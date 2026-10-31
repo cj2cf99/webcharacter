@@ -1,3 +1,4 @@
+import {dressDetails,atmosphere} from './rigby-magic-details.mjs';
 import {makeActor} from './rigby-actor.mjs';
 import {WebGLRenderer} from '../vendor/rigby2d/src/webgl/renderer.js';
 import {DURATION,BEATS,sceneAt,poseMagic} from './rigby-magic-scene.mjs';
@@ -11,8 +12,9 @@ function draw(){if(!actor)return;actor.seatControls={gather:Number($('#gather').
  if(s.broomVisible)broom(back,p.broom,p.broomAngle,p.broomScale);
  if(s.flight>0){back.strokeStyle='#b59dd070';back.lineWidth=3;for(let i=0;i<7;i++){back.beginPath();back.moveTo(s.x-130-i*19,s.y+375+i*11);back.lineTo(s.x-190-i*22,s.y+385+i*11);back.stroke();}}
  gl.viewport(0,0,w,h);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);renderer.begin(w,h,{x:500,y:285,zoom:w/1000});renderer.drawSkeleton(actor.sk,actor.pose,textures);renderer.end();
+ dressDetails(ctx,actor,s);atmosphere(ctx,s);
  if(s.bonk>0){ctx.fillStyle='#d6a442';ctx.font='bold 30px system-ui';ctx.fillText('✦',s.x-55,125);ctx.fillText('✧',s.x+35,140);}
- const text=time<1.8?'今天也很安静……':time<3.4?'哎哟！':time<6?'谁的书？':time<10.3?'捡起来。':time<12.5?'先收好。':time<15.5?'扫帚，出来！':time<18?'坐稳——':time<23?'出发！':'她飞走了 · 可以重播';
+ const text=time<1.8?'今天也很安静……':time<2.6?'哎哟！':time<3.4?'……书也会偷袭？':time<6?'谁的书？':time<8.5?'让我看看……':time<10.3?'原来是我的魔法书！':time<12.5?'没事，假装什么都没发生。':time<15.5?'扫帚，出来！':time<17?'整理一下裙摆……':time<18?'坐稳，优雅出发。':time<23?'出发！':'她飞走了 · 可以重播';
  ctx.fillStyle='#fff9';ctx.beginPath();ctx.roundRect(360,58,280,42,16);ctx.fill();ctx.fillStyle='#695478';ctx.textAlign='center';ctx.font='17px system-ui';ctx.fillText(text,500,85);
  $('#phase').textContent=BEATS[s.beat][1];$('#seek').value=time;$('#clock').textContent=`${time.toFixed(1)} / ${DURATION}.0 s`;document.querySelectorAll('[data-time]').forEach((b,i)=>b.classList.toggle('active',i===s.beat));}
 function sync(){$('#play').textContent=playing?'暂停':'播放';}

@@ -17,10 +17,10 @@ export function prepareSeatedDress(a){
  Object.assign(att,{type:'mesh',vertices,uvs,triangles});
  a.seatedDress={slot,att,samples};
 }
-export function deformSeatedDress(a,amount){
+export function deformSeatedDress(a,amount,crouch=0,time=0){
  const d=a.seatedDress,{gather=1,drape=1}=a.seatControls??{};
  // hip 设置姿态旋转 90°：局部 x 向上，局部 y 向左。
  a.pose.deform.set(`${d.slot}/${d.att.name}`,d.samples.flatMap(({rawX,f})=>[
-  35*f*2.53*gather*amount,-(112*drape-(rawX-512)*.22*gather)*f*2.53*amount
+  (35*f*gather*amount+28*f*crouch+Math.sin(rawX*.065)*3*f*amount)*2.53,(-(112*drape-(rawX-512)*.22*gather)*amount-(rawX-512)*.12*crouch)*f*2.53
  ]));
 }

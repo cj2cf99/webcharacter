@@ -1,0 +1,4 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';import {makeActor} from '../src/rigby-actor.mjs';import {sceneAt,poseMagic} from '../src/rigby-magic-scene.mjs';
+const a=makeActor(JSON.parse(fs.readFileSync(new URL('../assets/white/character.json',import.meta.url))),1,{palmOffset:65});let previous,maxJump=0,maxKnee=0;
+for(let i=0;i<=480;i++){const t=4+i/240;poseMagic(a,sceneAt(t));const feet=['l','r'].map(n=>a.world('foot_'+n).apply([0,0]));if(previous)for(let j=0;j<2;j++)maxJump=Math.max(maxJump,Math.hypot(...feet[j].map((x,k)=>x-previous[j][k])));previous=feet;if(t>=4.2&&t<=5.8)for(const side of ['l','r']){const bend=Math.abs(((a.world('shin_'+side).rotation()-a.world('thigh_'+side).rotation()+540)%360)-180);maxKnee=Math.max(maxKnee,bend);}}
+assert.ok(maxKnee<12,'步行时膝盖过度弯曲');assert.ok(maxJump<2,'脚部出现跳变');console.log({maxKnee,maxJump});

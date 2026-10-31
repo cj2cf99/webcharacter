@@ -58,3 +58,7 @@ node tools/check-project.mjs
 本仓库没有自动部署工作流。本次仅同步源代码和验证资源到 GitHub，未部署网站。实际部署前遵守项目发布审核及逐次确认要求。
 
 本地开发服务检查：`node tools/test-server.mjs`（需要允许本地回环连接，使用 18768 临时端口，退出时停止服务）。
+
+## 继续开发与迁移
+
+当前三个剧场已获用户接受。跨项目接入请先读 [迁移交接说明](docs/HANDOFF.md)，办公室入口为 [只改一个小 Bug](rigby-office.html)。
