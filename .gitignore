@@ -1,0 +1,16 @@
+/work/
+/local-backup/
+/.claude/
+/.codex/
+/.agents/
+/node_modules/
+*.log
+*.psd
+/白发双马尾黑白裙少女.png
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.DS_Store
+Thumbs.db
