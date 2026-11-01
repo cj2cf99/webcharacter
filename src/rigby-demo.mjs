@@ -1,3 +1,5 @@
+let animationId=0,disposed=false;
+import {connectPlayer,playerError,assetURL} from './player-bridge.mjs';
 import {makeActor,poseActor} from './rigby-actor.mjs';
 import {WebGLRenderer} from '../vendor/rigby2d/src/webgl/renderer.js';
 import {DURATION,sceneAt,ease,mix,pointMix} from './rigby-scene.mjs';
@@ -30,18 +32,31 @@ $('#replay').onclick=()=>{seek(0);playing=true;syncPlay();};
 $('#seek').oninput=e=>{playing=false;syncPlay();seek(Number(e.target.value));};
 document.querySelectorAll('[data-time]').forEach(b=>b.onclick=()=>{playing=false;syncPlay();seek(Number(b.dataset.time));});
 document.addEventListener('visibilitychange',()=>{last=performance.now();});
-function frame(now){const dt=Math.max(0,Math.min(.1,(now-last)/1000));last=now;if(!document.hidden&&playing){time+=dt*Number($('#speed').value);if(time>=DURATION){if($('#loop').checked)time%=DURATION;else{time=DURATION;playing=false;syncPlay();}}if(now-lastPaint>1000/30){draw();lastPaint=now;}}requestAnimationFrame(frame);}
+function frame(now){if(disposed)return;const dt=Math.max(0,Math.min(.1,(now-last)/1000));last=now;if(!document.hidden&&playing){time+=dt*Number($('#speed').value);if(time>=DURATION){if($('#loop').checked)time%=DURATION;else{time=DURATION;playing=false;syncPlay();}}if(now-lastPaint>1000/30){draw();lastPaint=now;}}animationId=requestAnimationFrame(frame);}
 window.addEventListener('resize',draw);
 try{
   gl=canvas.getContext('webgl2',{alpha:true,premultipliedAlpha:true});if(!gl)throw Error('浏览器未提供 WebGL2，请在 Edge / Chrome 中启用硬件加速后重试。');
   renderer=new WebGLRenderer(gl);
   {
-    async function whiteFile(name,type){const r=await fetch(new URL('../assets/white/'+name,import.meta.url));if(!r.ok)throw Error('白发角色尚未生成，请先打开 tools/rigby-white.html 生成绑定。');return r[type]();}
+    async function whiteFile(name,type){const r=await fetch(assetURL(name));if(!r.ok)throw Error('白发角色尚未生成，请先打开 tools/rigby-white.html 生成绑定。');return r[type]();}
     const [json,manifest]=await Promise.all([whiteFile('character.json','json'),whiteFile('manifest.json','json')]);
     const images=new Map(await Promise.all(manifest.images.map(async name=>[name,await createImageBitmap(await whiteFile(name+'.png','blob'),{premultiplyAlpha:'none'})])));
     textures=renderer.imageTextures(images);
     actors=[makeActor(json,1,{palmOffset:65,gaitScale:.55,walkStyle:'pseudo'}),makeActor(json,-1,{palmOffset:65,gaitScale:.55,walkStyle:'pseudo'})];
     $('#cast-name').textContent=' · 当前：现有白发素材';$('#credits').textContent='使用已有白发角色拆层素材，关节针对这张图标定；原图和 PSD 未修改。';
   }
-  $('#play').disabled=$('#replay').disabled=false;draw();playing=true;syncPlay();last=performance.now();requestAnimationFrame(frame);
-}catch(e){$('#error').textContent='加载失败：'+e.message;$('#phase').textContent='加载失败';console.error(e);}
+  $('#play').disabled=$('#replay').disabled=false;draw();playing=!new URLSearchParams(location.search).has('embed');syncPlay();last=performance.now();animationId=requestAnimationFrame(frame);
+}catch(e){$('#error').textContent='加载失败：'+e.message;$('#phase').textContent='加载失败';console.error(e);playerError(e);}
+
+if(actors.length)connectPlayer({
+ play(){if(time>=DURATION)time=0;playing=true;last=performance.now();},pause(){playing=false;},
+ seek(t){time=Math.min(DURATION,Math.max(0,t));draw();},replay(){time=0;playing=true;last=performance.now();draw();},
+ speed(v){$('#speed').append(new Option(String(v),String(v)));$('#speed').value=String(v);},loop(v){$('#loop').checked=v;},resize:draw,
+ state(){return{time,duration:DURATION,playing,loop:$('#loop').checked};},
+ destroy:releasePlayer
+});
+
+document.addEventListener('visibilitychange',()=>{last=performance.now();});
+
+function releasePlayer(){if(disposed)return;disposed=true;playing=false;cancelAnimationFrame(animationId);renderer?.dispose();gl?.getExtension('WEBGL_lose_context')?.loseContext();}
+window.addEventListener('pagehide',releasePlayer,{once:true});

@@ -80,3 +80,9 @@ node tools/check-project.mjs
 新增 `rigby-office.html`、`src/rigby-office-scene.mjs`、`src/rigby-office-art.mjs` 和播放控制模块。28 秒：侧边入场、拉椅子、坐下、滑到桌前、打字、报错扶额、重试成功后新需求。步行复用用户接受的小幅直立伪侧面姿态；椅背在角色后、桌面在角色前，手部由 IK 控制。无新依赖，未接大模型。
 
 `node tools/test-office.mjs` 检查 1681 时刻骨骼有效、7 段跳转确定性及打字时手掌位于键盘区域。桌椅和屏幕为 Canvas 图形；侧面视线、手指敲击仍是二维近似。入口已加入首页。
+
+### 组件化第一阶段
+
+用户已确认按现有交接推进。新增 CharacterPlayer 同源 iframe 适配器、页面桥接、多实例验收页及 `docs/PLAYER_API.md`。提供 load/play/pause/seek/replay/倍速/循环/resize/destroy 和事件；资源根地址可配置。原剧场画面复用，嵌入模式隐藏原控件。
+
+浏览器已通过实例独立控制、暂停、完成、重复创建销毁和加载失败重试。取消 RAF 和 WebGL 释放挂在子页面销毁及 pagehide；宿主移除 iframe、监听与 ResizeObserver。没有实测显存占用/回收量、真实后台及目标设备性能，因此本阶段不宣称全部性能验收完成。后续动作调度仍待开发。

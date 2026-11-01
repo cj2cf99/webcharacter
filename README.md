@@ -62,3 +62,7 @@ node tools/check-project.mjs
 ## 继续开发与迁移
 
 当前三个剧场已获用户接受。跨项目接入请先读 [迁移交接说明](docs/HANDOFF.md)，办公室入口为 [只改一个小 Bug](rigby-office.html)。
+
+## 可嵌入播放器
+
+多实例演示：`player-validation.html`。接口与接入说明见 [PLAYER_API](docs/PLAYER_API.md)。当前第一阶段采用同源 iframe，支持三个已接受剧场独立控制。
