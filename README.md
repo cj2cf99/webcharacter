@@ -1,5 +1,9 @@
 # WebCharacter
 
+极乐鸟模型优化（2026-11-15）：[需求](REQUIREMENTS.md) · [设计与结果](docs/DESIGN.md) · [模型源码及查看方法](model/bird/README.md)。第四批依用户参考修正身体/羽区、臀尾衔接与头部外形，通过 Blender MCP 更新实际场景；保留阶段接口和绑定分区，未制作内部解剖或新动作，外观待用户确认。[本批复核](docs/reviews/BIRD_MODEL_REFERENCE_REVIEW_2026-11-15.md)。
+
+巴黎圣母院写实场景（2026-11-15/16，独立子项目 [`cathedral/`](cathedral/README.md)）：Blender 脚本生成并烘焙，网页 three.js 第一人称行走，外部实时太阳、阴影与解析晴空，室内烘焙光照。收工进度：[PROGRESS_2026-11-16](cathedral/docs/PROGRESS_2026-11-16.md)；优先级与待确认问题：[PLAN](cathedral/docs/PLAN.md)。极乐鸟程序化早期版脚本：[`model/bird-procedural-v0`](model/bird-procedural-v0/README.md)。
+
 > 2026-11-06 当前状态与分类入口：[网页角色组件文档索引](docs/README.md)。下方旧阶段说明保留历史，已完成/待办以最新状态记录及发布回执为准。
 
 零构建、零 npm 安装的网页 2D 角色原型。使用固定版本的 Rigby2D、原生 ES Modules、WebGL2 与 Canvas，验证参数化动作与简单角色扮演。

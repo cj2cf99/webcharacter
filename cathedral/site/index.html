@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>巴黎圣母院</title>
+<script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
+<style>
+:root{--stone:#e9dfcd;--ink:#1d1a24;--rose:#5b6cff;--rose2:#c04aff;--glass:rgba(20,18,30,.55)}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d0c12;color:var(--stone);font:13px/1.4 system-ui,"Microsoft YaHei",sans-serif}
+canvas{display:block;width:100vw;height:100vh}
+#loading{position:fixed;inset:0;display:grid;place-content:center;gap:14px;text-align:center;
+  background:radial-gradient(600px 400px at 50% 45%,#2a2340,#0d0c12);transition:opacity .8s}
+#loading.done{opacity:0;pointer-events:none}
+#loading h1{margin:0;font:600 22px/1.2 Georgia,"Songti SC",serif;letter-spacing:4px}
+.rose{width:64px;height:64px;margin:auto;border-radius:50%;
+  background:conic-gradient(from 0deg,#2f49ff,#c33,#2f49ff,#e8b923,#2f49ff,#1b8f4a,#2f49ff,#c33,#2f49ff);
+  -webkit-mask:radial-gradient(circle,transparent 9px,#000 10px 26px,transparent 27px 29px,#000 30px);
+  mask:radial-gradient(circle,transparent 9px,#000 10px 26px,transparent 27px 29px,#000 30px);
+  animation:spin 6s linear infinite;filter:drop-shadow(0 0 12px #5b6cffaa)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.track{width:240px;height:4px;border-radius:4px;background:#ffffff1a;overflow:hidden}
+#bar{height:100%;width:0;background:linear-gradient(90deg,var(--rose),var(--rose2));transition:width .2s}
+#loading p{margin:0;opacity:.6;font-size:12px}
+#start{position:fixed;inset:0;display:none;place-content:center;background:#0006;backdrop-filter:blur(2px);cursor:pointer}
+#start.show{display:grid}
+#start span{padding:12px 22px;border-radius:999px;background:var(--glass);border:1px solid #ffffff2a;
+  font-size:15px;letter-spacing:2px;box-shadow:0 0 24px #5b6cff55;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 36px #c04aff77}}
+#cross{position:fixed;left:50%;top:50%;width:4px;height:4px;margin:-2px;border-radius:50%;background:#fff9;pointer-events:none}
+#door{position:fixed;left:50%;bottom:18%;transform:translate(-50%,10px);opacity:0;transition:.25s;pointer-events:none;
+  padding:8px 16px;border-radius:999px;background:var(--glass);border:1px solid #ffffff30;font-size:14px;display:flex;gap:8px;align-items:center}
+#door.show{opacity:1;transform:translate(-50%,0)}
+#door kbd{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:6px;background:var(--stone);color:var(--ink);font:700 13px system-ui}
+#door[data-state=open] .t::after{content:"开门"}
+#door[data-state=close] .t::after{content:"关门"}
+#door[data-state=wait] kbd{display:none}
+#door[data-state=wait] .t::after{content:"⏳ 室内加载中"}
+#clock{position:fixed;right:14px;top:12px;padding:5px 12px;border-radius:999px;background:var(--glass);border:1px solid #ffffff22;font-variant-numeric:tabular-nums;pointer-events:none}
+#help{position:fixed;left:14px;bottom:14px;display:flex;gap:6px;flex-wrap:wrap;transition:opacity .8s;pointer-events:none}
+#help.hide{opacity:0}
+#help b{padding:4px 8px;border-radius:8px;background:var(--glass);border:1px solid #ffffff22;font-weight:500}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="cross"></div>
+<div id="loading"><div class="rose"></div><h1>NOTRE-DAME DE PARIS</h1><div class="track"><div id="bar"></div></div><p>正在加载外观…</p></div>
+<div id="start"><span>🖱 点击开始</span></div>
+<div id="door" data-state="open"><kbd>E</kbd><span class="t"></span></div>
+<div id="clock"></div>
+<div id="help"><b>WASD 移动</b><b>⇧ 跑</b><b>🖱 视角</b><b>E 门</b><b>P 自动时间</b><b>, . 拨时间</b><b>H 提示</b><b>Esc 释放</b></div>
+<script type="module" src="src/main.mjs"></script>
+</body>
+</html>
