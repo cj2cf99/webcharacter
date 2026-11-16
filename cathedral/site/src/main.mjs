@@ -4,11 +4,11 @@ import { GLTFLoader } from '../../vendor/three/GLTFLoader.js';
 import { MeshoptDecoder } from '../../vendor/three/meshopt_decoder.module.js';
 import { createWorld, createDoor, stepDoor, doorAngleRad, move, nearDoor, isInside } from './collide.mjs';
 import { createSkyAndLights } from './sky.mjs';
-import { stoneMaterial } from './stone.mjs';
+import { stoneMaterial, GLSL_FUNCS } from './stone.mjs';
 
 const $ = (id) => document.getElementById(id);
 const EYE = 1.65, WALK = 6.4, RUN = 16.0;      // 米/秒；2026-11-15 用户要求行进速度提高 4 倍（原 1.6 / 4.0）
-const EXPOSURE_OUT = 0.7, EXPOSURE_IN = 22.0, ADAPT = 1.2;    // 室内曝光、适应时间常数（秒）；室外曝光随时间，见 sky.mjs 的 exposureOut
+const EXPOSURE_OUT = 0.7, EXPOSURE_IN = 26.0, ADAPT = 1.2;    // 室内曝光、适应时间常数（秒）；室外曝光随时间，见 sky.mjs 的 exposureOut
 const EXT_DIR = 'assets_next';                                 // 外部资源（颜色+遮蔽+实时光照）；室内仍用 assets（旧烘焙光照，W6 改关键帧）
 let hours = parseFloat(new URLSearchParams(location.search).get('t') || '16');   // 巴黎当地时钟时间
 let autoTime = new URLSearchParams(location.search).has('cycle');                   // ?cycle：一打开就自动走；也可按 P
@@ -43,17 +43,33 @@ function logMaterial(map, extra = {}, pave = false) {
     if (pave) sh.uniforms.tPave = { value: paveTex };
     // 地面：用世界坐标做铺石细节（每 6 m 重复一次），远处渐隐，避免远景闪烁
     sh.vertexShader = sh.vertexShader
-      .replace('void main() {', (pave ? 'varying vec3 vWPos;' + NL : '') + 'void main() {')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>' + NL + (pave ? 'vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;' : ''));
+      .replace('void main() {', 'varying vec3 vWPos;' + NL + 'void main() {')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>' + NL + 'vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('void main() {', 'uniform float uExp;' + NL + (pave ? 'uniform sampler2D tPave;' + NL + 'varying vec3 vWPos;' + NL : '') + 'void main() {')
+      .replace('void main() {', 'uniform float uExp;' + NL + 'varying vec3 vWPos;' + NL + (pave ? 'uniform sampler2D tPave;' + NL : '') + GLSL_FUNCS + NL + 'void main() {')
       .replace('#include <map_fragment>', `#include <map_fragment>
       diffuseColor.rgb = (exp(diffuseColor.rgb * ${Math.log1p(ENC.A * ENC.XMAX).toFixed(6)}) - 1.0) / ${ENC.A.toFixed(1)};
       ${pave ? `{ vec3 pv = texture2D(tPave, vWPos.xz / 6.0).rgb * 2.15;
         diffuseColor.rgb *= mix(vec3(1.0), pv, 1.0 - smoothstep(25.0, 90.0, distance(vWPos, cameraPosition))); }` : ''}
+      {   // 室内石面细节（烘焙贴图只有约 9.6 cm/像素，看起来糊）：按世界坐标叠加石块砌缝、颗粒，地面叠加大块石板，并把偏青灰的烘焙色调向暖石色拉回
+        vec3 gp = vWPos, gdx = dFdx(gp), gdy = dFdy(gp);
+        vec3 gn = normalize(cross(gdx, gdy)), an = abs(gn);
+        bool floorF = an.y > 0.85 && gp.y < 0.3;
+        bool wallX = an.x >= an.z && an.x > an.y, wallZ = an.z > an.x && an.z > an.y;
+        vec2 uv = wallX ? gp.zy : (wallZ ? gp.xy : gp.xz);
+        float fw = length(fwidth(uv));
+        float fadeD = 1.0 - smoothstep(0.03, 0.12, fw);
+        vec3 b = floorF ? ashlarP(uv, fw, 0.9, 1.1, 1.1) : ashlarP(uv, fw, 0.40, 0.55, 0.75);
+        float dk = 1.0 - 0.5 * b.z + (b.y - 0.5) * (floorF ? 0.35 : 0.22) + (fbm(uv * (floorF ? 4.0 : 9.0)) - 0.5) * 0.28 * fadeD;
+        diffuseColor.rgb *= dk;
+        float lm = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+        diffuseColor.rgb = mix(vec3(lm), diffuseColor.rgb, 0.72) * vec3(1.07, 1.02, 0.90);
+      }
       diffuseColor.rgb *= uExp;
       float pk = max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b);
-      float sp = pk < 0.6 ? pk : 0.6 + (1.0 - exp(-(pk - 0.6) * 0.8)) * 0.9;     // 0.6 以下不变；以上渐近到 1.5
+      { float lq = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lq), 0.6 * smoothstep(0.7, 3.5, pk)); }      // 很亮的彩色光斑（透过彩窗的日光）降低饱和，避免地面一片荧光蓝
+      pk = max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b);
+      float sp = pk < 0.5 ? pk : 0.5 + (1.0 - exp(-(pk - 0.5) * 0.45)) * 0.42;     // 0.5 以下不变；以上渐近到约 0.92（原 1.5，亮斑被压成白色）
       diffuseColor.rgb *= sp / max(pk, 1e-5);`);
   };
   return m;

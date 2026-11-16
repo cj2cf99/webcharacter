@@ -2,9 +2,7 @@
 // 以及铅皮屋面（竖向咬合缝）。无需额外贴图文件：全部由着色器程序化生成，细节不受贴图分辨率限制。
 import * as THREE from 'three';
 
-const GLSL_PARS = `
-varying vec3 vWPos;
-varying vec3 vWN;
+export const GLSL_FUNCS = `
 float h11(float p){ p = fract(p * .1031); p *= p + 33.33; p *= p + p; return fract(p); }
 float h21(vec2 p){ vec3 q = fract(vec3(p.xyx) * .1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
@@ -30,6 +28,9 @@ vec3 ashlarP(vec2 uv, float fw, float RH, float Lmin, float Lvar){      // RH �
   return vec3(h, id, joint);
 }
 `;
+const GLSL_PARS = `varying vec3 vWPos;
+varying vec3 vWN;
+` + GLSL_FUNCS;
 
 const GLSL_ALBEDO = `
 {
