@@ -12,7 +12,7 @@ const EXPOSURE_OUT = 0.7, EXPOSURE_IN = 22.0, ADAPT = 1.2;    // 室内曝光、
 const EXT_DIR = 'assets_next';                                 // 外部资源（颜色+遮蔽+实时光照）；室内仍用 assets（旧烘焙光照，W6 改关键帧）
 let hours = parseFloat(new URLSearchParams(location.search).get('t') || '16');   // 巴黎当地时钟时间
 let autoTime = new URLSearchParams(location.search).has('cycle');                   // ?cycle：一打开就自动走；也可按 P
-const DAY_SPEED = 0.25;                                                              // 小时/秒：约 72 秒走完 5:00–23:00
+const DAY_SPEED = 1 / 60;                                                              // 小时/秒：1 分钟 = 1 小时，18 分钟走完 5:00–23:00
 
 const renderer = new THREE.WebGLRenderer({ canvas: $('view'), antialias: true });
 renderer.setPixelRatio(Math.min(1.5, devicePixelRatio));

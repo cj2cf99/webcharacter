@@ -23,9 +23,9 @@ export function lightingAt(hours) {
   const skyBright = E >= 0 ? 0.15 + 0.85 * Math.pow(sinE, 0.6) : 0.15 * Math.exp(E / 3.5);   // 晨昏蒙影里天光慢慢暗下去
   const warm = (1 - sstep(0, 14, E)) * 0.6;
   const skyColor = mix([0.55, 0.72, 1.0], [1.0, 0.80, 0.65], warm);
-  const skyI = 0.75 * skyBright;
+  const skyI = 1.05 * skyBright;                                                // 配合曝光降低，天光相应抬高，背光面不至于太黑
   const lumRef = sunI * sinE * 0.45 + skyI * 0.6;                                // 平均受光面的照度，用来定室外曝光
-  const exposureOut = clamp(0.9 / (lumRef + 0.04), 0.9, 5);                      // 上限 5：晨昏要“暗下去”，不能让自动曝光把夜空提成白天
+  const exposureOut = clamp(0.6 / (lumRef + 0.04), 0.6, 5);      // 2026-11-16：原 0.9 / 0.9，亮处被压成白色看不见细节，整体降低约 40%                      // 上限 5：晨昏要“暗下去”，不能让自动曝光把夜空提成白天
   return { E, sinE, sunColor, sunI, skyColor, skyI, skyBright, exposureOut, sunDirThree: toThree(sunDir(hours)) };
 }
 
@@ -109,6 +109,7 @@ export function createSkyAndLights(scene, renderer) {
   // 阴影相机覆盖整座教堂加前广场（three 坐标：x ±45，y 0–100，z −140–90）
   const BOX = [];
   for (const x of [-45, 45]) for (const y of [0, 100]) for (const z of [-140, 90]) BOX.push(new THREE.Vector3(x, y, z));
+  let fitHours = -99;
   const tmpCam = new THREE.OrthographicCamera();
   const center = new THREE.Vector3(0, 40, -25);
 
@@ -121,6 +122,10 @@ export function createSkyAndLights(scene, renderer) {
     sun.visible = L.sunI > 0.01;
     hemi.color.setRGB(...L.skyColor); hemi.groundColor.setRGB(0.30, 0.28, 0.25).multiplyScalar(L.skyBright);
     hemi.intensity = Math.PI * L.skyI * exposure;
+    // 太阳方向与阴影相机只在时间变了 0.01 小时以上才更新：阴影图每帧重新拟合会让阴影边缘逐帧“游动”（颤抖）
+    const refit = Math.abs(hours - fitHours) > 0.01;
+    if (refit) fitHours = hours;
+    if (refit) {
     sun.position.copy(center).addScaledVector(d, 300);
     sun.target.position.copy(center);
     // 阴影相机范围
@@ -133,6 +138,7 @@ export function createSkyAndLights(scene, renderer) {
     const c = sun.shadow.camera;
     c.left = x0 - 4; c.right = x1 + 4; c.bottom = y0 - 4; c.top = y1 + 4; c.near = Math.max(1, -z1 - 20); c.far = -z0 + 20;
     c.updateProjectionMatrix();
+    }
     // 天空
     uniforms.uSun.value.copy(d); uniforms.uSunColor.value.set(...L.sunColor).multiplyScalar(Math.min(1, L.sunI / 0.6 + 0.2));
     const b = L.skyBright;
