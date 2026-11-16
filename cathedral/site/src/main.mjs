@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../../vendor/three/GLTFLoader.js';
 import { createWorld, createDoor, stepDoor, doorAngleRad, move, nearDoor, isInside } from './collide.mjs';
 import { createSkyAndLights } from './sky.mjs';
+import { stoneMaterial } from './stone.mjs';
 
 const $ = (id) => document.getElementById(id);
 const EYE = 1.65, WALK = 6.4, RUN = 16.0;      // 米/秒；2026-11-15 用户要求行进速度提高 4 倍（原 1.6 / 4.0）
@@ -80,13 +81,15 @@ async function prepareExterior(root) {
     const map = o.material.map;
     if (/glass/i.test(o.name) || /glass/i.test(o.material.name)) {
       map.colorSpace = THREE.SRGBColorSpace;
-      o.material = new THREE.MeshBasicMaterial({ map, toneMapped: false, side: THREE.DoubleSide });       // 彩色玻璃保持原色
+      // 外部看玻璃：深色、带天空反射；透出一点内部彩光（自发光取贴图的 18%）
+      const gm = new THREE.MeshStandardMaterial({ map, color: 0x6a7078, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: 0.1, roughness: 0.06, metalness: 0.0, side: THREE.DoubleSide });
+      gm.userData.envK = 1.6; lights.useEnv(gm); o.material = gm;
       return;
     }
     const key = AO_KEY[o.name];
     jobs.push(tex(`${EXT_DIR}/tex_${key}_ao.webp`).then((ao) => {
       ao.flipY = false; ao.colorSpace = THREE.NoColorSpace; ao.anisotropy = 4;      // glTF 的 UV 不翻转
-      o.material = exteriorMaterial(map, ao, o.name === 'B_ground');
+      o.material = (o.name === 'B_ext_a' || o.name === 'B_ext_b' || o.name === 'B_ground') && !location.search.includes('flat') ? (() => { const sm = stoneMaterial(map, ao, o.name === 'B_ground'); sm.userData.envK = 0.25; lights.useEnv(sm); return sm; })() : exteriorMaterial(map, ao, o.name === 'B_ground');
       o.castShadow = o.name !== 'B_ground'; o.receiveShadow = true;
     }));
   });

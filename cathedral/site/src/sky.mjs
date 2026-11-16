@@ -64,6 +64,25 @@ export function createSkyAndLights(scene, renderer) {
   sky.renderOrder = -10; sky.frustumCulled = false;
   scene.add(sky);
 
+  // 环境反射：把解析天空烘进 PMREM，供玻璃、铅皮、湿石面的高光反射（时间变化超过 0.25 小时才重做）
+  const pm = new THREE.PMREMGenerator(renderer);
+  const envScene = new THREE.Scene();
+  envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.ShaderMaterial({
+    uniforms: { ...uniforms, uExp: { value: 1 } }, vertexShader: SKY_VS,
+    fragmentShader: SKY_FS.replace('#include <tonemapping_fragment>', '').replace('#include <colorspace_fragment>', ''),
+    side: THREE.BackSide, depthWrite: false, depthTest: false })));
+  const envMats = [];                                   // 使用环境反射的材质
+  let envTarget = null, envHours = -99;
+  function refreshEnv(hours) {
+    if (Math.abs(hours - envHours) < 0.25) return;
+    envHours = hours;
+    const old = envTarget;
+    envTarget = pm.fromScene(envScene, 0, 1, 100);
+    for (const m of envMats) { if (!m.envMap) m.needsUpdate = true; m.envMap = envTarget.texture; }
+    if (old) old.dispose();
+  }
+  function useEnv(m) { envMats.push(m); if (envTarget) m.envMap = envTarget.texture; }
+
   const sun = new THREE.DirectionalLight(0xffffff, 1);
   sun.castShadow = true;
   sun.shadow.mapSize.set(4096, 4096);
@@ -105,7 +124,9 @@ export function createSkyAndLights(scene, renderer) {
     uniforms.uHorizon.value.set(0.62, 0.74, 0.92).multiplyScalar(0.04 + 0.96 * b);
     uniforms.uSunE.value = L.sinE; uniforms.uSunVis.value = sstep(-3, 0.5, L.E);
     uniforms.uExp.value = exposure;
+    refreshEnv(hours);
+    for (const m of envMats) m.envMapIntensity = exposure * (m.userData.envK ?? 1);
     return L;
   }
-  return { sky, sun, hemi, apply, uniforms };
+  return { sky, sun, hemi, apply, uniforms, useEnv };
 }
