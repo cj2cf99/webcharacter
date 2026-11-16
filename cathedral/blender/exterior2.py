@@ -38,8 +38,12 @@ def pinnacle(b, x, y, z0, w, shaft, tip):
     b.box(x - w * 0.62, x + w * 0.62, y - w * 0.62, y + w * 0.62, z0 + shaft * 0.55, z0 + shaft * 0.55 + 0.25)
     b.box(x - w * 0.6, x + w * 0.6, y - w * 0.6, y + w * 0.6, z0 + shaft, z0 + shaft + 0.2)
     pyr(b, x, y, z0 + shaft + 0.2, w * 0.6, z0 + shaft + 0.2 + tip)
-    for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):        # 四角爬行饰（小块）
-        b.box(x + sx * w * 0.5 - 0.1, x + sx * w * 0.5 + 0.1, y + sy * w * 0.5 - 0.1, y + sy * w * 0.5 + 0.1, z0 + shaft + 0.2, z0 + shaft + 0.2 + tip * 0.55)
+    for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):        # 四条棱上的爬行饰：贴着棱线，随锥体收细逐级上移（原来是四根悬空的立柱）
+        for k in range(4):
+            f = (k + 0.5) / 4 * 0.78
+            hw = w * 0.6 * (1 - f) * 0.98
+            zz = z0 + shaft + 0.2 + tip * f
+            b.box(x + sx * hw - 0.1, x + sx * hw + 0.1, y + sy * hw - 0.1, y + sy * hw + 0.1, zz - 0.1, zz + 0.2)
 
 def spirelet(b, x, y, z0, r, h, seg=8):
     c = bmesh.ops.create_cone(b.bm, cap_ends=True, segments=seg, radius1=r, radius2=0.04, depth=h)
@@ -111,7 +115,7 @@ for s in (-1, 1):
     ya, yb = WALL_Y0 + 0.9, TOWER_DEPTH - 0.9
     for x_ in (xa, xb_):
         for y_ in (ya, yb):
-            pinnacle(d2, x_, y_, TOWER_TOP_BAL + 1.5, 1.5, 1.8, 3.6)                                     # 塔顶四角尖塔
+            pinnacle(d2, x_, y_, TOWER_TOP_BAL, 1.5, 3.3, 3.6)                                     # 塔顶四角尖塔
     # 塔身中段的角柱（目视照片：钟楼层四角的细长塔式角扶壁）
     for x_ in (xa, xb_):
         for y_ in (ya, yb):

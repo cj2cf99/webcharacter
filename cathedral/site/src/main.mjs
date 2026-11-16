@@ -19,7 +19,7 @@ renderer.setPixelRatio(Math.min(1.5, devicePixelRatio));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 2500);
+const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 600)      // 远裁剪 600 m：超出就不画（教堂全长约 130 m，最远观景点也在范围内），省显存与填充;
 camera.rotation.order = 'YXZ';
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
@@ -164,7 +164,7 @@ async function boot() {
   await Promise.all([prepareExterior(ext), prepareExterior(doors)]);
   scene.add(ext, doors);
   // 远处地面：把广场铺石一直延伸到地平线（只为避免“悬空的方块”），远处铺石细节会按像素大小自动淡出
-  const far = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000).rotateX(-Math.PI / 2), stoneMaterial(null, null, true, 0xffffff));
+  const far = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400).rotateX(-Math.PI / 2), stoneMaterial(null, null, true, 0xffffff));
   far.position.set(0, -0.03, -40); far.material.userData.envK = 0.2; lights.useEnv(far.material); far.receiveShadow = true;
   scene.add(far);
   doorL = doors.getObjectByName('B_door_l'); doorR = doors.getObjectByName('B_door_r');
@@ -269,7 +269,7 @@ if (typeof window !== 'undefined') window.__vp = (i) => gotoViewpoint(VIEWPOINTS
 
 // ---------------------------------------------------------------- 循环
 let last = performance.now(), exposure = EXPOSURE_OUT;
-let eyeY = EYE, eyeT = EYE, vp = null;      // 眼高（平滑）与目标；vp：观景点 {cx, cy, r}，非空时在观景点范围内自由走动、不做碰撞
+let eyeY = EYE, eyeT = EYE, vp = null, lightK = 1;      // 眼高（平滑）与目标；vp：观景点 {cx, cy, r}，非空时在观景点范围内自由走动、不做碰撞
 function frame(now, manual = false) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (world) {
@@ -302,7 +302,9 @@ function frame(now, manual = false) {
     $('clock').textContent = `🕒 ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} 巴黎` + (autoTime ? ' ▶' : '');
     // 灯光与曝光：室外曝光随时间；进入室内后适应到 EXPOSURE_IN（室内烘焙材质用 uExp，外部灯光和天空同样乘它）
     if (lights) {
-      L = lights.apply(hours, exposure);
+      const insideNow = isInside(pos) && eyeY < 22;
+      lightK += ((insideNow ? 0.045 : 1) - lightK) * (1 - Math.exp(-dt / ADAPT));      // 站在室内时，外部材质（窗棂等）按室外亮度受光，不吃室内的高曝光
+      L = lights.apply(hours, exposure, lightK);
       const target = window.__expOverride || (isInside(pos) && eyeY < 22 ? EXPOSURE_IN : L.exposureOut);      // __expOverride：仅调试
       exposure += (target - exposure) * (1 - Math.exp(-dt / ADAPT));
       uExp.value = exposure;

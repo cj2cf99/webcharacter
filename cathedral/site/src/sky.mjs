@@ -115,19 +115,19 @@ export function createSkyAndLights(scene, renderer) {
   const tmpCam = new THREE.OrthographicCamera();
   const center = new THREE.Vector3(0, 40, -25);
 
-  function apply(hours, exposure) {
+  function apply(hours, exposure, lightK = 1) {
     const L = lightingAt(hours);
     const d = new THREE.Vector3(...L.sunDirThree);
     // 灯光（强度乘曝光；three 的 Lambert 辐亮度 = 反照率 × 强度 × N·L / π，所以乘 π）
     sun.color.setRGB(...L.sunColor);
-    sun.intensity = Math.PI * L.sunI * exposure;
+    sun.intensity = Math.PI * L.sunI * exposure * lightK;
     sun.visible = L.sunI > 0.01;
     hemi.color.setRGB(...L.skyColor); // 地面反弹：受太阳照射的铺石把暖光反弹到墙脚和飞扶壁下侧，强度随日照
     hemi.groundColor.setRGB(0.52, 0.47, 0.38).multiplyScalar(L.skyBright * (0.45 + 0.55 * Math.min(1, L.sunI / 1.6)));
     fill.color.setRGB(0.62, 0.74, 1.0).lerp(new THREE.Color(1.0, 0.72, 0.5), Math.min(1, 1 - Math.min(1, L.sinE * 3)));
-    fill.intensity = Math.PI * 0.38 * L.skyI * exposure;
+    fill.intensity = Math.PI * 0.38 * L.skyI * exposure * lightK;
     fill.position.set(-d.x * 300 + center.x, 90 + center.y, -d.z * 300 + center.z); fill.target.position.copy(center);
-    hemi.intensity = Math.PI * L.skyI * exposure;
+    hemi.intensity = Math.PI * L.skyI * exposure * lightK;
     // 太阳方向与阴影相机只在时间变了 0.01 小时以上才更新：阴影图每帧重新拟合会让阴影边缘逐帧“游动”（颤抖）
     const refit = Math.abs(hours - fitHours) > 0.01;
     if (refit) fitHours = hours;
@@ -153,7 +153,7 @@ export function createSkyAndLights(scene, renderer) {
     uniforms.uSunE.value = L.sinE; uniforms.uSunVis.value = sstep(-3, 0.5, L.E);
     uniforms.uExp.value = exposure;
     // 远景雾：颜色取地平线天空经 ACES 近似后的显示色，让无限延伸的地面融入天际
-    if (!scene.fog) scene.fog = new THREE.Fog(0xffffff, 220, 1100);
+    if (!scene.fog) scene.fog = new THREE.Fog(0xffffff, 200, 560);
     const aces = (x) => Math.min(1, Math.max(0, (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14)));
     const hv = uniforms.uHorizon.value;
     scene.fog.color.setRGB(aces(hv.x * exposure * 0.8), aces(hv.y * exposure * 0.8), aces(hv.z * exposure * 0.8));

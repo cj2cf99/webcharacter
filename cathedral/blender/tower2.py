@@ -104,3 +104,40 @@ for s in (-1, 1):
         for yy in (WALL_Y0 + 0.9, TOWER_DEPTH - 0.9):
             for dx, dy in ((-0.75, 0), (0.75, 0), (0, -0.75), (0, 0.75)):
                 rod(d2, (xx + dx, yy + dy, TOP_BAL_Z1 + 0.3), (xx + dx, yy + dy, TOWER_TOP_BAL - 0.2), 0.1)
+
+# ---------------------------------------------------------------- 钟楼里的钟与木钟架（用户 2026-11-16：“这里应该是钟楼，钟呢”）
+# 依据：南塔有大钟 Emmanuel（约 13 吨、口径约 2.6 m、高约 2.4 m），北塔挂较小的钟（这里画 4 口）；钟楼木架与横梁。
+# 大小与数量是公开资料的大致数字，钟的位置与木架形式为推算（待核实）。
+bronze = bpy.data.materials.get('Bronze') or material('Bronze', (0.36, 0.22, 0.08), 0.35)
+bells = Builder('W_Bells', EXT, bronze)
+
+def bell(b, x, y, ztop, R, H, seg=14):
+    prof = [(0.06, 0.0), (0.42 * R, -0.03 * H), (0.50 * R, -0.28 * H), (0.62 * R, -0.62 * H), (0.82 * R, -0.88 * H), (1.0 * R, -0.97 * H), (1.04 * R, -1.0 * H)]
+    rings = []
+    for i in range(seg):
+        a = 2 * math.pi * i / seg
+        rings.append([b.bm.verts.new((x + math.cos(a) * r_, y + math.sin(a) * r_, ztop + z_)) for r_, z_ in prof])
+    for i in range(seg):
+        j = (i + 1) % seg
+        for k in range(len(prof) - 1):
+            b.bm.faces.new((rings[i][k], rings[j][k], rings[j][k + 1], rings[i][k + 1]))
+    b.bm.faces.new([rg[0] for rg in rings][::-1])
+    # 钟舌与吊梁
+    rod(b, (x, y, ztop - 0.6 * H), (x, y, ztop - 1.08 * H), 0.07)
+
+for s in (-1, 1):
+    xc = s * (TW0 + TW1) / 2; yc = (WALL_Y0 + TOWER_DEPTH) / 2
+    zb = BELFRY_Z0 + 4.2                                   # 钟顶（吊梁下）
+    # 木钟架：两根纵向大梁 + 立柱 + 横梁（放在钟楼室内，穿过百叶可见）
+    for dyy in (-2.4, 2.4):
+        d2.box(xc - 4.6, xc + 4.6, yc + dyy - 0.22, yc + dyy + 0.22, zb, zb + 0.5)
+    for dxx in (-4.2, 4.2):
+        for dyy in (-2.4, 2.4):
+            d2.box(xc + dxx - 0.22, xc + dxx + 0.22, yc + dyy - 0.22, yc + dyy + 0.22, BELFRY_Z0 - 0.4, zb)
+    d2.box(xc - 4.6, xc + 4.6, yc - 2.7, yc + 2.7, BELFRY_Z0 - 0.5, BELFRY_Z0 - 0.2)        # 钟楼地板梁
+    if s > 0:
+        bell(bells, xc, yc, zb, 1.3, 2.4)                                                   # 南塔大钟
+    else:
+        for k in range(4):
+            bell(bells, xc - 3.0 + 2.0 * k, yc, zb, 0.62 + 0.04 * (3 - k), 1.2 + 0.1 * (3 - k))
+bells_obj = bells.done()

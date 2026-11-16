@@ -99,7 +99,7 @@ export function stoneMaterial(map, ao, ground = false, color = null) {
       vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
       vWN = normalize(mat3(modelMatrix) * objectNormal);`);
     sh.uniforms.uHaze = hazeU;
-    const HAZE = 'gl_FragColor.rgb = mix(gl_FragColor.rgb, uHaze, smoothstep(180.0, 1400.0, distance(vWPos, cameraPosition)));' + String.fromCharCode(10) + '#include <colorspace_fragment>';
+    const HAZE = 'gl_FragColor.rgb = mix(gl_FragColor.rgb, uHaze, smoothstep(160.0, 540.0, distance(vWPos, cameraPosition)));' + String.fromCharCode(10) + '#include <colorspace_fragment>';
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <colorspace_fragment>', ground ? HAZE : '#include <colorspace_fragment>')
       .replace('void main() {', 'uniform vec3 uHaze;' + String.fromCharCode(10) + GLSL_PARS + String.fromCharCode(10) + 'float stoneH, stoneRough;' + String.fromCharCode(10) + 'void main() {')

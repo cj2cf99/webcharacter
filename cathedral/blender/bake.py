@@ -11,7 +11,7 @@ os.makedirs(WORK, exist_ok=True); os.makedirs(SITE, exist_ok=True)
 
 GROUPS = {   # 名称: (成员物体, 贴图边长, 采样数)
     'ext_a': (['Ext_Stone', 'Ext_Sheets', 'Ext_Walls', 'Ext_Roof', 'W_Center', 'W_TowerLow_N', 'W_TowerLow_S', 'W_TowerUp_N', 'W_TowerUp_S'], 4096, 128),
-    'ext_b': (['W_Detail', 'W_Detail2', 'W_Statues', 'W_Doors', 'T_Doors'], 4096, 128),
+    'ext_b': (['W_Detail', 'W_Detail2', 'W_Bells', 'W_Statues', 'W_Doors', 'T_Doors'], 4096, 128),
     'ground': (['Ground'], 2048, 128),
     'int': (['Int_Stone', 'Int_Sheets', 'Int_Floor'], 4096, 256),
     'door_l': (['Door_L'], 512, 128),

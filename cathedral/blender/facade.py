@@ -43,6 +43,17 @@ for s, t in towers_up.items():
         sh.append((opening(xc + dx, BELFRY_W, BELFRY_Z0, BELFRY_Z1 - 2.2, BELFRY_Z1), WALL_Y0 - 1, TOWER_DEPTH + 1))
     for dy in (-BELFRY_DX, BELFRY_DX):          # 两侧面：沿 x 贯穿（轮廓的“横坐标”当作 y）
         sh.append(('x', opening(yc + dy, BELFRY_W, BELFRY_Z0, BELFRY_Z1 - 2.2, BELFRY_Z1), s * TW0 - s, s * TW1 + s))
+    # 钟楼下的盲拱带改成真开口（用户 2026-11-16：“这个位置没开窗吗”）：每面 5 个尖拱，只切穿各自那一道墙（不贯通整座塔，免得在角墩里切出长槽）
+    xa_, xb2 = sorted((s * (TW0 + 0.4), s * (TW1 - 0.4))); wa_ = (xb2 - xa_) / 5
+    for k in range(5):
+        cxk = xa_ + wa_ * (k + 0.5); pr = opening(cxk, wa_ / 2 - 0.55, 47.9, 49.6, 51.0)
+        sh.append((pr, WALL_Y0 - 1, WALL_Y0 + 1.9))                  # 前墙
+        sh.append((pr, TOWER_DEPTH - 1.9, TOWER_DEPTH + 1))          # 后墙
+    ya_, yb2 = WALL_Y0 + 0.4, TOWER_DEPTH - 0.4; wb_ = (yb2 - ya_) / 5
+    for k in range(5):
+        cyk = ya_ + wb_ * (k + 0.5); pr = opening(cyk, wb_ / 2 - 0.55, 47.9, 49.6, 51.0)
+        sh.append(('x', pr, s * (TW1 - 1.9), s * TW1 + s))           # 外侧墙
+        sh.append(('x', pr, s * TW0 - s, s * (TW0 + 1.9)))           # 内侧墙
     cut(t, sh)
 
 # ---------------------------------------------------------------- 附加构件
