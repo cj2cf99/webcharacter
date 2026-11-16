@@ -70,10 +70,10 @@ def classify_interior():
                 o = loc + Vector((0, 0, 0.01)); continue
             return True
         return True
-    def outer_face(c, n, zmax):
+    def outer_face(c, n, zmax, zmin=0.0):
         """朝外的高墙面：中殿高墙在楼廊屋面（24.8 m）以上、楼廊墙在侧廊屋面（17 m）以上，法线背离中轴 → 外部。
         （这些面上方有屋顶挑檐或飞券，射线法会误判成室内，导致从外面看高墙整块消失。）"""
-        if zmax >= 36.0: return True              # 36 m 以上不可能是室内（拱顶最高 33 m）：钟楼、屋面、尖塔的内外面全是外部
+        if zmin >= 33.0: return True              # 整个面都在 33 m 以上不可能是室内（拱顶最高 33 m）：钟楼、屋面、尖塔的内外面全是外部。（原来用最高点 ≥ 36 m，会把西墙内皮这种从 0 高到 45 m 的大面误判成室外，导致它用室外光照、一片惨白，并与另一半在 x=0 处拼出黑线）
         if c.y > APSE_CY:                           # 后殿弦段墙的窗洞侧壁（径向版本）
             rv2 = Vector((c.x, c.y - APSE_CY, 0)); rl = rv2.length
             if rl > 1e-6 and abs(n.dot(rv2 / rl)) < 0.5:
@@ -106,7 +106,7 @@ def classify_interior():
             c = M @ f.calc_center_median(); n = (M.to_3x3() @ f.normal).normalized()
             p = c + n * 0.03
             in_shaft = c.z <= 48.5 and any(math.hypot(c.x - sx_ * STAIR_X, c.y - STAIR_Y) <= STAIR_R + 0.2 for sx_ in (-1, 1))      # 楼梯井内壁：整段（到钟楼地板）都按室内烘焙，避免 36 m 处室内/室外光照突变
-            cls.append(1 if (in_shaft or (in_plan(p.x, p.y) and not outer_face(c, n, max((M @ v.co).z for v in f.verts)) and covered(p))) else 0)
+            cls.append(1 if (in_shaft or (in_plan(p.x, p.y) and not outer_face(c, n, max((M @ v.co).z for v in f.verts), min((M @ v.co).z for v in f.verts)) and covered(p))) else 0)
         n_int = sum(cls)
         if n_int:
             bm2 = bm.copy(); bm2.faces.ensure_lookup_table()

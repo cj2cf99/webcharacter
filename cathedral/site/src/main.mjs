@@ -50,6 +50,7 @@ function logMaterial(map, extra = {}, pave = false) {
       .replace('void main() {', 'uniform float uExp;' + NL + 'varying vec3 vWPos;' + NL + (pave ? 'uniform sampler2D tPave;' + NL : '') + GLSL_FUNCS + NL + 'void main() {')
       .replace('#include <map_fragment>', `#include <map_fragment>
       diffuseColor.rgb = (exp(diffuseColor.rgb * ${Math.log1p(ENC.A * ENC.XMAX).toFixed(6)}) - 1.0) / ${ENC.A.toFixed(1)};
+      diffuseColor.rgb = max(diffuseColor.rgb, vec3(0.0065, 0.0062, 0.0056));      // 暗部底值（在叠加石块纹理之前），烘焙接缝/遮蔽泄漏处不再死黑，暗部仍保留砌缝
       ${pave ? `{ vec3 pv = texture2D(tPave, vWPos.xz / 6.0).rgb * 2.15;
         diffuseColor.rgb *= mix(vec3(1.0), pv, 1.0 - smoothstep(25.0, 90.0, distance(vWPos, cameraPosition))); }` : ''}
       float dkv = 1.0;
@@ -72,7 +73,6 @@ function logMaterial(map, extra = {}, pave = false) {
         diffuseColor.rgb *= dk; dkv = dk;
         float lm = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
         diffuseColor.rgb = mix(vec3(lm), diffuseColor.rgb, 0.60) * vec3(1.13, 0.99, 0.86);
-        diffuseColor.rgb = max(diffuseColor.rgb, vec3(0.0065, 0.0062, 0.0056));      // 暗部底值：烘焙接缝/遮蔽泄漏处不再一团死黑
       }
       diffuseColor.rgb *= uExp;
       float pk = max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b);
