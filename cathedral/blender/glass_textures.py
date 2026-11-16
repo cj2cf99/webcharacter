@@ -141,3 +141,88 @@ def grisaille(W=512, H=1024):
     return _finish(img, lead, rng, 0.08)
 
 ALL = {'rose': rose, 'abs': abstract, 'med': medallion, 'gris': grisaille}
+
+# ---------------------------------------------------------------- 玫瑰窗（2026-11-16 按用户给的实景照片重做）
+# 参照：西窗（蓝红，12 瓣，三环圆章）、南窗（蓝红，圆章内是人物）、北窗（紫蓝为主，16 瓣，圆章密集）、
+# 以及南玫瑰窗的天使细节（红袍、白粉羽翼、金色光环、蓝底）。人物只画成“天使剪影”的大色块，不编造具体场景。
+PAL.update({'violet': (0.30, 0.10, 0.58), 'skin': (0.93, 0.78, 0.65), 'pink': (0.85, 0.55, 0.60), 'stone': (0.05, 0.045, 0.04)})
+
+def _disc(img, lead, x, y, cx, cy, R, col, ring=0.0):
+    """在包围盒内画圆盘（避免整幅图逐个运算）。"""
+    N = img.shape[0]
+    i0 = max(0, int((cy - R - 0.02 + 1) / 2 * N)); i1 = min(N, int((cy + R + 0.02 + 1) / 2 * N) + 1)
+    j0 = max(0, int((cx - R - 0.02 + 1) / 2 * N)); j1 = min(N, int((cx + R + 0.02 + 1) / 2 * N) + 1)
+    d = np.hypot(x[i0:i1, j0:j1] - cx, y[i0:i1, j0:j1] - cy)
+    img[i0:i1, j0:j1][d < R] = C(col) if isinstance(col, str) else np.array(col, np.float32)
+    if ring:
+        lead[i0:i1, j0:j1][(d >= R) & (d < R + ring)] = True
+
+def _ellipse(img, x, y, cx, cy, a, b, col, rot=0.0):
+    N = img.shape[0]; R = max(a, b)
+    i0 = max(0, int((cy - R + 1) / 2 * N)); i1 = min(N, int((cy + R + 1) / 2 * N) + 1)
+    j0 = max(0, int((cx - R + 1) / 2 * N)); j1 = min(N, int((cx + R + 1) / 2 * N) + 1)
+    dx = x[i0:i1, j0:j1] - cx; dy = y[i0:i1, j0:j1] - cy
+    c, s_ = np.cos(rot), np.sin(rot)
+    u = dx * c + dy * s_; v = -dx * s_ + dy * c
+    img[i0:i1, j0:j1][(u / a) ** 2 + (v / b) ** 2 < 1] = C(col)
+
+def _angel(img, lead, x, y, cx, cy, R, ang, rng, field):
+    """圆章：外圈红/金边 + 白细圈 + 底色 + 天使剪影（红袍、白粉羽翼、金光环）。ang：身体朝向圆心的方向。"""
+    _disc(img, lead, x, y, cx, cy, R, 'lead', 0.0)
+    _disc(img, lead, x, y, cx, cy, R * 0.93, 'red' if rng.random() < 0.7 else 'gold')
+    _disc(img, lead, x, y, cx, cy, R * 0.80, 'white')
+    _disc(img, lead, x, y, cx, cy, R * 0.74, field, R * 0.02)
+    ux, uy = np.cos(ang), np.sin(ang)                 # “上”方向（背向圆心）
+    rx, ry = -uy, ux
+    robe = ['red', 'red', 'green', 'purple', 'gold'][int(rng.integers(0, 5))]
+    for sgn in (-1, 1):                                # 翅膀
+        _ellipse(img, x, y, cx + rx * sgn * R * 0.36 + ux * R * 0.05, cy + ry * sgn * R * 0.36 + uy * R * 0.05, R * 0.30, R * 0.12, ['white', 'pink'][int(rng.integers(0, 2))], np.arctan2(uy, ux) + sgn * 0.5)
+    _ellipse(img, x, y, cx - ux * R * 0.12, cy - uy * R * 0.12, R * 0.34, R * 0.20, robe, np.arctan2(uy, ux) + 1.5708)    # 袍
+    _disc(img, lead, x, y, cx + ux * R * 0.30, cy + uy * R * 0.30, R * 0.17, 'gold')                                  # 光环
+    _disc(img, lead, x, y, cx + ux * R * 0.30, cy + uy * R * 0.30, R * 0.115, 'skin')                                 # 头
+
+def rose_ref(variant='w', N=1024):
+    rng = np.random.default_rng({'w': 11, 's': 12, 'n': 13}[variant])
+    y, x = np.mgrid[-1:1:N * 1j, -1:1:N * 1j].astype(np.float32)
+    r = np.hypot(x, y); th = (np.arctan2(y, x) + 2 * np.pi) % (2 * np.pi)
+    spokes = 16 if variant == 'n' else 12
+    bgc = ('violet', 'blue') if variant == 'n' else ('blue', 'red')
+    img = np.zeros((N, N, 3), np.float32); lead = np.zeros((N, N), bool)
+    # 底纹：极坐标菱格，蓝红（北窗紫蓝）相间，格心一颗小色点（绿/金/白）
+    nr = 20; na = spokes * 4
+    ri = np.floor(r / (1.0 / nr)).astype(int); ai = np.floor(th / (2 * np.pi) * na).astype(int)
+    cell = (ri + ai) % 2
+    img[:] = np.where(cell[..., None] == 0, C(bgc[0]), C(bgc[1]))
+    rc = (ri + 0.5) / nr; ac = (ai + 0.5) / na * 2 * np.pi
+    dd = np.hypot(x - rc * np.cos(ac), y - rc * np.sin(ac))
+    pick = ((ri * 7 + ai * 3) % 3)
+    dot = dd < 0.010
+    for k, nm in enumerate(['gold', 'green', 'white']):
+        img[dot & (pick == k)] = C(nm)
+    img[(r > 0.93)] = C('deep')
+    # 石质窗棂（放射条 + 同心环）
+    sector = (th / (2 * np.pi) * spokes) % 1.0
+    dsp = np.minimum(sector, 1 - sector) * (2 * np.pi / spokes) * r
+    lead[(dsp < 0.013) & (r > 0.14)] = True
+    for rr in (0.15, 0.44, 0.70, 0.93):
+        lead[np.abs(r - rr) < 0.010] = True
+    lead[r >= 0.99] = True
+    # 三环圆章，朝向圆心外侧
+    rings = [(0.29, spokes, 0.085), (0.565, spokes * 2, 0.062), (0.815, spokes * 2, 0.05)] if variant != 'n' else [(0.29, spokes, 0.08), (0.565, spokes * 2, 0.06), (0.815, spokes * 2, 0.05)]
+    for (rr, n, R) in rings:
+        for i in range(n):
+            a = (i + 0.5) / n * 2 * np.pi
+            field = ['blue', 'deep', 'violet' if variant == 'n' else 'blue'][i % 3]
+            _angel(img, lead, x, y, rr * np.cos(a), rr * np.sin(a), R, a, rng, field)
+    # 中心：八瓣花形圆章（童贞与圣子，用大色块近似）
+    for k in range(8):
+        a = k / 8 * 2 * np.pi
+        _disc(img, lead, x, y, 0.115 * np.cos(a), 0.115 * np.sin(a), 0.032, ['red', 'blue', 'white', 'gold'][k % 4], 0.006)
+    _disc(img, lead, x, y, 0, 0, 0.10, 'lead'); _disc(img, lead, x, y, 0, 0, 0.092, 'red'); _disc(img, lead, x, y, 0, 0, 0.075, 'blue', 0.006)
+    _ellipse(img, x, y, 0, -0.012, 0.048, 0.062, 'red'); _disc(img, lead, x, y, 0, 0.04, 0.026, 'gold'); _disc(img, lead, x, y, 0, 0.04, 0.017, 'skin')
+    img[lead] = C('stone')
+    return _finish(img, lead, rng, 0.10)
+
+ALL['rose'] = lambda: rose_ref('w')
+ALL['rose_s'] = lambda: rose_ref('s')
+ALL['rose_n'] = lambda: rose_ref('n')

@@ -4,6 +4,7 @@ import { GLTFLoader } from '../../vendor/three/GLTFLoader.js';
 import { createWorld, createDoor, stepDoor, doorAngleRad, move, nearDoor, isInside } from './collide.mjs';
 import { createSkyAndLights } from './sky.mjs';
 import { stoneMaterial } from './stone.mjs';
+import { createEnvironment } from './env.mjs';
 
 const $ = (id) => document.getElementById(id);
 const EYE = 1.65, WALK = 6.4, RUN = 16.0;      // 米/秒；2026-11-15 用户要求行进速度提高 4 倍（原 1.6 / 4.0）
@@ -124,7 +125,7 @@ function loadGlb(name, dir = 'assets') {
   }, fail));
 }
 const tex = (url) => new Promise((ok, fail) => new THREE.TextureLoader().load(url, ok, undefined, fail));
-let L = null, lights = null;        // L：当前时刻的光照参数
+let L = null, lights = null, env = null;        // L：当前时刻的光照参数
 
 let world, door, doorL, doorR, interiorReady = false, interiorLoading = false;
 async function boot() {
@@ -140,6 +141,7 @@ async function boot() {
   paveTex = await tex('assets/tex_paving.webp');
   paveTex.wrapS = paveTex.wrapT = THREE.RepeatWrapping; paveTex.colorSpace = THREE.NoColorSpace; paveTex.anisotropy = 8;
   lights = createSkyAndLights(scene, renderer);
+  env = createEnvironment(scene, lights);
   const [ext, doors] = await Promise.all([loadGlb('exterior', EXT_DIR), loadGlb('door', EXT_DIR)]);
   await Promise.all([prepareExterior(ext), prepareExterior(doors)]);
   scene.add(ext, doors);
@@ -230,6 +232,7 @@ function frame(now, manual = false) {
       exposure += (target - exposure) * (1 - Math.exp(-dt / ADAPT));
       uExp.value = exposure;
       lights.sky.position.copy(camera.position);
+      env && env.update(performance.now() / 1000);
     }
     camera.position.set(pos[0], window.__eyeH || EYE, -pos[1]);      // __eyeH：仅调试用，抬高相机看阴影
     camera.rotation.set(pitch, yaw, 0);

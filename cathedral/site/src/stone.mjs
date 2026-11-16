@@ -40,14 +40,18 @@ const GLSL_ALBEDO = `
   bool wallX = an.x >= an.z && an.x > an.y, wallZ = an.z > an.x && an.z > an.y;
   vec2 uv = wallX ? gp.zy : (wallZ ? gp.xy : gp.xz);        // 按主导轴选投影（墙与教堂轴向对齐）
   float fw = length(fwidth(uv));
+  #ifdef USE_AOMAP
   float aoV = texture2D(aoMap, vAoMapUv).r;
+#else
+  float aoV = 1.0;
+#endif
   float isLead = step(0.12, abs(vWN.y)) * step(14.0, gp.y);   // 高处的上倾面：铅皮屋面
 
   // ---- 石面
   vec3 b = ashlar(uv, fw);
   float fade = 1.0 - smoothstep(0.02, 0.09, fw);
   float lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
-  vec3 limestone = vec3(0.80, 0.62, 0.40) * (0.50 + 0.5 * lum);     // 巴黎石灰岩：暖奶油到蜜黄；沿用烘焙的明暗结构
+  vec3 limestone = vec3(0.92, 0.72, 0.46) * (0.58 + 0.5 * lum);     // 巴黎石灰岩：暖奶油到蜜黄；沿用烘焙的明暗结构
   float blockTint = (b.y - 0.5);
   limestone *= 1.0 + blockTint * 0.34;
   limestone = mix(limestone, limestone * vec3(1.06, 0.96, 0.82), vn(uv * 1.7 + 3.0) * 0.8);   // 大块暖冷色斑
@@ -57,10 +61,10 @@ const GLSL_ALBEDO = `
   float st = smoothstep(0.42, 0.80, fbm(vec2(uv.x * 4.5, uv.y * 0.22 + 5.0)));
   float yy = gp.y;
   float streak = st * (0.35 + 0.65 * smoothstep(3.0, 30.0, yy)) * (wallX || wallZ ? 1.0 : 0.0);
-  limestone = mix(limestone, limestone * vec3(0.40, 0.38, 0.35), streak * 1.0);
+  limestone = mix(limestone, limestone * vec3(0.52, 0.50, 0.47), streak * 1.0);
   // 积灰：凹处（遮蔽低）、近地面更脏；底部偶有潮绿
   limestone *= mix(0.35, 1.0, smoothstep(0.2, 0.9, aoV));
-  limestone *= mix(0.72, 1.0, smoothstep(0.0, 6.0, yy));
+  limestone *= mix(0.80, 1.0, smoothstep(0.0, 6.0, yy));
   float damp = (1.0 - smoothstep(0.0, 1.6, yy)) * smoothstep(0.45, 0.75, fbm(uv * 3.0));
   limestone = mix(limestone, vec3(0.20, 0.25, 0.14), damp * 0.5);
 
@@ -81,8 +85,8 @@ const GLSL_ALBEDO = `
 }
 `;
 
-export function stoneMaterial(map, ao, ground = false) {
-  const m = new THREE.MeshStandardMaterial({ map, aoMap: ao || null, aoMapIntensity: 1.0, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide });
+export function stoneMaterial(map, ao, ground = false, color = null) {
+  const m = new THREE.MeshStandardMaterial({ map: map || null, color: color ?? 0xffffff, aoMap: ao || null, aoMapIntensity: 1.0, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide });
   m.customProgramCacheKey = () => ground ? 'ground-v1' : 'stone-v1';
   m.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader
@@ -113,8 +117,12 @@ const GLSL_GROUND = `
   float fw = length(fwidth(uv));
   float fade = 1.0 - smoothstep(0.05, 0.25, fw);
   vec3 b = ashlarP(uv, fw, 0.9, 1.1, 1.1);
+  #ifdef USE_AOMAP
   float aoV = texture2D(aoMap, vAoMapUv).r;
-  vec3 c = vec3(0.56, 0.54, 0.50) * (0.82 + 0.35 * (b.y - 0.5) * 2.0 * 0.5);
+#else
+  float aoV = 1.0;
+#endif
+  vec3 c = vec3(0.40, 0.385, 0.36) * (0.82 + 0.35 * (b.y - 0.5) * 2.0 * 0.5);
   c *= 1.0 + (fbm(uv * 1.3) - 0.5) * 0.28;                           // 大块明暗
   c *= 1.0 + (fbm(uv * 9.0) - 0.5) * 0.22 * fade;                    // 颗粒
   c = mix(c, c * 0.48, b.z * 0.9);                                   // 灰缝

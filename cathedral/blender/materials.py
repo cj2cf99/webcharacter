@@ -124,7 +124,7 @@ transparent(M['GlassOut'], color=(0.88, 0.9, 0.92))
 import os, numpy as np
 _gt = {}
 exec(open(os.path.join(HERE, 'glass_textures.py'), encoding='utf-8').read(), _gt)
-GLASS_WASH = {'rose': 0.25, 'abs': 0.25, 'med': 0.30, 'gris': 0.65}
+GLASS_WASH = {'rose': 0.08, 'abs': 0.25, 'med': 0.30, 'gris': 0.65, 'rose_s': 0.08, 'rose_n': 0.08}
 os.makedirs(r"G:/selftool/Cathedral/work/glass_tex", exist_ok=True)
 
 def glass_image(kind):

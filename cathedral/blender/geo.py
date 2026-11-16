@@ -114,7 +114,7 @@ def balustrade(b, x0, x1, y, z, h=1.1, step=0.45):
 
 # ---------------------------------------------------------------- 玻璃片
 # 材质槽顺序固定：0 外侧（深色）、1.. 内侧按类型。walls.py / facade.py 的玻璃物体都按这个顺序挂材质。
-GLASS_ORDER = ['GlassOut', 'St_rose', 'St_abs', 'St_med', 'St_gris']
+GLASS_ORDER = ['GlassOut', 'St_rose', 'St_abs', 'St_med', 'St_gris', 'St_rose_s', 'St_rose_n']   # rose 西窗、rose_s 南耳堂、rose_n 北耳堂
 
 def glass_prism(bm, pts, y0, y1, kind):
     """窗玻璃薄片：xz 轮廓沿 y 拉伸。朝 +y（室内）的大面用 St_<kind>，其余面用 GlassOut。

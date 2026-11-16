@@ -33,11 +33,26 @@ void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix 
 const SKY_FS = `varying vec3 vDir;
 uniform vec3 uSun, uSunColor, uZenith, uHorizon;
 uniform float uExp, uSunE, uSunVis;
+float ch(vec2 p){ vec3 q = fract(vec3(p.xyx) * .1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+float cn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
+  return mix(mix(ch(i), ch(i + vec2(1, 0)), f.x), mix(ch(i + vec2(0, 1)), ch(i + vec2(1, 1)), f.x), f.y); }
+float cfbm(vec2 p){ float a = .5, s = 0.; for (int i = 0; i < 5; i++){ s += a * cn(p); p = p * 2.07 + 3.3; a *= .5; } return s; }
 void main() {
   vec3 v = normalize(vDir);
   float hz = pow(1.0 - max(v.y, 0.0), 3.5);
   vec3 col = mix(uZenith, uHorizon, hz);
   col = mix(col, uHorizon * 0.7, smoothstep(0.0, -0.2, v.y));
+  if (v.y > 0.0) {                                                              // 积云 + 卷云（静态）
+    vec2 cp = v.xz / (v.y + 0.12) * 0.55;
+    float d = cfbm(cp + vec2(4.0, 1.0));
+    float cov = smoothstep(0.50, 0.78, d) * smoothstep(0.0, 0.18, v.y);
+    float thin = smoothstep(0.45, 0.75, cfbm(cp * vec2(2.2, 5.0) + 9.0)) * 0.35 * smoothstep(0.1, 0.5, v.y);
+    float lit = 0.62 + 0.38 * clamp(dot(normalize(vec3(uSun.x, 0.0, uSun.z) + 1e-4), normalize(vec3(v.x, 0.0, v.z) + 1e-4)) * 0.5 + 0.5, 0.0, 1.0) * uSunVis;
+    float shade = mix(0.78, 1.0, smoothstep(0.50, 0.9, d));                   // 云心偏灰
+    vec3 cc = mix(uHorizon, vec3(1.0) * min(1.2, length(uHorizon) * 1.35), 0.75) * lit * mix(shade, 1.0, 0.0);
+    cc = mix(cc, uSunColor * length(uHorizon) * 1.05, (1.0 - shade) * 0.0);
+    col = mix(col, cc, clamp(cov + thin, 0.0, 1.0) * 0.92);
+  }
   float mu = max(dot(v, uSun), 0.0);
   float g = 0.78;
   float ph = (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * mu, 1.5) / 12.566;

@@ -36,7 +36,7 @@ def segment(p0, p1, inward, t, z0, z1, wins=(), roses=()):
     M, L = frame(p0, p1, inward)
     o = solid('tmp_wall', EXT, stone, 0, L, 0, t, z0, z1)
     shapes = [(opening(f * L, w, zb, zs, zc), -0.1, t + 0.1) for f, w, zb, zs, zc, *_ in wins]
-    shapes += [(circle(f * L, cz, r, 40), -0.1, t + 0.1) for f, cz, r in roses]
+    shapes += [(circle(f * L, cz, r, 40), -0.1, t + 0.1) for f, cz, r, *_ in roses]
     if shapes:
         cut(o, shapes)
     merge(WALLS.bm, o, M)
@@ -46,8 +46,8 @@ def segment(p0, p1, inward, t, z0, z1, wins=(), roses=()):
         kind = k[0] if k else ('gris' if zb > 0.5 else None)
         if kind:
             glass_prism(tmp, opening(f * L, w, zb, zs, zc), t / 2 - 0.02, t / 2 + 0.02, kind)
-    for f, cz, r in roses:
-        glass_prism(tmp, circle(f * L, cz, r, 40), t / 2 - 0.02, t / 2 + 0.02, 'rose')
+    for f, cz, r, *rk in roses:
+        glass_prism(tmp, circle(f * L, cz, r, 40), t / 2 - 0.02, t / 2 + 0.02, rk[0] if rk else 'rose')
     tmp.transform(M)
     me = bpy.data.meshes.new('tmpg'); tmp.to_mesh(me); tmp.free()
     GLASS.bm.from_mesh(me); bpy.data.meshes.remove(me)
@@ -85,7 +85,7 @@ ROSE_T_CZ = 22.5                           # 推算：门洞拱顶约 13 m 之�
 for s in (-1, 1):
     x = s * TRANSEPT_OUT_X
     segment((x, TY1 if s < 0 else TY0), (x, TY0 if s < 0 else TY1), (-s, 0), 1.2, 0, HIGH_WALL_TOP,
-            wins=[(0.5, 2.3, 0, 7.5, 12.0)], roses=[(0.5, ROSE_T_CZ, ROSE_T_R)])
+            wins=[(0.5, 2.3, 0, 7.5, 12.0)], roses=[(0.5, ROSE_T_CZ, ROSE_T_R, 'rose_n' if s < 0 else 'rose_s')])
     T_DOORS.box(x - s * 0.3, x - s * 0.5, (TY0 + TY1) / 2 - 2.3, (TY0 + TY1) / 2 + 2.3, 0, 7.5)   # 耳堂门（关闭，不可开）
     # 门楣：填满门顶 7.5 m 到门洞拱顶 12 m 之间的尖拱部分（石质，与门同一平面）
     pts = opening((TY0 + TY1) / 2, 2.3, 7.5, 7.5, 12.0)
