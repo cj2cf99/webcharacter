@@ -38,12 +38,6 @@ def pinnacle(b, x, y, z0, w, shaft, tip):
     b.box(x - w * 0.62, x + w * 0.62, y - w * 0.62, y + w * 0.62, z0 + shaft * 0.55, z0 + shaft * 0.55 + 0.25)
     b.box(x - w * 0.6, x + w * 0.6, y - w * 0.6, y + w * 0.6, z0 + shaft, z0 + shaft + 0.2)
     pyr(b, x, y, z0 + shaft + 0.2, w * 0.6, z0 + shaft + 0.2 + tip)
-    for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):        # 四条棱上的爬行饰：贴着棱线，随锥体收细逐级上移（原来是四根悬空的立柱）
-        for k in range(4):
-            f = (k + 0.5) / 4 * 0.78
-            hw = w * 0.6 * (1 - f) * 0.98
-            zz = z0 + shaft + 0.2 + tip * f
-            b.box(x + sx * hw - 0.1, x + sx * hw + 0.1, y + sy * hw - 0.1, y + sy * hw + 0.1, zz - 0.1, zz + 0.2)
 
 def spirelet(b, x, y, z0, r, h, seg=8):
     c = bmesh.ops.create_cone(b.bm, cap_ends=True, segments=seg, radius1=r, radius2=0.04, depth=h)
@@ -68,7 +62,7 @@ def flyer(b, p0, p1, z0, z1, width, t_end=2.4, t_mid=0.9, n=14):
 def gargoyle(b, x, y, z, sx, sy=0.0):
     """滴水兽：向外探出的方块，末端略低，带一块“头”。(sx, sy) 为外向单位方向。"""
     L = 1.7; w = 0.38
-    p0 = Vector((x, y, z)); p1 = p0 + Vector((sx * L, sy * L, -0.35))
+    p0 = Vector((x - sx * 0.45, y - sy * 0.45, z)); p1 = p0 + Vector((sx * (L + 0.45), sy * (L + 0.45), -0.35))       # 起点缩进墙内
     rod(b, p0, p1, w * 0.55, 6)
     h = p1 + Vector((sx * 0.25, sy * 0.25, -0.1))
     b.box(h.x - 0.28, h.x + 0.28, h.y - 0.28, h.y + 0.28, h.z - 0.3, h.z + 0.3)
@@ -85,7 +79,7 @@ for y in BUTTRESS_Y:
         pinnacle(d2, s * MID_X, y, 26.0, 1.2, 2.2, 3.6)
         flyer(d2, (xo - s * 0.75, y), (s * (MID_X + 0.55), y), 27.2, 25.0, 0.8, 2.0, 0.8)               # 外跨
         flyer(d2, (s * (MID_X - 0.55), y), (s * (ARC_X + 0.9), y), 29.0, 31.0, 0.8, 1.9, 0.8)             # 内跨（向上顶高墙）
-        gargoyle(d2, s * (CHAPEL_OUT_X + 0.2), y + 0.9, 26.2, s)                                          # 外墩上的滴水兽
+        gargoyle(d2, s * (CHAPEL_OUT_X + 0.2), y, 26.2, s)                                                # 外墩上的滴水兽（在墩的正中，原来偏了 0.9 m 悬空）
         gargoyle(d2, s * (CHAPEL_OUT_X + 0.2), y - 0.9, 13.5, s)                                          # 礼拜堂檐口
 # 开间中部的檐口滴水兽（外侧廊屋檐、楼廊屋檐）
 for ys in (NAVE_BAYS, CHOIR_BAYS):
@@ -131,7 +125,7 @@ for s in (-1, 1):
         d2.box(x_ - 1.0, x_ + 1.0, y_ - 1.0, y_ + 1.0, HIGH_WALL_TOP - 3.0, HIGH_WALL_TOP + 4.0)       # 转角塔身
         spirelet(d2, x_, y_, HIGH_WALL_TOP + 4.0, 1.2, 8.0, 8)                                           # 八角尖顶
     # 山墙顶尖塔
-    pinnacle(d2, s * (TRANSEPT_OUT_X - 0.6), (TY0_ + TY1_) / 2, ROOF_RIDGE + 1.0, 1.4, 1.5, 3.0)
+    pinnacle(d2, s * (TRANSEPT_OUT_X - 0.45), (TY0_ + TY1_) / 2, ROOF_RIDGE - 0.8, 1.6, 3.0, 3.0)
 
 # ---------------------------------------------------------------- 钟楼侧面百叶（斜板条，与前后面一致）
 for s in (-1, 1):
@@ -177,5 +171,6 @@ exec(open(os.path.join(HERE, 'facade2.py'), encoding='utf-8').read())
 exec(open(os.path.join(HERE, 'roof2.py'), encoding='utf-8').read())
 exec(open(os.path.join(HERE, 'aisle2.py'), encoding='utf-8').read())
 exec(open(os.path.join(HERE, 'tower2.py'), encoding='utf-8').read())
+exec(open(os.path.join(HERE, 'stairs.py'), encoding='utf-8').read())
 d2_obj = d2.done()
 print('exterior2 ok', len(d2_obj.data.polygons))

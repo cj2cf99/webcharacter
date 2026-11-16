@@ -45,6 +45,8 @@ canvas{display:block;width:100vw;height:100vh}
 #vplist{position:fixed;right:14px;bottom:14px;display:none;flex-direction:column;gap:4px;padding:8px 10px;border-radius:12px;background:var(--glass);border:1px solid #ffffff22;pointer-events:none}
 #vplist.show{display:flex}
 #vplist kbd{display:inline-grid;place-items:center;width:20px;height:20px;margin-right:8px;border-radius:5px;background:var(--stone);color:var(--ink);font:700 11px system-ui}
+#stairp{position:fixed;left:50%;bottom:24%;transform:translate(-50%,10px);opacity:0;transition:.25s;pointer-events:none;padding:8px 16px;border-radius:999px;background:var(--glass);border:1px solid #ffffff30;font-size:14px;box-shadow:0 0 18px #e8b92344}
+#stairp.show{opacity:1;transform:translate(-50%,0)}
 #help{position:fixed;left:14px;bottom:14px;display:flex;gap:6px;flex-wrap:wrap;transition:opacity .8s;pointer-events:none}
 #help.hide{opacity:0}
 #help b{padding:4px 8px;border-radius:8px;background:var(--glass);border:1px solid #ffffff22;font-weight:500}
@@ -58,6 +60,7 @@ canvas{display:block;width:100vw;height:100vh}
 <div id="door" data-state="open"><kbd>E</kbd><span class="t"></span></div>
 <div id="clock"></div>
 <div id="zoom"></div>
+<div id="stairp"></div>
 <div id="vpname"></div>
 <div id="vplist"></div>
 <div id="help"><b>WASD 移动</b><b>⇧ 跑</b><b>🖱 视角</b><b>E 门</b><b>1-0 观景点</b><b>V 列表</b><b>B 回地面</b><b>右键 望远镜</b><b>滚轮 倍率</b><b>P 自动时间</b><b>, . 拨时间</b><b>H 提示</b><b>Esc 释放</b></div>

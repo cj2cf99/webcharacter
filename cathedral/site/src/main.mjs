@@ -5,6 +5,7 @@ import { MeshoptDecoder } from '../../vendor/three/meshopt_decoder.module.js';
 import { createWorld, createDoor, stepDoor, doorAngleRad, move, nearDoor, isInside } from './collide.mjs';
 import { createSkyAndLights } from './sky.mjs';
 import { stoneMaterial, GLSL_FUNCS } from './stone.mjs';
+import { createMarbleMirror } from './marble.mjs';
 
 const $ = (id) => document.getElementById(id);
 const EYE = 1.65, WALK = 6.4, RUN = 16.0;      // 米/秒；2026-11-15 用户要求行进速度提高 4 倍（原 1.6 / 4.0）
@@ -19,7 +20,7 @@ renderer.setPixelRatio(Math.min(1.5, devicePixelRatio));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 600)      // 远裁剪 600 m：超出就不画（教堂全长约 130 m，最远观景点也在范围内），省显存与填充;
+const camera = new THREE.PerspectiveCamera(70, 1, 0.25, 600)      // 远裁剪 600 m：超出就不画（教堂全长约 130 m，最远观景点也在范围内），省显存与填充;
 camera.rotation.order = 'YXZ';
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
@@ -61,6 +62,12 @@ function logMaterial(map, extra = {}, pave = false) {
         float fadeD = 1.0 - smoothstep(0.03, 0.12, fw);
         vec3 b = floorF ? ashlarP(uv, fw, 0.9, 1.1, 1.1) : ashlarP(uv, fw, 0.40, 0.55, 0.75);
         float dk = 1.0 - 0.5 * b.z + (b.y - 0.5) * (floorF ? 0.35 : 0.22) + (fbm(uv * (floorF ? 4.0 : 9.0)) - 0.5) * 0.28 * fadeD;
+        if (floorF) {   // 室内地板：大理石（云纹 + 缝 + 中轴磨损带），并整体提亮（原烘焙地面太暗）；镜面反射由 marble.mjs 的反射层叠加
+          vec2 wv = uv * 0.22 + vec2(fbm(uv * 0.35) * 2.2, fbm(uv * 0.31 + 7.0) * 2.2) + b.y * 9.0;
+          float vein = pow(1.0 - abs(sin(wv.x * 3.0 + wv.y * 1.7 + fbm(wv * 2.0) * 3.0)), 14.0);
+          float path = exp(-pow(abs(gp.x) / 7.0, 2.0));
+          dk = (0.95 + (fbm(uv * 0.5 + b.y * 5.0) - 0.5) * 0.3) * (1.0 - 0.45 * vein * fadeD) * (1.0 - 0.35 * b.z) * (1.0 - 0.10 * path) * 2.2;
+        }
         diffuseColor.rgb *= dk;
         float lm = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
         diffuseColor.rgb = mix(vec3(lm), diffuseColor.rgb, 0.72) * vec3(1.07, 1.02, 0.90);
@@ -107,7 +114,7 @@ async function prepareExterior(root) {
     const key = AO_KEY[o.name];
     jobs.push(tex(`${EXT_DIR}/tex_${key}_ao.webp`).then((ao) => {
       ao.flipY = false; ao.colorSpace = THREE.NoColorSpace; ao.anisotropy = 4;      // glTF 的 UV 不翻转
-      o.material = (o.name === 'B_ext_a' || o.name === 'B_ext_b' || o.name === 'B_ground') && !location.search.includes('flat') ? (() => { const sm = stoneMaterial(map, ao, o.name === 'B_ground'); sm.userData.envK = 0.25; lights.useEnv(sm); return sm; })() : exteriorMaterial(map, ao, o.name === 'B_ground');
+      o.material = (o.name === 'B_ext_a' || o.name === 'B_ext_b' || o.name === 'B_ground') && !location.search.includes('flat') ? (() => { const sm = stoneMaterial(map, ao, o.name === 'B_ground'); sm.userData.envK = 0.7; lights.useEnv(sm); return sm; })() : exteriorMaterial(map, ao, o.name === 'B_ground');
       o.castShadow = o.name !== 'B_ground'; o.receiveShadow = true;
     }));
   });
@@ -143,7 +150,7 @@ function loadGlb(name, dir = 'assets') {
   }, fail));
 }
 const tex = (url) => new Promise((ok, fail) => new THREE.TextureLoader().load(url, ok, undefined, fail));
-let L = null, lights = null;        // L：当前时刻的光照参数
+let L = null, lights = null, mirror = null;        // L：当前时刻的光照参数
 
 let spawnPos = [0, -60];
 let world, door, doorL, doorR, interiorReady = false, interiorLoading = false;
@@ -160,6 +167,7 @@ async function boot() {
   paveTex = await tex('assets/tex_paving.webp');
   paveTex.wrapS = paveTex.wrapT = THREE.RepeatWrapping; paveTex.colorSpace = THREE.NoColorSpace; paveTex.anisotropy = 8;
   lights = createSkyAndLights(scene, renderer);
+  mirror = createMarbleMirror(scene);
   const [ext, doors] = await Promise.all([loadGlb('exterior', EXT_DIR), loadGlb('door', EXT_DIR)]);
   await Promise.all([prepareExterior(ext), prepareExterior(doors)]);
   scene.add(ext, doors);
@@ -185,7 +193,7 @@ let pos = [0, -60], yaw = 0, pitch = 0.12;       // yaw=0 面向东（教堂内�
 const keys = new Set();
 addEventListener('keydown', (e) => {
   keys.add(e.code);
-  if (e.code === 'KeyE' && locked()) toggleDoor();
+  if (e.code === 'KeyE' && locked()) { if (ride) return; if (nearDoor(pos, forward())) toggleDoor(); else stairAction(); }
   if (e.code === 'KeyH') $('help').classList.toggle('hide');
   // 临时时间控制（W8 的面板做好前）：P 自动走完一天，, 和 . 手动拨 ±0.5 小时
   if (e.code === 'KeyP') autoTime = !autoTime;
@@ -230,6 +238,64 @@ function toggleDoor() {
 const forward = () => [-Math.sin(yaw), Math.cos(yaw)];
 
 
+
+// ---------------------------------------------------------------- 楼梯（用户 2026-11-16）：塔内螺旋楼梯（到钟楼）、内侧廊直跑楼梯（到二楼楼廊）
+// 与 blender/stairs.py、facade.py 的 STAIR_X / STAIR_Y 一致：井中心 |x| = 9.9、y = 12.8；每圈 22 级、级高 0.18；直跑楼梯 x = ±9.9、y 17→34.6、63 级。
+// 走近楼梯底部按 E：镜头沿楼梯平滑上行（不做自由攀爬/碰撞）；到顶后进入“观景点”范围，可小范围走动；在楼梯顶部附近再按 E 下楼。
+const SP = { x: 9.9, y: 12.8, r: 1.25, per: 22, rise: 0.18, top: 47.6 };
+const TR = { x: 9.9, y0: 17.0, y1: 34.8, steps: 63, rise: 0.18 };
+let ride = null;
+const spiralPt = (s, i) => { const a = 2 * Math.PI * i / SP.per * s; return [s * SP.x + SP.r * Math.cos(a), SP.y + SP.r * Math.sin(a), a]; };
+const spiralN = Math.ceil(SP.top / SP.rise);
+function nearStair() {
+  const info = { kind: null };
+  if (ride) return info;
+  const d2 = (x, y) => Math.hypot(pos[0] - x, pos[1] - y);
+  for (const s of [-1, 1]) {
+    const [bx, by] = spiralPt(s, 0), [tx, ty] = spiralPt(s, spiralN);
+    if (!vp && eyeY < 5 && d2(bx, by) < 3.2) return { kind: 'up', type: 'spiral', s };
+    if (vp && vp.tower === s && eyeY > 40 && d2(tx, ty) < 4.2) return { kind: 'down', type: 'spiral', s };
+    if (!vp && eyeY < 5 && d2(s * TR.x, TR.y0 - 0.8) < 2.6) return { kind: 'up', type: 'tribune', s };
+    if (vp && vp.trib === s && eyeY > 8 && eyeY < 20 && d2(s * TR.x, TR.y1 + 0.8) < 3.2) return { kind: 'down', type: 'tribune', s };
+  }
+  return info;
+}
+function stairAction() {
+  if (!world) return;
+  const n = nearStair();
+  if (!n.kind) return;
+  const s = n.s;
+  if (n.type === 'spiral') {
+    ride = { type: 'spiral', s, dir: n.kind === 'up' ? 1 : -1, t: 0, dur: n.kind === 'up' ? 16 : 11, tower: true };
+  } else {
+    ride = { type: 'tribune', s, dir: n.kind === 'up' ? 1 : -1, t: 0, dur: 7 };
+  }
+  vp = null;
+}
+function stepRide(dt) {
+  ride.t += dt / ride.dur;
+  const u = Math.min(1, ride.t), k = ride.dir > 0 ? u : 1 - u;     // 0 = 底，1 = 顶
+  const e = k * k * (3 - 2 * k) * 0.35 + k * 0.65;                  // 起止略缓
+  const s = ride.s;
+  if (ride.type === 'spiral') {
+    const i = e * spiralN, [x, y, a] = spiralPt(s, i);
+    pos = [x, y]; eyeY = eyeT = (i + 1) * SP.rise + EYE;
+    const tx = -Math.sin(a) * s * ride.dir, ty = Math.cos(a) * s * ride.dir;
+    if (!ride.init) { yaw = Math.atan2(-tx, ty); pitch = 0.0; ride.init = true; }       // 只在起步时转向前进方向，之后可自由环顾
+  } else {
+    const y = TR.y0 + (TR.y1 - TR.y0) * e, i = e * TR.steps;
+    pos = [s * TR.x, y]; eyeY = eyeT = (i + 1) * TR.rise + EYE;
+    if (!ride.init) { yaw = ride.dir > 0 ? 0.0 : Math.PI; pitch = 0.05; ride.init = true; }
+  }
+  if (u >= 1) {
+    if (ride.dir > 0) {
+      if (ride.type === 'spiral') { vp = { cx: s * 13.7, cy: 8.8, r: 6.5, tower: s }; eyeT = SP.top + EYE; }
+      else { vp = { cx: s * 9.8, cy: 46, r: 13, trib: s }; eyeT = 11.34 + EYE; }
+    } else { vp = null; eyeT = EYE; }
+    ride = null;
+  }
+}
+
 // ---------------------------------------------------------------- 观景点（正常走不到的位置；数字键传送，B 回地面，V 显示列表）
 // 坐标：模型 x 南、y 东；眼高 = 站立面 + 1.7。位置按 dims.py 的高度取，视角朝向目视选取（不是测绘点）。
 const VIEWPOINTS = [
@@ -245,6 +311,7 @@ const VIEWPOINTS = [
   { k: 'Digit0', name: '广场上空俯瞰', x: 0, y: -90, z: 90, yaw: 0.0, pitch: -0.42, r: 15 },
 ];
 async function gotoViewpoint(v) {
+  ride = null;
   if (!world || !locked() && !window.__dbg) return;
   if (v.inside) { await loadInterior(); while (!interiorReady) await new Promise((r) => setTimeout(r, 100)); }
   pos = [v.x, v.y]; yaw = v.yaw; pitch = v.pitch; eyeT = v.z; vp = { cx: v.x, cy: v.y, r: v.r };
@@ -253,6 +320,7 @@ async function gotoViewpoint(v) {
 }
 let vpTimer;
 function backToGround() {
+  ride = null;
   if (!vp) return;
   vp = null; eyeT = EYE; pos = [...spawnPos]; yaw = 0; pitch = 0.12;
   $('vpname').classList.remove('show');
@@ -273,7 +341,8 @@ let eyeY = EYE, eyeT = EYE, vp = null, lightK = 1;      // 眼高（平滑）与
 function frame(now, manual = false) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (world) {
-    if (locked()) {
+    if (ride) stepRide(dt);
+    if (locked() && !ride) {
       const f = forward(), r = [Math.cos(yaw), Math.sin(yaw)];
       let mx = 0, my = 0;
       if (keys.has('KeyW')) { mx += f[0]; my += f[1]; }
@@ -292,6 +361,11 @@ function frame(now, manual = false) {
     stepDoor(door, dt);
     const a = doorAngleRad(door);
     if (doorL) { doorL.rotation.y = a; doorR.rotation.y = -a; }
+    {   // 楼梯提示
+      const n = nearStair(); const el = $('stairp');
+      el.classList.toggle('show', !!n.kind && locked());
+      el.textContent = n.kind === 'up' ? (n.type === 'spiral' ? 'E 登上钟楼' : 'E 登上二楼楼廊') : n.kind === 'down' ? 'E 下楼' : '';
+    }
     // 门前提示
     const near = nearDoor(pos, forward());
     const badge = $('door');
@@ -302,17 +376,17 @@ function frame(now, manual = false) {
     $('clock').textContent = `🕒 ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} 巴黎` + (autoTime ? ' ▶' : '');
     // 灯光与曝光：室外曝光随时间；进入室内后适应到 EXPOSURE_IN（室内烘焙材质用 uExp，外部灯光和天空同样乘它）
     if (lights) {
-      const insideNow = isInside(pos) && eyeY < 22;
+      const insideNow = isInside(pos) && eyeY < 22 && !(ride && ride.tower) && !(vp && vp.tower);
       lightK += ((insideNow ? 0.045 : 1) - lightK) * (1 - Math.exp(-dt / ADAPT));      // 站在室内时，外部材质（窗棂等）按室外亮度受光，不吃室内的高曝光
       L = lights.apply(hours, exposure, lightK);
-      const target = window.__expOverride || (isInside(pos) && eyeY < 22 ? EXPOSURE_IN : L.exposureOut);      // __expOverride：仅调试
+      const target = window.__expOverride || (isInside(pos) && eyeY < 22 && !(ride && ride.tower) && !(vp && vp.tower) ? EXPOSURE_IN : L.exposureOut);      // __expOverride：仅调试
       exposure += (target - exposure) * (1 - Math.exp(-dt / ADAPT));
       uExp.value = exposure;
       lights.sky.position.copy(camera.position);
     }
     // 玻璃：室外是深色带反射；站在室内时不吃灯光（室内曝光很高会冲白），改成按白天亮度发光的宝石色
     {
-      const inside = isInside(pos) && eyeY < 22;
+      const inside = isInside(pos) && eyeY < 22 && !(ride && ride.tower) && !(vp && vp.tower);
       const day = L ? Math.min(1, L.skyBright * 1.1) : 1;
       for (const g of glassMats) {
         if (inside) { g.color.setRGB(0.02, 0.02, 0.02); g.emissiveIntensity = 0.35 + 1.0 * day; g.userData.envK = 0; }
@@ -326,6 +400,7 @@ function frame(now, manual = false) {
     $('zoom').classList.toggle('show', zoomOn);
     $('zoom').textContent = '🔭 ×' + zoomT.toFixed(1);
     eyeY += (eyeT - eyeY) * (1 - Math.exp(-dt * 4));
+    if (mirror) mirror.visible = (window.__eyeH || eyeY) < 60 && !location.search.includes('nomirror');      // 高处俯瞰时不画反射；?nomirror 可关闭
     camera.position.set(pos[0], window.__eyeH || eyeY, -pos[1]);      // __eyeH：仅调试用，抬高相机看阴影
     camera.rotation.set(pitch, yaw, 0);
     // 调试/测试用：暴露状态
@@ -339,6 +414,8 @@ requestAnimationFrame(frame);
 if (new URLSearchParams(location.search).has('debug')) {
   window.__go = (x, y, yw = yaw, pt = pitch) => { pos = [x, y]; yaw = yw; pitch = pt; };
   window.__zoom = (on, z) => { zoomOn = on; if (z) zoomT = z; };
+  window.__stair = () => stairAction();
+  window.__ride = () => ride && { t: ride.t, type: ride.type, eyeY, pos };
   window.__dbg = { scene, camera, THREE, renderer, lights: () => lights };
   window.__setTime = (h) => { hours = h; exposure = L ? L.exposureOut : exposure; };       // 调试：设时间并让曝光立即适应室外
   window.__walk = (dx, dy) => { pos = move(world, door, pos, dx, dy); return pos; };

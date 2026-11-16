@@ -238,7 +238,12 @@ for y in NAVE_PIERS_Y[2:] + CHOIR_PIERS_Y:
 # 侧廊顶、楼廊地面与顶
 for (y0, y1) in ((NAVE_Y0 - 6.0, TRANSEPT_Y0), (TRANSEPT_Y1, APSE_CY)):
     def ceilings(s):
-        inn.box(s * (ARC_X + 0.5), s * (AISLE_PIER_X - 0.5), y0, y1, AISLE_VAULT, TRIBUNE_FLOOR)      # 内侧廊顶 = 楼廊地面
+        # 内侧廊顶 = 楼廊地面；中殿段在楼梯上端留出洞口（y 27–34.6），楼梯从地面上到楼廊（见 stairs.py）
+        if y0 < 20 and y1 > 40:
+            inn.box(s * (ARC_X + 0.5), s * (AISLE_PIER_X - 0.5), y0, 27.0, AISLE_VAULT, TRIBUNE_FLOOR)
+            inn.box(s * (ARC_X + 0.5), s * (AISLE_PIER_X - 0.5), 34.6, y1, AISLE_VAULT, TRIBUNE_FLOOR)
+        else:
+            inn.box(s * (ARC_X + 0.5), s * (AISLE_PIER_X - 0.5), y0, y1, AISLE_VAULT, TRIBUNE_FLOOR)
         inn.box(s * (ARC_X + 0.5), s * (AISLE_PIER_X + 0.5), y0, y1, TRIBUNE_VAULT, TRIBUNE_VAULT + 0.4)
         inn.box(s * (AISLE_PIER_X + 0.5), s * (CHAPEL_OUT_X - WALL_T), y0, y1, AISLE_VAULT - 0.3, AISLE_VAULT)
     both(ceilings)

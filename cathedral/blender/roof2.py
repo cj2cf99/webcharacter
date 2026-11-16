@@ -47,18 +47,50 @@ n_ = int(2 * TRANSEPT_OUT_X / 1.3)
 for i in range(n_ + 1):
     xx = -TRANSEPT_OUT_X + 2 * TRANSEPT_OUT_X * i / n_
     if i % 3 == 0:
-        d2.box(xx - 0.2, xx + 0.2, ymid_t - 0.2, ymid_t + 0.2, ROOF_RIDGE + 0.15, ROOF_RIDGE + 0.75)
+        d2.box(xx - 0.2, xx + 0.2, ymid_t - 0.2, ymid_t + 0.2, ROOF_RIDGE + 0.2, ROOF_RIDGE + 0.75)
 
-# ---------------------------------------------------------------- 老虎窗（每开间一个，两侧坡面各一排）
+d2.box(-TRANSEPT_OUT_X + 0.3, TRANSEPT_OUT_X - 0.3, ymid_t - 0.18, ymid_t + 0.18, ROOF_RIDGE - 0.05, ROOF_RIDGE + 0.3)      # 耳堂连续脊线（原来只有小块、悬在脊上）
+
+# ---------------------------------------------------------------- 老虎窗：带山花的小窗（侧壁 + 人字顶 + 正面尖拱窗框 + 顶端小尖饰），不再是一个方块顶一个棱锥
+def dormer(x, yc, zs, s):
+    """x、yc：窗在屋坡上的位置；zs：该处屋面高度；s：朝外方向（±x）。"""
+    xo = x + s * 0.55; xi = x - s * 0.7                       # 外立面与向屋脊内收的后端
+    z0 = zs - 0.35
+    d2.box(*sorted((xi, xo)), yc - 0.62, yc - 0.5, z0, zs + 1.25)         # 两侧颊墙
+    d2.box(*sorted((xi, xo)), yc + 0.5, yc + 0.62, z0, zs + 1.25)
+    d2.box(*sorted((xo - 0.12 * s, xo)), yc - 0.62, yc + 0.62, z0, zs + 0.15)     # 窗台以下的前墙
+    # 人字顶：两片斜板（沿 x 方向的脊）+ 前山花三角
+    zr = zs + 2.45
+    for sg in (-1, 1):
+        n0_ = len(d2.bm.faces)
+        A_ = [d2.bm.verts.new((xo + s * 0.12, yc + sg * 0.78, zs + 1.2)), d2.bm.verts.new((xi, yc + sg * 0.78, zs + 1.2)),
+              d2.bm.verts.new((xi, yc, zr)), d2.bm.verts.new((xo + s * 0.12, yc, zr))]
+        B_ = [d2.bm.verts.new((v.x, v.y, v.z - 0.14)) for v in [Vector(p.co) for p in A_]]
+        for q in ((A_[0], A_[1], A_[2], A_[3]), (B_[3], B_[2], B_[1], B_[0]), (A_[0], B_[0], B_[1], A_[1]), (A_[1], B_[1], B_[2], A_[2]), (A_[2], B_[2], B_[3], A_[3]), (A_[3], B_[3], B_[0], A_[0])):
+            d2.bm.faces.new(q)
+        d2.bm.faces.ensure_lookup_table(); bmesh.ops.recalc_face_normals(d2.bm, faces=list(d2.bm.faces)[n0_:])
+    n1_ = len(d2.bm.faces)
+    T_ = [d2.bm.verts.new((xo + s * 0.12 - s * 0.02, yc - 0.78, zs + 1.2)), d2.bm.verts.new((xo + s * 0.12 - s * 0.02, yc + 0.78, zs + 1.2)), d2.bm.verts.new((xo + s * 0.12 - s * 0.02, yc, zr + 0.02))]
+    T2_ = [d2.bm.verts.new((v.co.x - s * 0.18, v.co.y, v.co.z)) for v in T_]
+    for q in ((T_[0], T_[1], T_[2]), (T2_[2], T2_[1], T2_[0]), (T_[0], T2_[0], T2_[1], T_[1]), (T_[1], T2_[1], T2_[2], T_[2]), (T_[2], T2_[2], T2_[0], T_[0])):
+        d2.bm.faces.new(q)
+    d2.bm.faces.ensure_lookup_table(); bmesh.ops.recalc_face_normals(d2.bm, faces=list(d2.bm.faces)[n1_:])
+    # 前面的尖拱窗框 + 竖棂；小尖饰
+    face = ('x', xo + s * 0.14, s)
+    # 窗框：尖拱从窗台（颊墙顶）升起，拱顶顶到人字顶底；中棂上下都抵到实体（原来整个窗框悬在开口里）
+    for sg in (-1, 1):
+        rod(d2, P(face, yc + sg * 0.36, zs + 0.1, 0.0), P(face, yc + sg * 0.36, zs + 0.5, 0.0), 0.05)
+    _arch_rods(P, face, yc, 0.36, zs + 0.5, zs + 1.25, 0.05, 0.0, 8)
+    rod(d2, P(face, yc, zs + 0.1, 0.0), P(face, yc, zs + 1.25, 0.0), 0.045)
+    p_ = P(face, yc, zr, 0.05)
+    pinnacle(d2, p_.x, p_.y, zr - 0.05, 0.3, 0.35, 0.55)
 for ys in (NAVE_BAYS, CHOIR_BAYS):
     for ya, yb in bays(ys):
         yc = (ya + yb) / 2
         for s in (-1, 1):
             x = s * 5.0
             zs = HIGH_WALL_TOP + (ARC_X + 1.0 - abs(x)) / (ARC_X + 1.0) * (ROOF_RIDGE - HIGH_WALL_TOP)
-            d2.box(x - 0.55, x + 0.55, yc - 0.55, yc + 0.55, zs - 0.35, zs + 1.2)
-            pyr(d2, x, yc, zs + 1.2, 0.85, zs + 2.7)
-            d2.box(x - 0.3, x + 0.3, yc - 0.6, yc + 0.6, zs + 0.2, zs + 0.9)          # 窗洞（深色体块在网页里由遮蔽图体现）
+            dormer(x, yc, zs, s)
 
 # ---------------------------------------------------------------- 耳堂：山墙、门楣山花、盲拱带、玫瑰窗外框
 ym = (TRANSEPT_Y0 + TRANSEPT_Y1) / 2

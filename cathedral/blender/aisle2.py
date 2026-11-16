@@ -8,6 +8,7 @@ from mathutils import Vector
 def PC(face, u, z, p):
     """弦段平面：face=(cx, cy, tx, ty, nx, ny)；u 沿弦，p 沿外法线。"""
     cx, cy, tx, ty, nx, ny = face
+    p = min(p, 0.05)
     return Vector((cx + tx * u + nx * p, cy + ty * u + ny * p, z))
 
 def chord(rx, ry, n, i):
@@ -85,5 +86,5 @@ for (rx, ry, n, zb, zs, zc, ww, gable) in (
                 rod(d2, PC(face, -L / 2 + 0.7, z, 0.15), PC(face, L / 2 - 0.7, z, 0.15), 0.15)
     for i in range(1, n):                                              # 圈间转角（含扶壁位置）：小尖塔
         a = math.pi * i / n
-        x = math.cos(a) * (rx + 0.5); y = APSE_CY + math.sin(a) * (ry + 0.5)
-        pinnacle(d2, x, y, 14.0 if rx > 20 else (21.5 if rx > 10 else 35.0), 1.0, 1.2, 2.0)
+        x = math.cos(a) * rx; y = APSE_CY + math.sin(a) * ry
+        pinnacle(d2, x, y, (14.0 if rx > 20 else (21.5 if rx > 10 else 35.0)) - 0.3, 1.0, 1.5, 2.0)

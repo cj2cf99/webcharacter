@@ -11,9 +11,9 @@ os.makedirs(WORK, exist_ok=True); os.makedirs(SITE, exist_ok=True)
 
 GROUPS = {   # 名称: (成员物体, 贴图边长, 采样数)
     'ext_a': (['Ext_Stone', 'Ext_Sheets', 'Ext_Walls', 'Ext_Roof', 'W_Center', 'W_TowerLow_N', 'W_TowerLow_S', 'W_TowerUp_N', 'W_TowerUp_S'], 4096, 128),
-    'ext_b': (['W_Detail', 'W_Detail2', 'W_Bells', 'W_Statues', 'W_Doors', 'T_Doors'], 4096, 128),
+    'ext_b': (['W_Detail', 'W_Detail2', 'W_Bells', 'W_Stairs', 'W_Statues', 'W_Doors', 'T_Doors'], 4096, 128),
     'ground': (['Ground'], 2048, 128),
-    'int': (['Int_Stone', 'Int_Sheets', 'Int_Floor'], 4096, 256),
+    'int': (['Int_Stone', 'Int_Sheets', 'Int_Floor', 'Int_Stairs'], 4096, 256),
     'door_l': (['Door_L'], 512, 128),
     'door_r': (['Door_R'], 512, 128),
 }
@@ -73,6 +73,19 @@ def classify_interior():
     def outer_face(c, n, zmax):
         """朝外的高墙面：中殿高墙在楼廊屋面（24.8 m）以上、楼廊墙在侧廊屋面（17 m）以上，法线背离中轴 → 外部。
         （这些面上方有屋顶挑檐或飞券，射线法会误判成室内，导致从外面看高墙整块消失。）"""
+        if zmax >= 36.0: return True              # 36 m 以上不可能是室内（拱顶最高 33 m）：钟楼、屋面、尖塔的内外面全是外部
+        if c.y > APSE_CY:                           # 后殿弦段墙的窗洞侧壁（径向版本）
+            rv2 = Vector((c.x, c.y - APSE_CY, 0)); rl = rv2.length
+            if rl > 1e-6 and abs(n.dot(rv2 / rl)) < 0.5:
+                rr_ = math.hypot(c.x, (c.y - APSE_CY) * APSE_OUT[0] / APSE_OUT[1])
+                if CHAPEL_OUT_X - 1.2 <= rr_ <= CHAPEL_OUT_X + 0.1: return True
+                if AISLE_PIER_X - 0.1 <= rr_ <= AISLE_PIER_X + 0.6 and zmax >= 17.0: return True
+                if ARC_X - 0.2 <= rr_ <= ARC_X + 0.6 and zmax >= 24.6: return True
+        if c.y <= APSE_CY and abs(n.x) < 0.5:       # 窗洞的侧壁（reveal）：墙厚里的、法线沿 y 或 z 的面，从外面能看到，不能当室内（否则洞口侧面缺失、窗棂悬空）
+            axx = abs(c.x)
+            if CHAPEL_OUT_X - 1.2 <= axx <= CHAPEL_OUT_X + 0.1: return True
+            if AISLE_PIER_X - 0.1 <= axx <= AISLE_PIER_X + 0.6 and zmax >= 17.0: return True
+            if ARC_X - 0.2 <= axx <= ARC_X + 0.6 and zmax >= 24.6: return True
         if c.y <= APSE_CY:
             out = (1 if c.x > 0 else -1) * n.x > 0.6; ax = abs(c.x)
         else:

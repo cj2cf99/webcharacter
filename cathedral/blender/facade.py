@@ -27,6 +27,7 @@ def gallery_shapes(x0, x1, n):
         out.append((opening(cx, w / 2 - 0.12, GALLERY_Z0, GALLERY_Z1 - 1.6, GALLERY_Z1 - 0.4), WALL_Y0 - 0.1, WALL_Y1 + 0.1))
     return out
 
+STAIR_X, STAIR_Y, STAIR_R = TW0 + 3.0, TOWER_DEPTH - 3.2, 2.0      # 塔内螺旋楼梯：中心 |x|、y、井半径
 # 中央：中门、玫瑰窗、大连拱廊、国王廊壁龛
 cut(center, [(opening(PC_X, PC_W, -1, PORTAL_SPRING, PORTAL_C_CROWN), WALL_Y0 - 0.1, WALL_Y1 + 0.1),
              (circle(0, ROSE_CZ, ROSE_R + 0.6), WALL_Y0 - 0.1, WALL_Y1 + 0.1)]
@@ -34,7 +35,12 @@ cut(center, [(opening(PC_X, PC_W, -1, PORTAL_SPRING, PORTAL_C_CROWN), WALL_Y0 - 
 for s, t in towers_low.items():
     cut(t, [(opening(s * PS_X, PS_W, -1, PORTAL_SPRING, PORTAL_S_CROWN), WALL_Y0 - 0.1, WALL_Y1 + 0.1),
             ('box', s * (TW0 + 0.01), s * (TW1 - 1.6), WALL_Y1, TOWER_DEPTH + 0.1, -1, AISLE_VAULT),  # 塔下底层（连通侧廊）
-            (opening(s * PS_X, 3.6, SIDE_WIN_Z0, SIDE_WIN_Z1 - 3.0, SIDE_WIN_Z1), WALL_Y0 - 0.1, WALL_Y0 + 0.8)]
+            (opening(s * PS_X, 3.6, SIDE_WIN_Z0, SIDE_WIN_Z1 - 3.0, SIDE_WIN_Z1), WALL_Y0 - 0.1, WALL_Y0 + 0.8),
+            # 下塔身外侧面的 3 扇高尖窗：掏成 0.9 m 深的壁龛（原来只贴了一圈细杆）
+            ('xmulti', [opening(yy_, 0.85, 26.0, 33.0, 36.5) for yy_ in (WALL_Y0 + 4.0, (WALL_Y0 + TOWER_DEPTH) / 2, TOWER_DEPTH - 4.0)], s * TW1 - s * 0.9, s * TW1 + s),
+            # 螺旋楼梯井：圆柱竖井（半径 2.0）从塔下底层顶（10.6 m）一直到塔身顶（45 m）；back 墙开箭窗采光
+            ('cyl', s * STAIR_X, STAIR_Y, STAIR_R, AISLE_VAULT - 0.3, TOP_BAL_Z0 + 0.3),
+            ('multi', [opening(s * STAIR_X, 0.2, z_, z_ + 1.0, z_ + 1.7) for z_ in (14.0, 19.0, 24.0, 29.0, 34.0, 39.0, 43.5)], TOWER_DEPTH - 1.8, TOWER_DEPTH + 1)]
           + gallery_shapes(s * (TW0 + 1.0), s * (TW1 - 1.0), 5))
 for s, t in towers_up.items():
     xc = s * (TW0 + TW1) / 2; yc = (WALL_Y0 + TOWER_DEPTH) / 2
@@ -43,17 +49,17 @@ for s, t in towers_up.items():
         sh.append((opening(xc + dx, BELFRY_W, BELFRY_Z0, BELFRY_Z1 - 2.2, BELFRY_Z1), WALL_Y0 - 1, TOWER_DEPTH + 1))
     for dy in (-BELFRY_DX, BELFRY_DX):          # 两侧面：沿 x 贯穿（轮廓的“横坐标”当作 y）
         sh.append(('x', opening(yc + dy, BELFRY_W, BELFRY_Z0, BELFRY_Z1 - 2.2, BELFRY_Z1), s * TW0 - s, s * TW1 + s))
-    # 钟楼下的盲拱带改成真开口（用户 2026-11-16：“这个位置没开窗吗”）：每面 5 个尖拱，只切穿各自那一道墙（不贯通整座塔，免得在角墩里切出长槽）
-    xa_, xb2 = sorted((s * (TW0 + 0.4), s * (TW1 - 0.4))); wa_ = (xb2 - xa_) / 5
-    for k in range(5):
-        cxk = xa_ + wa_ * (k + 0.5); pr = opening(cxk, wa_ / 2 - 0.55, 47.9, 49.6, 51.0)
-        sh.append((pr, WALL_Y0 - 1, WALL_Y0 + 1.9))                  # 前墙
-        sh.append((pr, TOWER_DEPTH - 1.9, TOWER_DEPTH + 1))          # 后墙
-    ya_, yb2 = WALL_Y0 + 0.4, TOWER_DEPTH - 0.4; wb_ = (yb2 - ya_) / 5
-    for k in range(5):
-        cyk = ya_ + wb_ * (k + 0.5); pr = opening(cyk, wb_ / 2 - 0.55, 47.9, 49.6, 51.0)
-        sh.append(('x', pr, s * (TW1 - 1.9), s * TW1 + s))           # 外侧墙
-        sh.append(('x', pr, s * TW0 - s, s * (TW0 + 1.9)))           # 内侧墙
+    # 钟楼下、上两道盲拱带改成真开口（用户 2026-11-16：“拱形区域应该是掏空的窗”）：互不重叠的多个轮廓合成一次布尔，只切各自那一道墙
+    xa_, xb2 = sorted((s * (TW0 + 0.4), s * (TW1 - 0.4))); ya_, yb2 = WALL_Y0 + 0.4, TOWER_DEPTH - 0.4
+    for (nB, zb_, zs_, zc_, hwm) in ((5, 47.9, 49.6, 51.0, 0.55), (10, 63.9, 65.0, 66.2, 0.28)):
+        wa_ = (xb2 - xa_) / nB; wb_ = (yb2 - ya_) / nB
+        prx = [opening(xa_ + wa_ * (k + 0.5), wa_ / 2 - hwm, zb_, zs_, zc_) for k in range(nB)]
+        pry = [opening(ya_ + wb_ * (k + 0.5), wb_ / 2 - hwm, zb_, zs_, zc_) for k in range(nB)]
+        sh.append(('multi', prx, WALL_Y0 - 1, WALL_Y0 + 1.9))                  # 前墙
+        sh.append(('multi', prx, TOWER_DEPTH - 1.9, TOWER_DEPTH + 1))          # 后墙
+        sh.append(('xmulti', pry, s * (TW1 - 1.9), s * TW1 + s))               # 外侧墙
+        sh.append(('xmulti', pry, s * TW0 - s, s * (TW0 + 1.9)))               # 内侧墙
+    sh.append(('cyl', s * STAIR_X, STAIR_Y, STAIR_R, TOP_BAL_Z0 - 0.3, TOP_BAL_Z1 + 0.9))   # 楼梯井穿过钟楼地板（到钟楼室内）
     cut(t, sh)
 
 # ---------------------------------------------------------------- 附加构件

@@ -85,10 +85,17 @@ for ys, high_kind in ((NAVE_BAYS, 'abs'), (CHOIR_BAYS, 'med')):
 TY0, TY1 = TRANSEPT_Y0, TRANSEPT_Y1
 ROSE_T_R = 13.10 / 2                       # 官方直径
 ROSE_T_CZ = 22.5                           # 推算：门洞拱顶约 13 m 之上，墙顶 35 m 之下
+# 耳堂玫瑰窗下、上两道小尖窗带（原来只是贴在墙上的细杆）：做成真窗（灰色调玻璃）
+_Lt = TRANSEPT_Y1 - TRANSEPT_Y0
+TRANSEPT_BANDS = []
+for _n, _zb, _zs, _zc in ((9, 12.8, 14.3, 15.8), (11, 31.0, 33.0, 34.0)):
+    _wa = (_Lt - 1.2) / _n
+    for _k in range(_n):
+        TRANSEPT_BANDS.append(((0.6 + _wa * (_k + 0.5)) / _Lt, _wa / 2 - 0.25, _zb, _zs, _zc, 'gris'))
 for s in (-1, 1):
     x = s * TRANSEPT_OUT_X
     segment((x, TY1 if s < 0 else TY0), (x, TY0 if s < 0 else TY1), (-s, 0), 1.2, 0, HIGH_WALL_TOP,
-            wins=[(0.5, 2.3, 0, 7.5, 12.0)], roses=[(0.5, ROSE_T_CZ, ROSE_T_R, 'rose_n' if s < 0 else 'rose_s')])
+            wins=[(0.5, 2.3, 0, 7.5, 12.0)] + TRANSEPT_BANDS, roses=[(0.5, ROSE_T_CZ, ROSE_T_R, 'rose_n' if s < 0 else 'rose_s')])
     T_DOORS.box(x - s * 0.3, x - s * 0.5, (TY0 + TY1) / 2 - 2.3, (TY0 + TY1) / 2 + 2.3, 0, 7.5)   # 耳堂门（关闭，不可开）
     # 门楣：填满门顶 7.5 m 到门洞拱顶 12 m 之间的尖拱部分（石质，与门同一平面）
     pts = opening((TY0 + TY1) / 2, 2.3, 7.5, 7.5, 12.0)

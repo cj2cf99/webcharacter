@@ -69,21 +69,46 @@ const GLSL_ALBEDO = `
   limestone *= mix(0.80, 1.0, smoothstep(0.0, 6.0, yy));
   float damp = (1.0 - smoothstep(0.0, 1.6, yy)) * smoothstep(0.45, 0.75, fbm(uv * 3.0));
   limestone = mix(limestone, vec3(0.20, 0.25, 0.14), damp * 0.5);
+  // 使用十数年、但一直有人维护的痕迹（用户 2026-11-16）：
+  //  - 约 8% 的石块是后来换的新石：更浅更干净、灰缝也是新勾的（偏亮）；
+  //  - 人手够得到的下部（约 3 m 以下）常年擦洗：雨痕和积灰明显减弱，近地潮绿被清掉；
+  //  - 少数老石块有细裂缝；
+  float cleanZone = 1.0 - smoothstep(2.5, 6.5, yy);
+  float repl = step(0.92, fract(b.y * 7.13 + 0.31));
+  limestone = mix(limestone, limestone * 1.0 + (vec3(0.95, 0.82, 0.62) * (0.55 + 0.5 * lum) - limestone) * 0.85, repl * 0.9);
+  limestone = mix(limestone, vec3(0.90, 0.78, 0.60) * (0.62 + 0.4 * lum), repl * b.z * 0.8);
+  limestone = mix(limestone, mix(limestone, vec3(0.88, 0.76, 0.58) * (0.6 + 0.45 * lum), 0.45), cleanZone * 0.6);
+  float crack = (1.0 - smoothstep(0.0, 0.010 + fw * 0.8, abs(fbm(uv * 2.7 + b.y * 13.0) - 0.5) * 0.07)) * step(0.82, fract(b.y * 3.7)) * (1.0 - repl) * fade;
+  limestone *= 1.0 - 0.5 * crack;
 
-  // ---- 铅皮
+  // ---- 铅皮：竖向咬合缝（约 52 cm 一条）+ 横向搭接缝（约 2.1 m 一段，各条错位）+ 每块板微小的深浅差 + 顺坡细纹 + 雨痕
   vec2 tn = normalize(vec2(-vWN.z, vWN.x) + 1e-5);
   float s = dot(gp.xz, tn);                                          // 垂直于坡向的横坐标
-  float seam = abs(fract(s / 0.52) - 0.5) * 0.52;                    // 咬合缝（约 52 cm 一条）
-  float rib = 1.0 - smoothstep(0.0, 0.022 + fw, seam);
-  float sheet = h21(vec2(floor(s / 0.52), floor(gp.y * 0.6)));
-  vec3 lead = vec3(0.26, 0.285, 0.31) * (0.78 + 0.45 * sheet) * (0.85 + 0.3 * fbm(uv * 3.0));
-  lead = mix(lead, lead * vec3(0.9, 1.05, 1.0), step(0.5, vn(uv * 0.9)) * 0.4);
-  lead *= 1.0 - 0.35 * smoothstep(0.55, 0.9, fbm(vec2(s * 3.0, gp.y * 0.3 + 9.0)));   // 雨痕
-  lead = mix(lead, lead * 1.5, rib * 0.5);
+  float si = floor(s / 0.52);
+  float seam = abs(fract(s / 0.52) - 0.5) * 0.52;
+  float rib = 1.0 - smoothstep(0.0, 0.020 + fw, seam);
+  float ribHi = 1.0 - smoothstep(0.015, 0.045 + fw, seam);           // 咬合缝两侧的亮边
+  float lsl = gp.y * 1.35 + h11(si * 1.7) * 2.1;                     // 沿坡距离（坡度约 45°）
+  float sid = floor(lsl / 2.1);
+  float lapP = fract(lsl / 2.1);
+  float lap = (1.0 - smoothstep(0.0, 0.010 + fw * 0.7, lapP * 2.1)) ;
+  float sheet = h21(vec2(si, sid));
+  vec3 lead = vec3(0.30, 0.33, 0.355) * (0.94 + 0.12 * sheet);
+  lead *= 1.0 + (fbm(vec2(s * 16.0, lsl * 0.35)) - 0.5) * 0.10 * fade;        // 顺坡的细纹
+  lead = mix(lead, lead * vec3(0.92, 1.03, 1.02), smoothstep(0.55, 0.85, fbm(vec2(s * 0.8, lsl * 0.25))) * 0.6);   // 局部偏青的氧化
+  lead *= 1.0 - 0.28 * smoothstep(0.58, 0.9, fbm(vec2(s * 3.0, gp.y * 0.3 + 9.0)));      // 雨痕
+  lead *= 1.0 + 0.30 * step(0.94, h21(vec2(si * 3.1, sid + 7.0)));              // 偶有新换的铅板，更亮
+  lead *= 1.0 - 0.35 * lap * fade;                                    // 搭接缝的暗线
+  lead = mix(lead, lead * 1.35, ribHi * 0.45);
+  lead = mix(lead, lead * 0.7, rib * 0.35);
 
   diffuseColor.rgb = mix(limestone, lead, isLead);
-  stoneH = mix(b.x, rib * 0.012 + (sheet - 0.5) * 0.002, isLead);
-  stoneRough = mix(0.92 - b.z * 0.0 + (fbm(uv * 9.0) - 0.5) * 0.12, 0.42 + 0.2 * sheet, isLead);
+  stoneH = mix(b.x, rib * 0.018 + ribHi * 0.004 - lap * 0.004, isLead);
+  stoneRough = mix(0.92 - b.z * 0.0 + (fbm(uv * 9.0) - 0.5) * 0.12, 0.40 + 0.2 * sheet, isLead);
+  // 黄铜（钟）：烘焙底色里橙黄、偏亮的部分按金属处理
+  float isBrass = step(0.30, lumB) * step(1.5, diffuseColor.r / max(diffuseColor.g, 1e-3)) * step(4.0, diffuseColor.g / max(diffuseColor.b, 1e-3));
+  if (isBrass > 0.5) { diffuseColor.rgb = vec3(0.95, 0.62, 0.17) * (0.85 + 0.3 * fbm(uv * 6.0)); stoneRough = 0.26; }
+  stoneMetal = mix(0.0, 0.9, isBrass);
 }
 `;
 
@@ -102,9 +127,10 @@ export function stoneMaterial(map, ao, ground = false, color = null) {
     const HAZE = 'gl_FragColor.rgb = mix(gl_FragColor.rgb, uHaze, smoothstep(160.0, 540.0, distance(vWPos, cameraPosition)));' + String.fromCharCode(10) + '#include <colorspace_fragment>';
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <colorspace_fragment>', ground ? HAZE : '#include <colorspace_fragment>')
-      .replace('void main() {', 'uniform vec3 uHaze;' + String.fromCharCode(10) + GLSL_PARS + String.fromCharCode(10) + 'float stoneH, stoneRough;' + String.fromCharCode(10) + 'void main() {')
+      .replace('void main() {', 'uniform vec3 uHaze;' + String.fromCharCode(10) + GLSL_PARS + String.fromCharCode(10) + 'float stoneH, stoneRough, stoneMetal;' + String.fromCharCode(10) + 'void main() {')
       .replace('#include <map_fragment>', '#include <map_fragment>\n' + (ground ? GLSL_GROUND : GLSL_ALBEDO))
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = stoneRough;')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>' + String.fromCharCode(10) + 'metalnessFactor = stoneMetal;')
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
       {
         vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition);
@@ -122,24 +148,30 @@ const GLSL_GROUND = `
 {
   vec2 uv = vWPos.xz;
   float fw = length(fwidth(uv));
-  float fade = 1.0 - smoothstep(0.05, 0.25, fw);
-  vec3 b = ashlarP(uv, fw, 0.9, 1.1, 1.1);
-  #ifdef USE_AOMAP
-  float aoV = texture2D(aoMap, vAoMapUv).r;
-#else
+  float fade = 1.0 - smoothstep(0.08, 0.5, fw);
+  vec3 b = ashlarP(uv, fw, 1.8, 1.8, 0.9);                           // 大块石板（1.8 m 层高，长 1.8–2.7 m）
+  float id = b.y;
+  vec2 w = uv * 0.22 + vec2(fbm(uv * 0.35) * 2.2, fbm(uv * 0.31 + 7.0) * 2.2) + id * 9.0;   // 每块石板各有一套云纹
+  float vein = pow(1.0 - abs(sin(w.x * 3.0 + w.y * 1.7 + fbm(w * 2.0) * 3.0)), 14.0);
+  float vein2 = pow(1.0 - abs(sin(w.y * 4.3 - w.x * 1.1 + fbm(w * 3.1 + 3.0) * 2.5)), 22.0);
+  vec3 c = mix(vec3(0.50, 0.49, 0.47), vec3(0.40, 0.40, 0.41), fbm(uv * 0.5 + id * 5.0));   // 米白到灰白
+  c = mix(c, vec3(0.38, 0.40, 0.43), (vein * 0.55 + vein2 * 0.35) * fade);                    // 灰色纹路
+  c *= 1.0 + (id - 0.5) * 0.12;
+  // 使用痕迹但常年维护：人流走出的深色磨损带、偶尔换过的新石板（更白、纹路浅）、擦洗不到的接缝里的积灰
+  float rep = step(0.88, fract(id * 5.37 + 0.2));
+  c = mix(c, vec3(0.86, 0.85, 0.82), rep * 0.75);
+  float path = exp(-pow(abs(vWPos.x) / 7.0, 2.0)) * smoothstep(-60.0, 0.0, vWPos.z) * 0.5;          // 中轴的人流磨损带
+  c *= 1.0 - 0.12 * path;
+  c *= 1.0 - 0.22 * b.z;                                                                        // 缝
+  c *= 1.0 - 0.12 * smoothstep(0.55, 0.9, fbm(uv * 1.7 + 4.0)) * (1.0 - rep) * fade;             // 局部污渍
   float aoV = 1.0;
+#ifdef USE_AOMAP
+  aoV = texture2D(aoMap, vAoMapUv).r;
 #endif
-  vec3 c = vec3(0.26, 0.255, 0.245) * (0.82 + 0.35 * (b.y - 0.5) * 2.0 * 0.5);
-  c *= 1.0 + (fbm(uv * 1.3) - 0.5) * 0.28;                           // 大块明暗
-  c *= 1.0 + (fbm(uv * 9.0) - 0.5) * 0.22 * fade;                    // 颗粒
-  c = mix(c, c * 0.48, b.z * 0.9);                                   // 灰缝
-  float dirt = smoothstep(0.50, 0.80, fbm(uv * 0.55 + 11.0));        // 大片污渍
-  c = mix(c, c * vec3(0.62, 0.60, 0.56), dirt * 0.7);
-  float wear = smoothstep(0.55, 0.9, fbm(uv * 0.23 + 3.0));          // 潮湿暗斑
-  c *= 1.0 - 0.22 * wear;
-  c *= mix(0.5, 1.0, smoothstep(0.1, 0.8, aoV));                     // 墙脚遮蔽
+  c *= mix(0.55, 1.0, smoothstep(0.1, 0.8, aoV));
   diffuseColor.rgb = c;
-  stoneH = b.x * 1.3;
-  stoneRough = mix(0.92, 0.55, wear) - b.z * 0.0;
+  stoneH = (b.x * 0.4 + (vein - 0.5) * 0.0004) * 0.6;
+  stoneRough = mix(0.10, 0.22, smoothstep(0.4, 0.9, fbm(uv * 0.9)) * 0.7 + path * 0.8);                // 抛光，使用多的地方略钝
+  stoneMetal = 0.0;
 }
 `;

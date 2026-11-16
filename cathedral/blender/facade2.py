@@ -12,6 +12,7 @@ def _arch_rods(P, face, u, w, z0, crown, r, proud, n=10):
         rod(d2, P(face, u + x0, a0, proud), P(face, u + x1, a1, proud), r)
 
 def P(face, u, z, p):
+    p = min(p, 0.05)          # 细杆、拱框、卷叶块都直接贴（半嵌入）墙面，不留缝：原来 proud 大于杆半径，杆悬在墙外 5–15 cm（2026-11-16 悬空检查）
     kind, c, sg = face
     return Vector((u, c + sg * p, z)) if kind == 'y' else Vector((c + sg * p, u, z))
 

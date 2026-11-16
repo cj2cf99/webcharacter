@@ -92,9 +92,9 @@ for s in (-1, 1):
         for yy in (WALL_Y0 + 4.0, (WALL_Y0 + TOWER_DEPTH) / 2, TOWER_DEPTH - 4.0):
             Pf = bay_Pf(yy)
             bay_dress(Pf, face, 3.6, 26.0, 33.0, 36.5, 0.85)
-            rod(d2, Pf(face, 0, 26.0, 0.2), Pf(face, 0, 34.2, 0.2), 0.1)
+            rod(d2, Pf(face, 0, 26.0, -0.8), Pf(face, 0, 34.2, -0.8), 0.1)             # 竖棂、花格都贴在壁龛背面（壁龛深 0.9 m），原来悬在壁龛口
             for dz_ in (0.0,):
-                pts = [Pf(face, 0.45 * math.cos(2 * math.pi * k / 12), 35.0 + 0.45 * math.sin(2 * math.pi * k / 12), 0.2) for k in range(13)]
+                pts = [Pf(face, 0.45 * math.cos(2 * math.pi * k / 12), 35.0 + 0.45 * math.sin(2 * math.pi * k / 12), -0.8) for k in range(13)]
                 for a_, b_ in zip(pts, pts[1:]):
                     rod(d2, a_, b_, 0.06)
 
@@ -108,7 +108,7 @@ for s in (-1, 1):
 # ---------------------------------------------------------------- 钟楼里的钟与木钟架（用户 2026-11-16：“这里应该是钟楼，钟呢”）
 # 依据：南塔有大钟 Emmanuel（约 13 吨、口径约 2.6 m、高约 2.4 m），北塔挂较小的钟（这里画 4 口）；钟楼木架与横梁。
 # 大小与数量是公开资料的大致数字，钟的位置与木架形式为推算（待核实）。
-bronze = bpy.data.materials.get('Bronze') or material('Bronze', (0.36, 0.22, 0.08), 0.35)
+bronze = bpy.data.materials.get('Brass') or material('Brass', (0.90, 0.68, 0.22), 0.3)       # 黄铜（用户 2026-11-16：钟用黄铜，亮堂大气）
 bells = Builder('W_Bells', EXT, bronze)
 
 def bell(b, x, y, ztop, R, H, seg=14):
@@ -128,24 +128,31 @@ def bell(b, x, y, ztop, R, H, seg=14):
 for s in (-1, 1):
     xc = s * (TW0 + TW1) / 2; yc = (WALL_Y0 + TOWER_DEPTH) / 2
     zb = BELFRY_Z0 + 4.2                                   # 钟顶（吊梁下）
-    # 木钟架：两根纵向大梁 + 立柱 + 横梁（放在钟楼室内，穿过百叶可见）
-    for dyy in (-2.4, 2.4):
-        d2.box(xc - 4.6, xc + 4.6, yc + dyy - 0.22, yc + dyy + 0.22, zb, zb + 0.5)
+    zf = TOP_BAL_Z1 + 0.6                                  # 钟楼室内地板面（47.6 m）
+    # 木钟架：四根立柱从地板立到梁底；两侧纵梁 + 两端横梁；钟轭架在梁上（原来立柱起点在 51 m，悬在半空）
     for dxx in (-4.2, 4.2):
         for dyy in (-2.4, 2.4):
-            d2.box(xc + dxx - 0.22, xc + dxx + 0.22, yc + dyy - 0.22, yc + dyy + 0.22, BELFRY_Z0 - 0.4, zb)
-    d2.box(xc - 4.6, xc + 4.6, yc - 2.7, yc + 2.7, BELFRY_Z0 - 0.5, BELFRY_Z0 - 0.2)        # 钟楼地板梁
+            d2.box(xc + dxx - 0.25, xc + dxx + 0.25, yc + dyy - 0.25, yc + dyy + 0.25, zf - 0.2, zb + 0.5)
+    for dyy in (-2.4, 2.4):
+        d2.box(xc - 4.6, xc + 4.6, yc + dyy - 0.25, yc + dyy + 0.25, zb, zb + 0.5)          # 纵梁
+    for dxx in (-4.2, 4.2):
+        d2.box(xc + dxx - 0.25, xc + dxx + 0.25, yc - 2.65, yc + 2.65, zb, zb + 0.5)         # 端梁
+    # 斜撑
+    for dxx in (-4.2, 4.2):
+        for dyy in (-2.4, 2.4):
+            rod(d2, (xc + dxx, yc + dyy, zf + 0.5), (xc + dxx * 0.6, yc + dyy, zb), 0.13)
     if s > 0:
         # 南塔大钟 Emmanuel：口径约 2.6 m、高约 2.4 m（不含钟冠）；加粗的木钟轭与钟冠，视觉上更接近真实的分量
-        bell(bells, xc, yc, zb, 1.40, 2.6)
-        d2.box(xc - 2.2, xc + 2.2, yc - 0.35, yc + 0.35, zb, zb + 0.6)                        # 钟轭（木）
+        bell(bells, xc, yc, zb + 0.6, 1.62, 3.0)
+        d2.box(xc - 4.4, xc + 4.4, yc - 0.35, yc + 0.35, zb + 0.1, zb + 0.7)                  # 钟轭（木），两端搭在端梁上
         for sg in (-1, 1):
-            d2.box(xc + sg * 2.0 - 0.3, xc + sg * 2.0 + 0.3, yc - 0.55, yc + 0.55, zb - 0.4, zb + 0.9)   # 轭端轴承座
+            d2.box(xc + sg * 2.0 - 0.3, xc + sg * 2.0 + 0.3, yc - 0.55, yc + 0.55, zb - 0.1, zb + 0.9)   # 轭端轴承座
     else:
-        # 北塔：8 口钟，分两排（前后），口径 1.4–2.0 m，从大到小排列
+        # 北塔：8 口钟，分两排（前后），口径 1.4–2.3 m，从大到小排列；每排一根横梁搭在两端的端梁上
+        for rowi, ry_ in enumerate((-1.7, 1.7)):
+            d2.box(xc - 4.4, xc + 4.4, yc + ry_ - 0.3, yc + ry_ + 0.3, zb + 0.0, zb + 0.55)
         for k in range(8):
             row = k // 4; col = k % 4
-            R = 1.0 - 0.07 * k
-            bell(bells, xc - 3.3 + 2.2 * col, yc + (-1.4 if row == 0 else 1.4), zb, R, 1.9 * R)
-            d2.box(xc - 3.3 + 2.2 * col - 0.9, xc - 3.3 + 2.2 * col + 0.9, yc + (-1.4 if row == 0 else 1.4) - 0.25, yc + (-1.4 if row == 0 else 1.4) + 0.25, zb, zb + 0.4)
+            R = 1.15 - 0.085 * k
+            bell(bells, xc - 3.6 + 2.4 * col, yc + (-1.7 if row == 0 else 1.7), zb + 0.3, R, 1.9 * R)
 bells_obj = bells.done()

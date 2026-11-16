@@ -36,6 +36,28 @@ def cut(obj, shapes):
             r = bmesh.ops.create_cube(bm, size=1)
             for v in r['verts']:
                 v.co = Vector((x0 if v.co.x < 0 else x1, y0 if v.co.y < 0 else y1, z0 if v.co.z < 0 else z1))
+        elif s[0] == 'multi':                       # ('multi', [pts1, pts2, ...], y0, y1)：互不重叠的多个 xz 轮廓合成一次布尔（比逐个切快得多）
+            _, plist, y0_, y1_ = s
+            for pts_ in plist:
+                a_ = [bm.verts.new((x, y0_, z)) for x, z in pts_]; b_ = [bm.verts.new((x, y1_, z)) for x, z in pts_]
+                bm.faces.new(a_[::-1]); bm.faces.new(b_)
+                for i in range(len(pts_)):
+                    j = (i + 1) % len(pts_)
+                    bm.faces.new((a_[i], a_[j], b_[j], b_[i]))
+        elif s[0] == 'xmulti':                      # ('xmulti', [pts_yz...], x0, x1)
+            _, plist, x0_, x1_ = s
+            x0_, x1_ = sorted((x0_, x1_))
+            for pts_ in plist:
+                a_ = [bm.verts.new((x0_, y, z)) for y, z in pts_]; b_ = [bm.verts.new((x1_, y, z)) for y, z in pts_]
+                bm.faces.new(a_); bm.faces.new(b_[::-1])
+                for i in range(len(pts_)):
+                    j = (i + 1) % len(pts_)
+                    bm.faces.new((a_[i], b_[i], b_[j], a_[j]))
+        elif s[0] == 'cyl':                         # ('cyl', cx, cy, r, z0, z1)：竖直圆柱（楼梯井）
+            _, cx_, cy_, r_, z0_, z1_ = s
+            res_ = bmesh.ops.create_cone(bm, cap_ends=True, segments=24, radius1=r_, radius2=r_, depth=z1_ - z0_)
+            for v in res_['verts']:
+                v.co += Vector((cx_, cy_, (z0_ + z1_) / 2))
         elif s[0] == 'x':
             _, pts, x0, x1 = s
             x0, x1 = sorted((x0, x1))
