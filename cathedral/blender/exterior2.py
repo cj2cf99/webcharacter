@@ -170,5 +170,6 @@ for kind, M, xc, p1, p2, p3, p4, t in WIN_LOG:
             for a_, b_ in zip(pts, pts[1:]):
                 rod(d2, a_, b_, 0.09)
 
+exec(open(os.path.join(HERE, 'facade2.py'), encoding='utf-8').read())
 d2_obj = d2.done()
 print('exterior2 ok', len(d2_obj.data.polygons))
