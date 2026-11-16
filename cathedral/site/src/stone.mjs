@@ -45,7 +45,8 @@ const GLSL_ALBEDO = `
 #else
   float aoV = 1.0;
 #endif
-  float isLead = step(0.12, abs(vWN.y)) * step(14.0, gp.y);   // 高处的上倾面：铅皮屋面
+  float lumB = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+  float isLead = step(0.12, abs(vWN.y)) * step(14.0, gp.y) * (1.0 - smoothstep(0.34, 0.46, lumB));   // 只有烘焙底色偏暗的（屋面材质）才是铅皮，小尖塔等石构件保持石面   // 高处的上倾面：铅皮屋面
 
   // ---- 石面
   vec3 b = ashlar(uv, fw);

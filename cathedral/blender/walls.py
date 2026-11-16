@@ -78,7 +78,7 @@ for ys, high_kind in ((NAVE_BAYS, 'abs'), (CHOIR_BAYS, 'med')):
             segment((x, ya), (x, yb), inward, 1.0, 8.5, HIGH_WALL_TOP,
                     wins=[(0.5, (yb - ya) / 2 - 0.75, 0, 8.0, ARCADE_CROWN),
                           (0.5, (yb - ya) / 2 - 1.0, TRIBUNE_FLOOR + 0.9, 17.5, TRIBUNE_VAULT - 0.4, None),      # 楼廊开口：不装玻璃
-                          (0.5, (yb - ya) * 0.22, 21.8, 23.2, 24.2, high_kind)])      # 高侧窗：中殿抽象（1966）、唱诗区叙事版式
+                          (0.5, (yb - ya) * 0.26, 24.6, 29.8, 32.6, high_kind)])      # 高侧窗：中殿抽象（1966）、唱诗区叙事版式
             # 外侧廊与礼拜堂之间的拱（礼拜堂入口）：用扶壁隔墙已表达，这里不建墙
 
 # ---------------------------------------------------------------- 耳堂
@@ -123,7 +123,7 @@ def apse_ring(rx, ry, n, t, z0, z1, wins):
 apse_ring(APSE_OUT[0], APSE_OUT[1], 10, WALL_T, 0, CHAPEL_WALL_TOP, [(0.5, 0.25, 3.0, 9.0, 12.2)])
 apse_ring(APSE_AISLE[0] + 0.5, APSE_AISLE[1] + 0.5, 10, 1.0, AISLE_VAULT, TRIBUNE_WALL_TOP, [(0.5, 0.22, 17.0, 19.3, 20.9)])
 apse_ring(APSE_ARC[0] + 0.5, APSE_ARC[1] + 0.5, 5, 1.0, 8.5, HIGH_WALL_TOP,
-          [(0.5, 0.36, 0, 8.0, ARCADE_CROWN), (0.5, 0.3, TRIBUNE_FLOOR + 0.9, 17.5, TRIBUNE_VAULT - 0.4, None), (0.5, 0.18, 21.8, 23.2, 24.2, 'med')])
+          [(0.5, 0.36, 0, 8.0, ARCADE_CROWN), (0.5, 0.3, TRIBUNE_FLOOR + 0.9, 17.5, TRIBUNE_VAULT - 0.4, None), (0.5, 0.28, 24.6, 29.8, 32.6, 'med')])
 
 # 后殿侧廊顶棚与楼廊顶（环形水平板）
 for z, r0, r1 in ((AISLE_VAULT, ARC_X + 0.5, APSE_OUT[0] - WALL_T), (TRIBUNE_VAULT, ARC_X + 0.5, APSE_AISLE[0] + 0.5)):
