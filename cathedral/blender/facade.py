@@ -188,14 +188,16 @@ for x0, x1 in GAL_SECTIONS:
         cx = lo + (i + 0.5) * w
         rod(d, (cx, WALL_Y0 + 1.0, GALLERY_Z0), (cx, WALL_Y0 + 1.0, GALLERY_Z1 - 2.6), 0.1)
 
-# 钟楼百叶（每个开口内若干斜板）
+# 钟楼百叶：每个开口内一排斜板条（外缘低、内缘高）。前后两面各一层，开口上半的尖拱部分也填满
 for s in (-1, 1):
     xc = s * (TW0 + TW1) / 2
     for dx in (-BELFRY_DX, BELFRY_DX):
-        for k in range(10):
-            z = BELFRY_Z0 + 0.6 + k * 0.85
-            for y in (WALL_Y0 + 0.8, TOWER_DEPTH - 0.8):
-                d.box(xc + dx - BELFRY_W, xc + dx + BELFRY_W, y - 0.06, y + 0.06, z, z + 0.45)
+        for k in range(15):
+            z = BELFRY_Z0 + 0.5 + k * 0.62
+            if z > BELFRY_Z1 - 0.9: break
+            hw = BELFRY_W if z < BELFRY_Z1 - 2.2 else BELFRY_W * max(0.35, 1 - (z - (BELFRY_Z1 - 2.2)) / 2.4)
+            slat_y(d, xc + dx - hw, xc + dx + hw, WALL_Y0 + 0.8, z, -1)
+            slat_y(d, xc + dx - hw, xc + dx + hw, TOWER_DEPTH - 0.8, z, +1)
 
 for b_ in (d, st, wd):
     b_.done()

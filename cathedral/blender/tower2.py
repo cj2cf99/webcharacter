@@ -136,8 +136,16 @@ for s in (-1, 1):
             d2.box(xc + dxx - 0.22, xc + dxx + 0.22, yc + dyy - 0.22, yc + dyy + 0.22, BELFRY_Z0 - 0.4, zb)
     d2.box(xc - 4.6, xc + 4.6, yc - 2.7, yc + 2.7, BELFRY_Z0 - 0.5, BELFRY_Z0 - 0.2)        # 钟楼地板梁
     if s > 0:
-        bell(bells, xc, yc, zb, 1.3, 2.4)                                                   # 南塔大钟
+        # 南塔大钟 Emmanuel：口径约 2.6 m、高约 2.4 m（不含钟冠）；加粗的木钟轭与钟冠，视觉上更接近真实的分量
+        bell(bells, xc, yc, zb, 1.40, 2.6)
+        d2.box(xc - 2.2, xc + 2.2, yc - 0.35, yc + 0.35, zb, zb + 0.6)                        # 钟轭（木）
+        for sg in (-1, 1):
+            d2.box(xc + sg * 2.0 - 0.3, xc + sg * 2.0 + 0.3, yc - 0.55, yc + 0.55, zb - 0.4, zb + 0.9)   # 轭端轴承座
     else:
-        for k in range(4):
-            bell(bells, xc - 3.0 + 2.0 * k, yc, zb, 0.62 + 0.04 * (3 - k), 1.2 + 0.1 * (3 - k))
+        # 北塔：8 口钟，分两排（前后），口径 1.4–2.0 m，从大到小排列
+        for k in range(8):
+            row = k // 4; col = k % 4
+            R = 1.0 - 0.07 * k
+            bell(bells, xc - 3.3 + 2.2 * col, yc + (-1.4 if row == 0 else 1.4), zb, R, 1.9 * R)
+            d2.box(xc - 3.3 + 2.2 * col - 0.9, xc - 3.3 + 2.2 * col + 0.9, yc + (-1.4 if row == 0 else 1.4) - 0.25, yc + (-1.4 if row == 0 else 1.4) + 0.25, zb, zb + 0.4)
 bells_obj = bells.done()

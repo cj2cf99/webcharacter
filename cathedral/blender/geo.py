@@ -143,3 +143,38 @@ def glass_prism(bm, pts, y0, y1, kind):
                 lp[uvl].uv = ((lp.vert.co.x - x0) / (x1 - x0), (lp.vert.co.z - z0) / (z1 - z0))
         else:
             f.material_index = 0
+
+
+# ---------------------------------------------------------------- 百叶板条（abat-son）：斜板，外缘低、内缘高，雨水向外流；板与板略有重叠，从外面基本看不到钟
+def _slat_section(depth0, z, outward, L=0.62, t=0.07, theta=math.radians(35)):
+    ax, az = outward * math.cos(theta), -math.sin(theta)             # 沿板面方向（向外、向下）
+    nx, nz = -az * outward, ax * outward                                # 板厚方向
+    nx, nz = (math.sin(theta) * outward, math.cos(theta))
+    pts = []
+    for sa, sn in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+        pts.append((depth0 + ax * L / 2 * sa + nx * t / 2 * sn, z + az * L / 2 * sa + nz * t / 2 * sn))
+    return pts
+
+def slat_y(b, x0, x1, y, z, outward):
+    """沿 x 方向展开的斜板（用于前后两面）。y 是板中心的 y，outward=-1 表示朝 -y 外。"""
+    sec = _slat_section(y, z, outward)
+    n0 = len(b.bm.faces)
+    A = [b.bm.verts.new((x0, d, zz)) for d, zz in sec]; B = [b.bm.verts.new((x1, d, zz)) for d, zz in sec]
+    b.bm.faces.new(A[::-1]); b.bm.faces.new(B)
+    for i in range(4):
+        j = (i + 1) % 4
+        b.bm.faces.new((A[i], A[j], B[j], B[i]))
+    b.bm.faces.ensure_lookup_table()
+    bmesh.ops.recalc_face_normals(b.bm, faces=list(b.bm.faces)[n0:])
+
+def slat_x(b, y0, y1, x, z, outward):
+    """沿 y 方向展开的斜板（用于两侧面）。"""
+    sec = _slat_section(x, z, outward)
+    n0 = len(b.bm.faces)
+    A = [b.bm.verts.new((d, y0, zz)) for d, zz in sec]; B = [b.bm.verts.new((d, y1, zz)) for d, zz in sec]
+    b.bm.faces.new(A[::-1]); b.bm.faces.new(B)
+    for i in range(4):
+        j = (i + 1) % 4
+        b.bm.faces.new((A[i], A[j], B[j], B[i]))
+    b.bm.faces.ensure_lookup_table()
+    bmesh.ops.recalc_face_normals(b.bm, faces=list(b.bm.faces)[n0:])

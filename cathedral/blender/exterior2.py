@@ -133,17 +133,16 @@ for s in (-1, 1):
     # 山墙顶尖塔
     pinnacle(d2, s * (TRANSEPT_OUT_X - 0.6), (TY0_ + TY1_) / 2, ROOF_RIDGE + 1.0, 1.4, 1.5, 3.0)
 
-# ---------------------------------------------------------------- 钟楼侧面百叶（原来只有前后面）
+# ---------------------------------------------------------------- 钟楼侧面百叶（斜板条，与前后面一致）
 for s in (-1, 1):
     xc = s * (TW0 + TW1) / 2; yc = (WALL_Y0 + TOWER_DEPTH) / 2
     for dy in (-BELFRY_DX, BELFRY_DX):
-        for k in range(10):
-            z = BELFRY_Z0 + 0.6 + k * 0.85
-            for x in (s * (TW0 + 0.8), s * (TW1 - 0.8)):
-                d2.box(x - 0.06, x + 0.06, yc + dy - BELFRY_W, yc + dy + BELFRY_W, z, z + 0.45)
-        # 拱顶部分填板
-        for x in (s * (TW0 + 0.8), s * (TW1 - 0.8)):
-            d2.box(x - 0.06, x + 0.06, yc + dy - BELFRY_W, yc + dy + BELFRY_W, BELFRY_Z0 + 0.6 + 10 * 0.85, BELFRY_Z1 - 1.2)
+        for k in range(15):
+            z = BELFRY_Z0 + 0.5 + k * 0.62
+            if z > BELFRY_Z1 - 0.9: break
+            hw = BELFRY_W if z < BELFRY_Z1 - 2.2 else BELFRY_W * max(0.35, 1 - (z - (BELFRY_Z1 - 2.2)) / 2.4)
+            slat_x(d2, yc + dy - hw, yc + dy + hw, s * (TW1 - 0.8), z, s)           # 外侧面：朝外 = s
+            slat_x(d2, yc + dy - hw, yc + dy + hw, s * (TW0 + 0.8), z, -s)          # 内侧面：朝外 = -s
 
 # ---------------------------------------------------------------- 窗棂与花格（所有尖拱窗、耳堂玫瑰窗）
 def _w(M, x, y, z):
