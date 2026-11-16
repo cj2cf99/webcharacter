@@ -89,7 +89,7 @@ const GLSL_ALBEDO = `
 export const hazeU = { value: new THREE.Color(0.55, 0.6, 0.68) };      // 远景雾色（线性，已含色调映射），由 sky.mjs 每帧更新
 
 export function stoneMaterial(map, ao, ground = false, color = null) {
-  const m = new THREE.MeshStandardMaterial({ map: map || null, color: color ?? 0xffffff, aoMap: ao || null, aoMapIntensity: 1.0, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide });
+  const m = new THREE.MeshStandardMaterial({ map: map || null, color: color ?? 0xffffff, aoMap: ao || null, aoMapIntensity: 1.35, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide });
   m.customProgramCacheKey = () => ground ? 'ground-v1' : 'stone-v1';
   m.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader

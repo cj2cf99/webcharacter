@@ -75,6 +75,7 @@ function exteriorMaterial(map, ao, pave) {
   };
   return m;
 }
+const glassMats = [];     // 玻璃材质：室内看时改为“自发光彩色”（见 frame），否则被曝光 22 的灯光冲成白色
 async function prepareExterior(root) {
   const jobs = [];
   root.traverse((o) => {
@@ -84,7 +85,7 @@ async function prepareExterior(root) {
       map.colorSpace = THREE.SRGBColorSpace;
       // 外部看玻璃：深色、带天空反射；透出一点内部彩光（自发光取贴图的 18%）
       const gm = new THREE.MeshStandardMaterial({ map, color: 0x8a9098, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: 0.1, roughness: 0.04, metalness: 0.0, side: THREE.DoubleSide });
-      gm.userData.envK = 3.2; lights.useEnv(gm); o.material = gm;
+      gm.userData.envK = 3.2; lights.useEnv(gm); o.material = gm; glassMats.push(gm);
       return;
     }
     const key = AO_KEY[o.name];
@@ -290,6 +291,15 @@ function frame(now, manual = false) {
       exposure += (target - exposure) * (1 - Math.exp(-dt / ADAPT));
       uExp.value = exposure;
       lights.sky.position.copy(camera.position);
+    }
+    // 玻璃：室外是深色带反射；站在室内时不吃灯光（室内曝光很高会冲白），改成按白天亮度发光的宝石色
+    {
+      const inside = isInside(pos) && eyeY < 22;
+      const day = L ? Math.min(1, L.skyBright * 1.1) : 1;
+      for (const g of glassMats) {
+        if (inside) { g.color.setRGB(0.02, 0.02, 0.02); g.emissiveIntensity = 0.35 + 1.0 * day; g.userData.envK = 0; }
+        else { g.color.setHex(0x8a9098); g.emissiveIntensity = 0.1; g.userData.envK = 3.2; }
+      }
     }
     // 望远镜视角：平滑过渡到目标倍率；基础视角 70°
     zoomCur += ((zoomOn ? zoomT : 1) - zoomCur) * (1 - Math.exp(-dt * 10));

@@ -104,7 +104,9 @@ export function createSkyAndLights(scene, renderer) {
   sun.shadow.mapSize.set(4096, 4096);
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.05;
   const hemi = new THREE.HemisphereLight(0xffffff, 0x4a4540, 1);
-  scene.add(sun, sun.target, hemi);
+  // 天穹补光：与太阳反向、偏低的冷色弱方向光，不投影；让背光面也有体积感（天空半球光只是上下渐变，没有方向）
+  const fill = new THREE.DirectionalLight(0x9fb8ff, 0.3);
+  scene.add(sun, sun.target, hemi, fill, fill.target);
 
   // 阴影相机覆盖整座教堂加前广场（three 坐标：x ±45，y 0–100，z −140–90）
   const BOX = [];
@@ -120,7 +122,11 @@ export function createSkyAndLights(scene, renderer) {
     sun.color.setRGB(...L.sunColor);
     sun.intensity = Math.PI * L.sunI * exposure;
     sun.visible = L.sunI > 0.01;
-    hemi.color.setRGB(...L.skyColor); hemi.groundColor.setRGB(0.30, 0.28, 0.25).multiplyScalar(L.skyBright);
+    hemi.color.setRGB(...L.skyColor); // 地面反弹：受太阳照射的铺石把暖光反弹到墙脚和飞扶壁下侧，强度随日照
+    hemi.groundColor.setRGB(0.52, 0.47, 0.38).multiplyScalar(L.skyBright * (0.45 + 0.55 * Math.min(1, L.sunI / 1.6)));
+    fill.color.setRGB(0.62, 0.74, 1.0).lerp(new THREE.Color(1.0, 0.72, 0.5), Math.min(1, 1 - Math.min(1, L.sinE * 3)));
+    fill.intensity = Math.PI * 0.38 * L.skyI * exposure;
+    fill.position.set(-d.x * 300 + center.x, 90 + center.y, -d.z * 300 + center.z); fill.target.position.copy(center);
     hemi.intensity = Math.PI * L.skyI * exposure;
     // 太阳方向与阴影相机只在时间变了 0.01 小时以上才更新：阴影图每帧重新拟合会让阴影边缘逐帧“游动”（颤抖）
     const refit = Math.abs(hours - fitHours) > 0.01;
