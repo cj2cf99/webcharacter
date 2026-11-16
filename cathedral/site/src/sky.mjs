@@ -30,7 +30,7 @@ export function lightingAt(hours) {
 }
 
 const SKY_VS = `varying vec3 vDir;
-void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position.z = gl_Position.w; }`;
+void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position.z = gl_Position.w * 0.9999; }`;
 const SKY_FS = `varying vec3 vDir;
 uniform vec3 uSun, uSunColor, uZenith, uHorizon;
 uniform float uExp, uSunE, uSunVis;

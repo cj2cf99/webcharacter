@@ -15,7 +15,7 @@ const SHADER = {
       vec4 r = (texture2D(tDiffuse, uv0) * 2.0 + texture2D(tDiffuse, uv0 + vec2(t.x, 0.0)) + texture2D(tDiffuse, uv0 - vec2(t.x, 0.0)) + texture2D(tDiffuse, uv0 + vec2(0.0, t.y)) + texture2D(tDiffuse, uv0 - vec2(0.0, t.y))) / 6.0;
       vec3 V = normalize(cameraPosition - vW);
       float f = pow(1.0 - clamp(V.y, 0.0, 1.0), 4.0);
-      float a = clamp(uStrength * (0.35 + 0.65 * f), 0.0, 0.85) * (1.0 - smoothstep(70.0, 230.0, distance(vW, cameraPosition)));
+      float a = r.a * clamp(uStrength * (0.35 + 0.65 * f), 0.0, 0.85) * (1.0 - smoothstep(70.0, 230.0, distance(vW, cameraPosition)));
       gl_FragColor = vec4(r.rgb, a);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>

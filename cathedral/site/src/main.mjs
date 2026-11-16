@@ -175,8 +175,10 @@ async function boot() {
   scene.add(ext, doors);
   // 远处地面：把广场铺石一直延伸到地平线（只为避免“悬空的方块”），远处铺石细节会按像素大小自动淡出
   const far = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400).rotateX(-Math.PI / 2), stoneMaterial(null, null, true, 0xffffff));
-  far.position.set(0, -0.03, -40); far.material.userData.envK = 0.2; lights.useEnv(far.material); far.receiveShadow = true;
+  far.position.set(0, -0.07, -40); far.material.userData.envK = 0.2; lights.useEnv(far.material); far.receiveShadow = true;
   scene.add(far);
+  // 室外地面（顶面 y=0）与室内地板（y=0.004）几乎共面，深度精度不够时两层逐像素争抢（z-fighting），表现为地面颜色/条纹随视角乱闪：把室外地面整体下沉 3 cm
+  const gnd = ext.getObjectByName('B_ground'); if (gnd) gnd.position.y = -0.03;
   doorL = doors.getObjectByName('B_door_l'); doorR = doors.getObjectByName('B_door_r');
   $('loading').classList.add('done');
   $('start').classList.add('show');
