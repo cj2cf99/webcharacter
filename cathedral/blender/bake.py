@@ -263,7 +263,8 @@ def export_glb(path, objs, normals=False):
     select_only(objs)
     bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=True,
                               export_texcoords=True, export_normals=normals, export_materials='EXPORT',
-                              export_image_format='AUTO', export_apply=True, export_yup=True)
+                              export_image_format='AUTO', export_apply=True, export_yup=True,
+                              export_meshopt_compression_enable=True, export_meshopt_extension='EXT_meshopt_compression')      # 网页端用 vendor/three/meshopt_decoder.module.js 解码
 
 def export_all():
     """把每组的材质换成“烘焙贴图”单材质后导出（三个 glb）。会改动场景，导出后请重建场景。"""

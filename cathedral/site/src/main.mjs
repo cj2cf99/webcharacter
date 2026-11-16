@@ -1,6 +1,7 @@
 // 场景装配、加载、外部实时光照（天候）、室内烘焙着色、第一人称行走、开门、曝光适应。
 import * as THREE from 'three';
 import { GLTFLoader } from '../../vendor/three/GLTFLoader.js';
+import { MeshoptDecoder } from '../../vendor/three/meshopt_decoder.module.js';
 import { createWorld, createDoor, stepDoor, doorAngleRad, move, nearDoor, isInside } from './collide.mjs';
 import { createSkyAndLights } from './sky.mjs';
 import { stoneMaterial } from './stone.mjs';
@@ -113,6 +114,7 @@ function prepare(root) {
 
 // ---------------------------------------------------------------- 加载
 const loader = new GLTFLoader();
+loader.setMeshoptDecoder(MeshoptDecoder);
 const progress = {};
 function showProgress() {
   const v = Object.values(progress), done = v.reduce((a, p) => a + p[0], 0), all = v.reduce((a, p) => a + p[1], 0);

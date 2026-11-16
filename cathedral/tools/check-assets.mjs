@@ -7,7 +7,7 @@ const EXT = ['assets_next/exterior.glb', 'assets_next/door.glb', ...['ext_a', 'e
 const need = [...EXT, 'interior.glb', 'collision.json', 'collision.bin', 'encoding.json', 'tex_paving.webp'];
 let fails = 0;
 for (const f of need) { const ok = existsSync(new URL(f.replace(/^assets_next\//, '../assets_next/'), A)); console.log((ok ? 'PASS ' : 'FAIL ') + '存在 ' + f); if (!ok) fails++; }
-const VENDOR = ['three.module.min.js', 'GLTFLoader.js', 'BufferGeometryUtils.js'].map((n) => `../../vendor/three/${n}`);
+const VENDOR = ['three.module.min.js', 'GLTFLoader.js', 'BufferGeometryUtils.js', 'meshopt_decoder.module.js'].map((n) => `../../vendor/three/${n}`);
 for (const f of VENDOR) { const ok = existsSync(new URL(f, A)); console.log((ok ? 'PASS ' : 'FAIL ') + '存在 ' + f.slice(6)); if (!ok) fails++; }
 const sz = (f) => statSync(new URL(f.replace(/^assets_next\//, '../assets_next/'), A)).size;
 const MB = (b) => (b / 1048576).toFixed(2) + ' MB';
