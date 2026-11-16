@@ -5,6 +5,7 @@
 import bpy, bmesh, math
 from mathutils import Vector, Matrix
 
+WIN_LOG = []        # 窗口记录：exterior2.py 据此补窗棂和花格
 glass_out = material('GlassOut', (0.06, 0.08, 0.1), 0.15)        # 窗玻璃外侧（从外面看偏暗）
 for _n in GLASS_ORDER[1:]:                                       # 内侧：rose 玫瑰窗 / abs 抽象 / med 圆章 / gris 灰色调（shader 在 materials.py）
     material(_n, (0.3, 0.3, 0.6), 0.5)
@@ -46,8 +47,10 @@ def segment(p0, p1, inward, t, z0, z1, wins=(), roses=()):
         kind = k[0] if k else ('gris' if zb > 0.5 else None)
         if kind:
             glass_prism(tmp, opening(f * L, w, zb, zs, zc), t / 2 - 0.02, t / 2 + 0.02, kind)
+            WIN_LOG.append(('win', M.copy(), f * L, w, zb, zs, zc, t))
     for f, cz, r, *rk in roses:
         glass_prism(tmp, circle(f * L, cz, r, 40), t / 2 - 0.02, t / 2 + 0.02, rk[0] if rk else 'rose')
+        WIN_LOG.append(('rose', M.copy(), f * L, cz, r, 0, 0, t))
     tmp.transform(M)
     me = bpy.data.meshes.new('tmpg'); tmp.to_mesh(me); tmp.free()
     GLASS.bm.from_mesh(me); bpy.data.meshes.remove(me)

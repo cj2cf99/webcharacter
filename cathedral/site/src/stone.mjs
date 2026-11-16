@@ -85,6 +85,8 @@ const GLSL_ALBEDO = `
 }
 `;
 
+export const hazeU = { value: new THREE.Color(0.55, 0.6, 0.68) };      // 远景雾色（线性，已含色调映射），由 sky.mjs 每帧更新
+
 export function stoneMaterial(map, ao, ground = false, color = null) {
   const m = new THREE.MeshStandardMaterial({ map: map || null, color: color ?? 0xffffff, aoMap: ao || null, aoMapIntensity: 1.0, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide });
   m.customProgramCacheKey = () => ground ? 'ground-v1' : 'stone-v1';
@@ -94,9 +96,12 @@ export function stoneMaterial(map, ao, ground = false, color = null) {
       .replace('#include <begin_vertex>', `#include <begin_vertex>
       vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
       vWN = normalize(mat3(modelMatrix) * objectNormal);`);
+    sh.uniforms.uHaze = hazeU;
+    const HAZE = 'gl_FragColor.rgb = mix(gl_FragColor.rgb, uHaze, smoothstep(180.0, 1400.0, distance(vWPos, cameraPosition)));' + String.fromCharCode(10) + '#include <colorspace_fragment>';
     sh.fragmentShader = sh.fragmentShader
-      .replace('void main() {', GLSL_PARS + '\nfloat stoneH, stoneRough;\nvoid main() {')
-      .replace('#include <map_fragment>', '#include <map_fragment>\n' + GLSL_ALBEDO)
+      .replace('#include <colorspace_fragment>', ground ? HAZE : '#include <colorspace_fragment>')
+      .replace('void main() {', 'uniform vec3 uHaze;' + String.fromCharCode(10) + GLSL_PARS + String.fromCharCode(10) + 'float stoneH, stoneRough;' + String.fromCharCode(10) + 'void main() {')
+      .replace('#include <map_fragment>', '#include <map_fragment>\n' + (ground ? GLSL_GROUND : GLSL_ALBEDO))
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = stoneRough;')
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
       {
@@ -122,7 +127,7 @@ const GLSL_GROUND = `
 #else
   float aoV = 1.0;
 #endif
-  vec3 c = vec3(0.40, 0.385, 0.36) * (0.82 + 0.35 * (b.y - 0.5) * 2.0 * 0.5);
+  vec3 c = vec3(0.26, 0.255, 0.245) * (0.82 + 0.35 * (b.y - 0.5) * 2.0 * 0.5);
   c *= 1.0 + (fbm(uv * 1.3) - 0.5) * 0.28;                           // 大块明暗
   c *= 1.0 + (fbm(uv * 9.0) - 0.5) * 0.22 * fade;                    // 颗粒
   c = mix(c, c * 0.48, b.z * 0.9);                                   // 灰缝

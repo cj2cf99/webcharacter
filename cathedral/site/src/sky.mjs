@@ -3,6 +3,7 @@
 // 坐标：sun.mjs 用模型坐标（x 南、y 东、z 上），three.js 世界是 (x, z, −y)，这里统一转换。
 import * as THREE from 'three';
 import { sunAngles, sunDir } from './sun.mjs';
+import { hazeU } from './stone.mjs';
 
 const rad = (d) => d * Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -139,6 +140,12 @@ export function createSkyAndLights(scene, renderer) {
     uniforms.uHorizon.value.set(0.62, 0.74, 0.92).multiplyScalar(0.04 + 0.96 * b);
     uniforms.uSunE.value = L.sinE; uniforms.uSunVis.value = sstep(-3, 0.5, L.E);
     uniforms.uExp.value = exposure;
+    // 远景雾：颜色取地平线天空经 ACES 近似后的显示色，让无限延伸的地面融入天际
+    if (!scene.fog) scene.fog = new THREE.Fog(0xffffff, 220, 1100);
+    const aces = (x) => Math.min(1, Math.max(0, (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14)));
+    const hv = uniforms.uHorizon.value;
+    scene.fog.color.setRGB(aces(hv.x * exposure * 0.8), aces(hv.y * exposure * 0.8), aces(hv.z * exposure * 0.8));
+    hazeU.value.copy(scene.fog.color);
     refreshEnv(hours);
     for (const m of envMats) m.envMapIntensity = exposure * (m.userData.envK ?? 1);
     return L;

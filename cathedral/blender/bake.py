@@ -11,7 +11,7 @@ os.makedirs(WORK, exist_ok=True); os.makedirs(SITE, exist_ok=True)
 
 GROUPS = {   # 名称: (成员物体, 贴图边长, 采样数)
     'ext_a': (['Ext_Stone', 'Ext_Sheets', 'Ext_Walls', 'Ext_Roof', 'W_Center', 'W_TowerLow_N', 'W_TowerLow_S', 'W_TowerUp_N', 'W_TowerUp_S'], 4096, 128),
-    'ext_b': (['W_Detail', 'W_Statues', 'W_Doors', 'T_Doors'], 4096, 128),
+    'ext_b': (['W_Detail', 'W_Detail2', 'W_Statues', 'W_Doors', 'T_Doors'], 4096, 128),
     'ground': (['Ground'], 2048, 128),
     'int': (['Int_Stone', 'Int_Sheets', 'Int_Floor'], 4096, 256),
     'door_l': (['Door_L'], 512, 128),
@@ -70,6 +70,18 @@ def classify_interior():
                 o = loc + Vector((0, 0, 0.01)); continue
             return True
         return True
+    def outer_face(c, n, zmax):
+        """朝外的高墙面：中殿高墙在楼廊屋面（24.8 m）以上、楼廊墙在侧廊屋面（17 m）以上，法线背离中轴 → 外部。
+        （这些面上方有屋顶挑檐或飞券，射线法会误判成室内，导致从外面看高墙整块消失。）"""
+        if c.y <= APSE_CY:
+            out = (1 if c.x > 0 else -1) * n.x > 0.6; ax = abs(c.x)
+        else:
+            rv = Vector((c.x, c.y - APSE_CY, 0)); out = rv.length > 1e-6 and n.dot(rv.normalized()) > 0.6
+            ax = math.hypot(c.x, (c.y - APSE_CY) * APSE_OUT[0] / APSE_OUT[1])
+        if ax >= AISLE_PIER_X + 0.6 and c.z >= 17.0 and c.y > TRANSEPT_Y1 + 3 or (ax >= AISLE_PIER_X + 0.6 and c.z >= 17.0 and c.y < TRANSEPT_Y0 - 3):
+            return True                       # 侧廊屋面以上、飞扶壁一带：全是室外
+        if not out: return False
+        return (ARC_X <= ax <= AISLE_PIER_X + 1.6 and zmax >= 26.0) or (AISLE_PIER_X <= ax <= CHAPEL_OUT_X + 0.1 and zmax >= 18.0)
     made = []
     for src in list(GROUPS['ext_a'][0]):
         o = bpy.data.objects.get(src)
@@ -80,7 +92,7 @@ def classify_interior():
         for f in bm.faces:
             c = M @ f.calc_center_median(); n = (M.to_3x3() @ f.normal).normalized()
             p = c + n * 0.03
-            cls.append(1 if (in_plan(p.x, p.y) and covered(p)) else 0)
+            cls.append(1 if (in_plan(p.x, p.y) and not outer_face(c, n, max((M @ v.co).z for v in f.verts)) and covered(p)) else 0)
         n_int = sum(cls)
         if n_int:
             bm2 = bm.copy(); bm2.faces.ensure_lookup_table()

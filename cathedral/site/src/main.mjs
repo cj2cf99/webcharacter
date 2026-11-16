@@ -4,7 +4,6 @@ import { GLTFLoader } from '../../vendor/three/GLTFLoader.js';
 import { createWorld, createDoor, stepDoor, doorAngleRad, move, nearDoor, isInside } from './collide.mjs';
 import { createSkyAndLights } from './sky.mjs';
 import { stoneMaterial } from './stone.mjs';
-import { createEnvironment } from './env.mjs';
 
 const $ = (id) => document.getElementById(id);
 const EYE = 1.65, WALK = 6.4, RUN = 16.0;      // 米/秒；2026-11-15 用户要求行进速度提高 4 倍（原 1.6 / 4.0）
@@ -83,8 +82,8 @@ async function prepareExterior(root) {
     if (/glass/i.test(o.name) || /glass/i.test(o.material.name)) {
       map.colorSpace = THREE.SRGBColorSpace;
       // 外部看玻璃：深色、带天空反射；透出一点内部彩光（自发光取贴图的 18%）
-      const gm = new THREE.MeshStandardMaterial({ map, color: 0x6a7078, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: 0.1, roughness: 0.06, metalness: 0.0, side: THREE.DoubleSide });
-      gm.userData.envK = 1.6; lights.useEnv(gm); o.material = gm;
+      const gm = new THREE.MeshStandardMaterial({ map, color: 0x8a9098, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: 0.1, roughness: 0.04, metalness: 0.0, side: THREE.DoubleSide });
+      gm.userData.envK = 3.2; lights.useEnv(gm); o.material = gm;
       return;
     }
     const key = AO_KEY[o.name];
@@ -125,7 +124,7 @@ function loadGlb(name, dir = 'assets') {
   }, fail));
 }
 const tex = (url) => new Promise((ok, fail) => new THREE.TextureLoader().load(url, ok, undefined, fail));
-let L = null, lights = null, env = null;        // L：当前时刻的光照参数
+let L = null, lights = null;        // L：当前时刻的光照参数
 
 let world, door, doorL, doorR, interiorReady = false, interiorLoading = false;
 async function boot() {
@@ -141,10 +140,13 @@ async function boot() {
   paveTex = await tex('assets/tex_paving.webp');
   paveTex.wrapS = paveTex.wrapT = THREE.RepeatWrapping; paveTex.colorSpace = THREE.NoColorSpace; paveTex.anisotropy = 8;
   lights = createSkyAndLights(scene, renderer);
-  env = createEnvironment(scene, lights);
   const [ext, doors] = await Promise.all([loadGlb('exterior', EXT_DIR), loadGlb('door', EXT_DIR)]);
   await Promise.all([prepareExterior(ext), prepareExterior(doors)]);
   scene.add(ext, doors);
+  // 远处地面：把广场铺石一直延伸到地平线（只为避免“悬空的方块”），远处铺石细节会按像素大小自动淡出
+  const far = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000).rotateX(-Math.PI / 2), stoneMaterial(null, null, true, 0xffffff));
+  far.position.set(0, -0.34, -40); far.material.userData.envK = 0.2; lights.useEnv(far.material); far.receiveShadow = true;
+  scene.add(far);
   doorL = doors.getObjectByName('B_door_l'); doorR = doors.getObjectByName('B_door_r');
   $('loading').classList.add('done');
   $('start').classList.add('show');
@@ -232,7 +234,6 @@ function frame(now, manual = false) {
       exposure += (target - exposure) * (1 - Math.exp(-dt / ADAPT));
       uExp.value = exposure;
       lights.sky.position.copy(camera.position);
-      env && env.update(performance.now() / 1000);
     }
     camera.position.set(pos[0], window.__eyeH || EYE, -pos[1]);      // __eyeH：仅调试用，抬高相机看阴影
     camera.rotation.set(pitch, yaw, 0);

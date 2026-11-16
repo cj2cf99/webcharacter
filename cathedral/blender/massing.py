@@ -154,12 +154,7 @@ for y in BUTTRESS_Y:
     def b(s):
         ext.box(s * AISLE_WALL_X, s * CHAPEL_OUT_X, y - 0.6, y + 0.6, 0, CHAPEL_WALL_TOP)
         ext.box(s * (CHAPEL_OUT_X - 3.2), s * CHAPEL_OUT_X, y - 0.6, y + 0.6, CHAPEL_WALL_TOP, 29.0)   # 扶壁墩
-        for (xa, za, xb, zb) in ((CHAPEL_OUT_X - 3.2, 27.0, AISLE_PIER_X + 0.5, 23.5),
-                                 (AISLE_PIER_X - 0.5, 27.5, ARC_X + 0.5, 27.5)):
-            # 飞券：两段斜板，厚 0.8
-            she.poly([(s * xa, y - 0.4, za), (s * xb, y - 0.4, zb), (s * xb, y - 0.4, zb + 1.2), (s * xa, y - 0.4, za + 1.2)])
-            she.poly([(s * xa, y + 0.4, za), (s * xa, y + 0.4, za + 1.2), (s * xb, y + 0.4, zb + 1.2), (s * xb, y + 0.4, zb)])
-            she.poly([(s * xa, y - 0.4, za + 1.2), (s * xb, y - 0.4, zb + 1.2), (s * xb, y + 0.4, zb + 1.2), (s * xa, y + 0.4, za + 1.2)])
+        # 飞券改在 exterior2.py 里做成两跨的拱形实体
     both(b)
 
 # ---- 屋顶
@@ -281,6 +276,7 @@ she_obj, shi_obj = she.done(), shi.done()
 for o_ in (objs[1], she_obj, shi_obj):        # 只加厚单面薄片：屋顶、外部薄片、室内拱面
     thicken(o_)
 exec(open(os.path.join(HERE, 'facade.py'), encoding='utf-8').read())
+exec(open(os.path.join(HERE, 'exterior2.py'), encoding='utf-8').read())
 
 # ---------------------------------------------------------------- 平面图叠图（核对用）
 img = bpy.data.images.load("G:/selftool/Cathedral/reference/Plan_de_la_cath\u00e9drale_Notre-Dame-de-Paris._D.14500-14.jpg", check_existing=True)
