@@ -128,6 +128,7 @@ function loadGlb(name, dir = 'assets') {
 const tex = (url) => new Promise((ok, fail) => new THREE.TextureLoader().load(url, ok, undefined, fail));
 let L = null, lights = null;        // L：当前时刻的光照参数
 
+let spawnPos = [0, -60];
 let world, door, doorL, doorR, interiorReady = false, interiorLoading = false;
 async function boot() {
   ENC = await (await fetch('assets/encoding.json')).json();
@@ -137,7 +138,7 @@ async function boot() {
   ]);
   world = createWorld(new Uint8Array(bin), meta);
   door = createDoor(meta);
-  pos = [...meta.spawn];
+  pos = [...meta.spawn]; spawnPos = [...meta.spawn];
 
   paveTex = await tex('assets/tex_paving.webp');
   paveTex.wrapS = paveTex.wrapT = THREE.RepeatWrapping; paveTex.colorSpace = THREE.NoColorSpace; paveTex.anisotropy = 8;
@@ -187,11 +188,22 @@ document.addEventListener('pointerlockchange', () => {
   }
 });
 let helpTimer;
+// 望远镜：右键开关，滚轮（中键轴）调倍率 1.5–24×；放大时视角灵敏度同比降低，便于精细对准
+let zoomOn = false, zoomT = 5, zoomCur = 1;
 addEventListener('mousemove', (e) => {
   if (!locked()) return;
-  yaw -= e.movementX * 0.0022;
-  pitch = Math.max(-1.3, Math.min(1.3, pitch - e.movementY * 0.0022));
+  const k = 0.0022 / zoomCur;
+  yaw -= e.movementX * k;
+  pitch = Math.max(-1.3, Math.min(1.3, pitch - e.movementY * k));
 });
+addEventListener('mousedown', (e) => { if (e.button === 2 && locked()) { zoomOn = !zoomOn; e.preventDefault(); } });
+addEventListener('contextmenu', (e) => e.preventDefault());
+addEventListener('wheel', (e) => {
+  if (!locked()) return;
+  e.preventDefault();
+  if (!zoomOn) { zoomOn = true; }                                   // 直接滚轮也能进入望远镜
+  zoomT = Math.max(1.5, Math.min(24, zoomT * Math.exp(-e.deltaY * 0.0015)));
+}, { passive: false });
 
 function toggleDoor() {
   if (!nearDoor(pos, forward())) return;
@@ -200,8 +212,47 @@ function toggleDoor() {
 }
 const forward = () => [-Math.sin(yaw), Math.cos(yaw)];
 
+
+// ---------------------------------------------------------------- 观景点（正常走不到的位置；数字键传送，B 回地面，V 显示列表）
+// 坐标：模型 x 南、y 东；眼高 = 站立面 + 1.7。位置按 dims.py 的高度取，视角朝向目视选取（不是测绘点）。
+const VIEWPOINTS = [
+  { k: 'Digit1', name: '南塔顶平台', x: 13.7, y: 8.8, z: 70.7, yaw: 0.0, pitch: -0.18, r: 4 },
+  { k: 'Digit2', name: '北塔顶平台', x: -13.7, y: 8.8, z: 70.7, yaw: 0.0, pitch: -0.18, r: 4 },
+  { k: 'Digit3', name: '两塔之间廊台', x: 0, y: 4.0, z: 46.7, yaw: 0.0, pitch: -0.12, r: 5 },
+  { k: 'Digit4', name: '国王廊前', x: 0, y: -4.0, z: 25.5, yaw: 0.0, pitch: 0.12, r: 5 },
+  { k: 'Digit5', name: '中殿屋脊', x: 0, y: 36, z: 45.0, yaw: 0.0, pitch: -0.1, r: 6 },
+  { k: 'Digit6', name: '飞扶壁上方', x: 21.5, y: 34, z: 32.0, yaw: -0.35, pitch: -0.08, r: 4 },
+  { k: 'Digit7', name: '尖塔基座旁', x: 4.5, y: 66.65, z: 47.0, yaw: 0.6, pitch: 0.55, r: 3 },
+  { k: 'Digit8', name: '后殿上空', x: 0, y: 128, z: 32.0, yaw: Math.PI, pitch: -0.1, r: 6 },
+  { k: 'Digit9', name: '二楼楼廊（室内）', x: 10, y: 36, z: 13.0, yaw: 0.0, pitch: 0.05, r: 2, inside: true },
+  { k: 'Digit0', name: '广场上空俯瞰', x: 0, y: -90, z: 90, yaw: 0.0, pitch: -0.42, r: 15 },
+];
+async function gotoViewpoint(v) {
+  if (!world || !locked() && !window.__dbg) return;
+  if (v.inside) { await loadInterior(); while (!interiorReady) await new Promise((r) => setTimeout(r, 100)); }
+  pos = [v.x, v.y]; yaw = v.yaw; pitch = v.pitch; eyeT = v.z; vp = { cx: v.x, cy: v.y, r: v.r };
+  $('vpname').textContent = '📍 ' + v.name; $('vpname').classList.add('show');
+  clearTimeout(vpTimer); vpTimer = setTimeout(() => $('vpname').classList.remove('show'), 3500);
+}
+let vpTimer;
+function backToGround() {
+  if (!vp) return;
+  vp = null; eyeT = EYE; pos = [...spawnPos]; yaw = 0; pitch = 0.12;
+  $('vpname').classList.remove('show');
+}
+const vpList = VIEWPOINTS.map((v, i) => `<div><kbd>${(i + 1) % 10}</kbd>${v.name}</div>`).join('') + '<div><kbd>B</kbd>回到地面</div>';
+$('vplist').innerHTML = vpList;
+addEventListener('keydown', (e) => {
+  const v = VIEWPOINTS.find((q) => q.k === e.code);
+  if (v) gotoViewpoint(v);
+  if (e.code === 'KeyB') backToGround();
+  if (e.code === 'KeyV') $('vplist').classList.toggle('show');
+});
+if (typeof window !== 'undefined') window.__vp = (i) => gotoViewpoint(VIEWPOINTS[i]);
+
 // ---------------------------------------------------------------- 循环
 let last = performance.now(), exposure = EXPOSURE_OUT;
+let eyeY = EYE, eyeT = EYE, vp = null;      // 眼高（平滑）与目标；vp：观景点 {cx, cy, r}，非空时在观景点范围内自由走动、不做碰撞
 function frame(now, manual = false) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (world) {
@@ -215,7 +266,10 @@ function frame(now, manual = false) {
       const l = Math.hypot(mx, my);
       if (l) {
         const sp = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? RUN : WALK) * dt / l;
-        pos = move(world, door, pos, mx * sp, my * sp);
+        if (vp) {
+          const nx = pos[0] + mx * sp, ny = pos[1] + my * sp, dx = nx - vp.cx, dy = ny - vp.cy, d = Math.hypot(dx, dy);
+          pos = d > vp.r ? [vp.cx + dx / d * vp.r, vp.cy + dy / d * vp.r] : [nx, ny];
+        } else pos = move(world, door, pos, mx * sp, my * sp);
       }
     }
     stepDoor(door, dt);
@@ -232,12 +286,19 @@ function frame(now, manual = false) {
     // 灯光与曝光：室外曝光随时间；进入室内后适应到 EXPOSURE_IN（室内烘焙材质用 uExp，外部灯光和天空同样乘它）
     if (lights) {
       L = lights.apply(hours, exposure);
-      const target = window.__expOverride || (isInside(pos) ? EXPOSURE_IN : L.exposureOut);      // __expOverride：仅调试
+      const target = window.__expOverride || (isInside(pos) && eyeY < 22 ? EXPOSURE_IN : L.exposureOut);      // __expOverride：仅调试
       exposure += (target - exposure) * (1 - Math.exp(-dt / ADAPT));
       uExp.value = exposure;
       lights.sky.position.copy(camera.position);
     }
-    camera.position.set(pos[0], window.__eyeH || EYE, -pos[1]);      // __eyeH：仅调试用，抬高相机看阴影
+    // 望远镜视角：平滑过渡到目标倍率；基础视角 70°
+    zoomCur += ((zoomOn ? zoomT : 1) - zoomCur) * (1 - Math.exp(-dt * 10));
+    const fov = 2 * Math.atan(Math.tan(35 * Math.PI / 180) / zoomCur) * 180 / Math.PI;
+    if (Math.abs(fov - camera.fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    $('zoom').classList.toggle('show', zoomOn);
+    $('zoom').textContent = '🔭 ×' + zoomT.toFixed(1);
+    eyeY += (eyeT - eyeY) * (1 - Math.exp(-dt * 4));
+    camera.position.set(pos[0], window.__eyeH || eyeY, -pos[1]);      // __eyeH：仅调试用，抬高相机看阴影
     camera.rotation.set(pitch, yaw, 0);
     // 调试/测试用：暴露状态
     window.__cathedral = { pos, yaw, door: door.t, interiorReady, exposure, hours, info: renderer.info.render };
@@ -249,6 +310,7 @@ requestAnimationFrame(frame);
 // 仅 ?debug：供自动化测试直接设定位置、开门（浏览器自动化无法真正锁定鼠标）
 if (new URLSearchParams(location.search).has('debug')) {
   window.__go = (x, y, yw = yaw, pt = pitch) => { pos = [x, y]; yaw = yw; pitch = pt; };
+  window.__zoom = (on, z) => { zoomOn = on; if (z) zoomT = z; };
   window.__dbg = { scene, camera, THREE, renderer, lights: () => lights };
   window.__setTime = (h) => { hours = h; exposure = L ? L.exposureOut : exposure; };       // 调试：设时间并让曝光立即适应室外
   window.__walk = (dx, dy) => { pos = move(world, door, pos, dx, dy); return pos; };

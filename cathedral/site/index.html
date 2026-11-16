@@ -38,6 +38,13 @@ canvas{display:block;width:100vw;height:100vh}
 #door[data-state=wait] kbd{display:none}
 #door[data-state=wait] .t::after{content:"⏳ 室内加载中"}
 #clock{position:fixed;right:14px;top:12px;padding:5px 12px;border-radius:999px;background:var(--glass);border:1px solid #ffffff22;font-variant-numeric:tabular-nums;pointer-events:none}
+#zoom{position:fixed;right:14px;top:48px;padding:5px 12px;border-radius:999px;background:var(--glass);border:1px solid #ffffff22;font-variant-numeric:tabular-nums;pointer-events:none;opacity:0;transform:translateY(-6px);transition:.25s}
+#zoom.show{opacity:1;transform:none;box-shadow:0 0 14px #5b6cff66}
+#vpname{position:fixed;left:50%;top:14px;transform:translate(-50%,-8px);padding:6px 16px;border-radius:999px;background:var(--glass);border:1px solid #ffffff2a;opacity:0;transition:.3s;pointer-events:none;font-size:14px}
+#vpname.show{opacity:1;transform:translate(-50%,0)}
+#vplist{position:fixed;right:14px;bottom:14px;display:none;flex-direction:column;gap:4px;padding:8px 10px;border-radius:12px;background:var(--glass);border:1px solid #ffffff22;pointer-events:none}
+#vplist.show{display:flex}
+#vplist kbd{display:inline-grid;place-items:center;width:20px;height:20px;margin-right:8px;border-radius:5px;background:var(--stone);color:var(--ink);font:700 11px system-ui}
 #help{position:fixed;left:14px;bottom:14px;display:flex;gap:6px;flex-wrap:wrap;transition:opacity .8s;pointer-events:none}
 #help.hide{opacity:0}
 #help b{padding:4px 8px;border-radius:8px;background:var(--glass);border:1px solid #ffffff22;font-weight:500}
@@ -50,7 +57,10 @@ canvas{display:block;width:100vw;height:100vh}
 <div id="start"><span>🖱 点击开始</span></div>
 <div id="door" data-state="open"><kbd>E</kbd><span class="t"></span></div>
 <div id="clock"></div>
-<div id="help"><b>WASD 移动</b><b>⇧ 跑</b><b>🖱 视角</b><b>E 门</b><b>P 自动时间</b><b>, . 拨时间</b><b>H 提示</b><b>Esc 释放</b></div>
+<div id="zoom"></div>
+<div id="vpname"></div>
+<div id="vplist"></div>
+<div id="help"><b>WASD 移动</b><b>⇧ 跑</b><b>🖱 视角</b><b>E 门</b><b>1-0 观景点</b><b>V 列表</b><b>B 回地面</b><b>右键 望远镜</b><b>滚轮 倍率</b><b>P 自动时间</b><b>, . 拨时间</b><b>H 提示</b><b>Esc 释放</b></div>
 <script type="module" src="src/main.mjs"></script>
 </body>
 </html>
