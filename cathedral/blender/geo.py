@@ -62,15 +62,22 @@ def solid(name, coll, mat, x0, x1, y0, y1, z0, z1):
     b = Builder(name, coll, mat); b.box(x0, x1, y0, y1, z0, z1); return b.done()
 
 def figure(b, x, y, z, h, yaw=0.0):
-    """简化石雕人像：袍身（下宽上窄的八棱柱）+ 头。面向 -y，绕 z 转 yaw。"""
+    """简化石雕人像：下摆（外张）+ 躯干 + 肩 + 双臂 + 头 + 冠/光环。面向 -y，绕 z 转 yaw。（2026-11-16 加细：原来只有一个锥体加一个球）"""
     R = Matrix.Rotation(yaw, 4, 'Z')
+    O = Vector((x, y, z))
     r = h * 0.13
-    res = bmesh.ops.create_cone(b.bm, cap_ends=True, segments=8, radius1=r, radius2=r * 0.75, depth=h * 0.8)
-    for v in res['verts']:
-        v.co = Vector((x, y, z)) + R @ Vector((v.co.x, v.co.y * 0.75, v.co.z + h * 0.4))
-    res = bmesh.ops.create_uvsphere(b.bm, u_segments=8, v_segments=6, radius=h * 0.09)
-    for v in res['verts']:
-        v.co = Vector((x, y, z)) + R @ Vector((v.co.x, v.co.y - h * 0.02, v.co.z + h * 0.89))
+    def place(res, sx=1.0, sy=1.0, dz=0.0, dy=0.0, dx=0.0):
+        for v in res['verts']:
+            v.co = O + R @ Vector((v.co.x * sx + dx, v.co.y * sy + dy, v.co.z + dz))
+    place(bmesh.ops.create_cone(b.bm, cap_ends=True, segments=8, radius1=r * 1.15, radius2=r * 0.85, depth=h * 0.42), 1.0, 0.8, h * 0.21)      # 下摆
+    place(bmesh.ops.create_cone(b.bm, cap_ends=True, segments=8, radius1=r * 0.85, radius2=r * 0.6, depth=h * 0.40), 1.0, 0.75, h * 0.62)     # 躯干
+    place(bmesh.ops.create_uvsphere(b.bm, u_segments=8, v_segments=5, radius=r * 0.7), 1.35, 0.7, h * 0.80)                                  # 肩
+    for sg in (-1, 1):                                                                                                                       # 双臂
+        p0 = O + R @ Vector((sg * r * 0.95, 0, h * 0.78)); p1 = O + R @ Vector((sg * r * 1.0, -r * 0.55, h * 0.50))
+        rod(b, p0, p1, r * 0.16, 5)
+    place(bmesh.ops.create_uvsphere(b.bm, u_segments=8, v_segments=6, radius=h * 0.085), 1.0, 1.0, h * 0.90, -h * 0.02)                      # 头
+    if h > 2.0:                                                                                                                              # 大像加冠
+        place(bmesh.ops.create_cone(b.bm, cap_ends=True, segments=8, radius1=h * 0.09, radius2=h * 0.065, depth=h * 0.05), 1.0, 1.0, h * 0.985, -h * 0.02)
 
 def band(b, inner, outer, y0, y1, c=None):
     """两条等长折线（xz）之间的条带，沿 y 拉伸（拱券环）。

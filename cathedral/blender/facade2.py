@@ -30,8 +30,8 @@ for cx, w, crown, rise in ((0.0, PC_W, PORTAL_C_CROWN, 6.5), (-PS_X, PS_W, PORTA
     apex = crown + rise
     y = -0.15
     for sx in (-1, 1):                                    # 两道斜边
-        rod(d2, (cx + sx * hw, y, zb), (cx, y, apex), 0.24)
-    rod(d2, (cx - hw, y, zb), (cx + hw, y, zb), 0.2)      # 底边
+        rod(d2, (cx + sx * hw, y, zb), (cx, y, apex), 0.34)
+    rod(d2, (cx - hw, y, zb), (cx + hw, y, zb), 0.3)      # 底边
     n = 8
     for k in range(1, n):                                 # 斜边上的卷叶饰
         f = k / n
@@ -39,14 +39,13 @@ for cx, w, crown, rise in ((0.0, PC_W, PORTAL_C_CROWN, 6.5), (-PS_X, PS_W, PORTA
             xx = cx + sx * hw * (1 - f); zz = zb + (apex - zb) * f
             d2.box(xx - 0.18, xx + 0.18, y - 0.18, y + 0.18, zz, zz + 0.5)
     pinnacle(d2, cx, y, apex - 0.1, 0.8, 1.2, 1.8)        # 顶端小尖塔
-    rr = hw * 0.32                                        # 山花内的三叶/圆窗花格
-    zc = zb + (apex - zb) * 0.42
-    pts = [(cx + rr * math.cos(2 * math.pi * k / 16), zc + rr * math.sin(2 * math.pi * k / 16)) for k in range(17)]
-    for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
-        rod(d2, (x0, y, z0), (x1, y, z1), 0.1)
-    for k in range(3):
-        a = math.pi / 2 + 2 * math.pi * k / 3
-        rod(d2, (cx, y, zc), (cx + rr * math.cos(a), y, zc + rr * math.sin(a)), 0.09)
+    # 山花内的三叶浮雕：三个小圆环，上一下二（原来是一圈加三根辐条，像商标）
+    rc = hw * 0.12
+    zc = zb + (apex - zb) * 0.40
+    for (dx_, dz_) in ((0.0, rc * 1.1), (-rc * 1.05, -rc * 0.7), (rc * 1.05, -rc * 0.7)):
+        pts = [(cx + dx_ + rc * math.cos(2 * math.pi * k / 12), zc + dz_ + rc * math.sin(2 * math.pi * k / 12)) for k in range(13)]
+        for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
+            rod(d2, (x0, y, z0), (x1, y, z1), 0.1)
 
 # ---------------------------------------------------------------- 塔楼各面
 for s in (-1, 1):
