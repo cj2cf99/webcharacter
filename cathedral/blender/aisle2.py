@@ -86,5 +86,7 @@ for (rx, ry, n, zb, zs, zc, ww, gable) in (
                 rod(d2, PC(face, -L / 2 + 0.7, z, 0.15), PC(face, L / 2 - 0.7, z, 0.15), 0.15)
     for i in range(1, n):                                              # 圈间转角（含扶壁位置）：小尖塔
         a = math.pi * i / n
-        x = math.cos(a) * rx; y = APSE_CY + math.sin(a) * ry
-        pinnacle(d2, x, y, (14.0 if rx > 20 else (21.5 if rx > 10 else 35.0)) - 0.3, 1.0, 1.5, 2.0)
+        if rx > 20: continue                      # 礼拜堂圈的转角由径向墩与墩顶尖塔负责（见 exterior2.py），这里不再重复
+        rin = rx - 0.5                            # 立在墙厚中线上（墙向内厚 1.0 m），原来在墙外缘、半个底座悬空
+        x = math.cos(a) * rin; y = APSE_CY + math.sin(a) * ry * (rin / rx)
+        pinnacle(d2, x, y, (21.5 if rx > 10 else 35.0) - 0.3, 0.9, 1.5, 2.0)

@@ -89,19 +89,34 @@ for ys in (NAVE_BAYS, CHOIR_BAYS):
             gargoyle(d2, s * (AISLE_PIER_X + 0.9), (ya + yb) / 2, 20.8, s)
 
 # ---------------------------------------------------------------- 后殿放射飞扶壁
+# 用户 2026-11-16 指出：后殿尖塔底座“没融入建筑”。原因：放射墩是一个沿坐标轴摆的方块，从 14 m（礼拜堂墙顶）才开始，
+# 悬在礼拜堂屋面上、方向也不对着圆心；下面没有墩身。现在改成沿径向旋转的整根墩：0–14 m 是礼拜堂之间的隔墙，
+# 14–29 m 是上部墩（与直段的外墩一致，r 从 OUT-3.2 到 OUT），尖塔落在墩顶正中。
+KY = APSE_OUT[1] / APSE_OUT[0]
+
+def rbox(b, a, r0, r1, hw, z0, z1):
+    """沿径向（角度 a）的方墩：r 从 r0 到 r1，切向半宽 hw；椭圆后殿的 y 向按 KY 缩放。"""
+    ca, sa = math.cos(a), math.sin(a)
+    P_ = lambda r, off, z: b.bm.verts.new((r * ca - sa * off, APSE_CY + (r * sa + ca * off) * KY, z))
+    v = [P_(r0, -hw, z0), P_(r1, -hw, z0), P_(r1, hw, z0), P_(r0, hw, z0), P_(r0, -hw, z1), P_(r1, -hw, z1), P_(r1, hw, z1), P_(r0, hw, z1)]
+    n0 = len(b.bm.faces)
+    for q in ((0, 1, 2, 3), (4, 7, 6, 5), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)):
+        b.bm.faces.new([v[k] for k in q])
+    b.bm.faces.ensure_lookup_table(); bmesh.ops.recalc_face_normals(b.bm, faces=list(b.bm.faces)[n0:])
+
 for i in range(1, 10):
     a = math.pi * i / 10
     ca, sa = math.cos(a), math.sin(a)
-    px = lambda r: (r * ca * 1.0, APSE_CY + r * sa * (APSE_OUT[1] / APSE_OUT[0]))
-    r_pier = APSE_OUT[0] - 1.6
-    x0, y0 = px(r_pier)
-    # 放射墩：礼拜堂外墙上方到 29 m，朝圆心方向 2.6 m，宽 1.3 m
-    d2.box(x0 - 0.9, x0 + 0.9, y0 - 0.9, y0 + 0.9, 14.0, 29.0)
-    pinnacle(d2, x0, y0, 29.0, 1.5, 2.5, 4.6)
-    gargoyle(d2, *(px(APSE_OUT[0] + 0.1)), 13.4, ca, sa * (APSE_OUT[1] / APSE_OUT[0]))
-    # 单跨长飞券：从外墩到高墙
+    px = lambda r: (r * ca * 1.0, APSE_CY + r * sa * KY)
+    rbox(d2, a, APSE_WALL[0] - 0.4, APSE_OUT[0] + 0.1, 0.6, 0.0, CHAPEL_WALL_TOP)          # 礼拜堂之间的径向隔墙（0–14 m，落地）
+    rbox(d2, a, APSE_OUT[0] - 3.2, APSE_OUT[0] + 0.1, 0.75, CHAPEL_WALL_TOP - 0.2, 29.0)   # 上部墩（14–29 m）
+    xp, yp = px(APSE_OUT[0] - 1.55)
+    pinnacle(d2, xp, yp, 29.0, 1.5, 2.5, 4.6)                                                # 尖塔落在墩顶正中（与墩同宽 1.5 m）
+    gargoyle(d2, *(px(APSE_OUT[0] + 0.1)), 13.4, ca, sa * KY)
+    # 单跨长飞券：从外墩内侧到高墙
+    x0, y0 = px(APSE_OUT[0] - 3.0)
     xin, yin = px(ARC_X + 0.9)
-    flyer(d2, (x0 - ca * 0.9, y0 - sa * 0.9 * 1.0), (xin, yin), 28.0, 29.5, 0.9, 3.2, 1.0, 18)
+    flyer(d2, (x0, y0), (xin, yin), 28.0, 29.5, 0.9, 3.2, 1.0, 18)
 
 # ---------------------------------------------------------------- 塔顶、立面扶壁、耳堂转角
 for s in (-1, 1):

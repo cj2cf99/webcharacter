@@ -52,6 +52,7 @@ function logMaterial(map, extra = {}, pave = false) {
       diffuseColor.rgb = (exp(diffuseColor.rgb * ${Math.log1p(ENC.A * ENC.XMAX).toFixed(6)}) - 1.0) / ${ENC.A.toFixed(1)};
       ${pave ? `{ vec3 pv = texture2D(tPave, vWPos.xz / 6.0).rgb * 2.15;
         diffuseColor.rgb *= mix(vec3(1.0), pv, 1.0 - smoothstep(25.0, 90.0, distance(vWPos, cameraPosition))); }` : ''}
+      float dkv = 1.0;
       {   // 室内石面细节（烘焙贴图只有约 9.6 cm/像素，看起来糊）：按世界坐标叠加石块砌缝、颗粒，地面叠加大块石板，并把偏青灰的烘焙色调向暖石色拉回
         vec3 gp = vWPos, gdx = dFdx(gp), gdy = dFdy(gp);
         vec3 gn = normalize(cross(gdx, gdy)), an = abs(gn);
@@ -68,7 +69,7 @@ function logMaterial(map, extra = {}, pave = false) {
           float path = exp(-pow(abs(gp.x) / 7.0, 2.0));
           dk = (0.95 + (fbm(uv * 0.5 + b.y * 5.0) - 0.5) * 0.3) * (1.0 - 0.45 * vein * fadeD) * (1.0 - 0.35 * b.z) * (1.0 - 0.10 * path) * 2.2;
         }
-        diffuseColor.rgb *= dk;
+        diffuseColor.rgb *= dk; dkv = dk;
         float lm = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
         diffuseColor.rgb = mix(vec3(lm), diffuseColor.rgb, 0.72) * vec3(1.07, 1.02, 0.90);
       }
@@ -76,8 +77,9 @@ function logMaterial(map, extra = {}, pave = false) {
       float pk = max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b);
       { float lq = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lq), 0.6 * smoothstep(0.7, 3.5, pk)); }      // 很亮的彩色光斑（透过彩窗的日光）降低饱和，避免地面一片荧光蓝
       pk = max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b);
-      float sp = pk < 0.5 ? pk : 0.5 + (1.0 - exp(-(pk - 0.5) * 0.45)) * 0.42;     // 0.5 以下不变；以上渐近到约 0.92（原 1.5，亮斑被压成白色）
-      diffuseColor.rgb *= sp / max(pk, 1e-5);`);
+      float sp = pk < 0.5 ? pk : 0.5 + (1.0 - exp(-(pk - 0.5) * 0.28)) * 0.40;     // 0.5 以下不变；以上渐近到约 0.92（原 1.5，亮斑被压成白色）
+      diffuseColor.rgb *= sp / max(pk, 1e-5);
+      diffuseColor.rgb *= mix(1.0, clamp(dkv, 0.45, 1.25), smoothstep(0.5, 1.6, pk) * 0.85);      // 亮斑里把石块纹理再叠回来（先压缩后叠加），避免一片白`);
   };
   return m;
 }
@@ -253,10 +255,10 @@ function nearStair() {
   const d2 = (x, y) => Math.hypot(pos[0] - x, pos[1] - y);
   for (const s of [-1, 1]) {
     const [bx, by] = spiralPt(s, 0), [tx, ty] = spiralPt(s, spiralN);
-    if (!vp && eyeY < 5 && d2(bx, by) < 3.2) return { kind: 'up', type: 'spiral', s };
+    if (!vp && !spin && level === 0 && eyeY < 5 && d2(bx, by) < 3.2) return { kind: 'up', type: 'spiral', s };
     if (vp && vp.tower === s && eyeY > 40 && d2(tx, ty) < 4.2) return { kind: 'down', type: 'spiral', s };
-    if (!vp && eyeY < 5 && d2(s * TR.x, TR.y0 - 0.8) < 2.6) return { kind: 'up', type: 'tribune', s };
-    if (vp && vp.trib === s && eyeY > 8 && eyeY < 20 && d2(s * TR.x, TR.y1 + 0.8) < 3.2) return { kind: 'down', type: 'tribune', s };
+    if (!vp && !spin && level === 0 && eyeY < 5 && d2(s * TR.x, TR.y0 - 0.8) < 2.6) return { kind: 'up', type: 'tribune', s };
+    if ((vp && vp.trib === s || level === 1 && trib === s) && eyeY > 8 && eyeY < 20 && d2(s * TR.x, TR.y1 + 0.8) < 3.2) return { kind: 'down', type: 'tribune', s };
   }
   return info;
 }
@@ -272,6 +274,54 @@ function stairAction() {
   }
   vp = null;
 }
+
+// ---- 直接走上楼梯（用户 2026-11-16：“楼梯没有实体，上不去”）：楼梯区域内眼高随位置抬升；二楼楼廊上限制在楼廊范围内；螺旋梯按累计转角抬升
+let level = 0, trib = 0, spin = null;
+const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+function walkStairs() {
+  if (ride || vp) return;
+  const x = pos[0], y = pos[1];
+  // 螺旋楼梯
+  const mid = [...[-1, 1]].find((s) => Math.hypot(x - s * SP.x, y - SP.y) < 2.2);
+  if (!spin && level === 0 && mid) {
+    const [bx, by] = spiralPt(mid, 0);
+    if (Math.hypot(x - bx, y - by) < 0.8 && eyeY < 3) spin = { s: mid, u: 0, a: Math.atan2(y - SP.y, x - mid * SP.x) };
+  }
+  if (spin) {
+    const cx = spin.s * SP.x, cy = SP.y, dx = x - cx, dy = y - cy, r = Math.hypot(dx, dy) || 1e-6, a = Math.atan2(dy, dx);
+    let da = a - spin.a; if (da > Math.PI) da -= 2 * Math.PI; if (da < -Math.PI) da += 2 * Math.PI;
+    spin.a = a; spin.u = clampN(spin.u + da * spin.s * SP.per / (2 * Math.PI), 0, spiralN);
+    if (spin.u < 0.4 && r > 1.95) { spin = null; eyeT = EYE; return; }                    // 在底部走出螺旋梯
+    const rr = clampN(r, 0.55, 1.85); pos = [cx + dx / r * rr, cy + dy / r * rr];
+    eyeY = eyeT = (spin.u + 1) * SP.rise + EYE;
+    if (spin.u >= spiralN - 0.4) { vp = { cx: spin.s * 13.7, cy: 8.8, r: 6.5, tower: spin.s }; eyeT = SP.top + EYE; spin = null; }
+    return;
+  }
+  // 直跑楼梯 + 二楼楼廊
+  for (const s of [-1, 1]) {
+    const xr = s * TR.x, inRect = Math.abs(x - xr) <= 1.0 && y >= TR.y0 - 0.3 && y <= TR.y1 + 0.4;
+    const zOf = (yy) => clampN((yy - TR.y0) / 0.28, 0, TR.steps) * TR.rise;
+    if (level === 0 && inRect) {
+      pos = [clampN(x, xr - 0.95, xr + 0.95), y];
+      eyeY = eyeT = EYE + zOf(y);
+      if (y > TR.y1 && zOf(y) >= TR.steps * TR.rise - 0.05) { level = 1; trib = s; }
+      return;
+    }
+    if (level === 1 && trib === s) {
+      if (inRect && y <= TR.y1 + 0.05) {
+        pos = [clampN(x, xr - 0.95, xr + 0.95), y];
+        eyeY = eyeT = EYE + zOf(y);
+        if (y < TR.y0) level = 0;
+        return;
+      }
+      const ax = clampN(Math.abs(x), 7.6, 12.0), yy = clampN(y, TR.y1 + 0.1, 56.5);       // 楼廊范围
+      pos = [s * ax, yy]; eyeT = 11.34 + EYE; eyeY = eyeT;
+      return;
+    }
+  }
+  if (level === 1) level = 0;
+}
+
 function stepRide(dt) {
   ride.t += dt / ride.dur;
   const u = Math.min(1, ride.t), k = ride.dir > 0 ? u : 1 - u;     // 0 = 底，1 = 顶
@@ -290,8 +340,8 @@ function stepRide(dt) {
   if (u >= 1) {
     if (ride.dir > 0) {
       if (ride.type === 'spiral') { vp = { cx: s * 13.7, cy: 8.8, r: 6.5, tower: s }; eyeT = SP.top + EYE; }
-      else { vp = { cx: s * 9.8, cy: 46, r: 13, trib: s }; eyeT = 11.34 + EYE; }
-    } else { vp = null; eyeT = EYE; }
+      else { level = 1; trib = s; pos = [s * TR.x, TR.y1 + 0.6]; eyeT = 11.34 + EYE; }
+    } else { vp = null; level = 0; trib = 0; eyeT = EYE; }
     ride = null;
   }
 }
@@ -358,6 +408,7 @@ function frame(now, manual = false) {
         } else pos = move(world, door, pos, mx * sp, my * sp);
       }
     }
+    if (!ride) walkStairs();
     stepDoor(door, dt);
     const a = doorAngleRad(door);
     if (doorL) { doorL.rotation.y = a; doorR.rotation.y = -a; }
@@ -376,17 +427,17 @@ function frame(now, manual = false) {
     $('clock').textContent = `🕒 ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} 巴黎` + (autoTime ? ' ▶' : '');
     // 灯光与曝光：室外曝光随时间；进入室内后适应到 EXPOSURE_IN（室内烘焙材质用 uExp，外部灯光和天空同样乘它）
     if (lights) {
-      const insideNow = isInside(pos) && eyeY < 22 && !(ride && ride.tower) && !(vp && vp.tower);
+      const insideNow = isInside(pos) && eyeY < 22 && !(ride && ride.tower) && !(vp && vp.tower) && !spin;
       lightK += ((insideNow ? 0.045 : 1) - lightK) * (1 - Math.exp(-dt / ADAPT));      // 站在室内时，外部材质（窗棂等）按室外亮度受光，不吃室内的高曝光
       L = lights.apply(hours, exposure, lightK);
-      const target = window.__expOverride || (isInside(pos) && eyeY < 22 && !(ride && ride.tower) && !(vp && vp.tower) ? EXPOSURE_IN : L.exposureOut);      // __expOverride：仅调试
+      const target = window.__expOverride || (isInside(pos) && eyeY < 22 && !(ride && ride.tower) && !(vp && vp.tower) && !spin ? EXPOSURE_IN : L.exposureOut);      // __expOverride：仅调试
       exposure += (target - exposure) * (1 - Math.exp(-dt / ADAPT));
       uExp.value = exposure;
       lights.sky.position.copy(camera.position);
     }
     // 玻璃：室外是深色带反射；站在室内时不吃灯光（室内曝光很高会冲白），改成按白天亮度发光的宝石色
     {
-      const inside = isInside(pos) && eyeY < 22 && !(ride && ride.tower) && !(vp && vp.tower);
+      const inside = isInside(pos) && eyeY < 22 && !(ride && ride.tower) && !(vp && vp.tower) && !spin;
       const day = L ? Math.min(1, L.skyBright * 1.1) : 1;
       for (const g of glassMats) {
         if (inside) { g.color.setRGB(0.02, 0.02, 0.02); g.emissiveIntensity = 0.35 + 1.0 * day; g.userData.envK = 0; }

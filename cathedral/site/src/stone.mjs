@@ -170,7 +170,7 @@ const GLSL_GROUND = `
 #endif
   c *= mix(0.55, 1.0, smoothstep(0.1, 0.8, aoV));
   diffuseColor.rgb = c;
-  stoneH = (b.x * 0.4 + (vein - 0.5) * 0.0004) * 0.6;
+  stoneH = -0.0012 * b.z * fade;       // 只有缝有一点凹，随像素大小淡出：原来带颗粒的高度图 + 抛光（粗糙度 0.1）的高光，随视角移动会逐像素闪烁
   stoneRough = mix(0.10, 0.22, smoothstep(0.4, 0.9, fbm(uv * 0.9)) * 0.7 + path * 0.8);                // 抛光，使用多的地方略钝
   stoneMetal = 0.0;
 }

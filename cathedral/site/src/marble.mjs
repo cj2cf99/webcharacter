@@ -6,12 +6,13 @@ import { Reflector } from '../../vendor/three/Reflector.js';
 
 const SHADER = {
   name: 'MarbleMirror',
-  uniforms: { color: { value: null }, tDiffuse: { value: null }, textureMatrix: { value: null }, uStrength: { value: 0.42 } },
+  uniforms: { color: { value: null }, tDiffuse: { value: null }, textureMatrix: { value: null }, uStrength: { value: 0.42 }, uTexel: { value: new THREE.Vector2(1 / 1024, 1 / 576) } },
   vertexShader: `uniform mat4 textureMatrix; varying vec4 vUv; varying vec3 vW;
     void main() { vUv = textureMatrix * vec4(position, 1.0); vW = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float uStrength; varying vec4 vUv; varying vec3 vW;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uStrength; uniform vec2 uTexel; varying vec4 vUv; varying vec3 vW;
     void main() {
-      vec4 r = texture2DProj(tDiffuse, vUv);
+      vec2 uv0 = vUv.xy / vUv.w; vec2 t = uTexel * 1.6;      // 五点轻微模糊：反射图里的细砖缝随视角移动会闪烁
+      vec4 r = (texture2D(tDiffuse, uv0) * 2.0 + texture2D(tDiffuse, uv0 + vec2(t.x, 0.0)) + texture2D(tDiffuse, uv0 - vec2(t.x, 0.0)) + texture2D(tDiffuse, uv0 + vec2(0.0, t.y)) + texture2D(tDiffuse, uv0 - vec2(0.0, t.y))) / 6.0;
       vec3 V = normalize(cameraPosition - vW);
       float f = pow(1.0 - clamp(V.y, 0.0, 1.0), 4.0);
       float a = clamp(uStrength * (0.35 + 0.65 * f), 0.0, 0.85) * (1.0 - smoothstep(70.0, 230.0, distance(vW, cameraPosition)));
@@ -23,8 +24,9 @@ const SHADER = {
 
 export function createMarbleMirror(scene) {
   const geo = new THREE.PlaneGeometry(480, 480);
-  const w = Math.round(innerWidth * 0.7), h = Math.round(innerHeight * 0.7);
-  const mir = new Reflector(geo, { shader: SHADER, textureWidth: w, textureHeight: h, clipBias: 0.003, multisample: 0 });
+  const w = Math.round(innerWidth * 0.8), h = Math.round(innerHeight * 0.8);
+  const mir = new Reflector(geo, { shader: SHADER, textureWidth: w, textureHeight: h, clipBias: 0.003, multisample: 4 });
+  mir.material.uniforms.uTexel.value.set(1 / w, 1 / h);
   mir.rotation.x = -Math.PI / 2;
   mir.position.set(0, 0.02, -40);
   mir.material.transparent = true; mir.material.depthWrite = false;

@@ -187,7 +187,7 @@ for v in sp['verts']:
 for y in NAVE_PIERS_Y[2:] + CHOIR_PIERS_Y:
     def piers(s):
         inn.cyl(s * ARC_X, y, 0.7, 0, 8.5)
-        inn.cyl(s * AISLE_PIER_X, y, 0.5, 0, 8.0)
+        inn.cyl(s * AISLE_PIER_X, y, 0.5, 0, AISLE_VAULT)          # 侧廊柱顶到侧廊顶棚（原来只到 8 m，柱头悬在顶棚下 2 m，用户 2026-11-16）
     both(piers)
 for y in (CROSS_W_Y, CROSS_E_Y, NAVE_PIERS_Y[1]):
     both(lambda s: inn.box(s * (ARC_X - 1.2), s * (ARC_X + 1.2), y - 1.2, y + 1.2, 0, 24.3))
@@ -196,7 +196,7 @@ def apse_cols(rx, ry, n, r, z1):
         a = math.pi * i / n
         inn.cyl(math.cos(a) * rx, APSE_CY + math.sin(a) * ry, r, 0, z1)
 apse_cols(*APSE_ARC, 5, 0.7, 8.5)      # 图：主连拱圈 5 段
-apse_cols(*APSE_AISLE, 10, 0.5, 8.0)   # 图：内回廊柱圈 10 段
+apse_cols(*APSE_AISLE, 10, 0.5, AISLE_VAULT)   # 图：内回廊柱圈 10 段
 
 # 拱顶：中殿和唱诗区用尖拱筒面近似（六分肋拱在细节阶段做）
 vault = pointed(ARC_X - 0.5, VAULT_SPRING, VAULT_CROWN)
@@ -230,7 +230,7 @@ for seq in (NAVE_PIERS_Y[1::2], CHOIR_PIERS_Y[::2]):
 # 柱头：圆柱顶的倒台
 for y in NAVE_PIERS_Y[2:] + CHOIR_PIERS_Y:
     for s_ in (-1, 1):
-        for x_, r_, z_ in ((ARC_X, 0.7, 8.5), (AISLE_PIER_X, 0.5, 8.0)):
+        for x_, r_, z_ in ((ARC_X, 0.7, 8.5), (AISLE_PIER_X, 0.5, AISLE_VAULT)):
             c = bmesh.ops.create_cone(inn.bm, cap_ends=True, segments=16, radius1=r_, radius2=r_ + 0.45, depth=0.8)
             for v in c['verts']:
                 v.co += Vector((s_ * x_, y, z_ - 0.4))
