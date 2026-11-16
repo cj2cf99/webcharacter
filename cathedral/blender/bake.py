@@ -11,9 +11,9 @@ os.makedirs(WORK, exist_ok=True); os.makedirs(SITE, exist_ok=True)
 
 GROUPS = {   # 名称: (成员物体, 贴图边长, 采样数)
     'ext_a': (['Ext_Stone', 'Ext_Sheets', 'Ext_Walls', 'Ext_Roof', 'W_Center', 'W_TowerLow_N', 'W_TowerLow_S', 'W_TowerUp_N', 'W_TowerUp_S'], 4096, 128),
-    'ext_b': (['W_Detail', 'W_Detail2', 'W_Bells', 'W_Stairs', 'W_Statues', 'W_Doors', 'T_Doors'], 4096, 128),
+    'ext_b': (['W_Detail', 'W_Detail2', 'W_Bells', 'W_Statues', 'W_Doors', 'T_Doors'], 4096, 128),
     'ground': (['Ground'], 2048, 128),
-    'int': (['Int_Stone', 'Int_Sheets', 'Int_Floor', 'Int_Stairs'], 4096, 256),
+    'int': (['Int_Stone', 'Int_Sheets', 'Int_Floor', 'Int_Stairs', 'W_Stairs'], 4096, 256),
     'door_l': (['Door_L'], 512, 128),
     'door_r': (['Door_R'], 512, 128),
 }
@@ -105,7 +105,8 @@ def classify_interior():
         for f in bm.faces:
             c = M @ f.calc_center_median(); n = (M.to_3x3() @ f.normal).normalized()
             p = c + n * 0.03
-            cls.append(1 if (in_plan(p.x, p.y) and not outer_face(c, n, max((M @ v.co).z for v in f.verts)) and covered(p)) else 0)
+            in_shaft = c.z <= 48.5 and any(math.hypot(c.x - sx_ * STAIR_X, c.y - STAIR_Y) <= STAIR_R + 0.2 for sx_ in (-1, 1))      # 楼梯井内壁：整段（到钟楼地板）都按室内烘焙，避免 36 m 处室内/室外光照突变
+            cls.append(1 if (in_shaft or (in_plan(p.x, p.y) and not outer_face(c, n, max((M @ v.co).z for v in f.verts)) and covered(p))) else 0)
         n_int = sum(cls)
         if n_int:
             bm2 = bm.copy(); bm2.faces.ensure_lookup_table()
@@ -161,7 +162,7 @@ def bake_group(name):
     sc = bpy.context.scene
     sc.cycles.samples = spp
     select_only([o])
-    bpy.ops.object.bake(type='COMBINED', margin=4, use_clear=True)
+    bpy.ops.object.bake(type='COMBINED', margin=16, use_clear=True)
     img.filepath_raw = f"{WORK}/{name}.exr"; img.file_format = 'OPEN_EXR'; img.save()
     print('baked', name)
 

@@ -71,7 +71,8 @@ function logMaterial(map, extra = {}, pave = false) {
         }
         diffuseColor.rgb *= dk; dkv = dk;
         float lm = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
-        diffuseColor.rgb = mix(vec3(lm), diffuseColor.rgb, 0.72) * vec3(1.07, 1.02, 0.90);
+        diffuseColor.rgb = mix(vec3(lm), diffuseColor.rgb, 0.60) * vec3(1.13, 0.99, 0.86);
+        diffuseColor.rgb = max(diffuseColor.rgb, vec3(0.0065, 0.0062, 0.0056));      // 暗部底值：烘焙接缝/遮蔽泄漏处不再一团死黑
       }
       diffuseColor.rgb *= uExp;
       float pk = max(max(diffuseColor.r, diffuseColor.g), diffuseColor.b);
@@ -107,7 +108,7 @@ async function prepareExterior(root) {
     if (!o.isMesh) return;
     const map = o.material.map;
     if (/glass/i.test(o.name) || /glass/i.test(o.material.name)) {
-      map.colorSpace = THREE.SRGBColorSpace;
+      map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); map.generateMipmaps = true; map.minFilter = THREE.LinearMipmapLinearFilter; map.needsUpdate = true;
       // 外部看玻璃：深色、带天空反射；透出一点内部彩光（自发光取贴图的 18%）
       const gm = new THREE.MeshStandardMaterial({ map, color: 0x8a9098, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: 0.1, roughness: 0.04, metalness: 0.0, side: THREE.DoubleSide });
       gm.userData.envK = 3.2; lights.useEnv(gm); o.material = gm; glassMats.push(gm);
@@ -280,6 +281,8 @@ function stairAction() {
 // ---- 直接走上楼梯（用户 2026-11-16：“楼梯没有实体，上不去”）：楼梯区域内眼高随位置抬升；二楼楼廊上限制在楼廊范围内；螺旋梯按累计转角抬升
 let level = 0, trib = 0, spin = null;
 const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+const inShaft = () => !!(spin || (ride && ride.tower));                 // 在螺旋梯井里（井内壁和踏步用室内烘焙光照）
+const towerOutdoor = () => !!((vp && vp.tower) || (inShaft() && eyeY >= 47));       // 钟楼室内（通百叶）按室外光照
 function walkStairs() {
   if (ride || vp) return;
   const x = pos[0], y = pos[1];
@@ -429,17 +432,17 @@ function frame(now, manual = false) {
     $('clock').textContent = `🕒 ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} 巴黎` + (autoTime ? ' ▶' : '');
     // 灯光与曝光：室外曝光随时间；进入室内后适应到 EXPOSURE_IN（室内烘焙材质用 uExp，外部灯光和天空同样乘它）
     if (lights) {
-      const insideNow = isInside(pos) && eyeY < 22 && !(ride && ride.tower) && !(vp && vp.tower) && !spin;
+      const insideNow = isInside(pos) && (eyeY < 22 || inShaft() && eyeY < 47) && !towerOutdoor();
       lightK += ((insideNow ? 0.045 : 1) - lightK) * (1 - Math.exp(-dt / ADAPT));      // 站在室内时，外部材质（窗棂等）按室外亮度受光，不吃室内的高曝光
       L = lights.apply(hours, exposure, lightK);
-      const target = window.__expOverride || (isInside(pos) && eyeY < 22 && !(ride && ride.tower) && !(vp && vp.tower) && !spin ? EXPOSURE_IN : L.exposureOut);      // __expOverride：仅调试
+      const target = window.__expOverride || (isInside(pos) && (eyeY < 22 || inShaft() && eyeY < 47) && !towerOutdoor() ? EXPOSURE_IN : L.exposureOut);      // __expOverride：仅调试
       exposure += (target - exposure) * (1 - Math.exp(-dt / ADAPT));
       uExp.value = exposure;
       lights.sky.position.copy(camera.position);
     }
     // 玻璃：室外是深色带反射；站在室内时不吃灯光（室内曝光很高会冲白），改成按白天亮度发光的宝石色
     {
-      const inside = isInside(pos) && eyeY < 22 && !(ride && ride.tower) && !(vp && vp.tower) && !spin;
+      const inside = isInside(pos) && (eyeY < 22 || inShaft() && eyeY < 47) && !towerOutdoor();
       const day = L ? Math.min(1, L.skyBright * 1.1) : 1;
       for (const g of glassMats) {
         if (inside) { g.color.setRGB(0.02, 0.02, 0.02); g.emissiveIntensity = 0.35 + 1.0 * day; g.userData.envK = 0; }

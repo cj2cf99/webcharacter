@@ -51,4 +51,11 @@ try:
 except TypeError:
     pass
 sc.view_settings.exposure = 0
+# 塔内螺旋楼梯井的灯笼：井是封闭的（只有几条箭窗），烘焙里几乎全黑。沿井每 9–10 m 放一盏暖色点光，贴着踏步上方 1.5 m
+for _s in (-1, 1):
+    for _z in (4.0, 13.0, 22.0, 31.0, 40.0, 46.0):
+        _i = round(_z / 0.18); _a = 2 * math.pi * _i / 22 * _s
+        _ld = bpy.data.lights.new('Lantern', 'POINT'); _ld.energy = 140; _ld.color = (1.0, 0.78, 0.5); _ld.shadow_soft_size = 0.2
+        _lo = bpy.data.objects.new('Lantern', _ld); sc.collection.objects.link(_lo)
+        _lo.location = (_s * STAIR_X + 1.3 * math.cos(_a), STAIR_Y + 1.3 * math.sin(_a), _i * 0.18 + 1.5)
 print('lighting ok')

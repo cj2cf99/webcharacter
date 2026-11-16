@@ -27,6 +27,7 @@ export function createMarbleMirror(scene) {
   const w = Math.round(innerWidth * 0.8), h = Math.round(innerHeight * 0.8);
   const mir = new Reflector(geo, { shader: SHADER, textureWidth: w, textureHeight: h, clipBias: 0.003, multisample: 4 });
   mir.material.uniforms.uTexel.value.set(1 / w, 1 / h);
+  const rt = mir.getRenderTarget(); rt.texture.generateMipmaps = true; rt.texture.minFilter = THREE.LinearMipmapLinearFilter;      // 反射图加 mipmap：细砖缝、窗格在反射里不再逐像素闪
   mir.rotation.x = -Math.PI / 2;
   mir.position.set(0, 0.02, -40);
   mir.material.transparent = true; mir.material.depthWrite = false;

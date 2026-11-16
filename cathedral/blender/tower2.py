@@ -141,18 +141,10 @@ for s in (-1, 1):
     for dxx in (-4.2, 4.2):
         for dyy in (-2.4, 2.4):
             rod(d2, (xc + dxx, yc + dyy, zf + 0.5), (xc + dxx * 0.6, yc + dyy, zb), 0.13)
-    if s > 0:
-        # 南塔大钟 Emmanuel：口径约 2.6 m、高约 2.4 m（不含钟冠）；加粗的木钟轭与钟冠，视觉上更接近真实的分量
-        bell(bells, xc, yc, zb + 0.6, 1.62, 3.0)
-        d2.box(xc - 4.4, xc + 4.4, yc - 0.35, yc + 0.35, zb + 0.1, zb + 0.7)                  # 钟轭（木），两端搭在端梁上
-        for sg in (-1, 1):
-            d2.box(xc + sg * 2.0 - 0.3, xc + sg * 2.0 + 0.3, yc - 0.55, yc + 0.55, zb - 0.1, zb + 0.9)   # 轭端轴承座
-    else:
-        # 北塔：8 口钟，分两排（前后），口径 1.4–2.3 m，从大到小排列；每排一根横梁搭在两端的端梁上
-        for rowi, ry_ in enumerate((-1.7, 1.7)):
-            d2.box(xc - 4.4, xc + 4.4, yc + ry_ - 0.3, yc + ry_ + 0.3, zb + 0.0, zb + 0.55)
-        for k in range(8):
-            row = k // 4; col = k % 4
-            R = 1.15 - 0.085 * k
-            bell(bells, xc - 3.6 + 2.4 * col, yc + (-1.7 if row == 0 else 1.7), zb + 0.3, R, 1.9 * R)
+    # 每座钟楼一口黄铜大钟（用户 2026-11-16：“换成一个黄铜大钟，不要小钟”）：口径约 3.8 m、高约 3.6 m（比真实 Emmanuel 的 2.6 m 放大，求分量感），
+    # 挂在粗大的木钟轭上，钟轭两端搭在端梁上；钟顶高出钟轭，钟口离钟楼地板约 2.5 m。
+    bell(bells, xc, yc, zb + 0.9, 1.9, 3.6)
+    d2.box(xc - 4.4, xc + 4.4, yc - 0.45, yc + 0.45, zb + 0.1, zb + 0.95)                      # 钟轭（木），两端搭在端梁上
+    for sg in (-1, 1):
+        d2.box(xc + sg * 2.3 - 0.35, xc + sg * 2.3 + 0.35, yc - 0.6, yc + 0.6, zb - 0.1, zb + 1.1)   # 轭端轴承座
 bells_obj = bells.done()

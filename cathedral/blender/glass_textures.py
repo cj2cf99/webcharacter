@@ -128,7 +128,7 @@ def grisaille(W=512, H=1024):
     rng = np.random.default_rng(5)
     y, x = np.mgrid[0:1:H * 1j, 0:1:W * 1j].astype(np.float32)
     aspect = H / W
-    img = np.zeros((H, W, 3), np.float32) + np.array((0.80, 0.86, 0.80), np.float32)
+    img = np.zeros((H, W, 3), np.float32) + np.array((0.90, 0.88, 0.82), np.float32)      # 偏暖的中性白（原来偏青绿，透进来的光把室内染成灰绿）
     lead = np.zeros((H, W), bool)
     gx = x * 5.0; gy = y * aspect * 5.0
     lead |= (np.abs(((gx + gy) % 1.0) - 0.5) > 0.47) | (np.abs(((gx - gy) % 1.0) - 0.5) > 0.47)

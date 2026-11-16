@@ -108,7 +108,8 @@ const GLSL_ALBEDO = `
   // 黄铜（钟）：烘焙底色里橙黄、偏亮的部分按金属处理
   float isBrass = step(0.30, lumB) * step(1.5, diffuseColor.r / max(diffuseColor.g, 1e-3)) * step(4.0, diffuseColor.g / max(diffuseColor.b, 1e-3));
   if (isBrass > 0.5) { diffuseColor.rgb = vec3(0.95, 0.62, 0.17) * (0.85 + 0.3 * fbm(uv * 6.0)); stoneRough = 0.26; }
-  stoneMetal = mix(0.0, 0.9, isBrass);
+  stoneMetal = mix(0.0, 0.55, isBrass);
+  stoneEmit = isBrass * vec3(0.95, 0.62, 0.18) * 0.30;
 }
 `;
 
@@ -127,10 +128,11 @@ export function stoneMaterial(map, ao, ground = false, color = null) {
     const HAZE = 'gl_FragColor.rgb = mix(gl_FragColor.rgb, uHaze, smoothstep(160.0, 540.0, distance(vWPos, cameraPosition)));' + String.fromCharCode(10) + '#include <colorspace_fragment>';
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <colorspace_fragment>', ground ? HAZE : '#include <colorspace_fragment>')
-      .replace('void main() {', 'uniform vec3 uHaze;' + String.fromCharCode(10) + GLSL_PARS + String.fromCharCode(10) + 'float stoneH, stoneRough, stoneMetal;' + String.fromCharCode(10) + 'void main() {')
+      .replace('void main() {', 'uniform vec3 uHaze;' + String.fromCharCode(10) + GLSL_PARS + String.fromCharCode(10) + 'float stoneH, stoneRough, stoneMetal; vec3 stoneEmit;' + String.fromCharCode(10) + 'void main() {')
       .replace('#include <map_fragment>', '#include <map_fragment>\n' + (ground ? GLSL_GROUND : GLSL_ALBEDO))
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = stoneRough;')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>' + String.fromCharCode(10) + 'metalnessFactor = stoneMetal;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>' + String.fromCharCode(10) + 'totalEmissiveRadiance += stoneEmit;')
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
       {
         vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition);
@@ -172,6 +174,6 @@ const GLSL_GROUND = `
   diffuseColor.rgb = c;
   stoneH = -0.0012 * b.z * fade;       // 只有缝有一点凹，随像素大小淡出：原来带颗粒的高度图 + 抛光（粗糙度 0.1）的高光，随视角移动会逐像素闪烁
   stoneRough = mix(0.10, 0.22, smoothstep(0.4, 0.9, fbm(uv * 0.9)) * 0.7 + path * 0.8);                // 抛光，使用多的地方略钝
-  stoneMetal = 0.0;
+  stoneMetal = 0.0; stoneEmit = vec3(0.0);
 }
 `;
