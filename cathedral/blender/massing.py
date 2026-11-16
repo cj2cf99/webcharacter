@@ -190,7 +190,8 @@ for y in NAVE_PIERS_Y[2:] + CHOIR_PIERS_Y:
         inn.cyl(s * AISLE_PIER_X, y, 0.5, 0, AISLE_VAULT)          # 侧廊柱顶到侧廊顶棚（原来只到 8 m，柱头悬在顶棚下 2 m，用户 2026-11-16）
     both(piers)
 for y in (CROSS_W_Y, CROSS_E_Y, NAVE_PIERS_Y[1]):
-    both(lambda s: inn.box(s * (ARC_X - 1.2), s * (ARC_X + 1.2), y - 1.2, y + 1.2, 0, 24.3))
+    y1_ = max(y + 1.2, TOWER_DEPTH + 0.05) if y == NAVE_PIERS_Y[1] else y + 1.2      # 塔下第一个方墩要伸到中殿高墙起点（y=16）并略搭进去；原来止于 15.9，与高墙之间留了 10 cm 的黑缝（用户 2026-11-16）
+    both(lambda s: inn.box(s * (ARC_X - 1.2), s * (ARC_X + 1.2), y - 1.2, y1_, 0, 24.3))
 def apse_cols(rx, ry, n, r, z1):
     for i in range(1, n):
         a = math.pi * i / n
