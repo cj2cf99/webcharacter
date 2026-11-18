@@ -1,0 +1,13 @@
+import {readFileSync,writeFileSync,existsSync} from 'node:fs';
+import {SOUND_NODES,normalizeSound} from '../desktop/sound.mjs';
+const root=new URL('../',import.meta.url),page=new URL('prototype/settings.html',root);
+const saved=normalizeSound(JSON.parse(readFileSync(new URL('output/desktop-profile/sound-settings.json',root),'utf8')));
+const voices=[...new Map(SOUND_NODES.filter(n=>n.file).map(n=>[n.file,[n.file==='unified-zh.wav'?'voice1':n.id,n.file==='unified-zh.wav'?'原统一语音（待机已关闭）':n.label+' · '+n.text,'../assets/voice/'+n.file]])).values()];
+for(const n of SOUND_NODES.filter(n=>n.file))if(!existsSync(new URL('assets/voice/'+n.file,root)))throw Error('缺少 '+n.file);
+const snapshot=Object.fromEntries(SOUND_NODES.map(n=>[n.id,{on:saved.nodes[n.id].enabled,volume:saved.nodes[n.id].volume,voice:n.file?(n.file==='unified-zh.wav'?'voice1':n.id):'',delay:0}]));
+let html=readFileSync(page,'utf8');html=html.replace(/const voices=[\s\S]*?;let previewAudio/, 'const voices='+JSON.stringify(voices)+';let previewAudio');
+html=html.replace(/const soundSnapshot=[^\n]*\nfunction nodeSound[^\n]*\n/g,'');
+html=html.replace('const defaults=()=>', 'const soundSnapshot='+JSON.stringify(snapshot)+';\nfunction nodeSound(id,p){const node=id===\'special\'?\'idle-special\':p===\'single\'?id:p===\'enter\'&&id===\'hover\'?\'hover\':id+\'-\'+p;return {...(soundSnapshot[node]||{on:false,volume:100,voice:\'\',delay:0})}}\nconst defaults=()=>');
+html=html.replace(/\{on:!\['idle','special'\][\s\S]*?voice:'voice1',delay:0\}/,'nodeSound(id,p)');
+html=html.replace('draw();library();audioLibrary();',"$('masterOn').checked="+saved.enabled+";$('masterVolume').value="+saved.volume+';draw();library();audioLibrary();');
+writeFileSync(page,html);console.log('已同步 '+voices.length+' 个语音资源与12个节点配置');

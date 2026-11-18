@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {CompanionSound,validSound,normalizeSound,SOUND_NODES} from '../desktop/sound.mjs';
+const stateSource=readFileSync(new URL('../src/companion-state.ts',import.meta.url),'utf8');
+const ids=[...stateSource.match(/export type Clip = (.*);/)[1].matchAll(/'([^']+)'/g)].map(x=>x[1]);assert.deepEqual(SOUND_NODES.map(n=>n.id).sort(),ids.sort());
+for(const bad of [null,{}, {enabled:'yes',volume:50},{enabled:true,volume:-1},{enabled:true,volume:101},{enabled:true,volume:NaN},{enabled:true,volume:50,nodes:{unknown:{enabled:true,volume:1}}},{enabled:true,volume:50,nodes:{click:{enabled:true,volume:101}}}])assert(!validSound(bad));
+assert.equal(normalizeSound().nodes.idle.enabled,false);assert.equal(normalizeSound().nodes['idle-special'].enabled,false);
+const migrated=normalizeSound({enabled:false,volume:23});assert.equal(migrated.volume,23);assert.equal(migrated.enabled,false);assert.equal(Object.keys(migrated.nodes).length,12);assert.equal(migrated.nodes.click.volume,100);
+let plays=0,pauses=0;const audio={volume:1,currentTime:4,pause(){pauses++},async play(){plays++}};
+const sound=new CompanionSound(audio),settings=normalizeSound();settings.nodes.click.volume=40;settings.nodes.hover.enabled=false;sound.apply(settings);
+await sound.state('hover');assert.equal(plays,0);await sound.state('click');assert.equal(plays,1);assert.equal(audio.volume,.2);
+settings.nodes.click.volume=20;sound.apply(settings);assert.equal(audio.volume,.1,'播放中调节节点音量立即生效');
+settings.nodes.click.enabled=false;sound.apply(settings);assert.equal(audio.currentTime,0);assert.equal(sound.activeNode,null);
+await sound.play('click');assert.equal(plays,1);await sound.play('drag-enter');assert.equal(plays,2,'关闭点击不影响拖拽');
+settings.enabled=false;sound.apply(settings);await sound.play('drag-enter');assert.equal(plays,2);
+settings.enabled=true;settings.nodes['hover-loop'].enabled=true;settings.nodes['hover-loop'].volume=60;sound.apply(settings);
+await sound.state('hover-loop');await sound.state('hover-loop');assert.equal(plays,3);assert.equal(audio.volume,.3);assert.equal(audio.loop,false,'悬停笑声不循环');await sound.state('idle');assert.equal(audio.loop,false);assert.equal(sound.activeNode,'hover-loop','无下一声音时继续播放');
+sound.setVisible(false);await sound.play('hover-loop');assert.equal(plays,3);sound.setVisible(true);
+settings.nodes['hover-loop'].volume=0;sound.apply(settings);await sound.play('hover-loop');assert.equal(plays,3);
+await sound.play('not-a-node');assert.equal(plays,3);
+for(const node of SOUND_NODES){const config=normalizeSound();config.nodes[node.id]={enabled:true,volume:30};sound.apply(config);const previous=plays;await sound.play(node.id);assert.equal(plays,previous+(node.file?1:0));if(node.file){assert.equal(audio.volume,.15);assert.equal(audio.src,'./voice/'+node.file);assert.equal(audio.loop,false,'试听只播放一次');assert(readFileSync(new URL('../assets/voice/'+node.file,import.meta.url)).length>44);}}
+audio.play=async()=>{throw Object.assign(new Error('cancelled'),{name:'AbortError'})};await sound.play('click');
+audio.play=async()=>{throw new Error('missing audio')};await assert.rejects(()=>sound.play('click'),/missing audio/);
+const silent=normalizeSound();silent.nodes['work-loop'].enabled=true;silent.nodes['drag-loop'].enabled=true;sound.apply(silent);await sound.play('work-loop');await sound.play('drag-loop');
+assert(pauses>0);console.log('PASS：12节点覆盖、独立开关和音量、总音量乘积、实时静音、旧设置迁移、循环去重、隐藏停止、输入验证。');
+
+const followAudio={pause(){},currentTime:0,async play(){this.count=(this.count||0)+1}};
+const follow=new CompanionSound(followAudio);await follow.state('hover-loop');await follow.state('hover-loop');assert.equal(followAudio.count,1);
+await follow.state('hover-loop',true);assert.equal(followAudio.count,2,'动画下一轮触发同节点声音');assert.equal(followAudio.loop,false);
+await follow.state('work-loop');assert.equal(followAudio.count,2);assert.equal(follow.activeNode,'hover-loop');
+await follow.state('click');assert.equal(followAudio.count,3);assert.equal(follow.activeNode,'click');
+console.log('PASS：按动画轮次发声；无新声音续播，有新声音替换；Audio不自行循环。');

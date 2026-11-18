@@ -1,0 +1,9 @@
+/.local-tools.json
+/output/
+/tmp/
+/playback-test*.html
+/绯月播放测试_直接打开.html
+/绯月四状态*.html
+/绯月状态优先级*.html
+/绯月拖拽*.html
+/desktop/node_modules/

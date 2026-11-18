@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>绯月 · 单文件播放测试</title>
+<style>
+:root{color-scheme:dark;font:15px system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;background:#121622;color:#eff1f8;padding:18px}main{max-width:620px;margin:auto}header{display:flex;align-items:center;justify-content:space-between;gap:10px}h1{font-size:20px;margin:0}#badge{font-size:12px;padding:5px 10px;background:#303648;border-radius:20px}.tabs,.controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}button{border:1px solid #454b63;background:#252c40;color:#f1f2ff;border-radius:9px;padding:9px 14px;cursor:pointer;font:inherit}button[aria-pressed=true],#play{background:#6855d9;border-color:#9582ff}button:focus-visible,input:focus-visible{outline:2px solid #bcadff;outline-offset:3px}button:disabled{opacity:.5;cursor:wait}#stage{display:flex;justify-content:center;border-radius:14px;overflow:hidden;background:repeating-conic-gradient(#d3cdc3 0 25%,#f6f0e6 0 50%) 0/24px 24px;min-height:260px}#stage[data-bg=dark]{background:#202837}#stage[data-bg=light]{background:#f4eee6}video{display:block;width:100%;max-width:340px;max-height:65vh;object-fit:contain}#readout{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-variant-numeric:tabular-nums;margin-top:12px;color:#bdf1dc}progress{width:100%;height:5px;accent-color:#aa94ff}#message{font-size:13px;color:#bdc4d6;min-height:2.6em;line-height:1.6}label{margin-left:auto;font-size:13px;display:flex;gap:5px;align-items:center}#frames{font-size:13px}@media(max-width:400px){body{padding:12px}h1{font-size:17px}button{padding:8px 10px}}
+</style>
+<main>
+<header><h1>绯月 · 播放测试</h1><span id="badge" role="status">准备中</span></header>
+<div class="tabs" role="group" aria-label="素材选择"><button id="webm" aria-pressed="true">透明 WebM</button><button id="mp4" aria-pressed="false">原始 MP4 对照</button></div>
+<div id="stage" data-bg="checker"><video id="video" controls muted playsinline loop preload="auto" aria-label="绯月挥手视频"></video></div>
+<div id="readout"><span id="time">0.00 / — 秒</span><span id="frames">等待实际画面帧</span></div>
+<progress id="progress" value="0" max="1" aria-label="播放进度"></progress>
+<div class="controls"><button id="play">▶ 播放</button><button id="replay">↻ 重播</button><button id="step">前进一帧</button><button id="background">切换底色</button><label><input id="loop" type="checkbox" checked>循环</label></div>
+<p id="message" role="status">视频已嵌入本文件，无需服务器。加载后自动尝试静音播放；若未播放，请点“播放”。</p>
+</main>
+<script id="embedded-media" type="application/json">__EMBEDDED_MEDIA__</script>
+<script>
+'use strict';
+(() => {
+window.addEventListener('error',e=>{
+  document.getElementById('badge').textContent='初始化错误';
+  document.getElementById('message').textContent=`页面初始化失败：${e.message}`;
+});
+const dataText=document.getElementById('embedded-media').textContent.trim();
+if(!dataText.startsWith('{')){
+  document.getElementById('badge').textContent='这是源模板';
+  document.getElementById('message').textContent='本文件没有嵌入视频，请打开项目目录中的“绯月播放测试_直接打开.html”。';
+  const link=document.createElement('a');
+  link.href='../绯月播放测试_直接打开.html';link.textContent='点击打开可播放成品';link.style.color='#c9baff';
+  document.getElementById('message').append(document.createElement('br'),link);
+  for(const button of document.querySelectorAll('button'))button.disabled=true;
+  return;
+}
+const media=JSON.parse(dataText);
+const video=document.getElementById('video'), $=id=>document.getElementById(id);
+let current='webm', frameCount=0, frameCallback=0, objectURL='', generation=0;
+const errors={1:'播放被中止',2:'媒体读取失败',3:'解码失败',4:'浏览器不支持当前格式'};
+function paint(){
+  const duration=Number.isFinite(video.duration)?video.duration:0;
+  $('time').textContent=`${video.currentTime.toFixed(2)} / ${duration?duration.toFixed(2):'—'} 秒`;
+  $('progress').value=duration?video.currentTime/duration:0;
+  $('play').textContent=video.paused?'▶ 播放':'Ⅱ 暂停';
+  if(video.getVideoPlaybackQuality && !video.requestVideoFrameCallback){
+    const q=video.getVideoPlaybackQuality();$('frames').textContent=`解码帧 ${q.totalVideoFrames}`;
+  }
+}
+function watchFrames(token){
+  if(!video.requestVideoFrameCallback){$('frames').textContent='本浏览器不提供画面帧回调';return}
+  frameCallback=video.requestVideoFrameCallback(()=>{
+    if(token!==generation)return;
+    $('frames').textContent=`已呈现 ${++frameCount} 帧`;
+    watchFrames(token);
+  });
+}
+async function play(){
+  try{await video.play();$('badge').textContent='播放中';$('message').textContent='观察角色动作、时间和“已呈现帧”是否同时变化。视频开头有一段等待动作，请看完整段。'}
+  catch(e){$('badge').textContent='待点击播放';$('message').textContent=e.name==='NotAllowedError'?'浏览器未允许自动播放，请点击“播放”。':`播放未成功：${e.name}。可切换原始 MP4 对照。`}
+  paint();
+}
+function load(kind){
+  const token=++generation;
+  video.pause();
+  if(frameCallback && video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(frameCallback);
+  const oldURL=objectURL;
+  current=kind;frameCount=0;$('frames').textContent='等待实际画面帧';
+  $('badge').textContent='加载中';$('message').textContent='正在读取文件内嵌媒体…';
+  for(const type of ['webm','mp4'])$(type).setAttribute('aria-pressed',String(type===kind));
+  // 两种素材都在单文件中，仅在选择时解码对应的 Base64。
+  try{
+    const binary=atob(media[kind].data),bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    objectURL=URL.createObjectURL(new Blob([bytes],{type:media[kind].type}));
+    video.src=objectURL;video.load();
+    if(oldURL)URL.revokeObjectURL(oldURL);
+    watchFrames(token);
+    play();
+  }catch(e){$('badge').textContent='加载失败';$('message').textContent=`内嵌素材读取失败：${e.message}`}
+}
+for(const event of ['timeupdate','loadedmetadata','pause','seeked','ended'])video.addEventListener(event,paint);
+video.addEventListener('playing',()=>{$('badge').textContent='播放中';paint()});
+video.addEventListener('pause',()=>{if(!video.ended)$('badge').textContent='已暂停'});
+video.addEventListener('waiting',()=>{$('badge').textContent='等待画面'});
+video.addEventListener('error',()=>{$('badge').textContent='播放错误';$('message').textContent=`${errors[video.error?.code]||'未知媒体错误'}（代码 ${video.error?.code??'—'}）。可切换原始 MP4 对照。`});
+$('play').onclick=()=>video.paused?play():video.pause();
+$('replay').onclick=()=>{video.currentTime=0;play()};
+$('step').onclick=()=>{video.pause();video.currentTime=Math.min(Math.max(0,(video.duration||0)-0.001),video.currentTime+1/24);paint()};
+$('loop').onchange=()=>{video.loop=$('loop').checked};
+$('background').onclick=()=>{const values=['checker','dark','light'];$('stage').dataset.bg=values[(values.indexOf($('stage').dataset.bg)+1)%values.length]};
+$('webm').onclick=()=>{if(current!=='webm')load('webm')};
+$('mp4').onclick=()=>{if(current!=='mp4')load('mp4')};
+window.addEventListener('pagehide',()=>{video.pause();if(objectURL)URL.revokeObjectURL(objectURL)});
+window.addEventListener('pageshow',e=>{if(e.persisted)load(current)});
+load('webm');
+})();
+</script>
+</html>

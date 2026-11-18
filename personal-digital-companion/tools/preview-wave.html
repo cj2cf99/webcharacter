@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>挥手素材播放检查</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#151922;color:#eee;font:15px system-ui;padding:20px}main{max-width:760px;margin:auto}h1{font-size:21px;margin:0 0 14px}.row{display:flex;gap:16px;flex-wrap:wrap}section{flex:1;min-width:230px}h2{font-size:15px;font-weight:500}video{display:block;width:100%;max-height:68vh;object-fit:contain;background:repeating-conic-gradient(#e5ded3 0 25%,#f5f1e9 0 50%) 0/24px 24px;border-radius:12px}button{padding:9px 16px;border:0;border-radius:8px;background:#6156d9;color:white;cursor:pointer;margin-right:8px}output{display:block;font-variant-numeric:tabular-nums;padding:10px 0;color:#b7efca}p{color:#b9c0cc;font-size:13px}.dark video{background:#252c39}
+</style>
+<main><h1>挥手素材 · 实际视频播放</h1><div class="row">
+<section><h2>透明 WebM</h2><video id="alpha" src="/wave.webm" autoplay muted loop playsinline controls preload="auto"></video><output id="alpha-status">加载中</output></section>
+<section><h2>原始绿幕 MP4</h2><video id="source" src="/source.mp4" autoplay muted loop playsinline controls preload="auto"></video><output id="source-status">加载中</output></section>
+</div><button id="play">播放 / 暂停</button><button id="replay">重播</button><button id="background">切换底色</button><p>网页直接播放视频；时间持续增加即表示正在播放。此页仅用于素材检查。</p></main>
+<script>
+const videos=[...document.querySelectorAll('video')];
+function update(v){document.getElementById(v.id+'-status').textContent=v.error?'播放错误：'+v.error.code:`${v.paused?'已暂停':'播放中'} · ${v.currentTime.toFixed(2)} / ${Number.isFinite(v.duration)?v.duration.toFixed(2):'…'} 秒`}
+for(const v of videos)for(const event of ['timeupdate','loadedmetadata','play','pause','error'])v.addEventListener(event,()=>update(v));
+document.getElementById('play').onclick=()=>{const start=videos[0].paused;for(const v of videos)start?v.play().catch(()=>update(v)):v.pause()};
+document.getElementById('replay').onclick=()=>{for(const v of videos){v.currentTime=0;v.play().catch(()=>update(v))}};
+document.getElementById('background').onclick=()=>document.body.classList.toggle('dark');
+for(const v of videos)v.play().catch(()=>update(v));
+</script></html>

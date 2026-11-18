@@ -1,0 +1,17 @@
+import {readFileSync,writeFileSync,existsSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {stripTypeScriptTypes} from 'node:module';
+import {Script} from 'node:vm';
+const root=fileURLToPath(new URL('../',import.meta.url)),dir=resolve(root,process.argv[3]||'output/four-states-v3');
+const output=resolve(root,process.argv[2]||'绯月四状态测试_直接打开.html');
+if(existsSync(output))console.log('更新本地生成成品：'+output);
+const manifest=JSON.parse(readFileSync(resolve(dir,'manifest.json'),'utf8'));
+const media={baseline:readFileSync(resolve(dir,'baseline.png')).toString('base64'),clips:{}};
+for(const [id,item]of Object.entries(manifest.clips))media.clips[id]={data:readFileSync(resolve(dir,item.file)).toString('base64')};
+const dragDir=resolve(root,'output/drag-v1'),drag=JSON.parse(readFileSync(resolve(dragDir,'manifest.json'),'utf8'));
+for(const[id,item]of Object.entries(drag.clips))media.clips[id]={data:readFileSync(resolve(dragDir,item.file)).toString('base64')};
+const core=['companion-state.ts','companion-player.ts'].map(name=>stripTypeScriptTypes(readFileSync(resolve(root,'src',name),'utf8')).replace(/^export /gm,'')).join('\n');
+const html=readFileSync(new URL('./four-states.template.html.in',import.meta.url),'utf8').replace('/*__CORE__*/',()=>core).replace('__MEDIA__',()=>JSON.stringify(media));
+new Script(html.match(/<script>\s*([\s\S]*?)<\/script>/)[1]);
+writeFileSync(output,html);console.log(JSON.stringify({output,bytes:Buffer.byteLength(html),clips:Object.keys(media.clips),workSource:manifest.sources['工作三段2']}));

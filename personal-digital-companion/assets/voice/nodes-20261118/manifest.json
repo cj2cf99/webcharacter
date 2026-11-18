@@ -1,0 +1,87 @@
+{
+  "reference_audio": "G:\\voicesample\\新建文件夹\\elysia_01.wav",
+  "reference_text": "G:\\voicesample\\新建文件夹\\prompt.txt",
+  "language": "zh",
+  "nodes": {
+    "hover": {
+      "file": "hover.wav",
+      "raw": "hover.raw.wav",
+      "text": "诶呀。",
+      "direction": "轻声",
+      "gain": 0.65,
+      "seconds": 1.274,
+      "sample_rate": 48000,
+      "sha256": "bc92b1b4820efdcccf67973ed3a61c25cfb7e3dc4e2aafb97c201c237006ac68"
+    },
+    "hover-loop": {
+      "file": "hover-loop.wav",
+      "raw": "hover-loop.raw.wav",
+      "text": "嘻嘻，呵呵，嘻嘻嘻。",
+      "direction": "轻快笑声，持续循环",
+      "gain": 0.7,
+      "seconds": 1.668,
+      "sample_rate": 48000,
+      "sha256": "12d4e734c362124a6643b6c4f3e498e0d1319bafa8b84f7f83bc10b356b53d17"
+    },
+    "hover-exit": {
+      "file": "hover-exit.wav",
+      "raw": "hover-exit.raw.wav",
+      "text": "嗯！",
+      "direction": "轻快",
+      "gain": 0.8,
+      "seconds": 0.327,
+      "sample_rate": 48000,
+      "sha256": "d24fd29f2075ea68f96073409e1ace873f44004efe9b05599647dee0cc479304"
+    },
+    "click": {
+      "file": "click.wav",
+      "raw": "click.raw.wav",
+      "text": "嗨，我在哦！",
+      "direction": "亲切",
+      "gain": 0.95,
+      "seconds": 2.11,
+      "sample_rate": 48000,
+      "sha256": "1517e2c303ad40dc9203b388615da875bf7da774cfda37ca12ddfbf05d2afaec"
+    },
+    "work-enter": {
+      "file": "work-enter.wav",
+      "raw": "work-enter.raw.wav",
+      "text": "看我的！",
+      "direction": "自信",
+      "gain": 1.0,
+      "seconds": 0.683,
+      "sample_rate": 48000,
+      "sha256": "3eb57311f2a74df7b0daca49db4067ba6d379a69391bd0be3f6f706e39cd8fb8"
+    },
+    "work-exit": {
+      "file": "work-exit.wav",
+      "raw": "work-exit.raw.wav",
+      "text": "搞定，不愧是我！",
+      "direction": "得意轻快",
+      "gain": 1.0,
+      "seconds": 1.651,
+      "sample_rate": 48000,
+      "sha256": "d6fca1bad0e2cd75e829a0f02343305b26e245870bc39daaeb0159abde29ae7e"
+    },
+    "drag-enter": {
+      "file": "drag-enter.wav",
+      "raw": "drag-enter.raw.wav",
+      "text": "诶，慢一点嘛。",
+      "direction": "轻微惊讶",
+      "gain": 0.9,
+      "seconds": 1.608,
+      "sample_rate": 48000,
+      "sha256": "1f2332c7a71a76c30ac5b86758a6bb8e60aefc8841b537ad42084dbaddf5ba13"
+    },
+    "drag-exit": {
+      "file": "drag-exit.wav",
+      "raw": "drag-exit.raw.wav",
+      "text": "呼，站稳啦！",
+      "direction": "放松",
+      "gain": 0.85,
+      "seconds": 1.773,
+      "sample_rate": 48000,
+      "sha256": "91288cd37c04cf3ea8f909759dba445fae73364c56cb0509f022e5113c9a403e"
+    }
+  }
+}

@@ -1,0 +1,34 @@
+// 隔离桥接：不将ipcRenderer或Node对象暴露给网页。
+const {contextBridge,ipcRenderer}=require('electron');
+function subscribe(channel,callback){
+  if(typeof callback!=='function')throw new TypeError('callback required');
+  const listener=(_event,value)=>callback(value);ipcRenderer.on(channel,listener);
+  return ()=>ipcRenderer.removeListener(channel,listener);
+}
+const api={
+  getSettings:()=>ipcRenderer.invoke('pc:get'),
+  saveSettings:(config,domain)=>ipcRenderer.invoke('pc:save',{config,domain}),
+  importResource:kind=>ipcRenderer.invoke('pc:import',kind),
+  renameResource:(id,name)=>ipcRenderer.invoke('pc:rename',{id,name}),
+  onSettings:callback=>subscribe('pc:changed',callback),
+  reportRuntime:value=>ipcRenderer.send('pc:runtime',value),
+  getRuntime:()=>ipcRenderer.invoke('pc:runtime'),
+  onRuntime:callback=>subscribe('pc:runtime',callback),
+  soundReady:()=>ipcRenderer.send('desktop:sound-ready'),
+  setSound:value=>ipcRenderer.send('desktop:sound-change',value),
+  previewSound:id=>{if(typeof id==='string')ipcRenderer.send('desktop:sound-preview',id);},
+  onSound:callback=>subscribe('desktop:sound',callback),
+  onSoundPreview:callback=>subscribe('desktop:sound-preview',callback),
+  ready:()=>ipcRenderer.send('desktop:ready'),
+  hit:value=>{if(typeof value==='boolean')ipcRenderer.send('desktop:hit',value);},
+  dragStart:()=>ipcRenderer.send('desktop:drag-start'),
+  dragEnd:()=>ipcRenderer.send('desktop:drag-end'),
+  onPointer:callback=>subscribe('desktop:pointer',callback),
+  onVisible:callback=>subscribe('desktop:visible',callback),
+  onWork:callback=>subscribe('desktop:work',callback),
+};
+if(process.argv.includes('--feiyue-benchmark')){
+  api.onPerfSnapshot=callback=>subscribe('desktop:perf-request',callback);
+  api.perfSnapshot=value=>ipcRenderer.send('desktop:perf-response',value);
+}
+contextBridge.exposeInMainWorld('desktopHost',api);

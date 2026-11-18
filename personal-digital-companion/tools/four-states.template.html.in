@@ -1,0 +1,75 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>绯月 · 四状态试验</title><style>
+*{box-sizing:border-box}body{margin:0;background:#141722;color:#f3eef9;font:15px system-ui;padding:18px}main{max-width:650px;margin:auto}header,.bar{display:flex;align-items:center;gap:9px;flex-wrap:wrap}header{justify-content:space-between}h1{font-size:21px;margin:0}#badge{font-size:13px;padding:6px 12px;border-radius:20px;background:#493470}.stage{display:flex;justify-content:center;border-radius:18px;margin:14px 0 10px;background:repeating-conic-gradient(#dcd5cd 0 25%,#f7f2eb 0 50%) 0/24px 24px;overflow:hidden}.stage.dark{background:#252b3b}canvas{display:block;width:min(100%,300px);height:auto;touch-action:manipulation;cursor:pointer}button{font:inherit;background:#292d42;border:1px solid #4f4c66;color:#fff;padding:10px 13px;border-radius:10px;cursor:pointer}button.active{background:#7852ce;border-color:#c4a8ff}button:focus-visible{outline:2px solid #d5b9ff;outline-offset:2px}output{display:block;font-size:13px;color:#c7b7eb;min-height:22px;margin:10px 0}p{font-size:13px;color:#bbc0d1;line-height:1.6}#detail{font-variant-numeric:tabular-nums}small{color:#abafc6}.pulse{animation:pulse 1.5s infinite}@keyframes pulse{50%{opacity:.55}}@media(prefers-reduced-motion:reduce){.pulse{animation:none}}
+</style><main><header><h1>绯月 · 四状态试验</h1><span id="badge" role="status">准备中</span></header>
+<div class="stage" id="stage"><canvas id="character" width="464" height="688" role="button" tabindex="0" aria-label="绯月，悬停触发反应，点击打招呼"></canvas></div>
+<div class="bar"><button id="work">✎ 开始工作</button><button id="click">♡ 点击反应</button><button id="hover">✧ 悬停预览</button><button id="drag">↔ 按住模拟拖拽</button><button id="pause">Ⅱ 暂停</button><button id="retry">↻ 重试</button><button id="bg">◐ 底色</button></div>
+<output id="queue" role="status">加载待机素材…</output><small id="detail">0.00 秒 · 0 帧</small>
+<p>待机可立即切到其他动作；按住拖拽按钮可抢占，进入后循环，松开后接退出段。其余动作保留结束交接。</p>
+<p><small>工作中段循环接缝、不同片段间的细节变化仍待确认。本页仅验证素材与状态切换。</small></p></main>
+<script id="media" type="application/json">__MEDIA__</script><script>
+'use strict';
+(()=>{
+const $=id=>document.getElementById(id);
+window.addEventListener('error',e=>{$('badge').textContent='初始化错误';$('queue').textContent=e.message;});
+/*__CORE__*/
+const embedded=JSON.parse($('media').textContent),cache=new Map();
+const model=new CompanionState();
+const labels={idle:'待机',click:'点击 · 开心挥手',hover:'悬停反应','drag-enter':'拖拽 · 进入','drag-loop':'拖拽 · 循环','drag-exit':'拖拽 · 退出','work-enter':'工作 · 进入','work-loop':'工作 · 进行中','work-exit':'工作 · 收尾'};
+let paused=false,hidden=false,failed=false,loading=false,closed=false,request=0;
+const player=new CompanionPlayer($('character'),async id=>{
+  if(!cache.has(id)){
+    const text=atob(embedded.clips[id].data),bytes=new Uint8Array(text.length);
+    for(let i=0;i<text.length;i++)bytes[i]=text.charCodeAt(i);
+    cache.set(id,new Blob([bytes],{type:'video/webm'}));
+  }
+  return cache.get(id);
+});
+function paint(){
+  $('work').textContent=model.work?'■ 结束工作':'✎ 开始工作';$('work').classList.toggle('active',model.work);
+  $('pause').textContent=paused?'▶ 继续':'Ⅱ 暂停';
+  if(!failed){
+    $('badge').textContent=loading?'加载中':paused?'已暂停':labels[model.current];
+    const pending=model.clickPending?'点击':model.hoverPending?'悬停':model.work&&!model.current.startsWith('work-')?'进入工作':!model.work&&model.current.startsWith('work-')?'退出工作':'';
+    $('queue').textContent=model.isDrag()?model.dragHeld?'正在拖拽，进入后循环播放':'已松开，当前小段结束后收尾':pending?`已接收：${pending}，等当前片段完成后切换`:'等待互动 · 待机可立即打断';
+  }
+}
+function failure(e){failed=true;loading=false;$('badge').textContent='播放未开始';$('pause').textContent='▶ 播放 / 重试';$('queue').textContent=`${e.message||e}，请点“重试”，或点“播放 / 重试”。`;}
+player.onError=failure;
+async function loadCurrent(){
+  const token=++request;failed=false;loading=true;paint();
+  try{await player.load(model.current);if(token!==request)return;loading=false;if(paused||hidden)player.pause();paint();}
+  catch(e){if(token===request)failure(e);}
+}
+player.onEnded=()=>{model.ended();loadCurrent();};
+function dispatch(next){next?loadCurrent():paint();}
+$('click').onclick=()=>dispatch(model.click());
+$('hover').onclick=()=>{model.leave();dispatch(model.enter());};
+$('work').onclick=()=>dispatch(model.setWork(!model.work));
+$('drag').onpointerdown=e=>{e.preventDefault();$('drag').setPointerCapture(e.pointerId);if(model.beginDrag()){request++;player.hold();loadCurrent();}};
+function stopDrag(){model.endDrag();paint();}
+$('drag').onpointerup=stopDrag;$('drag').onpointercancel=stopDrag;
+const canvas=$('character');
+canvas.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')return;if(player.hit(e.clientX,e.clientY))dispatch(model.enter());else{model.leave();paint();}});
+canvas.addEventListener('pointerleave',()=>{model.leave();paint();});
+canvas.addEventListener('click',e=>{if(player.hit(e.clientX,e.clientY))dispatch(model.click());});
+canvas.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();dispatch(model.click());}});
+$('pause').onclick=async()=>{
+  if(model.isDrag())return;
+  if(failed){paused=false;if(!player.video||player.video.error){loadCurrent();return;}try{await player.resume();failed=false;paint();}catch(e){failure(e);}return;}
+  paused=!paused;if(paused)player.pause();else try{await player.resume();}catch(e){failure(e);}paint();
+};
+$('retry').onclick=()=>{if(model.isDrag())return;paused=false;loadCurrent();};
+$('bg').onclick=()=>$('stage').classList.toggle('dark');
+document.addEventListener('visibilitychange',()=>{
+  hidden=document.hidden;
+  if(hidden){player.pause();model.endDrag();paint();}
+  else if(!paused&&!failed&&!loading)player.resume().catch(failure);
+});
+const poster=new Image();poster.onload=()=>{player.draw(poster);loadCurrent();};poster.onerror=()=>failure(new Error('基准图加载失败'));
+poster.src='data:image/png;base64,'+embedded.baseline;
+const interval=setInterval(()=>{if(!closed)$('detail').textContent=`${(player.video?.currentTime||0).toFixed(2)} 秒 · ${player.frames} 已呈现帧`;},250);
+window.addEventListener('pagehide',()=>{closed=true;clearInterval(interval);player.destroy();cache.clear();});
+window.addEventListener('pageshow',e=>{if(e.persisted)location.reload();});
+})();
+</script></html>

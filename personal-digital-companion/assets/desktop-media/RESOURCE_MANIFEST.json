@@ -1,0 +1,110 @@
+{
+  "./clips-compact/click.webm": {
+    "bytes": 2133508,
+    "sha256": "7b3f9c6584a26d85d2c6d0b8900e17a03fdf02260d839906e9dcb936dd38ebf0"
+  },
+  "./clips-compact/drag-enter-speed.webm": {
+    "bytes": 483066,
+    "sha256": "2945128ea9c983abd2413fb336426d634f4330c23eac70b919bf16b4ffebad88"
+  },
+  "./clips-compact/drag-exit-speed.webm": {
+    "bytes": 537953,
+    "sha256": "00ff0642a4d53b48814a584715efb3c099e04c3fa5dc515d3d4e55c722734f84"
+  },
+  "./clips-compact/drag-loop-speed.webm": {
+    "bytes": 1426283,
+    "sha256": "d72ec27e2ff562a06d8bf864b9fbf492d1a9044e136ea68c5e4f27df364ffe26"
+  },
+  "./clips-compact/hover-exit-parts.webm": {
+    "bytes": 1112678,
+    "sha256": "24beeb80f691a83d42a872fec0a178ee6d90471e490fa0cc295de4e97d601ddb"
+  },
+  "./clips-compact/hover-parts.webm": {
+    "bytes": 311195,
+    "sha256": "e3912786087095199a8f951413f1d82f704b0dcd1f48c232ad53882769e13247"
+  },
+  "./clips-compact/hover-seamless.webm": {
+    "bytes": 575202,
+    "sha256": "193ef3be6d315afa69d819c2330b581d643545b87a72a1ca5583220b68eb765b"
+  },
+  "./clips-compact/hover.webm": {
+    "bytes": 2751420,
+    "sha256": "ea0c352e24672b2d60a502ee9bf82fdc903026f47a9c5f723a4fad5fcf2f4036"
+  },
+  "./clips-compact/idle-basic.webm": {
+    "bytes": 1096334,
+    "sha256": "eb09688b554fdc4ced85313351a538c8d4cdb5488778c1bec7f1e38eb0e5311b"
+  },
+  "./clips-compact/work-enter.webm": {
+    "bytes": 2991589,
+    "sha256": "e7e5d14bba2b6ea720aa1185b44c523adc0e60a639218f5819953a1cac14ee87"
+  },
+  "./clips-compact/work-exit.webm": {
+    "bytes": 2230413,
+    "sha256": "5e8df5ef6f4f167616dd45016e8a6407636cb380f329d4f601a98fcbd2977c56"
+  },
+  "./clips-compact/work-loop.webm": {
+    "bytes": 821266,
+    "sha256": "44fafebca0f807b713ec87575a29020d431e6f6524a23c8ca32f7ce9bc480463"
+  },
+  "./clips/click.webm": {
+    "bytes": 2670352,
+    "sha256": "60348667bd429dccac3ca414748e52263e263d26953143eda9c32118d3c3c742"
+  },
+  "./clips/drag-enter-speed.webm": {
+    "bytes": 697015,
+    "sha256": "c71ae04b8e360c4cafc0fce16542a6875e26db3480e25e5e944eb6bf02b12107"
+  },
+  "./clips/drag-exit-speed.webm": {
+    "bytes": 768045,
+    "sha256": "e688bee4c6d66ee09b6f5b94131af4eea8e67683dc0ddaf20a1a80711d87a457"
+  },
+  "./clips/drag-loop-speed.webm": {
+    "bytes": 2006415,
+    "sha256": "784a0e23853de1a4fe69296461644f2098fc8ccc40a085740f533c9369853e12"
+  },
+  "./clips/hover-exit-parts.webm": {
+    "bytes": 1566740,
+    "sha256": "d03eb3fb3c19d90a539602ea4494664b3d406a7a252a8f3fe16356a8ebe92daa"
+  },
+  "./clips/hover-parts.webm": {
+    "bytes": 428554,
+    "sha256": "0a14e680edfa87a7eda3bbd6e717fa0207ee0d00456285621b1f905b762bce4d"
+  },
+  "./clips/hover-seamless.webm": {
+    "bytes": 823355,
+    "sha256": "011ed177d09d435c2f63cd2be769c5c79991c59a02f458848381079c7a55b6f4"
+  },
+  "./clips/hover.webm": {
+    "bytes": 3378898,
+    "sha256": "fe3584ca8faf923f85f927bdf041a2ef16e4b6579655213b12ac825c7998b3d4"
+  },
+  "./clips/idle-basic.webm": {
+    "bytes": 1886403,
+    "sha256": "aa417aef749b9b15133a996dfd61035ac9edb5600f3da9e088e3dde1b02b5d08"
+  },
+  "./clips/work-enter.webm": {
+    "bytes": 3795728,
+    "sha256": "28d69c8d16f81e87e8328e719bbc417c6e972dbb4826f95f09b83085930183d7"
+  },
+  "./clips/work-exit.webm": {
+    "bytes": 2814026,
+    "sha256": "700b5b0d7bde48ad3569cc0c942f8f14ae69d71b0265ccf2dc449383d33b3f54"
+  },
+  "./clips/work-loop.webm": {
+    "bytes": 1050784,
+    "sha256": "29fb00c2d4cf46330dcde28826b5dccc2a108eb4074b4d261031e8a74c354068"
+  },
+  "baseline.png": {
+    "bytes": 229911,
+    "sha256": "905bcf2b1c983698bded4e147406d2e3f47bfd15ca46799ae883f8270e25a480"
+  },
+  "clip-catalog.json": {
+    "bytes": 1141,
+    "sha256": "1d85bfb0a72c9abe438e39166ff950442554f3d4b72fd42f360c3220062c9a06"
+  },
+  "tray.png": {
+    "bytes": 3234,
+    "sha256": "41f817021418b6f3b76d227f924fe1c08736874c2a62c07367c109d2b298d40b"
+  }
+}

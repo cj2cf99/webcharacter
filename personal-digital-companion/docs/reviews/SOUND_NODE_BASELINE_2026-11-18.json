@@ -1,0 +1,11 @@
+{
+  "desktop/sound.mjs": "7f9c0b8327d83f31d85840f84b847649c7802196585177f87c9a3e2268ea1f5f",
+  "desktop/sound-settings.mjs": "5e46091a18edc68cb2cd42abfce908a4e7504b2ea729ff627ba093156c99076c",
+  "desktop/sound-settings.html": "1379a89f4038a05cc438cb252c34a6e5de3f3eea2b9d0927b194253ef73bd748",
+  "desktop/sound-settings.css": "2daf9f7feccea736289f553199f272583d3d0794fe780c6efb33dcfb67bcf6d6",
+  "desktop/shell.mjs": "e612018233a76260d8f6d23d626f2b65094f579ee31732e374273b4c792bb9b1",
+  "desktop/preload.cjs": "d81deffe34aa58be1ce11dc03f7bef959421498383f62c86700980f0caf006c1",
+  "desktop/renderer.mjs": "a30cc101fdc0814316d3dc4eba992421b2962db30834f3b8f6c3e9fa44de5ede",
+  "tools/test-desktop-sound.mjs": "813de9a78b91a09f53dd602d414e96306013fbc8429f558ca6618f4a16b7030d",
+  "tools/test-desktop-shell.mjs": "52c0e43efc0db12e6be40bacdcbd7654168abf2c61c26812ee0b1b1465d91bf4"
+}

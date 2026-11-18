@@ -1,0 +1,11 @@
+{
+  "confirmedDate": "2026-11-18",
+  "timezone": "Asia/Tokyo",
+  "userStatement": "这三个可以接受",
+  "approved": [
+    "laugh-soft.wav",
+    "greeting-dear.wav",
+    "laugh-bell-v3.wav"
+  ],
+  "note": "laugh-bell-v3.wav为原版，不是加长版；本清单不自动分配节点或删除其他候选。"
+}
