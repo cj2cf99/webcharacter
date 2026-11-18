@@ -1,0 +1,18 @@
+Create a single production ANIMATION SPRITE SHEET of EXACTLY 4 columns x 4 rows (16 sequential frames), portrait overall canvas 1024x1536, equal 256x384 cells. The attached image is the ONLY authoritative BASE POSE and identity. Use precisely this THREE-QUARTER VIEW FACING VIEWER LEFT, hands delicately overlapped in front of waist, crossed legs, chestnut high bun with large red white flower on viewer-right side, flowing long hair behind viewer right, white gold detached sleeves, red gold costume, floral strapped heels, red eyes, forehead floral mark. Preserve the image's drawing style, clothing and original adult 4-head-chibi proportions, no redesign and no sexual emphasis. DO NOT substitute a straight-on symmetrical front standing pose. The user wants an emotionally expressive WHOLE BODY happy click response, NOT a fixed torso with waving forearm. Allow exaggerated adorable expressions and dynamic full-body poses. Every cell contains one COMPLETE full-body figure, fixed camera and consistent anatomy/size. Rest pose bounds approx x65..205,y16..365 relative to cell; leave extra headroom and lateral space for hands and a small hop; never crop. Whole background solid pure chroma GREEN #00FF00, no floor or shadows, no text, no borders, no effects obscuring the character. Read frames left-to-right row-by-row:
+01 EXACT input waiting pose, three-quarter left, hands folded, legs crossed, neutral gentle face.
+02 React with bright eyes and open delighted smile, head lifts and tilts toward viewer, shoulders lift, hands begin separating, knees soften.
+03 Anticipation squash, knees bend noticeably, hips lower, torso leans forward, smiling squinted eyes, hair lags.
+04 Push off into a SMALL HAPPY HOP, both feet momentarily airborne, left hand raises beside head while other hand opens outward, knees flex, joyful wide smile, sleeves and hair trail downward.
+05 Soft landing on one supporting foot, other lower leg bends back with toe lifted, torso counterbalances sideways, head tilts, open raised palm waves.
+06 Whole-body wave inward: one-leg balance, hips sway one way, shoulders and head tilt opposite, cheerful closed-eye smile, forearm bends.
+07 Whole-body wave outward: opposite lean, free foot swings slightly, hair and sleeves lag, raised palm moves outward.
+08 Return through balance center, knee spring, bright open-eye grin, hand at intermediate angle.
+09 Second playful one-leg pose: lift opposite heel and bend knee with torso counterbalance, head tilt other direction, happy eyes, open palm inward.
+10 Exaggerated wave outward, small shoulder twist and hip sway, big closed-eye smile, hair/sleeves/ribbon overshoot.
+11 Wave inward while leaning back slightly, cheerful expression, knees soft, free foot still lifted.
+12 Both feet return to ground with soft knee bend, hand begins lowering, smile relaxes.
+13 Torso and head return toward original three-quarter left direction, feet start crossing, hair and sleeves catch up, hands approach each other.
+14 Hands fold in front waist, knees straighten gently, crossed legs nearly original, small residual hair swing.
+15 Settle into EXACT original input pose, gentle neutral face, hair settling.
+16 EXACT original input waiting pose again.
+Emotion is highest priority: visible delight, clear anticipation, bounce, head/shoulder/waist/knee participation, believable balance and soft landing; avoid frozen body and avoid identical duplicated frames. Maintain costume and face identity across all sixteen cells; do not add arms/fingers/legs, no floating shoes or disconnected limbs. No captions. Actual coherent consecutive whole-body poses, not sixteen independent character designs.

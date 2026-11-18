@@ -8,9 +8,13 @@ import {run} from './media.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url)),out=resolve(root,'output/desktop-bundle'),media=resolve(root,'output/four-states-v3');
 mkdirSync(out,{recursive:true});
 for(const name of ['companion-state','companion-player'])writeFileSync(resolve(out,name+'.mjs'),stripTypeScriptTypes(readFileSync(resolve(root,'src',name+'.ts'),'utf8')));
-for(const name of ['index.html','style.css','renderer.mjs','sound.mjs','sound-settings.html','sound-settings.css','sound-settings.mjs','settings.html','settings-ui.mjs','settings.css','configured-renderer.mjs','behavior-controller.mjs','effect-preview.mjs'])copyFileSync(resolve(root,'desktop',name),resolve(out,name));
+for(const name of ['index.html','style.css','renderer.mjs','sound.mjs','sound-settings.html','sound-settings.css','sound-settings.mjs','settings.html','settings-ui.mjs','settings.css','configured-renderer.mjs','behavior-controller.mjs','effect-preview.mjs','window-nodes.mjs','screen-posture.mjs','screen-question.html','screen-question.css','screen-question-ui.mjs'])copyFileSync(resolve(root,'desktop',name),resolve(out,name));
 mkdirSync(resolve(out,'voice'),{recursive:true});
 cpSync(resolve(root,'assets/voice'),resolve(out,'voice'),{recursive:true});
+cpSync(resolve(root,'assets/walk-20261118'),resolve(out,'walk'),{recursive:true});
+cpSync(resolve(root,'assets/attachment-human-20261118'),resolve(out,'attachment-human'),{recursive:true});
+mkdirSync(resolve(out,'elevator'),{recursive:true});
+for(const phase of ['enter','run','exit'])copyFileSync(resolve(root,'assets/elevator-20261118',phase+'.webm'),resolve(out,'elevator',phase+'.webm'));
 // Git内正式资源可独立恢复；只有显式重做素材时才读取本机中间产物。
 const committed=resolve(root,'assets/desktop-media');
 if(existsSync(resolve(committed,'clip-catalog.json'))&&!process.argv.includes('--from-intermediates')){

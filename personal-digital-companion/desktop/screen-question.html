@@ -1,0 +1,6 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'none'"><title>绯月 · 看屏幕问答</title><link rel="stylesheet" href="screen-question.css"></head>
+<body><main class="bubble" data-tail="bottom">
+<header><span class="avatar" aria-hidden="true">✧</span><strong>绯月</strong><span id="badge">看屏幕问答</span><button id="close" class="icon" aria-label="关闭问答">×</button></header>
+<section id="reply" aria-live="polite" aria-busy="false"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><p id="answer">有什么想让我帮你看看？</p></section>
+<form id="questionForm"><label class="sr" for="question">你的问题</label><textarea id="question" rows="2" placeholder="这个报错是什么意思？" aria-describedby="hint"></textarea><footer><span id="hint">Ctrl+Enter · 鼠标所在屏幕</span><button id="retry" type="button" hidden>重试原图</button><button id="send" type="submit">看一眼 ↗</button></footer></form>
+</main><script type="module" src="screen-question-ui.mjs"></script></body></html>

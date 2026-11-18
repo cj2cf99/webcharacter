@@ -1,5 +1,6 @@
 import {CompanionPlayer} from './companion-player.mjs';
 import {BehaviorController} from './behavior-controller.mjs';
+import {WINDOW_NODES} from './window-nodes.mjs';
 // 使用与桌宠相同的动画控制器和画布播放器；仅预览，不写配置。
 export class EffectPreview{
  constructor({canvas,label,getDraft,beforePlay}){this.canvas=canvas;this.label=label;this.getDraft=getDraft;this.beforePlay=beforePlay;this.audio=new Audio();this.audio.preload='none';this.token=0;this.running=false;this.timer=null;this.active=null;
@@ -13,11 +14,13 @@ export class EffectPreview{
  stop(text='已停止'){this.running=false;this.token++;this.player.hold();this.silence();this.label.textContent=text;}
  start(){this.stop();this.beforePlay();this.draft=this.getDraft();this.id=this.draft.selected;this.round=1;this.running=true;
  this.controller=new BehaviorController(this.draft.config,(id,phase)=>{if(id!==this.id){this.complete();return;}this.load(phase);});
- if(this.id==='hover')this.controller.over=true;if(this.id==='work')this.controller.work=true;if(this.id==='drag')this.controller.drag=true;
+ if(this.id==='hover')this.controller.over=true;if(this.id==='work')this.controller.work=true;if(this.id==='drag')this.controller.drag=true;if(this.id==='walk')this.controller.walk=true;
+ if(WINDOW_NODES[this.id])this.controller.holds=()=>!this.controller.stopping;
+ this.player.preserveAspect=!!WINDOW_NODES[this.id];
  this.controller.start(this.id);
  }
  show(){const names={single:'单段',enter:'进入',loop:'循环',exit:'退出'};this.label.textContent=names[this.controller.phase]+(this.controller.phase==='loop'?' · 第 '+this.round+' 轮':'');}
- async load(phase){const token=++this.token;this.clearTimer();this.label.textContent='加载中…';try{await this.player.load(this.draft.config.states[this.id].slots[phase]);if(token!==this.token||!this.running)return;this.player.loopBlend=this.draft.config.states[this.id].slots[phase]!=='hoverLoop';this.player.video.loop=this.controller.canNativeLoop();this.show();this.speak();}catch(e){if(token===this.token)this.fail(e);}}
+ async load(phase){const token=++this.token;this.clearTimer();this.label.textContent='加载中…';try{await this.player.load(this.draft.config.states[this.id].slots[phase]);if(token!==this.token||!this.running)return;this.player.loopBlend=!['hoverLoop','walk-loop'].includes(this.draft.config.states[this.id].slots[phase]);this.player.video.loop=this.controller.canNativeLoop();this.show();this.speak();}catch(e){if(token===this.token)this.fail(e);}}
  currentSound(){return this.getDraft().config.states[this.id]?.sound[this.controller.phase];}
  level(active=this.active){if(!active)return 0;const c=this.getDraft().config,s=c.states[active.id]?.sound[active.phase];return c.master.enabled&&s?.on?c.master.volume*s.volume/10000:0;}
  updateSound(){if(this.active){this.audio.volume=this.level();if(!this.audio.volume)this.silence();}}

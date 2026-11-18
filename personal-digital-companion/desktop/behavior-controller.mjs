@@ -1,12 +1,14 @@
 // 动画完成控制与输入意图分离；声音不参与结束门禁。
 export class BehaviorController{
- constructor(config,play){this.config=config;this.play=play;this.current='idle';this.phase='single';this.over=false;this.work=false;this.drag=false;this.clickPending=false;this.specialPending=false;this.stopping=false;}
+ constructor(config,play){this.config=config;this.play=play;this.current='idle';this.phase='single';this.over=false;this.work=false;this.drag=false;this.walk=false;this.clickPending=false;this.specialPending=false;this.stopping=false;}
  start(id){this.current=id;this.phase=this.config.states[id].mode==='single'?'single':'enter';this.stopping=false;this.emit();}
  emit(){this.play(this.current,this.phase);}
- desired(){return this.drag?'drag':this.clickPending?'click':this.work?'work':this.over?'hover':this.specialPending?'special':'idle';}
+ desired(){return this.drag?'drag':this.walk?'walk':this.clickPending?'click':this.work?'work':this.over?'hover':this.specialPending?'special':'idle';}
  next(){const id=this.desired();if(id==='click')this.clickPending=false;if(id==='special')this.specialPending=false;this.start(id);}
- holds(){return this.current==='idle'?this.desired()==='idle':this.current==='hover'?this.over&&!this.work&&!this.drag&&!this.clickPending:this.current==='work'?this.work&&!this.drag&&!this.clickPending:this.current==='drag'?this.drag:false;}
+ holds(){if(this.walk&&this.current!=='walk'&&this.current!=='drag')return false;return this.current==='idle'?this.desired()==='idle':this.current==='hover'?this.over&&!this.work&&!this.drag&&!this.clickPending:this.current==='work'?this.work&&!this.drag&&!this.clickPending:this.current==='drag'?this.drag:this.current==='walk'?this.walk&&!this.drag:false;}
  input(kind,value=true){if(kind==='click')this.clickPending=true;else this[kind]=value;const desired=this.desired();if(desired!==this.current){this.stopping=true;const s=this.config.states[this.current];if(s.force)return;if(this.drag){this.next();return;}if(s.mode==='triple'&&this.phase!=='exit'){this.phase='exit';this.emit();}else if(s.mode==='single')this.next();}}
+ // 到达预告优先于循环强制播完；收步退出本身仍完整播放。
+ finishWalk(){if(this.current!=='walk')return;this.walk=false;this.stopping=true;if(this.phase==='exit')return;if(this.config.states.walk.mode==='triple'){this.phase='exit';this.emit();}else this.next();}
  ended(){const s=this.config.states[this.current];if(this.phase==='exit'){this.next();return;}if(this.stopping||!this.holds()){
    if(s.mode==='triple'&&this.phase==='enter'&&!this.stopping&&['click','special'].includes(this.current)){this.phase='loop';this.emit();return;}
    if(s.mode==='triple'){this.phase='exit';this.emit();}else this.next();return;

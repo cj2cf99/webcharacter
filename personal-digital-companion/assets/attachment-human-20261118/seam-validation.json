@@ -1,0 +1,74 @@
+{
+  "lie-self": {
+    "max_premultiplied_difference": 0.0,
+    "mean_difference": 0.0,
+    "max_alpha_difference": 0,
+    "opaque_geometry_identical": true
+  },
+  "sit-self": {
+    "max_premultiplied_difference": 0.0,
+    "mean_difference": 0.0,
+    "max_alpha_difference": 0,
+    "opaque_geometry_identical": true
+  },
+  "lie-to-transition": {
+    "max_premultiplied_difference": 0.019607841968536377,
+    "mean_difference": 0.0005263692582957447,
+    "max_alpha_difference": 1,
+    "opaque_geometry_identical": true
+  },
+  "transition-to-sit": {
+    "max_premultiplied_difference": 0.04313725233078003,
+    "mean_difference": 0.00029994500800967216,
+    "max_alpha_difference": 1,
+    "opaque_geometry_identical": true
+  },
+  "sit-to-transition": {
+    "max_premultiplied_difference": 0.0,
+    "mean_difference": 0.0,
+    "max_alpha_difference": 0,
+    "opaque_geometry_identical": true
+  },
+  "transition-to-lie": {
+    "max_premultiplied_difference": 0.0,
+    "mean_difference": 0.0,
+    "max_alpha_difference": 0,
+    "opaque_geometry_identical": true
+  },
+  "lie-idle-self": {
+    "max_premultiplied_difference": 0.0,
+    "mean_difference": 0.0,
+    "max_alpha_difference": 0,
+    "opaque_geometry_identical": true
+  },
+  "lie-idle-to-special": {
+    "max_premultiplied_difference": 0.0,
+    "mean_difference": 0.0,
+    "max_alpha_difference": 0,
+    "opaque_geometry_identical": true
+  },
+  "lie-special-to-idle": {
+    "max_premultiplied_difference": 0.0,
+    "mean_difference": 0.0,
+    "max_alpha_difference": 0,
+    "opaque_geometry_identical": true
+  },
+  "sit-idle-self": {
+    "max_premultiplied_difference": 0.0,
+    "mean_difference": 0.0,
+    "max_alpha_difference": 0,
+    "opaque_geometry_identical": true
+  },
+  "sit-idle-to-special": {
+    "max_premultiplied_difference": 0.0,
+    "mean_difference": 0.0,
+    "max_alpha_difference": 0,
+    "opaque_geometry_identical": true
+  },
+  "sit-special-to-idle": {
+    "max_premultiplied_difference": 0.0,
+    "mean_difference": 0.0,
+    "max_alpha_difference": 0,
+    "opaque_geometry_identical": true
+  }
+}

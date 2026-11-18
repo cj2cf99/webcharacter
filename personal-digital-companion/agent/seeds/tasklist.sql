@@ -1,0 +1,2 @@
+-- 用户已暂停disk.query具体任务；本轮不初始化任何业务任务类型。
+-- 不删除既有tasklist/tasks记录。测试mock只在tests/fixtures.mjs中创建。

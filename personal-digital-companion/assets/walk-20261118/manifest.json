@@ -1,0 +1,67 @@
+{
+  "source": "行走完整.mp4",
+  "source_sha256": "c4555a8851940d2a0bcab085ab5c1eb42759c05860e2f04b5dfc3b8e5c94f63d",
+  "fps": 24,
+  "source_frames": 145,
+  "clips": {
+    "walk-enter": {
+      "start_frame": 7,
+      "end_frame_exclusive": 27,
+      "frames": 20,
+      "seconds": 0.8333,
+      "file": "walk-enter.webm",
+      "compact": "compact/walk-enter.webm"
+    },
+    "walk-loop": {
+      "start_frame": 27,
+      "end_frame_exclusive": 55,
+      "frames": 28,
+      "seconds": 1.1667,
+      "file": "walk-loop.webm",
+      "compact": "compact/walk-loop.webm"
+    },
+    "walk-exit": {
+      "start_frame": 83,
+      "end_frame_exclusive": 99,
+      "frames": 16,
+      "seconds": 0.6667,
+      "file": "walk-exit.webm",
+      "compact": "compact/walk-exit.webm"
+    }
+  },
+  "voices": {
+    "walk-enter": {
+      "text": "我要出发咯～！",
+      "file": "walk-enter.wav",
+      "seconds": 1.1,
+      "sample_rate": 48000,
+      "sha256": "2e1975152620ac04a11dcd2823fa685e0f28c79050371be2bc5f182a0a6795a8"
+    },
+    "walk-exit": {
+      "text": "到啦！",
+      "file": "walk-exit.wav",
+      "seconds": 0.74,
+      "sample_rate": 48000,
+      "sha256": "ab373d8f9119210a4d1f5f1ffd524d93bd6dd0d5e672b1b4726810e4a82baf77"
+    }
+  },
+  "pairing": {
+    "enter": {
+      "video": "walk-enter",
+      "voice": "voice:walk-enter"
+    },
+    "loop": {
+      "video": "walk-loop",
+      "voice": null
+    },
+    "exit": {
+      "video": "walk-exit",
+      "voice": "voice:walk-exit"
+    }
+  },
+  "reference_audio": "G:\\voicesample\\新建文件夹\\elysia_01.wav",
+  "reference_text": "G:\\voicesample\\新建文件夹\\prompt.txt",
+  "reference_language": "zh",
+  "output_language": "zh",
+  "source_copy": "source.mp4"
+}

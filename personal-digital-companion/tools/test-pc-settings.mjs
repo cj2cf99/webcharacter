@@ -1,12 +1,30 @@
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,existsSync,rmSync} from 'node:fs';
+import {mkdtempSync,readFileSync,writeFileSync,existsSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';import {join,resolve} from 'node:path';
 import {SettingsStore,defaults} from '../desktop/settings-store.mjs';
+import {WINDOW_NODES} from '../desktop/window-nodes.mjs';
 import {BehaviorController} from '../desktop/behavior-controller.mjs';
 const dir=mkdtempSync(join(tmpdir(),'pc-settings-test-')),bundle=resolve('output/desktop-bundle');
 try{
  let store=new SettingsStore(dir,bundle,{enabled:false,volume:27,nodes:{idle:{enabled:false,volume:42}}});assert.equal(store.snapshot().config.master.volume,27);assert.equal(store.snapshot().config.states.idle.sound.single.volume,42);
  for(const id of ['laugh-soft','greeting-dear','laugh-bell-v3']){const asset=store.catalog().find(a=>a.id==='voice:'+id);assert(asset&&asset.kind==='audio');assert(existsSync(new URL(asset.url)));}
+ const oldProfile=JSON.parse(readFileSync(store.file,'utf8'));
+ for(const id of Object.keys(WINDOW_NODES))delete oldProfile.config.states[id];
+ writeFileSync(store.file,JSON.stringify(oldProfile));
+ store=new SettingsStore(dir,bundle);
+ assert.equal(store.snapshot().config.states.windowElevator.slots.loop,'elevator-run');
+ assert.equal(store.snapshot().config.states.windowLieSpecial.slots.single,'attachment-lie');
+ assert.equal(store.snapshot().config.states.idle.sound.single.volume,42);
+ const windowConfig=store.snapshot().config;
+ windowConfig.states.windowSit.slots.single='attachment-sit';
+ store.save(windowConfig,'animation');
+ windowConfig.states.windowSit.sound.single={on:true,volume:62,delay:0,voice:'voice:walk-exit'};
+ store.save(windowConfig,'sound');
+ const windowNode=new SettingsStore(dir,bundle).snapshot().config.states.windowSit;
+ assert.equal(windowNode.slots.single,'attachment-sit');
+ assert.equal(windowNode.sound.single.volume,62);
+ const invalidRule=store.snapshot().config;invalidRule.states.windowSit.play='once';
+ assert.throws(()=>store.save(invalidRule,'animation'),/窗口互动的播放规则固定/);
  const untouched=JSON.stringify(store.snapshot().config);new SettingsStore(dir,bundle);assert.equal(JSON.stringify(store.snapshot().config),untouched,'新增资源不改节点映射');
  let c=store.snapshot().config;c.states.hover.force=true;c.states.hover.slots.enter='click';store.save(c,'animation');
  c.master.volume=63;c.states.hover.sound.enter.delay=1.2;store.save(c,'sound');

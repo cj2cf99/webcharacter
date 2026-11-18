@@ -1,0 +1,8 @@
+{
+  "clip": "lie-to-sit",
+  "before_max_relative_scale": 1.2325958294667614,
+  "after_max_relative_scale": 1.032463336242845,
+  "after_min_relative_scale": 0.9708718071408382,
+  "after_min_tracking_inliers": 147,
+  "measure": "head optical-flow similarity, normalized to endpoint trend; not a full 3D size measurement"
+}

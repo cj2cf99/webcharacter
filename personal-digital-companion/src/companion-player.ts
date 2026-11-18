@@ -4,6 +4,7 @@ export class CompanionPlayer {
   blendStart = 0;
   smooth = false;
   loopBlend = true;
+  preserveAspect = false;
   canvas: HTMLCanvasElement;
   context: CanvasRenderingContext2D;
   video: HTMLVideoElement | null = null;
@@ -14,6 +15,7 @@ export class CompanionPlayer {
   raf = 0;
   frames = 0;
   lastTime = -1;
+  onFrame: (time: number, duration: number) => void = () => {};
   onEnded: () => void = () => {};
   onLoop: () => void = () => {};
   onError: (error: Error) => void = () => {};
@@ -23,8 +25,15 @@ export class CompanionPlayer {
   }
   captureBlend(){if(!this.smooth)return;this.blend=document.createElement('canvas');this.blend.width=this.canvas.width;this.blend.height=this.canvas.height;this.blend.getContext('2d')!.drawImage(this.canvas,0,0);this.blendStart=performance.now();}
   draw(source: CanvasImageSource) {
-    this.context.clearRect(0,0,this.canvas.width,this.canvas.height);
-    this.context.drawImage(source,0,0,this.canvas.width,this.canvas.height);
+    // 一次覆盖整帧（含透明像素），不先提交清空画布。
+    this.context.globalCompositeOperation='copy';
+    const width=this.canvas.width,height=this.canvas.height;
+    if(this.preserveAspect&&source instanceof HTMLVideoElement&&source.videoWidth&&source.videoHeight){
+      const scale=Math.min(width/source.videoWidth,height/source.videoHeight);
+      const w=source.videoWidth*scale,h=source.videoHeight*scale;
+      this.context.drawImage(source,(width-w)/2,(height-h)/2,w,h);
+    }else this.context.drawImage(source,0,0,width,height);
+    this.context.globalCompositeOperation='source-over';
     if(this.blend){const a=1-(performance.now()-this.blendStart)/100;if(a>0){this.context.globalAlpha=a;this.context.drawImage(this.blend,0,0);this.context.globalAlpha=1;}else this.blend=null;}
   }
   hit(x: number,y: number) {
@@ -42,13 +51,13 @@ export class CompanionPlayer {
     if(video.requestVideoFrameCallback){
       this.frameId=video.requestVideoFrameCallback(()=>{
         if(token!==this.generation||this.video!==video)return;
-        if(video.currentTime!==this.lastTime){if(video.currentTime<this.lastTime){if(this.loopBlend)this.captureBlend();if(video.loop)this.onLoop();}this.draw(video);this.frames++;this.lastTime=video.currentTime;}
+        if(video.currentTime!==this.lastTime){if(video.currentTime<this.lastTime){if(this.loopBlend)this.captureBlend();if(video.loop)this.onLoop();}this.draw(video);this.onFrame(video.currentTime,video.duration);this.frames++;this.lastTime=video.currentTime;}
         this.watch(token);
       });
     }else{
       this.raf=requestAnimationFrame(()=>{
         if(token!==this.generation)return;
-        if(video.currentTime!==this.lastTime){if(video.currentTime<this.lastTime){if(this.loopBlend)this.captureBlend();if(video.loop)this.onLoop();}this.draw(video);this.frames++;this.lastTime=video.currentTime;}
+        if(video.currentTime!==this.lastTime){if(video.currentTime<this.lastTime){if(this.loopBlend)this.captureBlend();if(video.loop)this.onLoop();}this.draw(video);this.onFrame(video.currentTime,video.duration);this.frames++;this.lastTime=video.currentTime;}
         this.watch(token);
       });
     }

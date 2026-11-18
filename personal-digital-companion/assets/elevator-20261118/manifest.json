@@ -1,0 +1,48 @@
+{
+  "canvas": [
+    464,
+    688
+  ],
+  "fps": 24,
+  "anchorPixels": [
+    42,
+    600
+  ],
+  "loopSourceFrames": [
+    0,
+    38
+  ],
+  "seamBlendFrames": 6,
+  "clips": {
+    "enter": {
+      "source": "进入电梯.mp4",
+      "file": "enter.webm",
+      "frames": 145,
+      "seconds": 6.041666666666667,
+      "sourceSha256": "dce43dec787a86694e1de3b589487a9e2f4fe5bcc165e2191e9598e167c0c04b",
+      "sha256": "9f4413dc84a8f0679b00ba45eb20ba616c38a3ec2ff5d616dce16a2883b76525"
+    },
+    "run": {
+      "source": "电梯运行中.mp4",
+      "file": "run.webm",
+      "frames": 38,
+      "seconds": 1.5833333333333333,
+      "sourceSha256": "84f1ac88b255aadcb3bd92a870cc8ec3423f936bb37367a04aa943bb15a89bb1",
+      "sha256": "7ca48b401b95f545014d0985e0a3b1fb04f5350ed00bac7a334170b73518d1fe"
+    },
+    "exit": {
+      "source": "离开电梯.mp4",
+      "file": "exit.webm",
+      "frames": 145,
+      "seconds": 6.041666666666667,
+      "sourceSha256": "44e72f9f9700636d25fbd30978f7fbc9f55c1d315af32ee429e03972467f88bb",
+      "sha256": "84adaa650082eb583b182494bf373d28fe746e42a2f29a06d0b38edf1f78c045"
+    }
+  },
+  "occupancyPixels": [
+    0,
+    0,
+    459,
+    675
+  ]
+}
