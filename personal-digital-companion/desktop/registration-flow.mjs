@@ -179,7 +179,7 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
   return {
     submit(text) {
       if (typeof text !== 'string' || !text.trim()) return Promise.reject(Error('请输入登记内容'));
-      return once(text.trim());
+      return once(text);
     },
     resume: () => once(),
     decide(action) {

@@ -206,3 +206,61 @@ test('解析保留待确认项，旧临时链同号重放后仍可领到原节�
   assert.equal((await f.call(`/api/tasks/${legacy.nodes[0].current_task.task_id}/execute`, {})).status, 200);
   assert.equal(f.writes.length, 1);
 });
+
+test('日记使用完整桌面原文，模型只追问标题和内容时仍能登记', async t => {
+  t.mock.method(Date, 'now', () => Date.parse('2026-11-19T15:00:09Z'));
+  const f = await fixture(t, {
+    actions: [],
+    pending: [{ type: 'diaries.create', question: '请补充标题和内容' }],
+  });
+  const input = '  今天修好了窗口，感觉轻松。\n明天记得核对。  ';
+  const result = await f.desktop().submit(input);
+  assert.equal(result.status, 'completed');
+  assert.deepEqual(result.pending, []);
+  assert.equal(f.env.input.text, input);
+  assert.deepEqual(f.env.input.tasklist.find(item => item.type === 'diaries.create').parameter_spec, {});
+  assert.equal(result.chain.nodes.length, 1);
+  assert.equal(f.writes[0].path, '/api/diaries');
+  assert.deepEqual(f.writes[0].body, { title: '绯月助记-2026-11-20 00:00:09', content: input });
+});
+
+test('日记替换模型改写；混合登记的默认标题和明确标题各自保留正确事项', async t => {
+  t.mock.method(Date, 'now', () => Date.parse('2026-11-19T01:02:03Z'));
+  const f = await fixture(t, {
+    actions: [
+      { type: 'diaries.create', params: { title: '模型拟的标题', content: '模型重写的正文' } },
+      { type: 'reminders.create', params: { content: '整理书桌', deadline: 'tomorrow' } },
+      { type: 'reminders.create', params: { title: '核对账单' } },
+    ],
+    pending: [{ type: 'diaries.create', question: '请提供日记标题。' }],
+  });
+  const input = '今天感觉轻松。明天提醒我整理书桌，另加提醒「核对账单」。';
+  const result = await f.desktop().submit(input);
+  assert.equal(result.status, 'completed');
+  assert.equal(result.chain.nodes.length, 3);
+  assert.deepEqual(result.pending, []);
+  assert.deepEqual(f.writes[0].body, { title: '绯月助记-2026-11-19 10:02:03', content: input });
+  assert.equal(f.writes[1].body.title, f.writes[0].body.title);
+  assert.equal(f.writes[1].body.content, '整理书桌');
+  assert.equal(f.writes[1].body.deadline, '2026-11-20');
+  assert.equal(f.writes[2].body.title, '核对账单');
+});
+
+test('确有未确认的登记意图时保留问题，不创建空提醒', async t => {
+  const f = await fixture(t, {
+    actions: [],
+    pending: [{ type: 'diaries.create', question: '你希望把这段话写进日记吗？' },
+      { type: 'reminders.create', question: '需要提醒你做什么？' }],
+  });
+  const result = await f.desktop().submit('想整理一下最近的安排。');
+  assert.equal(result.status, 'needs_input');
+  assert.equal(result.pending.length, 2);
+  assert.equal(f.writes.length, 0);
+  assert.equal(f.db.sqlite.prepare('SELECT COUNT(*) AS count FROM chains').get().count, 0);
+  const empty = await fixture(t, {
+    actions: [{ type: 'reminders.create', params: { deadline: 'tomorrow' } }],
+  });
+  const parsed = await empty.call('/api/assistant/recording-plan', { text: '明天提醒我。' });
+  assert.equal(parsed.status, 502);
+  assert.equal(parsed.body.error.code, 'INVALID_AI_RESPONSE');
+});

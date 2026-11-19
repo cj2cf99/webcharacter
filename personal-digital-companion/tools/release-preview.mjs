@@ -13,14 +13,14 @@ const {build} = require('esbuild');
 const {Miniflare, convertV4MiniflareOptions} = require('miniflare');
 const serve = process.argv.includes('--serve');
 const visual = process.argv.includes('--visual-check');
-const input = '隔离验收文字';
+const input = '  今天整理了项目资料。\n明天再核对结果。  ';
 const actions = [
   {type:'hu-shi.food.create', params:{body:'午餐面条'}},
   {type:'hu-shi.exercise.create', params:{body:'散步半小时'}},
   {type:'hu-shi.event.create', params:{}},
-  {type:'diaries.create', params:{title:'验收日记',content:'整理资料'}},
+  {type:'diaries.create', params:{}},
   {type:'records.create', params:{body:'合成资源 https://example.test', category_id:'fixture-resource'}},
-  {type:'reminders.create', params:{title:'检查资料',deadline:'tomorrow'}},
+  {type:'reminders.create', params:{content:'检查资料',deadline:'tomorrow'}},
 ];
 async function bundle(contents, resolveDir) {
   return (await build({stdin:{contents,resolveDir}, bundle:true,write:false,format:'esm',platform:'browser',
@@ -144,6 +144,10 @@ try {
   for(const [table,count] of [['ra_hushi_records',3],['ra_records',1],['diaries',1],['reminders',1]]) {
     assert.equal((await db.prepare('SELECT count(*) AS n FROM '+table).first()).n,count);
   }
+  const diary = await db.prepare('SELECT title,content FROM diaries').first();
+  assert.match(diary.title, /^绯月助记-\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  assert.equal(diary.content,input);
+  assert.equal((await db.prepare('SELECT title FROM reminders').first()).title,diary.title);
   assert.equal((await taskDb.prepare("SELECT count(*) AS n FROM executions WHERE task_id=? AND status='COMPLETED'").bind(first.split('/').at(-1)).first()).n,1);
   if(!serve&&!visual)assert.equal((await runtime.dispatchFetch('http://127.0.0.1/companion/chains')).status,403);
   const siteHeaders={'x-fixture-owner':'yes'};
