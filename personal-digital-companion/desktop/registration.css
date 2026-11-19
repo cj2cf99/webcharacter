@@ -11,3 +11,28 @@ button { font: inherit; padding: 5px 12px; border-radius: 6px; border: 1px solid
 button:disabled { cursor: default; }
 button[type=submit] { background: AccentColor; color: AccentColorText; }
 ul { margin: 4px 0; padding-inline-start: 22px; overflow-wrap: anywhere; }
+#status { margin-block: 12px 6px; font-weight: 650; }
+#status:empty { display: none; }
+#receipts { display: grid; gap: 6px; padding: 0; list-style: none; }
+.receipt {
+  --receipt-ink: CanvasText;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, CanvasText 20%, Canvas);
+  border-radius: 8px;
+  background: color-mix(in srgb, CanvasText 5%, Canvas);
+}
+.receipt[data-state="COMPLETED"] { --receipt-ink: light-dark(#14624d, #9be2cc); }
+.receipt[data-state="FAILED"] { --receipt-ink: light-dark(#981b32, #ffadb6); }
+.receipt-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.receipt-kind { font-weight: 650; }
+.receipt-state {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 99px;
+  color: var(--receipt-ink);
+  background: color-mix(in srgb, var(--receipt-ink) 13%, Canvas);
+  font-size: .83rem;
+}
+.receipt-title { margin: 4px 0 0; font-weight: 650; }
+.receipt-text { margin: 4px 0 0; }
+.receipt-meta { margin: 4px 0 0; color: light-dark(#4e5359, #b4bac1); font-size: .82rem; }

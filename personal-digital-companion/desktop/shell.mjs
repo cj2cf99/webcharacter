@@ -12,6 +12,7 @@ import {createDesktopTasks} from './task-lifecycle.mjs';
 import {attachScreenQuestion} from './screen-question-host.mjs';
 import {attachWeather} from './weather-host.mjs';
 import {attachRegistration} from './registration-host.mjs';
+import {attachReminderReview} from './reminder-review-host.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const ROAM_DELAY=45_000;
@@ -41,7 +42,7 @@ export async function startDesktop(electron,options={}){
   app.setPath('userData',profile);
   await app.whenReady();
   const tasks=options.tasks||await createDesktopTasks({profile,dialog:electron.dialog});
-  let quitApproved=false,quitPending=false,cleaned=false;
+  let quitApproved=false,quitPending=false,restartRequested=false,cleaned=false;
   function taskNotice(work){void work.catch(()=>{
     if(!quitApproved&&!quitPending&&electron.dialog)void electron.dialog.showMessageBox({type:'error',title:'任务记录',message:'任务处理未完成，记录已保留，请从“中断任务与补传”重试。',buttons:['确定']}).catch(()=>{});
   });}
@@ -76,6 +77,7 @@ export async function startDesktop(electron,options={}){
   const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,client:options.screenQuestionClient});
   const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark});
   const registration=tasks.registration?attachRegistration(electron,{bundle,root,flow:tasks.registration}):null;
+  const reminderReview=tasks.reminderReview?attachReminderReview(electron,{bundle,root,flow:tasks.reminderReview}):null;
   attachment=new AttachmentController({
     areaFor:rect=>screen.getDisplayNearestPoint({x:Math.round(rect.x+rect.width/2),y:Math.round(rect.y+rect.height/2)}).workArea,
     onPlace:(p,state)=>{
@@ -380,9 +382,12 @@ export async function startDesktop(electron,options={}){
             message:'登记窗口没能打开。请重新构建绯月桌面包后再试。',buttons:['确定']}).catch(()=>{});
         });
       }}]:[]),
-      {label:'主动接取与任务链',click:()=>{if(tasks.showTasks)taskNotice(tasks.showTasks());}},
+      {label:'任务',submenu:[
+        ...(reminderReview?[{label:'查看今天的任务',click:()=>taskNotice(reminderReview.open())}]:[]),
+        {label:'主动接取与任务链',click:()=>{if(tasks.showTasks)taskNotice(tasks.showTasks());}},
+        {label:'中断任务与补传',click:()=>{taskNotice(tasks.retryPending());}},
+      ]},
       ...(tasks.showCloudConnection?[{label:'云端连接',click:()=>taskNotice(tasks.showCloudConnection())}]:[]),
-      {label:'中断任务与补传',click:()=>{taskNotice(tasks.retryPending());}},
       ...(tasks.traffic&&electron.shell?[{label:'查看任务日志',click:()=>{void (async()=>{
         await tasks.traffic.flush();
         if(existsSync(tasks.traffic.file)){
@@ -391,7 +396,10 @@ export async function startDesktop(electron,options={}){
           message:tasks.traffic.failed()?'任务日志暂时无法写入。':'还没有任务收发日志。',buttons:['确定']});
       })().catch(()=>{});}}]:[]),
       {label:'回到右下角',click:()=>goHome()},
-      {type:'separator'}, {label:'退出',click:()=>app.quit()},
+      {type:'separator'}, {label:'重启绯月',click:()=>{
+        if(quitPending||quitApproved||restartRequested)return;
+        restartRequested=true;app.quit();
+      }}, {label:'退出',click:()=>app.quit()},
     ]));
   }
   // 仅接受布尔/空消息，拖动坐标取自主进程；不接受任意路径、脚本或窗口配置。
@@ -419,7 +427,7 @@ export async function startDesktop(electron,options={}){
   ipcMain.on('desktop:hit',onHit);ipcMain.on('desktop:ready',onReady);
   ipcMain.on('desktop:drag-start',onDragStart);ipcMain.on('desktop:drag-end',onDragEnd);
   const icon=nativeImage.createFromPath(resolve(bundle,'tray.png'));
-  tray=new Tray(icon);tray.setToolTip('绯月 · 右键菜单可隐藏或退出');
+  tray=new Tray(icon);tray.setToolTip('绯月 · 右键打开菜单');
   win.webContents.on('context-menu',()=>tray.popUpContextMenu());
   tray.on('double-click',()=>{win.isVisible()?hide():show();menu();});menu();
   app.on('second-instance',()=>{show();menu();});
@@ -442,6 +450,7 @@ export async function startDesktop(electron,options={}){
     stopWindows?.();stopWindows=null;
     screenQuestion.close();
     registration?.close();
+    reminderReview?.close();
     weather.close();
     movement=null;ipcMain.removeListener('pc:runtime',onMovementRuntime);pcSettings.close();
     stopPoll();ipcMain.removeListener('desktop:sound-ready',soundReady);ipcMain.removeListener('desktop:sound-change',soundChange);ipcMain.removeListener('desktop:sound-preview',soundPreview);
@@ -452,21 +461,29 @@ export async function startDesktop(electron,options={}){
     if(tray){tray.destroy();tray=null;}
   }
   win.on('close',event=>{if(!quitApproved){event.preventDefault();app.quit();}});
+  app.once('will-quit',()=>{if(restartRequested)app.relaunch();});
+  function cancelQuit(){
+    restartRequested=false;tasks.cancelQuitCheck();quitPending=false;
+  }
   app.on('before-quit',event=>{
     if(quitApproved){cleanup();return;}
     if(quitPending){event?.preventDefault();return;}
     tasks.beginQuitCheck();
-    if(!tasks.activeCount()){
+    const hasActiveTasks=tasks.activeCount()>0;
+    if(!hasActiveTasks&&!restartRequested){
       quitApproved=true;cleanup();void tasks.stop();return;
     }
     event?.preventDefault();quitPending=true;
     void (async()=>{
-      const choice=await electron.dialog.showMessageBox({type:'warning',title:'确认退出',
-        message:'有任务正在执行，退出可能中断任务',detail:'结果未知的任务会在下次启动时提示处理。',
-        buttons:['取消退出','确认退出'],defaultId:0,cancelId:0});
-      if(choice.response!==1){tasks.cancelQuitCheck();quitPending=false;return;}
+      if(hasActiveTasks){
+        const action=restartRequested?'重启':'退出';
+        const choice=await electron.dialog.showMessageBox({type:'warning',title:'确认'+action,
+          message:'有任务正在执行，'+action+'可能中断任务',detail:'结果未知的任务会在下次启动时提示处理。',
+          buttons:['取消'+action,'确认'+action],defaultId:0,cancelId:0});
+        if(choice.response!==1){cancelQuit();return;}
+      }
       await tasks.stop();quitApproved=true;quitPending=false;app.quit();
-    })().catch(()=>{tasks.cancelQuitCheck();quitPending=false;});
+    })().catch(cancelQuit);
   });
   for(const event of displayEvents)screen.on(event,handleDisplays);
   await win.loadFile(entry);

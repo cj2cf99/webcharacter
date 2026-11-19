@@ -9,6 +9,7 @@ import {createTaskPoller} from './task-poller.mjs';
 import {createChainClient} from './chain-client.mjs';
 import {createChainDialogs} from './chain-dialogs.mjs';
 import {createRegistrationFlow} from './registration-flow.mjs';
+import {createReminderReviewFlow} from './reminder-review-flow.mjs';
 import {createTaskTrafficLog} from './task-traffic-log.mjs';
 import {loadCloudConnection} from './cloud-connection.mjs';
 
@@ -49,6 +50,7 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
   const threads=await createThreadHandlers(handlerModule?{module:handlerModule}:{});
   let checking=false,stopped=false,gate=null,release=null,showing=null;
   const registration=createRegistrationFlow({profile,request,canStart:()=>!checking&&!stopped,log:traffic.write});
+  const reminderReview=createReminderReviewFlow({request,canStart:()=>!checking&&!stopped,waitForStart:()=>gate});
   const inFlight=new Set();
   const executor=createTaskExecutor({databasePath:join(profile,'tasks.sqlite'),deviceId:identity.device_id,handlers:threads.handlers,
     canExecute:()=>!stopped,waitForExecution:async()=>{if(gate)await gate;}});
@@ -210,18 +212,19 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
       await tell(response.ok?'云端连接正常':`云端暂不可用（HTTP ${response.status}）`);
     } catch { await tell('无法连到云端，请查看任务日志'); }
   }
-  return {identity,executor,runTask,decide,syncDecision,showPending,startup,registration,traffic,showCloudConnection,
+  return {identity,executor,runTask,decide,syncDecision,showPending,startup,registration,reminderReview,traffic,showCloudConnection,
     weatherRequest: request,
     chainClient,showTasks:()=>chainDialogs.show(),
     getAvailableTasks:()=>availableTasks.map(task=>({...task})),
     startPolling(){if(!stopped)poller?.start();},
-    activeCount:()=>executor.activeCount()+inFlight.size+chainClient.activeCount()+registration.activeCount(),
+    activeCount:()=>executor.activeCount()+inFlight.size+chainClient.activeCount()+registration.activeCount()+reminderReview.activeCount(),
     beginQuitCheck(){checking=true;if(!gate)gate=new Promise(resolve=>{release=resolve;});},
     cancelQuitCheck(){checking=false;release?.();release=null;gate=null;poller?.kick();},
     async stop(){stopped=true;poller?.stop();executor.interrupt();controller.abort();release?.();release=null;gate=null;
       const closed=!inFlight.size&&!executor.activeCount();if(closed)executor.close();
       await threads.stop();
       await Promise.allSettled([...inFlight]);
+      await reminderReview.waitForStop();
       await traffic.flush();
       if(!closed&&!executor.activeCount())executor.close();},
     async retryPending(){await startup();},

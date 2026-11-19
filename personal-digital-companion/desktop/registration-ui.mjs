@@ -9,41 +9,86 @@ const pending = byId('pending');
 const decisions = byId('decisions');
 const actions = [...decisions.querySelectorAll('button')];
 const labels = {
-  'hu-shi.food.create': '吃喝', 'hu-shi.exercise.create': '运动', 'hu-shi.event.create': '一键事件',
+  'hu-shi.food.create': '吃喝记录', 'hu-shi.exercise.create': '运动记录', 'hu-shi.event.create': '撸管记录',
   'records.create': '随手记', 'diaries.create': '日记', 'reminders.create': '提醒',
 };
-const nodeStatus = { PENDING: '待领取', RUNNING: '待回执', COMPLETED: '已登记', FAILED: '失败', CANCELLED: '已取消' };
-const summary = { completed: '登记完成', stopped: '已停止后续登记', waiting: '等待执行回执，可稍后恢复原链',
-  needs_decision: '遇到失败，请选择如何处理', needs_input: '需要补充信息', blocked: '当前没有可领取的登记',
-  paused: '已暂停，可以恢复原链' };
+const nodeStatus = { PENDING: '待登记', RUNNING: '待确认', COMPLETED: '✓ 已登记', FAILED: '登记失败',
+  CANCELLED: '已取消', SKIPPED: '已跳过' };
+const summary = { needs_input: '本次未登记', stopped: '已停止后续登记', waiting: '等待确认登记结果',
+  needs_decision: '请处理失败的项目', blocked: '当前没有可登记的项目', paused: '已暂停，可以恢复原链' };
+const tokyoTime = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric',
+  hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const receiptCharacters = new Intl.Segmenter('zh-CN', { granularity: 'grapheme' });
 let active = false;
 let chainPending = false;
 
-function setList(element, items) {
-  element.replaceChildren(...items.map(item => {
-    const row = document.createElement('li');
-    row.textContent = item;
-    return row;
-  }));
-  element.hidden = items.length === 0;
+function element(tag, className, value) {
+  const node = document.createElement(tag);
+  node.className = className;
+  node.textContent = value;
+  return node;
+}
+
+function setList(list, rows) {
+  list.replaceChildren(...rows);
+  list.hidden = rows.length === 0;
+}
+
+const labelFor = type => labels[type] || '登记';
+const plainText = value => typeof value === 'string' ? value.trim() : '';
+
+function setReceiptText(card, body) {
+  if (!body) return;
+  const excerpt = body.replace(/\s+/gu, ' ');
+  const characters = Array.from(receiptCharacters.segment(excerpt), ({ segment }) => segment);
+  const preview = characters.length <= 20 ? excerpt
+    : characters.slice(0, 10).join('') + '…' + characters.slice(-10).join('');
+  card.append(element('p', 'receipt-text', preview));
+}
+
+function receiptCard({ current_task: task, skipped }) {
+  const state = skipped ? 'SKIPPED' : task.status;
+  const { title, body, content, reflection, deadline } = task.params ?? {};
+  const card = element('li', 'receipt', '');
+  card.dataset.state = state;
+  const header = element('div', 'receipt-header', '');
+  header.append(element('span', 'receipt-kind', labelFor(task.type)),
+    element('span', 'receipt-state', nodeStatus[state] || '待确认'));
+  card.append(header);
+  if (plainText(title)) card.append(element('p', 'receipt-title', title.trim()));
+  const description = [plainText(body) || plainText(content), plainText(reflection) ? '感想：' + reflection.trim() : '']
+    .filter(Boolean).join('\n');
+  setReceiptText(card, description);
+  if (task.type === 'reminders.create' && /^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+    card.append(element('p', 'receipt-meta', `到期 ${deadline} · JST`));
+  }
+  const timestamp = task.result?.created_at;
+  if (state === 'COMPLETED' && Number.isSafeInteger(timestamp) && Number.isFinite(new Date(timestamp).getTime())) {
+    card.append(element('p', 'receipt-meta', `${tokyoTime.format(timestamp)} · JST`));
+  }
+  return card;
+}
+
+function statusMessage(status, nodes, pendingCount) {
+  const registered = nodes.filter(node => !node.skipped && node.current_task.status === 'COMPLETED').length;
+  const skipped = nodes.filter(node => node.skipped).length;
+  return [summary[status], registered && `已登记 ${registered} 项`, skipped && `已跳过 ${skipped} 项`,
+    pendingCount && `${pendingCount} 项待补充`].filter(Boolean).join(' · ');
 }
 
 function render(result) {
   const chain = result?.chain;
+  const nodes = chain?.nodes || [];
+  const questions = (result?.pending || []).map(item => `${labelFor(item.type)}：${item.question}`);
   chainPending = chain?.status === 'ACTIVE';
-  status.textContent = summary[result?.status] || '';
+  status.textContent = statusMessage(result?.status, nodes, questions.length);
   const needsDecision = result?.status === 'needs_decision';
   decisions.hidden = !chainPending;
   for (const button of actions) button.hidden = !needsDecision && button.dataset.action !== 'stop';
   resume.hidden = !chainPending;
-  setList(receipts, (chain?.nodes || []).map(({ current_task: task, skipped }) => {
-    const state = skipped ? '已跳过' : nodeStatus[task.status] || task.status;
-    const detail = task.result?.record_id ?? task.error ?? task.activity?.progress_message;
-    return `${labels[task.type] || task.type} · ${state}${detail == null ? '' : ' · ' + detail}`;
-  }));
-  const questions = (result?.pending || []).map(item => `${labels[item.type] || item.type} · ${item.question}`);
+  setList(receipts, nodes.map(receiptCard));
   if (questions.length && chain) questions.push('补充时只提交仍待登记的事项。');
-  setList(pending, questions);
+  setList(pending, questions.map(question => element('li', '', question)));
   if (chain) text.value = '';
 }
 

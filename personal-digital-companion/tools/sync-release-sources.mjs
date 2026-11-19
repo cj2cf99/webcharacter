@@ -32,7 +32,7 @@ for (const name of [
 for (const name of ['tasklist-hu-shi.sql','tasklist-registration.sql']) {
   await copy(join(source,'agent/seeds',name), join(vendor,'agent/seeds',name));
 }
-for (const name of ['registration-ai.mjs','registration-data.mjs','chain-page.mjs']) {
+for (const name of ['registration-ai.mjs','registration-data.mjs','chain-page.mjs','reminder-review.mjs']) {
   await copy(join(source,'agent/host',name), join(main,'src/features/companion/vendor',name));
 }
 for (const name of ['chains.js','chains.css']) await copy(join(source,'web',name), join(main,'src/client/companion',name));

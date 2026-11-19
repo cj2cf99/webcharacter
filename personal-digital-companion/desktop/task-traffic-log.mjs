@@ -57,7 +57,7 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
       return async (path, options = {}) => {
         // The query can hold filters and headers carry credentials. Record identifiers and statuses only.
         const route = path.split('?')[0];
-        if (!/^\/api\/(?:tasks(?:\/|$)|devices(?:\/|$)|chains(?:\/|$)|task-submissions$|assistant\/recording-plan$)/.test(route)) {
+        if (!/^\/api\/(?:tasks(?:\/|$)|devices(?:\/|$)|chains(?:\/|$)|task-submissions$|assistant\/recording-plan$|reminder-review(?:\/|$))/.test(route)) {
           return request(path, options);
         }
         const request_id = crypto.randomUUID();

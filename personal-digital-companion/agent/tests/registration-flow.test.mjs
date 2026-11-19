@@ -86,7 +86,7 @@ test('桌面提交一次后建一链，主动领取六类节点并等待显式�
     '/api/diaries', '/api/records', '/api/reminders',
   ]);
   assert.equal(f.writes.at(-1).body.deadline, f.env.input.dates.tomorrow);
-  assert.equal(f.writes[4].body.body, all[5].params.body);
+  assert.equal(f.writes[4].body.body, all[5].params.body + '❤️');
   assert.deepEqual(new Set(f.writes.map(write => write.idempotencyKey)),
     new Set(result.chain.nodes.map(entry => entry.node_id)));
   assert.ok(result.chain.nodes.every(entry => entry.current_task.result?.record_id));
@@ -221,7 +221,7 @@ test('日记使用完整桌面原文，模型只追问标题和内容时仍能�
   assert.deepEqual(f.env.input.tasklist.find(item => item.type === 'diaries.create').parameter_spec, {});
   assert.equal(result.chain.nodes.length, 1);
   assert.equal(f.writes[0].path, '/api/diaries');
-  assert.deepEqual(f.writes[0].body, { title: '绯月助记-2026-11-20 00:00:09', content: input });
+  assert.deepEqual(f.writes[0].body, { title: '绯月助记-2026-11-20 00:00:09', content: input + '❤️' });
 });
 
 test('日记替换模型改写；混合登记的默认标题和明确标题各自保留正确事项', async t => {
@@ -229,8 +229,8 @@ test('日记替换模型改写；混合登记的默认标题和明确标题各�
   const f = await fixture(t, {
     actions: [
       { type: 'diaries.create', params: { title: '模型拟的标题', content: '模型重写的正文' } },
-      { type: 'reminders.create', params: { content: '整理书桌', deadline: 'tomorrow' } },
-      { type: 'reminders.create', params: { title: '核对账单' } },
+      { type: 'reminders.create', params: { content: '甲乙丙丁戊己庚辛壬👩‍💻甲午', deadline: 'tomorrow' } },
+      { type: 'reminders.create', params: { title: '核对账单', content: '明细已写❤' } },
     ],
     pending: [{ type: 'diaries.create', question: '请提供日记标题。' }],
   });
@@ -239,11 +239,12 @@ test('日记替换模型改写；混合登记的默认标题和明确标题各�
   assert.equal(result.status, 'completed');
   assert.equal(result.chain.nodes.length, 3);
   assert.deepEqual(result.pending, []);
-  assert.deepEqual(f.writes[0].body, { title: '绯月助记-2026-11-19 10:02:03', content: input });
-  assert.equal(f.writes[1].body.title, f.writes[0].body.title);
-  assert.equal(f.writes[1].body.content, '整理书桌');
+  assert.deepEqual(f.writes[0].body, { title: '绯月助记-2026-11-19 10:02:03', content: input + '❤️' });
+  assert.equal(f.writes[1].body.title, '甲乙丙丁戊己庚辛壬👩‍💻 · 绯月助记');
+  assert.equal(f.writes[1].body.content, '甲乙丙丁戊己庚辛壬👩‍💻甲午❤️');
   assert.equal(f.writes[1].body.deadline, '2026-11-20');
-  assert.equal(f.writes[2].body.title, '核对账单');
+  assert.equal(f.writes[2].body.title, '核对账单 · 绯月助记');
+  assert.equal(f.writes[2].body.content, '明细已写❤️');
 });
 
 test('确有未确认的登记意图时保留问题，不创建空提醒', async t => {
@@ -263,4 +264,34 @@ test('确有未确认的登记意图时保留问题，不创建空提醒', async
   const parsed = await empty.call('/api/assistant/recording-plan', { text: '明天提醒我。' });
   assert.equal(parsed.status, 502);
   assert.equal(parsed.body.error.code, 'INVALID_AI_RESPONSE');
+});
+
+test('红心超出原字段上限时只暂缓该项与显式依赖，独立事项照常登记', async t => {
+  const full = '长'.repeat(4000);
+  const f = await fixture(t, {actions: [
+    {type: 'hu-shi.food.create', params: {body: full}},
+    {type: 'reminders.create', params: {content: '核对用餐记录'}, after: 1},
+    {type: 'hu-shi.exercise.create', params: {body: '步行三十分钟'}},
+    {type: 'hu-shi.event.create', params: {}, after: 2},
+  ]});
+  const result = await f.desktop().submit(full + '，另外登记步行。');
+  assert.equal(result.status, 'completed');
+  assert.deepEqual(result.pending.map(item => item.type), ['hu-shi.food.create', 'reminders.create', 'hu-shi.event.create']);
+  assert.match(result.pending[0].question, /正文.*红心.*字数/);
+  assert.match(result.pending[1].question, /前置/);
+  assert.deepEqual(f.writes.map(entry => entry.path), ['/api/records/hu-shi/exercise/entries']);
+  assert.equal(f.writes[0].body.body, '步行三十分钟❤️');
+});
+
+test('标题标记超出上限时保留明确原标题并请求缩短，不影响其他提醒', async t => {
+  const longTitle = '题'.repeat(300);
+  const f = await fixture(t, {actions: [
+    {type: 'reminders.create', params: {title: longTitle, content: '核对长标题'}},
+    {type: 'reminders.create', params: {content: '检查资料'}},
+  ]});
+  const result = await f.desktop().submit('提醒标题为「' + longTitle + '」，另外提醒检查资料。');
+  assert.equal(result.status, 'completed');
+  assert.match(result.pending[0].question, /标题.*绯月助记.*字数/);
+  assert.equal(f.writes[0].body.title, '检查资料 · 绯月助记');
+  assert.equal(f.writes.length, 1);
 });

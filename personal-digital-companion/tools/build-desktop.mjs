@@ -7,7 +7,7 @@ import {Script} from 'node:vm';
 import {run} from './media.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url)),out=resolve(root,'output/desktop-bundle'),media=resolve(root,'output/four-states-v3');
 mkdirSync(out,{recursive:true});
-for(const name of ['registration.html','registration.css','registration-ui.mjs']) {
+for(const name of ['registration.html','registration.css','registration-ui.mjs','reminder-review.html','reminder-review.css','reminder-review-ui.mjs']) {
   copyFileSync(resolve(root,'desktop',name),resolve(out,name));
 }
 for(const name of ['companion-state','companion-player'])writeFileSync(resolve(out,name+'.mjs'),stripTypeScriptTypes(readFileSync(resolve(root,'src',name+'.ts'),'utf8')));

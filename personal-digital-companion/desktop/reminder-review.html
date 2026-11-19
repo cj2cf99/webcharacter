@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'">
+<title>绯月 · 今日任务</title>
+<link rel="stylesheet" href="reminder-review.css">
+<main>
+  <header>
+    <div><h1>今日任务</h1><time id="date"></time></div>
+    <button type="button" id="refresh">刷新</button>
+  </header>
+  <p id="status" role="status"></p>
+  <div id="report" hidden role="region" aria-label="核对结果" tabindex="-1"></div>
+  <div id="groups"></div>
+</main>
+<footer><span id="selected">未选择操作</span><button type="button" id="apply" disabled>执行所选</button></footer>
+<script type="module" src="reminder-review-ui.mjs"></script>
+</html>
