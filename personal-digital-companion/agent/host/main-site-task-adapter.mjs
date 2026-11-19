@@ -1,7 +1,20 @@
 import { validateParameters } from '../tasks/parameters.mjs';
 
+const huShiTextBody = ({ body, reflection, tag_ids = [], photos = [] }) => ({
+  body: body.trim(), reflection: reflection?.trim() || null, tag_ids, photos,
+});
+const huShiReceipt = response => typeof response?.id === 'string' && response.id.trim()
+  && Number.isSafeInteger(response.created_at) && response.created_at >= 0 ? response.id : null;
+const huShiOperations = {
+  'hu-shi.food.create': { path: '/api/records/hu-shi/food/entries', body: huShiTextBody, recordId: huShiReceipt },
+  'hu-shi.exercise.create': { path: '/api/records/hu-shi/exercise/entries', body: huShiTextBody, recordId: huShiReceipt },
+  'hu-shi.event.create': { path: '/api/records/hu-shi/event/entries', body: () => ({}), recordId: huShiReceipt },
+};
+export const isHuShiTaskType = type => Object.hasOwn(huShiOperations, type);
+
 // 受信任的业务接口表。D1 存参数定义和说明，不提供运行地址或代码。
 const operations = {
+  ...huShiOperations,
   'records.create': {
     path: '/api/records',
     body: ({ body, category_id }) => ({ body: body.trim(), category_id, tag_ids: [], photos: [] }),
@@ -20,9 +33,15 @@ const operations = {
     },
     recordId: response => Number.isSafeInteger(response?.item?.seq) && response.item.seq > 0 ? response.item.seq : null,
   },
+  'diaries.create': {
+    path: '/api/diaries',
+    body: ({ title, content }) => ({ title: title.trim(), content: content.trim() }),
+    recordId: response => Number.isSafeInteger(response?.item?.seq) && response.item.seq > 0 ? response.item.seq : null,
+  },
 };
+export const isRegistrationTaskType = type => Object.hasOwn(operations, type);
 
-// 接入者必须提供能够按同一个键找回原回执的写入函数。此模块没有默认网络行为。
+// 生成受限的目标请求。回执不明时能否重试，由调用者按目标写入协议判断。
 export function prepareMainSiteTask(task) {
   const operation = Object.hasOwn(operations, task?.type) ? operations[task.type] : null;
   if (!operation || task.definition?.executor !== 'cloud' || task.target_device_id !== null
@@ -35,10 +54,10 @@ export function prepareMainSiteTask(task) {
   return { path: operation.path, body: operation.body(task.params) };
 }
 
-export async function executeMainSiteTask(task, writeOnce) {
+export async function executeMainSiteTask(task, writeEntry) {
   const operation = prepareMainSiteTask(task);
-  const response = await writeOnce({ ...operation, idempotencyKey: task.task_id });
+  const response = await writeEntry({ ...operation, idempotencyKey: task.chain?.node_id ?? task.task_id });
   const recordId = operations[task.type].recordId(response);
   if (recordId === null) throw new Error('未取得有效业务回执');
-  return { record_id: recordId };
+  return { record_id: recordId, ...(isHuShiTaskType(task.type) ? { created_at: response.created_at } : {}) };
 }

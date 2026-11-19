@@ -21,7 +21,7 @@ export function defaults(old){
     states[id]={mode:node.mode,force:true,play:node.play,slots:{...node.slots},
       sound:Object.fromEntries(PHASES.map(phase=>[phase,{on:false,volume:100,voice:'',delay:0}]))};
   }
-  return {version:1,target:'pc',idleSpecialDelaySeconds:10,master:{enabled:sound.enabled,volume:sound.volume},states};
+  return {version:1,target:'pc',idleSpecialDelaySeconds:10,confineToScreen:false,master:{enabled:sound.enabled,volume:sound.volume},states};
 }
 export class SettingsStore{
   constructor(profile,bundle,old){
@@ -42,17 +42,19 @@ export class SettingsStore{
     if(existsSync(this.file)){
       const saved=JSON.parse(readFileSync(this.file,'utf8'));
       const missing=STATE_IDS.filter(id=>!saved.config.states[id]&&(id==='walk'||WINDOW_NODES[id]));
+      const missingScreenLock=saved.config.confineToScreen===undefined;
+      if(missingScreenLock)saved.config.confineToScreen=false;
       for(const id of missing)saved.config.states[id]=this.data.config.states[id];
       this.data=saved;
       this.validate(saved.config);
-      if(missing.length)this.persist(saved);
+      if(missing.length||missingScreenLock)this.persist(saved);
     }else this.persist(this.data);
   }
   catalog(){return [...this.builtins,...this.data.custom.map(a=>({...a,url:pathToFileURL(resolve(this.profile,'media',a.file)).href}))].map(a=>({...a,name:this.data.names[a.id]||a.name}));}
   snapshot(){return {target:'pc',config:structuredClone(this.data.config),assets:this.catalog()};}
   validate(c){
     const finite=(x,min,max)=>Number.isFinite(x)&&x>=min&&x<=max;
-    if(c?.target!=='pc'||c.version!==1||!finite(c.idleSpecialDelaySeconds,1,3600)||typeof c.master?.enabled!=='boolean'||!finite(c.master.volume,0,100))throw Error('仅支持本地 PC；设置数据无效');
+    if(c?.target!=='pc'||c.version!==1||!finite(c.idleSpecialDelaySeconds,1,3600)||typeof c.confineToScreen!=='boolean'||typeof c.master?.enabled!=='boolean'||!finite(c.master.volume,0,100))throw Error('仅支持本地 PC；设置数据无效');
     const assets=this.catalog(),has=(id,kind)=>assets.some(a=>a.id===id&&a.kind===kind);
     for(const id of STATE_IDS){const s=c.states?.[id];if(!s||!['single','triple'].includes(s.mode)||typeof s.force!=='boolean'||!['once','loop'].includes(s.play))throw Error('状态配置无效：'+id);
       const windowNode=WINDOW_NODES[id];
@@ -66,6 +68,7 @@ export class SettingsStore{
     const c=structuredClone(this.data.config);
     if(domain==='animation'){c.idleSpecialDelaySeconds=input.idleSpecialDelaySeconds;for(const id of STATE_IDS){const s=input.states?.[id];if(!s)throw Error('缺少状态');Object.assign(c.states[id],{mode:s.mode,force:s.force,play:s.play,slots:s.slots});}}
     else if(domain==='sound'){c.master=input.master;for(const id of STATE_IDS)c.states[id].sound=input.states?.[id]?.sound;}
+    else if(domain==='display'){if(typeof input.confineToScreen!=='boolean')throw Error('屏幕锁定设置无效');c.confineToScreen=input.confineToScreen;}
     else throw Error('设置域无效');
     if(input.target!=='pc')throw Error('禁止写入非本地 PC 目标');this.validate(c);const next={...this.data,config:c};this.persist(next);this.data=next;return this.snapshot();
   }

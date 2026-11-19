@@ -42,7 +42,9 @@ confirm 在用户明确接受后，先从 POST /api/task-submissions 取提交�
 
 提交断网、500、坏 JSON 或回执不符时保留当前建议和原提交号，避免换号后重复创建。用户再次确认可核对原任务；确认结果未知时暂停替换建议。助手客户端只在当前实例内保存原提交号，宿主如需跨重启继续核对，应保存原号和请求数据。
 
-## 主站挂载候选
+## 主站挂载
+
+2026-11-19 JST，用户确认「和restapi走一个worker吧，省事」。按照前文的 REST API 指主站现有 Cloudflare AI 接口，挂载目标采用同一个 `myapp` Worker。以下是待实施接线。
 
 `agent/host/main-site.mjs`导出`createCompanionMount({authorizeMarket,createEnvAiClient})`。未来主站接线时传入它现有的真实函数；缺任一函数直接失败，不能用请求字段或开发Bearer替代Access登录。
 

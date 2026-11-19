@@ -1,0 +1,45 @@
+import {createWorker} from '../worker.mjs';
+
+const prefix = '/api/companion';
+const fail = (status, code, message) => Response.json({error: {code, message}}, {status, headers: {'Cache-Control': 'no-store'}});
+export const isCompanionPath = path => path.startsWith(prefix + '/');
+const browserRoute = /^\/api\/(?:chains(?:\/[A-Za-z0-9_-]+(?:\/stop|\/nodes\/[A-Za-z0-9_-]+\/decision)?)?|tasks\/[A-Za-z0-9_-]+\/(?:receipt|execute))$/;
+
+async function writeRegistrationEntry({path, body, idempotencyKey, env}) {
+  const result = await env.COMPANION_HOST.register({path, body, idempotencyKey});
+  if (result?.receipt) return result.receipt;
+  if (Number.isInteger(result?.rejected)) throw Object.assign(new Error('登记被拒绝'),
+    {code: 'RECORDS_REJECTED', status: result.rejected});
+  throw new Error('登记结果待核对');
+}
+
+const worker = createWorker({
+  authorize: (_request, env) => ({ownerId: env.ownerId}),
+  loadRegistrationCategories: env => env.COMPANION_HOST.categories(),
+  writeRegistrationEntry,
+  writeHuShiEntry: (_request, env, path, body, idempotencyKey) =>
+    writeRegistrationEntry({path, body, idempotencyKey, env}),
+  readRegistrationReceipt: ({path, idempotencyKey, env}) => env.COMPANION_HOST.lookup(idempotencyKey, path),
+});
+
+export async function handleCompanion(request, env, actor, fromMain) {
+  if (!actor) return fail(403, 'ACCESS_DENIED', '需要有效的 Access 身份');
+  const url = new URL(request.url);
+  const origin = request.headers.get('Origin');
+  if (!fromMain && !['GET', 'HEAD'].includes(request.method)
+    && (origin && origin !== url.origin || request.headers.get('Sec-Fetch-Site') === 'cross-site')) {
+    return fail(403, 'ORIGIN_DENIED', '仅允许同源操作');
+  }
+  url.pathname = '/api' + url.pathname.slice(prefix.length);
+  if (fromMain && !browserRoute.test(url.pathname)) return fail(404, 'NOT_FOUND', '接口不存在');
+  if (!env.COMPANION_DB || !env.COMPANION_HOST) return fail(503, 'COMPANION_NOT_CONFIGURED', '绯月服务尚未接入');
+  if (url.pathname === '/api/health' && request.method === 'GET') {
+    try {
+      await Promise.all([env.COMPANION_DB.prepare('SELECT 1 FROM registration_ai_preference LIMIT 1').first(),
+        env.COMPANION_HOST.categories()]);
+      return Response.json({ok: true}, {headers: {'Cache-Control': 'no-store'}});
+    } catch { return fail(503, 'COMPANION_NOT_CONFIGURED', '绯月服务尚未接入'); }
+  }
+  return worker.fetch(new Request(url, request), {...env, DB: env.COMPANION_DB,
+    REGISTRATION_AI: env.COMPANION_HOST, ownerId: 'companion-owner'});
+}

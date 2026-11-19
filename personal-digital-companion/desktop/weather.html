@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+  <title>绯月 · 三地天气</title>
+  <link rel="stylesheet" href="weather.css">
+</head>
+<body>
+  <header><h1>三地天气</h1><button id="refresh" type="button">↻ 刷新</button></header>
+  <main id="places" aria-label="三地天气与预警" aria-busy="true"></main>
+  <p role="status" id="status">正在读取天气…</p>
+  <footer id="sources"></footer>
+  <script src="weather-ui.mjs" type="module"></script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import worker from '../worker.mjs';
 import {openTestDatabase,initializeDatabase} from './sqlite-d1.mjs';
 import {seedMockTask,withTaskSubmission} from './fixtures.mjs';
@@ -31,6 +32,151 @@ test('CH01：1至5节点，同组单前置无循环，事务失败不留半组',
   db.sqlite.exec("CREATE TRIGGER break_node BEFORE INSERT ON chain_nodes BEGIN SELECT RAISE(ABORT,'test'); END");
   assert.equal((await db.call('/api/chains',{nodes:[db.node('a')]})).status,500);
   assert.equal(db.sqlite.prepare('SELECT COUNT(*) n FROM chains').get().n,0);
+});
+test('任务链同号并发只建一次，回执丢失时同号取回原链',async t=>{
+  const db=setup(t);
+  const {body:{submission_id}}=await db.call('/api/task-submissions',{});
+  const original={submission_id,name:'临时链',nodes:[
+    {...db.node('a'),deadline_at:'2026-11-20T09:00:00+09:00'},db.node('b','a'),
+  ]};
+  const result=await Promise.all([db.call('/api/chains',original),db.call('/api/chains',original)]);
+  assert.deepEqual(result.map(item=>item.status).sort(),[200,201]);
+  assert.equal(result[0].body.chain_id,submission_id);
+  assert.deepEqual(result[0].body,result[1].body);
+  const same={...original,name:' 临时链 ',nodes:[
+    {...original.nodes[0],deadline_at:'2026-11-20T00:00:00Z',depends_on:null},original.nodes[1],
+  ]};
+  assert.deepEqual(await db.call('/api/chains',same),{status:200,body:result[0].body});
+  assert.equal((await db.call('/api/chains',{...original,name:'改变名称'})).body.error.code,'SUBMISSION_CONFLICT');
+  assert.equal(db.sqlite.prepare('SELECT COUNT(*) n FROM chains').get().n,1);
+  assert.equal(db.sqlite.prepare('SELECT COUNT(*) n FROM tasks').get().n,2);
+  const {body:{submission_id:another}}=await db.call('/api/task-submissions',{});
+  assert.equal((await db.call('/api/chains',{...original,submission_id:another})).status,201);
+});
+test('任务与链共用提交号时只能占用一次，链建失败可重试原号',async t=>{
+  const db=setup(t);
+  const issue=async()=>(await db.call('/api/task-submissions',{})).body.submission_id;
+  const submitTask=async id=>db.request('/api/tasks',{method:'POST',body:JSON.stringify({
+    submission_id:id,type:'mock.unit',target_device_id:a,params:{value:'standalone'},
+  })});
+  const original=await issue();
+  const chainBody={submission_id:original,nodes:[db.node('a')]};
+  db.sqlite.exec("CREATE TRIGGER break_once BEFORE INSERT ON chain_nodes BEGIN SELECT RAISE(ABORT,'test'); END");
+  assert.equal((await db.call('/api/chains',chainBody)).status,500);
+  assert.equal(db.sqlite.prepare('SELECT COUNT(*) n FROM chains').get().n,0);
+  assert.equal(db.sqlite.prepare('SELECT COUNT(*) n FROM tasks').get().n,0);
+  db.sqlite.exec('DROP TRIGGER break_once');
+  assert.equal((await db.call('/api/chains',chainBody)).status,201);
+  assert.equal((await submitTask(original)).status,409);
+
+  const used=await issue();
+  assert.equal((await submitTask(used)).status,201);
+  assert.equal((await db.call('/api/chains',{...chainBody,submission_id:used})).status,409);
+
+  const concurrent=await issue();
+  const contested=await Promise.all([
+    submitTask(concurrent),
+    db.call('/api/chains',{...chainBody,submission_id:concurrent}),
+  ]);
+  assert.deepEqual(contested.map(result=>result.status).sort(),[201,409]);
+
+  const foreign=crypto.randomUUID();
+  db.sqlite.prepare('INSERT INTO task_submissions VALUES (?,?)').run(foreign,'another-owner');
+  assert.equal((await db.call('/api/chains',{...chainBody,submission_id:foreign})).status,409);
+  assert.equal((await db.call('/api/chains',{...chainBody,submission_id:crypto.randomUUID()})).status,409);
+});
+test('十一项临时登记保留原顺序并组成同一条链，模板仍最多五项',async t=>{
+  const db=setup(t);
+  seedMockTask(db.sqlite,{type:'mock.registration',executor:'cloud',spec:{value:{type:'string',required:true}}});
+  const nodes=Array.from({length:11},(_,index)=>({
+    key:`entry-${index+1}`,type:'mock.registration',target_device_id:null,params:{value:`登记${index+1}`},
+  }));
+  const {body:{submission_id}}=await db.call('/api/task-submissions',{});
+  assert.equal((await db.call('/api/chains',{nodes})).status,400);
+  assert.equal((await db.call('/api/chains',{nodes,temporary_registration:true})).body.error.code,'INVALID_SUBMISSION_ID');
+  const payload={nodes,temporary_registration:true,submission_id};
+  const created=await Promise.all([db.call('/api/chains',payload),db.call('/api/chains',payload)]);
+  assert.deepEqual(created.map(result=>result.status).sort(),[200,201]);
+  assert.deepEqual(created[0].body,created[1].body);
+  assert.equal(created[0].body.chain_id,submission_id);
+  assert.deepEqual(created[0].body.nodes.map(node=>node.key),nodes.map(node=>node.key));
+  assert.deepEqual((await db.view(created[0].body)).nodes.map(node=>node.key),nodes.map(node=>node.key));
+  assert.equal(db.sqlite.prepare('SELECT COUNT(*) n FROM chains').get().n,1);
+  assert.equal(db.sqlite.prepare('SELECT COUNT(*) n FROM tasks').get().n,11);
+  assert.equal((await db.call('/api/chains',{...payload,nodes:nodes.slice(0,-1)})).body.error.code,'SUBMISSION_CONFLICT');
+});
+test('长链写入失败会整条回滚，使用原提交号可以重试',async t=>{
+  const db=setup(t);
+  seedMockTask(db.sqlite,{type:'mock.registration',executor:'cloud',spec:{value:{type:'string',required:true}}});
+  const {body:{submission_id}}=await db.call('/api/task-submissions',{});
+  const nodes=Array.from({length:10},(_,index)=>({
+    key:`entry-${index+1}`,type:'mock.registration',target_device_id:null,params:{value:'登记'},
+  }));
+  const payload={nodes,temporary_registration:true,submission_id};
+  const withPc={...payload,nodes:[...nodes.slice(0,-1),db.node('pc-task')]};
+  assert.equal((await db.call('/api/chains',withPc)).body.error.code,'INVALID_TARGET');
+  db.sqlite.exec("CREATE TRIGGER break_long_chain BEFORE INSERT ON chain_nodes WHEN NEW.position=8 BEGIN SELECT RAISE(ABORT,'test'); END");
+  assert.equal((await db.call('/api/chains',payload)).status,500);
+  for(const table of ['chains','chain_nodes','tasks']){
+    assert.equal(db.sqlite.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n,0);
+  }
+  db.sqlite.exec('DROP TRIGGER break_long_chain');
+  const saved=await db.call('/api/chains',payload);
+  assert.equal(saved.status,201);
+  assert.equal(saved.body.nodes.length,10);
+});
+test('临时长链保留显式跨五节点前置，拒绝循环后可用原号提交',async t=>{
+  const db=setup(t);
+  seedMockTask(db.sqlite,{type:'mock.registration',executor:'cloud',spec:{}});
+  const {body:{submission_id}}=await db.call('/api/task-submissions',{});
+  const nodes=Array.from({length:11},(_,index)=>({
+    key:`entry-${index+1}`,type:'mock.registration',target_device_id:null,params:{},
+  }));
+  nodes[0].depends_on='entry-6';
+  nodes[10].depends_on='entry-1';
+  const payload={nodes,temporary_registration:true,submission_id};
+  const cycle=nodes.map((node,index)=>index===5?{...node,depends_on:'entry-11'}:node);
+  const invalid=await db.call('/api/chains',{...payload,nodes:cycle});
+  assert.equal(invalid.status,400);
+  assert.equal(invalid.body.error.code,'CYCLIC_CHAIN');
+  assert.equal(db.sqlite.prepare('SELECT COUNT(*) n FROM chains').get().n,0);
+  const created=await db.call('/api/chains',payload);
+  assert.equal(created.status,201);
+  const saved=created.body.nodes;
+  assert.equal(saved[0].depends_on,saved[5].node_id);
+  assert.equal(saved[10].depends_on,saved[0].node_id);
+  assert.ok(saved[10].reasons.claim.some(reason=>reason.code==='DEPENDENCY_PENDING'));
+  assert.equal(saved[3].depends_on,null);
+});
+test('010迁移保留已有节点、前置关系及历史任务轮次',t=>{
+  const db=openTestDatabase();t.after(db.close);
+  for(const file of [
+    '001-task-units.sql','002-executions.sql','003-task-activity.sql','004-task-deadline.sql','005-task-recoveries.sql',
+    '006-chains.sql','007-task-submissions.sql','008-daily-logs.sql','009-chain-submissions.sql',
+  ])db.sqlite.exec(readFileSync(new URL(`../migrations/${file}`,import.meta.url),'utf8'));
+  seedMockTask(db.sqlite,{type:'mock.registration',executor:'cloud',spec:{}});
+  db.sqlite.exec(`
+    INSERT INTO chains (chain_id,name,created_at) VALUES ('legacy','旧链','2026-11-18T00:00:00Z');
+    INSERT INTO tasks (task_id,type,params_json,status,created_at) VALUES
+      ('initial','mock.registration','{}','CANCELLED','2026-11-18T00:00:00Z'),
+      ('current','mock.registration','{}','COMPLETED','2026-11-18T00:00:00Z'),
+      ('next','mock.registration','{}','PENDING','2026-11-18T00:00:00Z');
+    INSERT INTO chain_nodes (node_id,chain_id,node_key,position,depends_on,current_task_id) VALUES
+      ('first','legacy','a',0,NULL,'current'),('second','legacy','b',1,'first','next');
+    UPDATE tasks SET chain_node_id='first',superseded_by_task_id='current' WHERE task_id='initial';
+    UPDATE tasks SET chain_node_id='first' WHERE task_id='current';
+    UPDATE tasks SET chain_node_id='second' WHERE task_id='next';
+    UPDATE chain_nodes SET skipped_task_id='initial' WHERE node_id='first';
+  `);
+  const beforeNodes=db.sqlite.prepare('SELECT * FROM chain_nodes ORDER BY position').all();
+  const beforeTasks=db.sqlite.prepare('SELECT * FROM tasks ORDER BY task_id').all();
+  const sql=readFileSync(new URL('../migrations/010-temporary-chain-positions.sql',import.meta.url),'utf8');
+  db.sqlite.exec(`BEGIN;\n${sql}\nCOMMIT;`);
+  assert.deepEqual(db.sqlite.prepare('SELECT * FROM chain_nodes ORDER BY position').all(),beforeNodes);
+  assert.deepEqual(db.sqlite.prepare('SELECT * FROM tasks ORDER BY task_id').all(),beforeTasks);
+  assert.deepEqual(db.sqlite.prepare('PRAGMA foreign_key_check').all(),[]);
+  assert.equal(db.sqlite.prepare('PRAGMA quick_check').get().quick_check,'ok');
+  assert.throws(()=>db.sqlite.exec("UPDATE chain_nodes SET position=-1 WHERE node_id='second'"),/CHECK constraint failed/);
 });
 test('CH02：主动领取，同请求回放/不同请求拒绝，全部任务共用两个名额',async t=>{
   const db=setup(t),chain=await db.create([db.node('a'),db.node('b'),db.node('c')]),task=chain.nodes[0].current_task;

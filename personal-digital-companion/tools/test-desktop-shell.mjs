@@ -9,10 +9,19 @@ import {startDesktop,initialBounds} from '../desktop/shell.mjs';
 assert.deepEqual(initialBounds({x:0,y:0,width:1440,height:900}),{x:1181,y:528,width:243,height:360});
 const app=new EventEmitter();Object.assign(app,{requestSingleInstanceLock:()=>true,setName(){},setPath(){},whenReady:async()=>{},quit(){this.emit('before-quit')}});
 let win,tray,network,permission,timer=null,clears=0,intervalMs=0;
-let clock=0,publishWindows;
+let clock=0,publishWindows,roamRandom=0.999;
 let cursor={x:1200,y:600};
-const screen=new EventEmitter();screen.getPrimaryDisplay=()=>({workArea:{x:0,y:0,width:1440,height:900}});screen.getCursorScreenPoint=()=>cursor;screen.getDisplayNearestPoint=screen.getPrimaryDisplay;screen.screenToDipRect=(_window,rect)=>rect;
-const ipcMain=new EventEmitter();ipcMain.handle=()=>{};ipcMain.removeHandler=()=>{};
+const primary={id:1,scaleFactor:1,workArea:{x:0,y:0,width:1440,height:900}};
+const left={id:2,scaleFactor:1.5,workArea:{x:-1120,y:80,width:960,height:650},physicalArea:{x:-1440,y:120,width:1440,height:975}};
+const gap={id:3,scaleFactor:1,workArea:{x:1500,y:0,width:900,height:650}};
+let displayList=[primary];
+const screen=new EventEmitter();screen.getPrimaryDisplay=()=>primary;screen.getCursorScreenPoint=()=>cursor;
+screen.getAllDisplays=()=>displayList;
+screen.getDisplayNearestPoint=({x,y})=>displayList.find(({workArea:r})=>x>=r.x&&x<r.x+r.width&&y>=r.y&&y<r.y+r.height)||primary;
+screen.screenToDipRect=(_window,rect)=>rect;
+screen.dipToScreenRect=(_window,rect)=>displayList.find(item=>item.workArea===rect)?.physicalArea||rect;
+const ipcMain=new EventEmitter(),handlers=new Map();
+ipcMain.handle=(channel,fn)=>handlers.set(channel,fn);ipcMain.removeHandler=channel=>handlers.delete(channel);
 class Window extends EventEmitter{
   constructor(options){super();win=this;this.options=options;this.visible=false;this.bounds=options;this.ignore=[];this.sent=[];this.webContents=new EventEmitter();
     this.webContents.mainFrame={id:1};this.webContents.setWindowOpenHandler=fn=>this.open=fn;this.webContents.send=(...args)=>this.sent.push(args);}
@@ -23,7 +32,8 @@ class Tray {constructor(){tray=this;this.events={}}setToolTip(){}setContextMenu(
 const session={defaultSession:{webRequest:{onBeforeRequest(_filter,fn){network=fn}},setPermissionRequestHandler(fn){permission=fn}}};
 const profile=mkdtempSync(join(tmpdir(),'companion-sound-'));
 const result=await startDesktop({app,BrowserWindow:Window,Tray,Menu:{buildFromTemplate:x=>x},nativeImage:{createFromPath:x=>x},screen,ipcMain,session},
-  {profile,windowSource:({onSnapshot})=>{publishWindows=onSnapshot;return ()=>{};},now:()=>clock,setInterval:(fn,ms)=>{timer=fn;intervalMs=ms;return 1},clearInterval:()=>{timer=null;clears++}});
+  {profile,windowSource:({onSnapshot})=>{publishWindows=onSnapshot;return ()=>{};},now:()=>clock,random:()=>roamRandom,
+    setInterval:(fn,ms)=>{timer=fn;intervalMs=ms;return 1},clearInterval:()=>{timer=null;clears++}});
 assert.equal(win.options.transparent,true);assert.equal(win.options.frame,false);assert.equal(win.options.webPreferences.nodeIntegration,false);
 assert.equal(win.options.webPreferences.contextIsolation,true);assert.equal(win.options.webPreferences.sandbox,true);
 assert.equal(win.visible,false,'首张角色图就绪前不显示空窗');assert.equal(win.ignore[0][0],true);
@@ -124,7 +134,70 @@ assert.equal(attachments().at(-1)[1],null,'远处松手解除依附');
 assert.equal(win.getBounds().width,243);
 assert.notEqual(win.getBounds().x,1181,'保留松手附近位置');
 console.log('PASS：上沿拖拽保持播放和尺寸、快照不抢位置、松手更新锚点、拖远退出。');
+
+const crossMenu=()=>tray.menu.find(m=>m.label==='指令').submenu.find(m=>m.label==='移动指令').submenu[1];
+const home=()=>tray.menu.find(m=>m.label==='回到右下角').click();
+const saveLock=value=>handlers.get('pc:save')(event,{config:{target:'pc',confineToScreen:value},domain:'display'});
+const centerX=()=>win.getBounds().x+win.getBounds().width/2;
+const lastWalk=()=>win.sent.filter(message=>message[0]==='desktop:move').at(-1)?.[1];
+function assertCorner(display){
+ const {x,y,width,height}=win.getBounds(),area=display.workArea;
+ assert.ok([area.x+16,area.x+area.width-width-16].includes(x),'漫游结束时贴近屏幕左右边');
+ assert.ok([area.y+12,area.y+area.height-height-12].includes(y),'漫游结束时贴近屏幕上下边');
+}
+function finishWalk(){
+ ipcMain.emit('pc:runtime',event,{state:'walk',phase:'loop'});
+ for(let i=0;i<600&&lastWalk()!==false;i++)walkTick();
+ assert.equal(lastWalk(),false,'完整到达');
+ ipcMain.emit('pc:runtime',event,{state:'idle',phase:'single'});
+}
+home();displayList=[primary,left,gap];screen.emit('display-added',{},left);
+assert.equal(crossMenu().enabled,true);assert.equal(crossMenu().submenu[0].enabled,true);
+assert.equal(crossMenu().submenu[1].enabled,false,'不跨越物理屏幕间隙');
+crossMenu().submenu[0].click();assert.equal(lastWalk(),true);
+finishWalk();
+assert(centerX()<0,'跨到负坐标副屏');
+assert.equal(win.getBounds().width,244,'150%屏宽度对齐物理像素网格');
+assert.equal(win.getBounds().height,360);
+assert.equal(win.sent.filter(m=>m[0]==='desktop:scale').at(-1)[1],1.5);
+assert.equal(crossMenu().submenu[0].enabled,true,'可返回主屏');
+crossMenu().submenu[0].click();
+ipcMain.emit('pc:runtime',event,{state:'walk',phase:'loop'});
+clock+=16;timer();
+await saveLock(true);
+assert.equal(lastWalk(),false,'启用锁定立即终止正在走的路线');
+assert(centerX()<0);assert.equal(crossMenu().enabled,false);
+home();assert(centerX()<0,'锁定时回到本屏右下角');
+ipcMain.emit('pc:runtime',event,{state:'idle',phase:'single'});
+clock+=45_001;timer();assert.equal(lastWalk(),false,'工作状态不触发漫游');
+result.setWork(false);
+const lockStart={...win.getBounds()};
+clock+=45_001;timer();assert.equal(lastWalk(),'roam','锁定仍允许同屏漫游');
+finishWalk();assertCorner(left);
+assert.notDeepEqual(win.getBounds(),lockStart,'排除已停留的角落');
+
+const occupied=win.getBounds();cursor={x:occupied.x+20,y:occupied.y+20};
+ipcMain.emit('desktop:hit',event,true);ipcMain.emit('desktop:drag-start',event);
+cursor={x:420,y:410};timer();ipcMain.emit('desktop:drag-end',event);
+assert(centerX()>0,'锁定后手动拖拽仍可换屏');
+assert.equal(win.getBounds().width,243,'回到 100% 屏恢复基准宽度');
+assert.equal(win.sent.filter(m=>m[0]==='desktop:scale').at(-1)[1],1);
+home();assert(centerX()>0,'手动换屏后锁定新屏');
+await saveLock(false);assert.equal(crossMenu().enabled,true);
+ipcMain.emit('pc:runtime',event,{state:'idle',phase:'single'});
+roamRandom=0;
+clock+=45_001;timer();assert.equal(lastWalk(),'roam');
+finishWalk();assertCorner(left);
+displayList=[primary,gap];screen.emit('display-removed',{},left);
+assert.deepEqual(win.getBounds(),initialBounds(primary.workArea),'拔掉当前屏后回主屏');
+assert.equal(crossMenu().enabled,false,'离散屏没有行走通路');
+displayList=[primary];screen.emit('display-removed',{},gap);
+clock+=45_001;timer();assert.equal(lastWalk(),'roam','单屏也能自主漫游');
+finishWalk();assertCorner(primary);
+console.log('PASS：单屏与混合 DPI 跨屏漫游均停在角落，覆盖实时锁定、手动换屏、空隙及拔屏回退。');
+
 result.hide();assert.equal(timer,null);app.quit();assert.equal(tray.destroyed,true);assert.equal(ipcMain.listenerCount('desktop:hit'),0);assert(clears>0);
+assert.equal(screen.listenerCount('display-metrics-changed'),0);
 console.log('PASS：透明窗口参数、默认穿透、可信IPC与类型校验、人物命中、托盘工作/显隐/退出、隐藏停轮询、禁止外联/导航/权限。');
 
 assert.equal(ipcMain.listenerCount('desktop:sound-change'),0);rmSync(profile,{recursive:true});

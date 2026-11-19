@@ -29,6 +29,7 @@ const api={
   onAttachmentPending:callback=>subscribe('desktop:attachment-pending',callback),
   onAttachment:callback=>subscribe('desktop:attachment',callback),
   onMove:callback=>subscribe('desktop:move',callback),
+  onScale:callback=>subscribe('desktop:scale',callback),
   onPosture:callback=>subscribe('desktop:posture',callback),
   onPointer:callback=>subscribe('desktop:pointer',callback),
   onVisible:callback=>subscribe('desktop:visible',callback),

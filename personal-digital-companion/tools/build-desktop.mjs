@@ -7,8 +7,11 @@ import {Script} from 'node:vm';
 import {run} from './media.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url)),out=resolve(root,'output/desktop-bundle'),media=resolve(root,'output/four-states-v3');
 mkdirSync(out,{recursive:true});
+for(const name of ['registration.html','registration.css','registration-ui.mjs']) {
+  copyFileSync(resolve(root,'desktop',name),resolve(out,name));
+}
 for(const name of ['companion-state','companion-player'])writeFileSync(resolve(out,name+'.mjs'),stripTypeScriptTypes(readFileSync(resolve(root,'src',name+'.ts'),'utf8')));
-for(const name of ['index.html','style.css','renderer.mjs','sound.mjs','sound-settings.html','sound-settings.css','sound-settings.mjs','settings.html','settings-ui.mjs','settings.css','configured-renderer.mjs','behavior-controller.mjs','effect-preview.mjs','window-nodes.mjs','screen-posture.mjs','screen-question.html','screen-question.css','screen-question-ui.mjs'])copyFileSync(resolve(root,'desktop',name),resolve(out,name));
+for(const name of ['index.html','style.css','renderer.mjs','sound.mjs','sound-settings.html','sound-settings.css','sound-settings.mjs','settings.html','settings-ui.mjs','settings.css','configured-renderer.mjs','behavior-controller.mjs','effect-preview.mjs','window-nodes.mjs','screen-posture.mjs','screen-question.html','screen-question.css','screen-question-ui.mjs','weather.html','weather.css','weather-ui.mjs'])copyFileSync(resolve(root,'desktop',name),resolve(out,name));
 mkdirSync(resolve(out,'voice'),{recursive:true});
 cpSync(resolve(root,'assets/voice'),resolve(out,'voice'),{recursive:true});
 cpSync(resolve(root,'assets/walk-20261118'),resolve(out,'walk'),{recursive:true});

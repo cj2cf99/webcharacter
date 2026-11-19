@@ -1,17 +1,23 @@
 // 桌面壳只处理透明窗、穿透、托盘及坐标；动作逻辑留在共享TS核心。
-import {MOVE_TARGETS,movementTarget,movementStep,movementGrid,snapMovement,WALK_START_TIME,WALK_SETTLE_TIME,WALK_BRAKE_DISTANCE,settlePosition} from './movement.mjs';
+import {CORNER_TARGETS,MOVE_TARGETS,movementTarget,movementStep,movementGrid,snapMovement,displayRoutes,displayPosition,displaySize,WALK_START_TIME,WALK_SETTLE_TIME,WALK_BRAKE_DISTANCE,settlePosition} from './movement.mjs';
 import {AttachmentController} from './attachment.mjs';
 import {watchWindows} from './native-windows.mjs';
 import {screenPosture} from './screen-posture.mjs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
-import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
 import {attachSettings} from './settings-host.mjs';
 import {DEFAULT_SOUND,validSound,normalizeSound,SOUND_NODES} from './sound.mjs';
 import {createDesktopTasks} from './task-lifecycle.mjs';
 import {attachScreenQuestion} from './screen-question-host.mjs';
+import {attachWeather} from './weather-host.mjs';
+import {attachRegistration} from './registration-host.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
+const ROAM_DELAY=45_000;
+const displayEvents=['display-added','display-removed','display-metrics-changed'];
+const roamInterrupts=['hover','click','drag','work'];
+const boundsKeys=['x','y','width','height'];
 export function initialBounds(area,height=360){
   const h=Math.min(height,area.height-24),w=Math.round(h*464/688);
   return {x:Math.round(area.x+area.width-w-16),y:Math.round(area.y+area.height-h-12),width:w,height:h};
@@ -22,9 +28,10 @@ export async function startDesktop(electron,options={}){
   const bundle=options.bundle||resolve(root,'output/desktop-bundle');
   const entry=resolve(bundle,'index.html'),entryURL=pathToFileURL(entry).href;
   let win=null,tray=null,poll=null,ignored=true,work=false,previousReady=false,drag=null;
-  let movement=null,travelPosture=null,walkAcknowledged=false;const now=options.now||Date.now;
+  let movement=null,travelPosture=null,walkAcknowledged=false,runtimeState=null,nextRoamAt=Infinity;
+  const now=options.now||Date.now,random=options.random||Math.random;
   let attachment=null,stopWindows=null,windowsReady=false,attachmentVisual='',attachmentSide=null;
-  let pointerMessages=0,pointerOutside=false,posture='right';
+  let pointerMessages=0,pointerOutside=false,posture='right',reportedScale=null;
   if(!app.requestSingleInstanceLock()){app.quit();return;}
   app.setName('绯月桌宠试验');
   const profile=options.profile||resolve(root,'output/desktop-profile');mkdirSync(profile,{recursive:true});
@@ -38,17 +45,37 @@ export async function startDesktop(electron,options={}){
   function taskNotice(work){void work.catch(()=>{
     if(!quitApproved&&!quitPending&&electron.dialog)void electron.dialog.showMessageBox({type:'error',title:'任务记录',message:'任务处理未完成，记录已保留，请从“中断任务与补传”重试。',buttons:['确定']}).catch(()=>{});
   });}
-  // 只加载打包在本地的界面/视频；无网络、权限请求或远程页面。
+  // 渲染进程只加载本地界面和视频。天气由主进程访问已配置的 Worker。
   session.defaultSession.webRequest.onBeforeRequest({urls:['http://*/*','https://*/*','ws://*/*','wss://*/*']},(_details,callback)=>callback({cancel:true}));
   session.defaultSession.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));
   const bounds=initialBounds(screen.getPrimaryDisplay().workArea);
-  win=new BrowserWindow({...bounds,show:false,frame:false,transparent:true,backgroundColor:'#00000000',
+  let displays=readDisplays(),lastDisplayId=screen.getPrimaryDisplay().id;
+  function readDisplays(){
+    return (screen.getAllDisplays?.()||[screen.getPrimaryDisplay()]).map(display=>({
+      ...display,physicalArea:process.platform==='win32'?screen.dipToScreenRect?.(null,display.workArea):undefined
+    }));
+  }
+  function displayAt(point){
+    const nearest=screen.getDisplayNearestPoint({x:Math.round(point.x),y:Math.round(point.y)});
+    return displays.find(display=>display.id===nearest.id)||displays[0];
+  }
+  function currentDisplay(){
+    if(movement)return movement.display;
+    const box=win.getBounds();
+    return displayAt({x:box.x+box.width/2,y:box.y+box.height/2});
+  }
+  const primary=displays.find(display=>display.id===lastDisplayId)||displays[0];
+  const startSize=displaySize(primary,bounds);
+  win=new BrowserWindow({...displayPosition(bounds,primary,startSize),...startSize,show:false,frame:false,transparent:true,backgroundColor:'#00000000',
     resizable:false,hasShadow:false,skipTaskbar:true,alwaysOnTop:true,focusable:false,
     webPreferences:{preload:resolve(root,'desktop/preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,
       webSecurity:true,backgroundThrottling:true,spellcheck:false,
       additionalArguments:options.benchmark?['--feiyue-benchmark']:[]}});
-  const pcSettings=attachSettings(electron,{win,profile,bundle,root,legacySound:sound});
+  const pcSettings=attachSettings(electron,{win,profile,bundle,root,legacySound:sound,onDisplayChange:applyScreenLock});
+  let confineToScreen=pcSettings.store.snapshot().config.confineToScreen;
   const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,client:options.screenQuestionClient});
+  const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark});
+  const registration=tasks.registration?attachRegistration(electron,{bundle,root,flow:tasks.registration}):null;
   attachment=new AttachmentController({
     areaFor:rect=>screen.getDisplayNearestPoint({x:Math.round(rect.x+rect.width/2),y:Math.round(rect.y+rect.height/2)}).workArea,
     onPlace:(p,state)=>{
@@ -108,26 +135,98 @@ export async function startDesktop(electron,options={}){
   function stopPoll(){if(poll){clearEvery(poll);poll=null;}}
   function updatePosture(force=false){
     if(!previousReady||win.isDestroyed())return;
+    const display=currentDisplay();
+    if(display.id!==lastDisplayId){lastDisplayId=display.id;if(tray)menu();}
+    const scale=display.scaleFactor||1;
+    if(force||scale!==reportedScale){reportedScale=scale;win.webContents.send('desktop:scale',scale);}
     if(attachmentSide){if(force)win.webContents.send('desktop:posture',attachmentSide);return;}
     if(travelPosture){if(force)win.webContents.send('desktop:posture',travelPosture);return;}
-    const b=win.getBounds(),display=screen.getDisplayNearestPoint({x:Math.round(b.x+b.width/2),y:Math.round(b.y+b.height/2)});
+    const b=win.getBounds();
     const next=screenPosture(b,display.bounds||display.workArea,posture);
     if(force||next!==posture){posture=next;win.webContents.send('desktop:posture',posture);}
   }
   win.on('move',()=>updatePosture());
-  function cancelMovement(){if(movement){movement=null;win.webContents.send('desktop:move',false);if(win.isVisible())beginPoll();}}
-  function moveTo(id){
-    if(!previousReady)return;detachAttachment('move');
-    const b=win.getBounds(),display=screen.getDisplayNearestPoint({x:Math.round(b.x+b.width/2),y:Math.round(b.y+b.height/2)}),area=display.workArea,grid=movementGrid(display.scaleFactor);
-    const size={width:snapMovement(bounds.width,grid),height:snapMovement(bounds.height,grid)};
-    const target=movementTarget(area,size,id);
-    target.x=snapMovement(target.x,grid);target.y=snapMovement(target.y,grid);if(Math.hypot(target.x-b.x,target.y-b.y)<1)return;
-    drag=null;walkAcknowledged=false;const ready=movement?.ready&&!movement.finishing||false;movement={target,x:b.x,y:b.y,...size,grid,ready,last:now()};
-    travelPosture=target.x<b.x?'right':target.x>b.x?'left':travelPosture||posture;
-    win.webContents.send('desktop:posture',travelPosture);
-    if(!win.isVisible())show();else beginPoll();win.webContents.send('desktop:move',true);
+  function postponeRoam(){nextRoamAt=now()+ROAM_DELAY;}
+  function cancelMovement(){
+    if(!movement)return;
+    movement=null;postponeRoam();win.webContents.send('desktop:move',false);
+    if(win.isVisible())beginPoll();
+  }
+  function setWalkLeg(leg){
+    Object.assign(movement,leg);
+    const next=leg.target.x<movement.x?'right':leg.target.x>movement.x?'left':travelPosture||posture;
+    if(next!==travelPosture){travelPosture=next;win.webContents.send('desktop:posture',next);}
+  }
+  function placeWalk(point){
+    const {display,size,contain}=movement;
+    const next={...displayPosition(point,display,size,contain),...size};
+    // Windows 会把跨屏窗口换算回 DIP，等待解码帧时避免反复请求同一位置和尺寸。
+    if(boundsKeys.every(key=>movement.lastBounds?.[key]===next[key]))return;
+    movement.lastBounds=next;
+    const current=win.getBounds();
+    if(boundsKeys.some(key=>current[key]!==next[key]))win.setBounds(next,false);
+  }
+  function moveTo(id,destinationId,automatic=false){
+    if(!previousReady)return;
+    const start=currentDisplay();
+    if(confineToScreen&&destinationId!==undefined&&destinationId!==start.id)return;
+    const destination=destinationId===undefined?start:displays.find(display=>display.id===destinationId);
+    if(!destination)return;
+    const route=destination===start?[]:displayRoutes(displays,start,bounds).get(destination.id);
+    if(!route)return;
+    detachAttachment('move');
+    const box=win.getBounds(), legs=[];
+    for(const edge of route){
+      const fromSize=displaySize(edge.from,bounds),toSize=displaySize(edge.to,bounds);
+      legs.push(
+        {display:edge.from,size:fromSize,contain:true,target:displayPosition(edge.exit,edge.from,fromSize)},
+        {display:edge.from,size:fromSize,contain:false,target:edge.exit},
+        {display:edge.to,size:toSize,contain:false,entry:edge.entry,target:displayPosition(edge.entry,edge.to,toSize)}
+      );
+    }
+    const size=displaySize(destination,bounds),area=destination.workArea;
+    const target=displayPosition(movementTarget(area,size,id),destination,size);
+    if(!route.length&&Math.hypot(target.x-box.x,target.y-box.y)<1)return;
+    legs.push({display:destination,size,contain:true,target});
+    drag=null;walkAcknowledged=false;postponeRoam();
+    movement={x:box.x,y:box.y,ready:movement?.ready&&!movement.finishing||false,last:now(),legs,automatic};
+    setWalkLeg(legs.shift());
+    if(!win.isVisible())show();else beginPoll();
+    win.webContents.send('desktop:move',automatic?'roam':true);
+  }
+  function roam(){
+    if(now()<nextRoamAt||runtimeState!=='idle'||work||drag||movement||attachment.active||pcSettings.panel?.isVisible())return;
+    postponeRoam();
+    const start=currentDisplay();
+    const reachable=confineToScreen?[]:[...displayRoutes(displays,start,bounds).values()].filter(route=>route.length===1);
+    const destination=reachable[Math.floor(random()*reachable.length)]?.[0].to??start;
+    const current=win.getBounds(),size=displaySize(destination,bounds),area=destination.workArea;
+    const corners=destination!==start?CORNER_TARGETS:CORNER_TARGETS.filter(([id])=>{
+      const target=displayPosition(movementTarget(area,size,id),destination,size);
+      return Math.abs(target.x-current.x)>1||Math.abs(target.y-current.y)>1;
+    });
+    const corner=corners[Math.floor(random()*corners.length)]?.[0];
+    if(corner)moveTo(corner,destination.id,true);
+  }
+  function stopAtCurrentDisplay(){
+    const display=currentDisplay(),box=win.getBounds(),size=displaySize(display,bounds);
+    cancelMovement();travelPosture=null;
+    win.setBounds({...displayPosition(box,display,size),...size},false);
+    updatePosture(true);
+  }
+  function applyScreenLock(value){
+    if(confineToScreen===value)return;
+    confineToScreen=value;
+    if(value&&movement&&(!movement.contain||movement.legs.some(leg=>leg.display.id!==movement.display.id))){
+      stopAtCurrentDisplay();
+    }
+    if(tray)menu();
   }
   const onMovementRuntime=(event,value)=>{if(!own(event))return;
+    if(runtimeState!==value?.state){
+      if(roamInterrupts.includes(runtimeState)||roamInterrupts.includes(value?.state))postponeRoam();
+      runtimeState=value?.state;
+    }
     if(value?.state==='walk')walkAcknowledged=true;
     if(travelPosture&&walkAcknowledged&&value?.state&&value.state!=='walk'){travelPosture=null;updatePosture(true);}
     if(movement?.finishing&&value?.state!=='walk'&&!movement.brakeFrom){
@@ -165,14 +264,12 @@ export async function startDesktop(electron,options={}){
     const {bounds:b}=drag,dx=cursor.x-drag.cursor.x,dy=cursor.y-drag.cursor.y;
     if(!drag.moved&&Math.hypot(dx,dy)<5)return;
     drag.moved=true;
-    const area=screen.getDisplayNearestPoint(cursor).workArea;
-    let x=b.x+dx,y=b.y+dy;
+    const display=displayAt(cursor);
+    const x=b.x+dx,y=b.y+dy;
     // 附着素材允许透明画布越过屏幕边缘，按住的位置跟随鼠标。
-    if(!drag.top){
-      x=Math.min(Math.max(x,area.x),area.x+area.width-b.width);
-      y=Math.min(Math.max(y,area.y),area.y+area.height-b.height);
-    }
-    const target={x:Math.round(x),y:Math.round(y),width:b.width,height:b.height};
+    const size=drag.top?{width:b.width,height:b.height}:displaySize(display,bounds);
+    const position=drag.top?{x:Math.round(x),y:Math.round(y)}:displayPosition({x,y},display,size);
+    const target={...position,...size};
     const current=win.getBounds();
     if(['x','y','width','height'].some(k=>current[k]!==target[k]))win.setBounds(target,false);
   }
@@ -180,18 +277,22 @@ export async function startDesktop(electron,options={}){
     stopPoll();let pointerAt=-Infinity;
     poll=setEvery(()=>{
       if(win.isDestroyed()||!win.isVisible())return;
+      roam();
       if(movement){
         const time=now(),dt=(time-movement.last)/1000;movement.last=time;
         if(movement.ready){
-          if(!movement.finishing&&Math.hypot(movement.target.x-movement.x,movement.target.y-movement.y)<=WALK_BRAKE_DISTANCE){movement.finishing=true;win.webContents.send('desktop:move','finish');}
+          if(!movement.legs.length&&!movement.finishing&&Math.hypot(movement.target.x-movement.x,movement.target.y-movement.y)<=WALK_BRAKE_DISTANCE){movement.finishing=true;win.webContents.send('desktop:move','finish');}
           // 收步从实际解码帧开始；资源切换期间保留位置，站稳后不再滑动。
           const next=movement.finishing
             ?movement.brakeFrom?settlePosition(movement.brakeFrom,movement.target,movement.exitTime+Math.min(movement.freeBrake?WALK_SETTLE_TIME:.05,(time-movement.exitAt)/1000),movement.settleTime):{x:movement.x,y:movement.y,done:false}
             :movementStep(movement,movement.target,dt);movement.x=next.x;movement.y=next.y;
-          const current=win.getBounds(),x=snapMovement(next.x,movement.grid),y=snapMovement(next.y,movement.grid);
-          // 固定原始DIP尺寸，禁止把原生窗口舍入后的尺寸回灌造成反复resize/清屏。
-          if(current.x!==x||current.y!==y)win.setBounds({x,y,width:movement.width,height:movement.height},false);
-          if(next.done)cancelMovement();
+          placeWalk(next);
+          if(next.done&&movement.legs.length){
+            const leg=movement.legs.shift();
+            if(leg.entry)Object.assign(movement,leg.entry);
+            setWalkLeg(leg);
+            if(leg.entry){placeWalk(leg.entry);updatePosture();}
+          }else if(next.done)cancelMovement();
         }
       }
       // 移动保持高频；鼠标命中仍以50ms采样，避免同步读像素/屏幕查询争用绘制。
@@ -208,9 +309,13 @@ export async function startDesktop(electron,options={}){
       }else{pointerOutside=false;pointerMessages++;win.webContents.send('desktop:pointer',{x,y});}
     },movement?16:50);
   }
-  function show(){pointerOutside=false;win.showInactive();win.webContents.send('desktop:visible',true);updatePosture(true);if(previousReady)beginPoll();}
+  function show(){pointerOutside=false;postponeRoam();win.showInactive();win.webContents.send('desktop:visible',true);updatePosture(true);if(previousReady)beginPoll();}
   function hide(){screenQuestion.hide();detachAttachment('hidden');cancelMovement();travelPosture=null;drag=null;stopPoll();ignore(true);win.webContents.send('desktop:visible',false);win.hide();}
-  function setWork(value){work=value;win.webContents.send('desktop:work',work);menu();}
+  function setWork(value){
+    work=value;postponeRoam();
+    if(work&&movement?.automatic)stopAtCurrentDisplay();
+    win.webContents.send('desktop:work',work);menu();
+  }
   function openSoundSettings(){
     if(settingsWindow&&!settingsWindow.isDestroyed()){settingsWindow.show();settingsWindow.focus();return;}
     settingsWindow=new BrowserWindow({width:480,height:650,resizable:false,autoHideMenuBar:true,title:'声音设置 · 绯月',alwaysOnTop:true,
@@ -233,22 +338,59 @@ export async function startDesktop(electron,options={}){
   };
   const soundPreview=(event,id)=>{if(soundOwner(event)&&SOUND_NODES.some(node=>node.id===id))win.webContents.send('desktop:sound-preview',id);};
   ipcMain.on('desktop:sound-ready',soundReady);ipcMain.on('desktop:sound-change',soundChange);ipcMain.on('desktop:sound-preview',soundPreview);
+  function moveMenu(){
+    const commands=[{label:'去',submenu:MOVE_TARGETS.map(([id,label])=>({label,click:()=>moveTo(id)}))}];
+    if(displays.length>1){
+      const start=currentDisplay(),routes=displayRoutes(displays,start,bounds);
+      const other=displays.flatMap((display,index)=>display.id===start.id?[]:[{
+        label:display.label?`屏幕 ${index+1} · ${display.label}`:`屏幕 ${index+1}`,
+        enabled:!confineToScreen&&routes.has(display.id),
+        click:()=>moveTo('center',display.id)
+      }]);
+      commands.push({label:'去另一块屏幕',enabled:other.some(item=>item.enabled),submenu:other});
+    }
+    return commands;
+  }
+  function primaryDisplay(){return displays.find(item=>item.id===screen.getPrimaryDisplay().id)||displays[0];}
+  function goHome(display=confineToScreen?currentDisplay():primaryDisplay()){
+    detachAttachment('home');cancelMovement();travelPosture=null;
+    const home=initialBounds(display.workArea,bounds.height),size=displaySize(display,home);
+    win.setBounds({...displayPosition(home,display,size),...size},false);
+    updatePosture(true);
+  }
   function menu(){
     tray.setContextMenu(Menu.buildFromTemplate([
       {label:win.isVisible()?'隐藏':'显示',click:()=>{win.isVisible()?hide():show();menu();}},
-      {label:'指令',submenu:[{label:windowsReady?'窗口依附':'窗口依附（检测中/不可用）',enabled:windowsReady,submenu:[{label:'左侧电梯上行',click:()=>startAttachment('climb','left')},{label:'右侧电梯上行',click:()=>startAttachment('climb','right')},{label:'上沿坐姿',click:()=>startAttachment('sit','top')},{label:'上沿侧卧',click:()=>startAttachment('lie','top')},{label:'坐卧连续循环',type:'checkbox',checked:!!attachment?.continuous,click:()=>{if(attachment.continuous){attachment.continuous=false;menu();}else startAttachment('lie','top',true);}},{type:'separator'},{label:'解除依附',enabled:!!attachment?.active,click:()=>detachAttachment()}]},{label:'移动指令',submenu:[{label:'去',submenu:MOVE_TARGETS.map(([id,label])=>({label,click:()=>moveTo(id)}))}]}]},
+      {label:'指令',submenu:[{label:windowsReady?'窗口依附':'窗口依附（检测中/不可用）',enabled:windowsReady,submenu:[{label:'左侧电梯上行',click:()=>startAttachment('climb','left')},{label:'右侧电梯上行',click:()=>startAttachment('climb','right')},{label:'上沿坐姿',click:()=>startAttachment('sit','top')},{label:'上沿侧卧',click:()=>startAttachment('lie','top')},{label:'坐卧连续循环',type:'checkbox',checked:!!attachment?.continuous,click:()=>{if(attachment.continuous){attachment.continuous=false;menu();}else startAttachment('lie','top',true);}},{type:'separator'},{label:'解除依附',enabled:!!attachment?.active,click:()=>detachAttachment()}]},{label:'移动指令',submenu:moveMenu()}]},
       {label:work?'结束工作':'开始工作',click:()=>setWork(!work)},
       {label:'动画与声音设置 · 本地 PC',click:pcSettings.open},
       {label:'声音设置',click:pcSettings.open},
+      {label:'三地天气',click:()=>{void weather.open().catch(()=>{
+        if(!quitApproved&&electron.dialog)void electron.dialog.showMessageBox({type:'error',title:'三地天气',message:'天气面板打不开，请重新启动绯月后重试。',buttons:['确定']}).catch(()=>{});
+      });}},
       {label:'看屏幕提问（头顶气泡）',click:()=>{
         if(!win.isVisible()){show();menu();}
         void screenQuestion.open().catch(()=>{
           if(!quitApproved&&electron.dialog)void electron.dialog.showMessageBox({type:'error',title:'看屏幕提问',message:'问答气泡未能打开，请重新启动精灵后再试。',buttons:['确定']}).catch(()=>{});
         });
       }},
+      ...(registration?[{label:'随口登记',click:()=>{
+        void registration.open().catch(()=>{
+          if(!quitApproved&&electron.dialog)void electron.dialog.showMessageBox({type:'error',title:'随口登记',
+            message:'登记窗口没能打开。请重新构建绯月桌面包后再试。',buttons:['确定']}).catch(()=>{});
+        });
+      }}]:[]),
       {label:'主动接取与任务链',click:()=>{if(tasks.showTasks)taskNotice(tasks.showTasks());}},
+      ...(tasks.showCloudConnection?[{label:'云端连接',click:()=>taskNotice(tasks.showCloudConnection())}]:[]),
       {label:'中断任务与补传',click:()=>{taskNotice(tasks.retryPending());}},
-      {label:'回到右下角',click:()=>{detachAttachment('home');cancelMovement();win.setBounds(initialBounds(screen.getPrimaryDisplay().workArea));}},
+      ...(tasks.traffic&&electron.shell?[{label:'查看任务日志',click:()=>{void (async()=>{
+        await tasks.traffic.flush();
+        if(existsSync(tasks.traffic.file)){
+          if(await electron.shell.openPath(tasks.traffic.file))electron.shell.showItemInFolder(tasks.traffic.file);
+        }else if(electron.dialog)await electron.dialog.showMessageBox({type:'info',title:'任务日志',
+          message:tasks.traffic.failed()?'任务日志暂时无法写入。':'还没有任务收发日志。',buttons:['确定']});
+      })().catch(()=>{});}}]:[]),
+      {label:'回到右下角',click:()=>goHome()},
       {type:'separator'}, {label:'退出',click:()=>app.quit()},
     ]));
   }
@@ -261,12 +403,12 @@ export async function startDesktop(electron,options={}){
     if(cursor.x<b.x||cursor.y<b.y||cursor.x>=b.x+b.width||cursor.y>=b.y+b.height)return;
     const top=attachment.topDragAnchor();
     if(!top)detachAttachment('drag');
-    cancelMovement();
+    cancelMovement();travelPosture=null;postponeRoam();
     drag={cursor,bounds:top?b:{...b,width:bounds.width,height:bounds.height},moved:false,top};
   };
   const onDragEnd=(event,canceled)=>{
     if(!own(event)||!drag)return;
-    if(!drag.top){drag=null;return;}
+    if(!drag.top){if(canceled!==true)followDrag(screen.getCursorScreenPoint());drag=null;updatePosture();return;}
     if(canceled!==true)followDrag(screen.getCursorScreenPoint());
     const {top,moved,deferred}=drag;
     drag=null;
@@ -281,17 +423,32 @@ export async function startDesktop(electron,options={}){
   win.webContents.on('context-menu',()=>tray.popUpContextMenu());
   tray.on('double-click',()=>{win.isVisible()?hide():show();menu();});menu();
   app.on('second-instance',()=>{show();menu();});
+  function handleDisplays(){
+    if(win.isDestroyed())return;
+    displays=readDisplays();
+    const display=displays.find(item=>item.id===lastDisplayId);
+    cancelMovement();travelPosture=null;drag=null;postponeRoam();
+    if(!display)goHome(primaryDisplay());
+    else if(!attachment.active){
+      const size=displaySize(display,bounds),next={...displayPosition(win.getBounds(),display,size),...size};
+      win.setBounds(next,false);
+    }
+    updatePosture(true);menu();
+  }
   function cleanup(){
     if(cleaned)return;cleaned=true;
     ipcMain.removeListener('desktop:attachment-done',onAttachmentDone);
     ipcMain.removeListener('desktop:elevator-playback',onElevatorPlayback);
     stopWindows?.();stopWindows=null;
     screenQuestion.close();
+    registration?.close();
+    weather.close();
     movement=null;ipcMain.removeListener('pc:runtime',onMovementRuntime);pcSettings.close();
     stopPoll();ipcMain.removeListener('desktop:sound-ready',soundReady);ipcMain.removeListener('desktop:sound-change',soundChange);ipcMain.removeListener('desktop:sound-preview',soundPreview);
     if(settingsWindow&&!settingsWindow.isDestroyed())settingsWindow.destroy();
     ipcMain.removeListener('desktop:hit',onHit);ipcMain.removeListener('desktop:ready',onReady);
     ipcMain.removeListener('desktop:drag-start',onDragStart);ipcMain.removeListener('desktop:drag-end',onDragEnd);
+    for(const event of displayEvents)screen.removeListener(event,handleDisplays);
     if(tray){tray.destroy();tray=null;}
   }
   win.on('close',event=>{if(!quitApproved){event.preventDefault();app.quit();}});
@@ -311,8 +468,7 @@ export async function startDesktop(electron,options={}){
       await tasks.stop();quitApproved=true;quitPending=false;app.quit();
     })().catch(()=>{tasks.cancelQuitCheck();quitPending=false;});
   });
-  // 显示器变化只做最低限度可见性兜底，不实现多屏漫游或窗口攀爬。
-  screen.on('display-removed',()=>{if(!win.isDestroyed()){detachAttachment('display');cancelMovement();win.setBounds(initialBounds(screen.getPrimaryDisplay().workArea));}});
+  for(const event of displayEvents)screen.on(event,handleDisplays);
   await win.loadFile(entry);
   if(options.windowSource||process.platform==='win32'&&typeof win.getNativeWindowHandle==='function'){
     const source=options.windowSource||watchWindows;
@@ -323,6 +479,7 @@ export async function startDesktop(electron,options={}){
     },onError:()=>{windowsReady=false;if(attachment.active)attachment.detach('service-error');if(tray)menu();}});
   }
   tasks.startPolling?.();
+  void weather.start();
   taskNotice(tasks.startup());
-  return {win,show,hide,moveTo,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,getStats:()=>({pointerMessages,visible:win.isVisible(),ready:previousReady})};
+  return {win,show,hide,moveTo,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,getStats:()=>({pointerMessages,visible:win.isVisible(),ready:previousReady})};
 }

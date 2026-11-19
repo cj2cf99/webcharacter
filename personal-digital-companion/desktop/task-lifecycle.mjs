@@ -1,4 +1,3 @@
-import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {getDeviceIdentity} from '../agent/devices/identity.mjs';
 import {createTaskExecutor} from '../agent/execution/runner.mjs';
@@ -9,6 +8,9 @@ import {DEADLINE_GRACE_MS} from '../agent/tasks/deadline.mjs';
 import {createTaskPoller} from './task-poller.mjs';
 import {createChainClient} from './chain-client.mjs';
 import {createChainDialogs} from './chain-dialogs.mjs';
+import {createRegistrationFlow} from './registration-flow.mjs';
+import {createTaskTrafficLog} from './task-traffic-log.mjs';
+import {loadCloudConnection} from './cloud-connection.mjs';
 
 const terminal=task=>['COMPLETED','FAILED'].includes(task.status);
 export function interruptionDetail(task) {
@@ -16,45 +18,37 @@ export function interruptionDetail(task) {
   const time=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',dateStyle:'medium',timeStyle:'medium'}).format(new Date(date));
   return `任务：${task.metadata?.name||task.type} (${task.task_id})\n参数：${JSON.stringify(task.params)}\n最后记录：${last?`第${last.attempt_no}次 ${last.status}`:task.status}，${time} JST\n结果未知，可能已产生部分操作。重做可能重复原操作。`;
 }
-async function configuredRequest(profile) {
-  let config;
-  try {config=JSON.parse(await readFile(join(profile,'task-config.json'),'utf8'));}
-  catch(error) {if(error.code==='ENOENT')return null;throw new Error('任务云端配置无效，请检查本地配置文件');}
-  let base; try {base=new URL(config.base_url);} catch {throw new Error('任务云端地址无效');}
-  if(base.username||base.password||base.search||base.hash||base.pathname!=='/'
-    || !(base.protocol==='https:' || (base.protocol==='http:' && ['127.0.0.1','localhost','[::1]'].includes(base.hostname)))
-    || typeof config.api_token!=='string'||!config.api_token.trim()||!/^[\x21-\x7e]+$/.test(config.api_token))throw new Error('任务云端配置无效');
-  const prefix=config.api_prefix??'/api';
-  if(!['/api','/api/companion'].includes(prefix))throw new Error('任务API前缀无效');
-  return (path,options={})=>fetch(new URL(prefix+path.slice('/api'.length),base),{...options,redirect:'error',
-    headers:{...options.headers,Authorization:`Bearer ${config.api_token}`}});
-}
 export async function createDesktopTasks({profile,dialog,request,handlerModule,pollerOptions={}}={}) {
   const identity=await getDeviceIdentity(profile);
-  let configurationError=null;
-  if(request===undefined)try {request=await configuredRequest(profile);} catch(error){configurationError=error.message;request=null;}
+  let configurationError=null, connection;
+  if(request===undefined)try {connection=await loadCloudConnection(profile); request=connection?.request;} catch(error){configurationError=error.message;request=null;}
   const controller=new AbortController();
+  const traffic=createTaskTrafficLog(profile);
   if(request) {
     const rawRequest=request;
     request=(path,options)=>new Promise((resolve,reject)=>{
       const local=new AbortController();let timeout;
       const finish=(error,response)=>{clearTimeout(timeout);controller.signal.removeEventListener('abort',abort);if(error)reject(error);else resolve(response);};
-      const abort=()=>{local.abort();finish(new Error('应用正在退出，记录保留'));};
+      const abort=()=>{local.abort();finish(Object.assign(new Error('应用正在退出，记录保留'),{code:'CANCELLED'}));};
       if(controller.signal.aborted){abort();return;}
-      timeout=setTimeout(()=>{local.abort();finish(new Error('连接超时，记录仍保留'));},5000);
+      const wait=path==='/api/assistant/recording-plan'?120000:path.endsWith('/execute')||path.startsWith('/api/weather/')?15000:5000;
+      timeout=setTimeout(()=>{local.abort();finish(Object.assign(new Error('连接超时，记录仍保留'),{code:'TIMEOUT'}));},wait);
       controller.signal.addEventListener('abort',abort,{once:true});
       Promise.resolve().then(()=>{
         if(local.signal.aborted)throw new Error('请求已取消');
-        return rawRequest(path,{...options,signal:local.signal});
+        const signal=options?.signal?AbortSignal.any([local.signal,options.signal]):local.signal;
+        return rawRequest(path,{...options,signal});
       }).then(async response=>{
         // 超时覆盖完整响应体，避免只收到HTTP头后卡住退出/启动恢复。
         const body=await response.arrayBuffer();
         return new Response([204,205,304].includes(response.status)?null:body,{status:response.status,statusText:response.statusText,headers:response.headers});
       }).then(response=>finish(null,response),()=>finish(new Error('任务云端连接失败，记录保留')));
     });
+    request=traffic.wrap(request);
   }
   const threads=await createThreadHandlers(handlerModule?{module:handlerModule}:{});
   let checking=false,stopped=false,gate=null,release=null,showing=null;
+  const registration=createRegistrationFlow({profile,request,canStart:()=>!checking&&!stopped,log:traffic.write});
   const inFlight=new Set();
   const executor=createTaskExecutor({databasePath:join(profile,'tasks.sqlite'),deviceId:identity.device_id,handlers:threads.handlers,
     canExecute:()=>!stopped,waitForExecution:async()=>{if(gate)await gate;}});
@@ -205,17 +199,30 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     if(pendingResults&&!stopped)await tell(`${pendingResults}个任务结果仍待补传`,'本地结果已保留，不会重新执行；可通过“中断任务与补传”再次尝试。');
     if(!stopped)await showPending();
   }
-  return {identity,executor,runTask,decide,syncDecision,showPending,startup,
+  async function showCloudConnection() {
+    const choice = await dialog.showMessageBox({title:'绯月云端连接',type:'info',
+      message:connection ? connection.mode : configurationError || '等待发布配置',
+      detail:connection?.origin ?? '',
+      buttons:request?['测试连接','关闭']:['关闭'],defaultId:0,cancelId:request?1:0});
+    if(!request || choice.response!==0)return;
+    try {
+      const response=await request(connection?.mode==='Access'?'/api/health':'/api/chains',{method:'GET'});
+      await tell(response.ok?'云端连接正常':`云端暂不可用（HTTP ${response.status}）`);
+    } catch { await tell('无法连到云端，请查看任务日志'); }
+  }
+  return {identity,executor,runTask,decide,syncDecision,showPending,startup,registration,traffic,showCloudConnection,
+    weatherRequest: request,
     chainClient,showTasks:()=>chainDialogs.show(),
     getAvailableTasks:()=>availableTasks.map(task=>({...task})),
     startPolling(){if(!stopped)poller?.start();},
-    activeCount:()=>executor.activeCount()+inFlight.size+chainClient.activeCount(),
+    activeCount:()=>executor.activeCount()+inFlight.size+chainClient.activeCount()+registration.activeCount(),
     beginQuitCheck(){checking=true;if(!gate)gate=new Promise(resolve=>{release=resolve;});},
     cancelQuitCheck(){checking=false;release?.();release=null;gate=null;poller?.kick();},
     async stop(){stopped=true;poller?.stop();executor.interrupt();controller.abort();release?.();release=null;gate=null;
       const closed=!inFlight.size&&!executor.activeCount();if(closed)executor.close();
       await threads.stop();
       await Promise.allSettled([...inFlight]);
+      await traffic.flush();
       if(!closed&&!executor.activeCount())executor.close();},
     async retryPending(){await startup();},
   };

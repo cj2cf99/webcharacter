@@ -1,5 +1,4 @@
-import {readFile} from 'node:fs/promises';
-import {join} from 'node:path';
+import {loadCloudConnection} from './cloud-connection.mjs';
 const endpoint='/api/assistant/screen-question',limit=4*1024*1024;
 const failure=(code,text,retryable=false)=>({state:'error',code,text,retryable});
 const cancelled=()=>failure('REQUEST_CANCELLED','请求已取消');
@@ -9,13 +8,11 @@ const fields=(v,keys)=>object(v)&&Object.keys(v).length===keys.length&&keys.ever
 const contract={INVALID_JSON:[400,false],INVALID_REQUEST:[400,false],INVALID_IMAGE:[400,false],UNAUTHORIZED:[401,false],FORBIDDEN:[403,false],SAME_ORIGIN_REQUIRED:[403,false],METHOD_NOT_ALLOWED:[405,false],REQUEST_CANCELLED:[408,false],REQUEST_TOO_LARGE:[413,false],IMAGE_TOO_LARGE:[413,false],UNSUPPORTED_MEDIA_TYPE:[415,false],AI_RATE_LIMITED:[429,true],AI_UNAVAILABLE:[502,true],INVALID_AI_RESPONSE:[502,true],AUTH_NOT_CONFIGURED:[503,false],AI_NOT_CONFIGURED:[503,false],AI_TIMEOUT:[504,true],INTERNAL_ERROR:[500,false]};
 const userMessages={UNAUTHORIZED:'认证失败，请检查本地配置',FORBIDDEN:'没有访问权限',SAME_ORIGIN_REQUIRED:'接口同源校验失败',AUTH_NOT_CONFIGURED:'服务端认证尚未配置',AI_NOT_CONFIGURED:'服务端AI尚未配置',AI_TIMEOUT:'AI响应超时，请稍后重试',AI_RATE_LIMITED:'AI暂时限流，请稍后重试',REQUEST_CANCELLED:'请求已取消'};
 async function configuredRequest(profile){
-  let config;try{config=JSON.parse(await readFile(join(profile,'task-config.json'),'utf8'));}catch(error){throw failure(error?.code==='ENOENT'?'CONFIG_NOT_CONFIGURED':'CONFIG_INVALID','请先配置截图问答的云端连接');}
-  let base;try{base=new URL(config.base_url);}catch{throw failure('CONFIG_INVALID','云端地址配置无效');}
-  const prefix=config.api_prefix??'/api';
-  if(base.username||base.password||base.search||base.hash||base.pathname!=='/'||!['/api','/api/companion'].includes(prefix)
-    ||!(base.protocol==='https:'||(base.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(base.hostname)))
-    ||typeof config.api_token!=='string'||!config.api_token.trim()||!/^[\x21-\x7e]+$/.test(config.api_token))throw failure('CONFIG_INVALID','云端连接配置无效');
-  return (path,options)=>fetch(new URL(prefix+path.slice('/api'.length),base),{...options,redirect:'error',headers:{...options.headers,Origin:base.origin,Authorization:`Bearer ${config.api_token}`}});
+  let connection;
+  try { connection=await loadCloudConnection(profile); }
+  catch { throw failure('CONFIG_INVALID','云端连接配置无效'); }
+  if(!connection)throw failure('CONFIG_NOT_CONFIGURED','请先配置截图问答的云端连接');
+  return connection.request;
 }
 async function abortable(work,signal){
   if(signal.aborted)throw cancelled();let onAbort;

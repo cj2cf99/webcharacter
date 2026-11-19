@@ -1,13 +1,13 @@
 import {SettingsStore} from './settings-store.mjs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-export function attachSettings(electron,{win,profile,bundle,root,legacySound}){
+export function attachSettings(electron,{win,profile,bundle,root,legacySound,onDisplayChange}){
  const {BrowserWindow,ipcMain,dialog}=electron;const store=new SettingsStore(profile,bundle,legacySound);let panel=null,lastRuntime=null;
  const trusted=e=>[win,panel].some(w=>w&&!w.isDestroyed()&&e.sender===w.webContents&&e.senderFrame===w.webContents.mainFrame);
  const notify=kind=>{const value={...store.snapshot(),kind};win.webContents.send('pc:changed',value);panel?.webContents.send('pc:changed',value);};
  const handlers={
   'pc:get':()=>store.snapshot(),
-  'pc:save':(_e,{config,domain})=>{const result=store.save(config,domain);notify(domain);return result;},
+  'pc:save':(_e,{config,domain})=>{const result=store.save(config,domain);if(domain==='display')onDisplayChange?.(result.config.confineToScreen);notify(domain);return result;},
   'pc:import':async(_e,kind)=>{if(!['audio','video'].includes(kind))throw Error('资源类型无效');const result=await dialog.showOpenDialog(panel,{properties:['openFile'],filters:[{name:kind==='video'?'WebM动画':'语音',extensions:kind==='video'?['webm']:['wav','mp3','ogg','m4a','flac']}]});if(result.canceled)return null;const value=store.importFile(result.filePaths[0],kind);notify('resources');return value;},
   'pc:rename':(_e,{id,name})=>{const value=store.rename(id,name);notify('resources');return value;},
   'pc:runtime':()=>lastRuntime

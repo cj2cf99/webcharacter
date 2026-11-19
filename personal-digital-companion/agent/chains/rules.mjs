@@ -7,7 +7,7 @@ export async function nodeInfo(DB,taskId) {
   return DB.prepare(`SELECT n.*,c.stopped_at FROM tasks t JOIN chain_nodes n ON n.node_id=t.chain_node_id
     JOIN chains c ON c.chain_id=n.chain_id WHERE t.task_id=?`).bind(taskId).first();
 }
-// 最多五层，SQL直接检查当前祖先轮；已领取任务回报不经过此领取守卫。
+// SQL 直接检查当前祖先轮。已领取任务回报不经过此领取守卫。
 export const ancestorsReadySQL=`NOT EXISTS (
   WITH RECURSIVE parents(node_id,depends_on,current_task_id,skipped_task_id) AS (
     SELECT n.node_id,n.depends_on,n.current_task_id,n.skipped_task_id FROM chain_nodes own

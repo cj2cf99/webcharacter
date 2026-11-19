@@ -5,6 +5,8 @@ import { handleTaskAction } from './tasks/actions.mjs';
 import { normalizeDeadline } from './tasks/deadline.mjs';
 import { handleRecovery } from './tasks/recover.mjs';
 import {handleAssistantMessage} from './assistant/message.mjs';
+import {planRegistration} from './assistant/registration-plan.mjs';
+import {handleWeather} from './weather/api.mjs';
 import {createBindingAiClient,createBindingVisionClient} from './assistant/cloudflare.mjs';
 import {handleScreenQuestion} from './assistant/screen-question.mjs';
 import {screenError} from './assistant/screen-errors.mjs';
@@ -13,6 +15,8 @@ import {handleChainRequest} from './chains/api.mjs';
 import {gateSQL,gateBindings} from './chains/rules.mjs';
 import {encodeJson} from './execution/json.mjs';
 import {issueTaskSubmission,isSubmissionId} from './tasks/submissions.mjs';
+import {authorizeDailyLogToken,handleDailyLogs} from './assistant/daily-logs.mjs';
+import {executeCloudRegistration} from './tasks/hu-shi-execution.mjs';
 
 // 单用户开发Bearer边界；本轮不接入独立设备凭据或心跳。
 const json = (body, status = 200, headers = {}) => Response.json(body, {
@@ -53,21 +57,51 @@ const taskQuery = `SELECT t.*, l.name, l.description, l.executor, l.parameter_sp
   l.procedure, l.report_spec, d.computer_name, d.alias,n.chain_id,n.current_task_id,n.skipped_task_id,c.stopped_at
   FROM tasks t JOIN tasklist l ON l.type = t.type
   LEFT JOIN devices d ON d.device_id = t.target_device_id
-  LEFT JOIN chain_nodes n ON n.node_id=t.chain_node_id LEFT JOIN chains c ON c.chain_id=n.chain_id WHERE t.task_id = ?`;
+  LEFT JOIN chain_nodes n ON n.node_id=t.chain_node_id LEFT JOIN chains c ON c.chain_id=n.chain_id`;
+
+async function readTasks(DB, ids) {
+  if (!ids.length) return new Map();
+  const filter = 'IN (SELECT value FROM json_each(?))';
+  const encodedIds = encodeJson(ids);
+  const { results: rows } = await DB.prepare(`${taskQuery} WHERE t.task_id ${filter}`).bind(encodedIds).all();
+  if (!rows.length) return new Map();
+  const [executions, activity, recoveries, archived] = await Promise.all([
+    DB.prepare(`SELECT * FROM executions WHERE task_id ${filter} ORDER BY attempt_no`).bind(encodedIds).all(),
+    DB.prepare(`SELECT task_id,updated_at,event,progress_message FROM task_activity WHERE task_id ${filter}`).bind(encodedIds).all(),
+    DB.prepare(`SELECT * FROM task_recoveries WHERE task_id ${filter}`).bind(encodedIds).all(),
+    rows.some(row => row.superseded_by_task_id)
+      ? DB.prepare(`SELECT task_id,report_json FROM archived_task_results WHERE task_id ${filter}`).bind(encodedIds).all()
+      : { results: [] },
+  ]);
+  const executionsByTask = Map.groupBy(executions.results, row => row.task_id);
+  const activityByTask = new Map(activity.results.map(({ task_id, ...fields }) => [task_id, fields]));
+  const recoveryByTask = new Map(recoveries.results.map(row => [row.task_id, row]));
+  const archiveByTask = new Map(archived.results.map(row => [row.task_id, row.report_json]));
+  return new Map(await Promise.all(rows.map(async row => {
+    const id = row.task_id;
+    const recovery = recoveryByTask.get(id);
+    const report = row.superseded_by_task_id ? archiveByTask.get(id) : null;
+    const claimable = row.status === 'PENDING' && row.executor === 'pc' && await DB
+      .prepare(`SELECT t.task_id FROM tasks t WHERE t.task_id=? AND ${gateSQL()}`)
+      .bind(id, ...gateBindings(row.target_device_id)).first();
+    return [id, {
+      ...taskView(row),
+      can_claim: Boolean(claimable),
+      archived_report: report ? JSON.parse(report) : null,
+      activity: activityByTask.get(id) ?? null,
+      recovery: recovery ? {
+        task_id: id, decision: recovery.decision, replacement_task_id: recovery.replacement_task_id,
+        snapshot: JSON.parse(recovery.snapshot_json), decided_at: recovery.decided_at,
+      } : null,
+      executions: (executionsByTask.get(id) ?? []).map(({ result_json, ...execution }) => ({
+        ...execution, result: result_json === null ? null : JSON.parse(result_json),
+      })),
+    }];
+  })));
+}
 
 async function readTask(DB, id) {
-  const row = await DB.prepare(taskQuery).bind(id).first();
-  if (!row) return null;
-  const { results } = await DB.prepare('SELECT * FROM executions WHERE task_id = ? ORDER BY attempt_no').bind(id).all();
-  const activity = await DB.prepare('SELECT updated_at, event, progress_message FROM task_activity WHERE task_id = ?').bind(id).first();
-  const recovery = await DB.prepare('SELECT * FROM task_recoveries WHERE task_id=?').bind(id).first();
-  const archived=row.superseded_by_task_id?await DB.prepare('SELECT report_json FROM archived_task_results WHERE task_id=?').bind(id).first():null;
-  const claimable=row.status==='PENDING'&&row.executor==='pc'&&await DB.prepare(`SELECT t.task_id FROM tasks t WHERE t.task_id=? AND ${gateSQL()}`).bind(id,...gateBindings(row.target_device_id)).first();
-  return { ...taskView(row),can_claim:Boolean(claimable),archived_report:archived?JSON.parse(archived.report_json):null, activity, recovery: recovery ? {task_id:id,decision:recovery.decision,
-    replacement_task_id:recovery.replacement_task_id,snapshot:JSON.parse(recovery.snapshot_json),decided_at:recovery.decided_at} : null,
-    executions: results.map(({ result_json, ...execution }) => ({
-    ...execution, result: result_json === null ? null : JSON.parse(result_json),
-  })) };
+  return (await readTasks(DB, [id])).get(id) ?? null;
 }
 
 async function createTask(request, DB, ownerId) {
@@ -121,6 +155,7 @@ async function createTask(request, DB, ownerId) {
     (task_id, type, target_device_id, params_json, status, attempt_count, created_at, deadline_at, submission_id)
     SELECT ?, ?, ?, ?, 'PENDING', 0, ?, ?, s.submission_id FROM task_submissions s
     WHERE s.submission_id = ? AND s.owner_id = ?
+      AND NOT EXISTS (SELECT 1 FROM chains c WHERE c.chain_id=s.submission_id AND c.submission_fingerprint IS NOT NULL)
     ON CONFLICT(submission_id) DO NOTHING`)
     .bind(id, body.type, target, params, new Date(now).toISOString(), deadline, body.submission_id, ownerId).run();
   if (!inserted.meta.changes) {
@@ -133,25 +168,38 @@ async function authorizeDevelopment(request,env) {
   if(typeof env.API_TOKEN!=='string'||!env.API_TOKEN.trim()||request.headers.get('Authorization')!==`Bearer ${env.API_TOKEN}`)throw Object.assign(new Error('未认证'),{status:401});
   return {ownerId:'development'};
 }
-export function createWorker({authorize=authorizeDevelopment,createAiClient=createBindingAiClient,createVisionClient=createBindingVisionClient,sameOriginWrites=false}={}) {return {
+export function createWorker({authorize=authorizeDevelopment,createAiClient=createBindingAiClient,createVisionClient=createBindingVisionClient,
+  authorizeDailyLogs=authorizeDailyLogToken,writeHuShiEntry,writeRegistrationEntry,readRegistrationReceipt,loadRegistrationCategories,
+  weatherOptions,sameOriginWrites=false}={}) {return {
   async fetch(request, env) {
-    const path = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const path = url.pathname;
     const screen=path==='/api/assistant/screen-question';
+    const dailyLogs=path==='/api/daily-logs';
     if (path !== '/api' && !path.startsWith('/api/')) return error(404, 'NOT_FOUND', '接口不存在');
+    if(dailyLogs&&url.protocol!=='https:')return error(403,'HTTPS_REQUIRED','每日日志只通过 HTTPS 调用');
+    const authorizeRequest=dailyLogs?authorizeDailyLogs:authorize;
     let identity;
     try {
-      if(typeof authorize!=='function')return screen?screenError('AUTH_NOT_CONFIGURED'):error(503,'AUTH_NOT_CONFIGURED','身份验证尚未配置');
+      if(typeof authorizeRequest!=='function')return screen?screenError('AUTH_NOT_CONFIGURED'):error(503,'AUTH_NOT_CONFIGURED','身份验证尚未配置');
       if(screen&&authorize===authorizeDevelopment&&(typeof env?.API_TOKEN!=='string'||!env.API_TOKEN.trim()))return screenError('AUTH_NOT_CONFIGURED');
-      identity=await authorize(request,env);
+      identity=await authorizeRequest(request,env);
       if(typeof identity?.ownerId!=='string'||!identity.ownerId)return screen?screenError('UNAUTHORIZED'):error(401,'UNAUTHORIZED','需要有效认证');
-    }catch(e){if(screen)return screenError(e?.status===401?'UNAUTHORIZED':e?.status===403?'FORBIDDEN':e?.status===503?'AUTH_NOT_CONFIGURED':'INTERNAL_ERROR');return error([401,403,503].includes(e?.status)?e.status:401,'UNAUTHORIZED','需要有效认证');}
+    }catch(e){
+      if(screen)return screenError(e?.status===401?'UNAUTHORIZED':e?.status===403?'FORBIDDEN':e?.status===503?'AUTH_NOT_CONFIGURED':'INTERNAL_ERROR');
+      if(dailyLogs&&e?.status===503)return error(503,'AUTH_NOT_CONFIGURED','日志身份验证尚未配置');
+      return error([401,403,503].includes(e?.status)?e.status:401,'UNAUTHORIZED','需要有效认证');
+    }
     if(sameOriginWrites&&!['GET','HEAD','OPTIONS'].includes(request.method)
-      &&(request.headers.get('Origin')!==new URL(request.url).origin||request.headers.get('Sec-Fetch-Site')==='cross-site'))return screen?screenError('SAME_ORIGIN_REQUIRED'):error(403,'SAME_ORIGIN_REQUIRED','仅允许同源写请求');
+      &&(request.headers.get('Origin')!==url.origin||request.headers.get('Sec-Fetch-Site')==='cross-site'))return screen?screenError('SAME_ORIGIN_REQUIRED'):error(403,'SAME_ORIGIN_REQUIRED','仅允许同源写请求');
     if(screen){try{return await handleScreenQuestion(request,createVisionClient,env);}catch{return screenError('INTERNAL_ERROR');}}
-    if(!env.DB)return error(503,'DATABASE_NOT_CONFIGURED','任务数据库尚未配置');
     try {
-      const chainResponse=await handleChainRequest(request,env.DB,readTask);if(chainResponse)return chainResponse;
+      if(path.startsWith('/api/weather/'))return await handleWeather(request,env,weatherOptions);
+      if(!env.DB)return error(503,'DATABASE_NOT_CONFIGURED',dailyLogs?'日志数据库尚未配置':'任务数据库尚未配置');
+      if(dailyLogs)return await handleDailyLogs(request,url,env,identity.ownerId);
+      const chainResponse=await handleChainRequest(request,env.DB,readTasks,identity.ownerId);if(chainResponse)return chainResponse;
       if(path==='/api/assistant/message')return await handleAssistantMessage(request,env.DB,createAiClient,env);
+      if(path==='/api/assistant/recording-plan')return await planRegistration(request,env,identity.ownerId,createAiClient,loadRegistrationCategories);
       const terminalResponse = await handleTerminalRequest(request, env.DB);
       if (terminalResponse) return terminalResponse;
       const pendingResponse=await handlePendingRequest(request,env.DB);
@@ -171,12 +219,16 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
         if (request.method !== 'POST') return error(405, 'METHOD_NOT_ALLOWED', '仅支持POST', { Allow: 'POST' });
         return await createTask(request, env.DB, identity.ownerId);
       }
-      const actionMatch = /^\/api\/tasks\/([^/]+)\/(claim|result|progress|cancel|recover)$/.exec(path);
+      const actionMatch = /^\/api\/tasks\/([^/]+)\/(claim|result|progress|cancel|recover|execute|receipt)$/.exec(path);
       if (actionMatch) {
         if (request.method !== 'POST') return error(405, 'METHOD_NOT_ALLOWED', '仅支持POST', { Allow: 'POST' });
         let id;
         try { id = decodeURIComponent(actionMatch[1]); } catch { return error(400, 'INVALID_TASK_ID', '任务标识无效'); }
         if (actionMatch[2] === 'recover') return await handleRecovery(request, env.DB, id, readTask);
+        if (actionMatch[2] === 'execute' || actionMatch[2] === 'receipt') {
+          return await executeCloudRegistration({request,env,taskId:id,ownerId:identity.ownerId,readTask,
+            writeEntry:writeHuShiEntry,writeRegistrationEntry,readRegistrationReceipt,receiptOnly:actionMatch[2]==='receipt'});
+        }
         return await handleTaskAction(request, env.DB, id, actionMatch[2], readTask);
       }
       const taskMatch = /^\/api\/tasks\/([^/]+)$/.exec(path);
