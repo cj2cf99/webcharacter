@@ -460,3 +460,8 @@ Qwen 会话通过 local-model-process.mjs 中的 systemPrompt 加载绯月人设
 
 在独立本地 Git 分支 codex/feiyue-9b-skill-routing-20261121 保存本批次的实际旧值、发布文件及审核结果。模型权重、用户内容、资料目录、令牌和备份包未加入 Git。
 
+## 2026-11-21 JST · 手记篇首修复本机安装与回读
+
+用户批准本机安装并选择本次不登记花园。东京时间 2026-11-21T06:43:00.6370153+09:00 完成，原进程 16344 正常退出，新进程 23352 从原安装和资料目录运行。仅替换 desktop/personality-diary.mjs，原文件备份在 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/diary-summary-before-cde5ac2e4d0a4cc89c57294b9312400a，前后 SHA-256 与审核清单相符。本机服务已就绪。
+验收直接加载正式安装版代码及 Aggressive 9B Vulkan 权重。用只读数据库副本离线回放，原故障篇首 summary/tags 生成成功。使用隔离资料生成完整测试手记，独立读回正文、摘要、修订并比对；相同输入重跑后一篇、内容和修订均相同。真实手记未提交或改写。本次未登记花园，无数据库迁移、云端部署或远端推送。本地发布分支 codex/feiyue-diary-summary-fix-20261121。
+

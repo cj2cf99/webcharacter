@@ -239,3 +239,15 @@ node tools/personality-memory-preview.mjs --serve
 
 在独立本地 Git 分支 codex/feiyue-9b-skill-routing-20261121 保存本批次的实际旧值、发布文件及审核结果。模型权重、用户内容、资料目录、令牌和备份包未加入 Git。
 
+## 2026-11-21 JST · 修复正式版手记在篇首摘要阶段报 LOCAL_AI_INFERENCE_FAILED（本机候选）
+
+用户看到手记未完成弹窗，要求定位问题。验收以正式模型重放同一类资料，能返回完整摘要和标签，并在隔离服务完整写入、读回且重跑不重复为准。06:27:15 JST 正式日志报 diary-writing 推理失败，之前多次同技能调用已完成。正式资料的只读 SQLite 快照离线回放定位在 summary,tags：正文和私语生成成功，输入 165 个字符，旧版自由长度字段生成到 420 token 预算附近仍未闭合 JSON，解析失败；计量输出重分词为 416 token。未输出用户资料正文，未写入真实日记；临时资料副本已清理。
+目标为 Windows 正式安装目录 G:\selftool\.release-feiyue-handbook-desktop-20261120\personal-digital-companion，仅改 desktop/personality-diary.mjs。来源 G:\selftool\WebCharacter\personal-digital-companion，开发基线 3b55903，安装基线 39fd098 加本机既有发布。复用开发版 think 已有的字段限制，按实际安装文件合入该一处变更。生成阶段把篇首 summary 限为 72 字符、tags 限为 36 字符，从而约束这一轮 JSON。比较命令 git diff --no-index 正式文件 候选文件。旧 SHA-256 7D6C87BB268BFA683E4C4F9095C5735576F2D2694586BFA04C3E582A1BA76050，新 F649B5EA3D43E5F936E92FEE3A9CBF2E044FD65695EDF9042F8721CE0F35081A。候选 G:\chat\2026-11-20\wo-z\work\diary-summary-release\desktop\personality-diary.mjs。
+实测：Node 24 + 正式 Aggressive 9B Vulkan，work/probe-diary-failure.mjs old 用只读快照断网复现；fixed 同样本摘要和标签通过。integration 使用候选正式模块、真实 9B 和隔离 D1，四次推理完成评价、情绪、叙事和摘要，独立读回正文和篇首；再次运行核对行数、正文、摘要和 revision 相同。开发树 node --test agent/tests/personality-memory.test.mjs 为 20/20。以上未写用户正式日记。此次复现和候选实测后端为 Vulkan；CPU 本轮未复测。第三方独立审核未执行。业务迁移、已有数据回填、模型和配置变更、远端 Worker 发布均无。
+本次本机安装及本次花园登记意愿待用户决定。获本次安装授权后，复核正在运行的正式进程、快捷方式与登录启动项、新旧文件摘要，备份单个原文件，受控重启并核实实际模块、进程和资料目录。以临时资料验收。原文件若变化先重新比对；需要回退时按备份摘要还原该模块并受控重启。当前生产数据、正式桌宠代码未改，候选未作 Git 提交或推送；结果待安装后补记。
+
+## 2026-11-21 JST · 手记篇首修复本机安装与回读
+
+用户批准本机安装并选择本次不登记花园。东京时间 2026-11-21T06:43:00.6370153+09:00 完成，原进程 16344 正常退出，新进程 23352 从原安装和资料目录运行。仅替换 desktop/personality-diary.mjs，原文件备份在 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/diary-summary-before-cde5ac2e4d0a4cc89c57294b9312400a，前后 SHA-256 与审核清单相符。本机服务已就绪。
+验收直接加载正式安装版代码及 Aggressive 9B Vulkan 权重。用只读数据库副本离线回放，原故障篇首 summary/tags 生成成功。使用隔离资料生成完整测试手记，独立读回正文、摘要、修订并比对；相同输入重跑后一篇、内容和修订均相同。真实手记未提交或改写。本次未登记花园，无数据库迁移、云端部署或远端推送。本地发布分支 codex/feiyue-diary-summary-fix-20261121。
+
