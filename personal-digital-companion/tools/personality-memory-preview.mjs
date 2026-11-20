@@ -9,14 +9,21 @@ import {once} from 'node:events';
 const root=resolve(import.meta.dirname,'..'),main=process.env.FEIYUE_MAIN_DIR||'G:/cloudflare/myapp';
 const require=createRequire(join(main,'package.json'));
 const {build}=require('esbuild'),{Miniflare,convertV4MiniflareOptions}=require('miniflare');
+const integrated=process.argv.includes('--integrated');
 const assets={};
 for(const [path,file,mime] of [['/assets/styles/shell.css','src/client/styles/shell.css','text/css'],['/assets/styles/theme.css','src/client/styles/theme.css','text/css'],['/assets/shell/theme.js','src/client/shell/theme.js','text/javascript'],['/assets/shell/navigation.js','src/client/shell/navigation.js','text/javascript'],['/assets/icons/anim/feiyue.svg','public/assets/icons/anim/feiyue.svg','image/svg+xml']]){
   assets[path]=[await readFile(join(main,file),'utf8'),mime];
 }
 const fixture={id:'P-BOOK',spendDate:'2026-11-20',amount:3500,merchant:'街角书店',category:'图书',description:'散文集'};
 const expenseModule=file=>JSON.stringify(join(main,'src/features/expenses',file).replaceAll('\\','/'));
+assets['/assets/shell/workspace-layout.js']=[await readFile(join(main,'src/client/shell/workspace-layout.js'),'utf8'),'text/javascript'];
+for(const [url,file] of [['/assets/icons/feiyue-journal.svg','feiyue-journal.svg'],['/assets/icons/anim/feiyue-journal.svg','feiyue-journal-draw.svg'],['/assets/icons/anim/feiyue-journal-sweep.svg','feiyue-journal-sweep.svg']]){
+  assets[url]=[await readFile(integrated?join(main,'public',url.slice(1)):join(root,'web/icons',file),'utf8'),'image/svg+xml'];
+}
+const readerRoute=integrated?join(main,'src/features/companion/vendor/memory-route.mjs').replaceAll('\\','/'):'./agent/host/memory-route.mjs';
+const portrait=await readFile(integrated?join(main,'public/assets/companion/journal-portrait.png'):join(root,'assets/desktop-media/baseline.png'));
 const bundle=await build({keepNames:true,stdin:{resolveDir:root,contents:
-  "import {createMemoryPage} from './agent/host/memory-route.mjs';\n"+
+  "import {createMemoryPage} from "+JSON.stringify(readerRoute)+";\n"+
   "import {handleCompanion} from './agent/host/subscriptions.mjs';\n"+
   "import {shell} from "+JSON.stringify(join(main,'src/pages/navigation.js').replaceAll('\\','/'))+";\n"+
   "import {memoryExpenses} from './agent/host/memory-expenses.mjs';\n"+
@@ -25,23 +32,27 @@ const bundle=await build({keepNames:true,stdin:{resolveDir:root,contents:
   "import {configuredOwners} from "+expenseModule('identity.js')+";\n"+
   "import {createContext} from "+expenseModule('context.js')+";\n"+
   "const assets="+JSON.stringify(assets)+";\n"+
+  "import {renderPage} from "+JSON.stringify(join(main,'src/pages/render.js').replaceAll('\\','/'))+";\n"+
   "const bill="+JSON.stringify(fixture)+";\n"+
   `const route=createMemoryPage({shell,authorize:()=>({sub:'local-preview'})});
   export default {async fetch(request,bindings){
     const env={...bindings,COMPANION_ENABLED:'true',ALLOWED_OWNER_SUBS:'local-preview',COMPANION_HOST:{memorySources:q=>memorySources(env,q),memoryExpenses:q=>memoryExpenses(env,q,{createContext,configuredOwners,getExpenses})}};
     env.SUBSCRIPTIONS_API={fetchOwner:(r,owner)=>handleCompanion(r,env,owner,true)};
     const url=new URL(request.url);
+    if(url.pathname==='/')return new Response(renderPage('/',env),{headers:{'Content-Type':'text/html; charset=utf-8'}});
     if(assets[url.pathname]){const [body,type]=assets[url.pathname];return new Response(body,{headers:{'Content-Type':type}});}
     if(url.pathname==='/api/v1/expenses'){const ctx=createContext(env),[owner]=await configuredOwners(ctx.cfg);return Response.json(await getExpenses(ctx.with({owner}),request,null,url));}
     if(request.headers.get('x-fixture')==='1')return handleCompanion(request,env,{id:'bot:local-preview',role:'bot'},false);
     return await route(request,env)??new Response(null,{status:404});
-  }};`},bundle:true,write:false,format:'esm',platform:'browser',plugins:[{
+  }};`},bundle:true,write:false,loader:{'.html':'text'},format:'esm',platform:'browser',plugins:[{
   name:'pending-expense-read-export',setup(builder){builder.onLoad({filter:/[\\/]features[\\/]expenses[\\/]routes\.js$/},async({path})=>{
     const source=await readFile(path,'utf8');return {contents:source.includes('export async function getExpenses(')?source:source+'\nexport {getExpenses};',loader:'js'};
   });}
 }]});
 const serve=process.argv.includes('--serve');
-const runtime=new Miniflare(convertV4MiniflareOptions({host:'127.0.0.1',port:serve?8796:0,cf:false,modules:true,compatibilityDate:'2026-10-27',
+const runtime=new Miniflare(convertV4MiniflareOptions({host:'127.0.0.1',port:serve?8796:0,cf:false,modules:true,
+  serviceBindings:{STOCKCHECK_ASSETS:request=>new URL(request.url).pathname==='/assets/companion/journal-portrait.png'
+    ?new Response(request.method==='HEAD'?null:portrait,{headers:{'Content-Type':'image/png'}}):new Response(null,{status:404})},compatibilityDate:'2026-10-27',
   script:bundle.outputFiles[0].text,d1Databases:{COMPANION_DB:'memory-preview-only',mymaindb:'expense-preview-only'},d1Persist:false}));
 try{
   const db=await runtime.getD1Database('COMPANION_DB');

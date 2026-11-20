@@ -32,8 +32,12 @@ for (const name of [
 for (const name of ['tasklist-hu-shi.sql','tasklist-registration.sql','tasklist-pc.sql']) {
   await copy(join(source,'agent/seeds',name), join(vendor,'agent/seeds',name));
 }
-for (const name of ['registration-ai.mjs','registration-data.mjs','record-photo.mjs','chain-page.mjs','task-workspace-routes.mjs','reminder-edits.mjs','reminder-review.mjs']) {
+for (const name of ['registration-ai.mjs','registration-data.mjs','record-photo.mjs','memory-page.mjs','memory-reader.mjs','memory-route.mjs','chain-page.mjs','task-workspace-routes.mjs','reminder-edits.mjs','reminder-review.mjs']) {
   await copy(join(source,'agent/host',name), join(main,'src/features/companion/vendor',name));
 }
+await copy(join(source,'web/icons/feiyue-journal.svg'),join(main,'public/assets/icons/feiyue-journal.svg'));
+await copy(join(source,'web/icons/feiyue-journal-draw.svg'),join(main,'public/assets/icons/anim/feiyue-journal.svg'));
+await copy(join(source,'web/icons/feiyue-journal-sweep.svg'),join(main,'public/assets/icons/anim/feiyue-journal-sweep.svg'));
+await copy(join(source,'assets/desktop-media/baseline.png'), join(main,'public/assets/companion/journal-portrait.png'));
 for (const name of ['chains.js','chains.css']) await copy(join(source,'web',name), join(main,'src/client/companion',name));
 console.log('已同步绯月 Worker 源码与迁移、主站私有模块及任务管理页面。');

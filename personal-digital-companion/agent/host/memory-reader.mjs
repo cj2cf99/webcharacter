@@ -82,7 +82,7 @@ export const memoryScript=String.raw`
   }
   async function read(id,kind){
     const token=++readToken,container=el('article'),dialog=el('reader');
-    el('readerLabel').textContent=kind==='diaries'?'绯月的日记':'念叨记录';
+    el('readerLabel').textContent=kind==='diaries'?'绯月的日记':'绯月的小唠叨';
     if(!dialog.open)dialog.showModal();container.replaceChildren(node('p','正在翻页…'));
     try{
       const r=await fetchJson(base+kind+'/'+encodeURIComponent(id));
@@ -126,8 +126,8 @@ export const memoryScript=String.raw`
       const choices=diary?[...new Set([filter,...data.items.flatMap(r=>r.tags)].filter(Boolean))]:['paylog','diary','audit'];
       el('filter').replaceChildren(new Option(diary?'全部标签':'全部来源',''),...choices.map(v=>new Option(diary?v:sourceName(v),v)));
       el('filter').value=filter;
-      el('archiveSummary').textContent=diary?'日记档案':'念叨档案';
-      el('listCaption').textContent=(day?day+' · ':'')+total+(diary?' 篇日记':' 条念叨');
+      el('archiveSummary').textContent=diary?'日记':'小唠叨';
+      el('listCaption').textContent=(day?day+' · ':'')+total+(diary?' 篇日记':' 条小唠叨');
       for(const r of data.items){
         const date=diary?r.day:localDay(r.created_at),id=diary?r.day+'.'+r.part:r.id;
         const entry=node('a',null,'entry');entry.href='#'+(diary?'diary':'nag');entry.onclick=e=>{e.preventDefault();read(id,kind);};
@@ -141,7 +141,8 @@ export const memoryScript=String.raw`
     }catch(error){if(token===listToken)failed(rows,error,list);}
   }
   for(const b of document.querySelectorAll('[data-dismiss]'))b.onclick=()=>b.closest('dialog').close();
-  el('origin').onclose=()=>++originToken;el('reader').onclose=()=>++readToken;
+  el('origin').onclose=()=>{if(!el('origin').open)++originToken;};
+  el('reader').onclose=()=>{if(!el('reader').open)++readToken;};
   function changeDate(value){day=value;if(day)month=day.slice(0,7);el('mobileDate').value=day;page=0;list();}
   el('mobileDate').onchange=e=>changeDate(e.target.value);
   el('clearDate').onclick=()=>changeDate('');
