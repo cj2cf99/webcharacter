@@ -16,34 +16,271 @@ const wait=async predicate=>{for(let i=0;i<100;i++){if(await predicate())return;
 async function run(){try{
   await electron.app.whenReady();
   pet=new electron.BrowserWindow({x:600,y:600,width:240,height:360,show:false,webPreferences:{offscreen:true}});
-  let captures=0,calls=0,mode='answer',release;
+  let captures=0,calls=0,romeAttempts=0,mode='answer',release;
   const image=electron.nativeImage.createFromBitmap(Buffer.alloc(64*64*4,255),{width:64,height:64});
-  const worker=createWorker({createVisionClient:()=>({async generate(){calls++;if(mode==='waiting')await new Promise(resolve=>release=resolve);if(mode==='error')throw Object.assign(new Error('mock'),{code:'TIMEOUT'});return {provider:'cloudflare',model:CLOUDFLARE_MODEL,finishReason:'stop',text:JSON.stringify({answer:mode==='long'?'<img src=x onerror=alert(1)>\n'+('从这张截图只能确定路径没有找到，先核对文件位置，不要急着删除配置。\n'.repeat(30)):'这个报错是说文件找不到。先检查路径是否拼错、文件有没有被移动；仅凭截图还不能确定具体原因。'})};}})});
+  const worker=createWorker({weatherOptions:{fetcher:async url=>{
+    assert.match(url,/www\.jma\.go\.jp\/bosai\/warning\//);
+    return Response.json([{warning:{class20Items:[{areaCode:'4010000',kinds:[]}]}}]);
+  }},createAiClient:()=>({async generate(input){
+    assert.equal(input.route,'text');
+    if(input.messages.at(-1).content.startsWith('请根据附件回答')){
+      assert.match(input.messages.at(-3).content,/notes\.txt[\s\S]*测试代号：海棠/);
+      assert.match(input.messages.at(-2).content,/请概括这个文件的内容/);
+      return {provider:'cloudflare',model:CLOUDFLARE_MODEL,text:JSON.stringify({reply:'代号是海棠。',proposal:null})};
+    }
+    if(input.messages.at(-1).content==='介绍下罗马'){
+      if(++romeAttempts===1)throw Object.assign(Error('模拟模型超时'),{code:'TIMEOUT'});
+      return {provider:'cloudflare',model:CLOUDFLARE_MODEL,text:JSON.stringify({reply:'罗马坐落在台伯河畔。',proposal:null})};
+    }
+    if(input.messages.at(-1).content==='FluxJet 是什么？')return {provider:'cloudflare',model:CLOUDFLARE_MODEL,text:JSON.stringify({reply:'缺少可靠资料。',proposal:null,search_query:'FluxJet'})};
+    if(input.messages.at(-1).content.startsWith('请依据以下公开网页摘要')){
+      assert.match(input.messages.at(-1).content,/发布公告.*最新版本已公布/);
+      return {provider:'cloudflare',model:CLOUDFLARE_MODEL,text:JSON.stringify({reply:'据发布公告，最新版本已公布。[1]',proposal:null})};
+    }
+    assert.equal(input.messages.at(-1).content,'你好');
+    return {provider:'cloudflare',model:CLOUDFLARE_MODEL,text:JSON.stringify({reply:'你好呀',proposal:null})};
+  }}),createVisionClient:()=>({async generate(){calls++;if(mode==='waiting')await new Promise(resolve=>release=resolve);if(mode==='error')throw Object.assign(new Error('mock'),{code:'TIMEOUT'});return {provider:'cloudflare',model:CLOUDFLARE_MODEL,finishReason:'stop',text:JSON.stringify({answer:mode==='long'?'<img src=x onerror=alert(1)>\n'+('从这张截图只能确定路径没有找到，先核对文件位置，不要急着删除配置。\n'.repeat(30)):'这个报错是说文件找不到。先检查路径是否拼错、文件有没有被移动；仅凭截图还不能确定具体原因。'})};}})});
   const client=await createScreenQuestionClient({profile,screen:{getCursorScreenPoint:()=>({x:-100,y:50}),getDisplayNearestPoint:()=>({id:77,size:{width:64,height:64},scaleFactor:1})},
-    desktopCapturer:{async getSources(){captures++;return [{display_id:'77',thumbnail:image}];}},
-    request:(path,options)=>worker.fetch(new Request('https://test'+path,{...options,headers:{...options.headers,Authorization:'Bearer test'}}),{API_TOKEN:'test'})});
-  host=attachScreenQuestion(electron,{win:pet,profile,bundle:resolve(root,'output/desktop-bundle'),root,client,visible:false});
+    desktopCapturer:{async getSources(){
+      captures++;
+      if(mode==='waitingCapture')await new Promise(resolve=>release=resolve);
+      return [{display_id:'77',thumbnail:image}];
+    }},
+    request:(path,options)=>path==='/api/weather/kokurakita/current'
+      ? Response.json({validTime:new Date().toISOString(),condition:{text:'晴'},temperature:{value:16},wind:{speed:{value:2}}})
+      : worker.fetch(new Request('https://test'+path,{...options,headers:{...options.headers,Authorization:'Bearer test'}}),{API_TOKEN:'test',DB:{prepare:()=>({all:async()=>({results:[]})})}})});
+  const searched=[],registered=[];
+  const search=async query=>{searched.push(query);return {state:'answer',text:'搜索结果 '+query,
+    sources:[{title:'发布公告',snippet:'最新版本已公布。',url:'https://example.org/docs'}]};};
+  const registration={submit:async text=>{registered.push(text);return {status:'completed',chain:{status:'COMPLETED',nodes:[{current_task:{type:'records.create',status:'COMPLETED',params:{body:text}}}]}};}};
+  const reminderWrites=[];
+  const reminderRequest=async(path,options)=>{
+    if(path==='/api/reminder-edits')return Response.json({items:(JSON.parse(options.body).id?[1]:[1,2]).map(id=>({id,title:'周报'+id,content:'初稿',deadline:'2026-11-20',recurrence:null,version:'fixture'}))});
+    reminderWrites.push([path,JSON.parse(options.body)]);return Response.json({accepted:true});
+  };
+  host=attachScreenQuestion(electron,{win:pet,profile,bundle:resolve(root,'output/desktop-bundle'),root,client,registration,search,reminderRequest,visible:false,
+    readTasks:()=>[{at:Date.now(),title:'检查资料',action:'完成提醒 · 已核实完成',task_id:'42',detail:'下次到期：明天'}]});
   await host.open();const panel=host.panel;
   const js=code=>panel.webContents.executeJavaScript(code);
   const snapshot=async name=>{await new Promise(resolve=>setTimeout(resolve,250));writeFileSync(join(output,name),(await panel.webContents.capturePage()).toPNG());};
   await wait(()=>js('Boolean(window.screenQuestion)'));
+  assert.equal(await js("document.querySelector('#withScreen').checked"),false);
+  if(process.argv.includes('--attachments')){
+    const source=bytes=>JSON.stringify([...bytes]);
+    const put=async(event,name,type,bytes)=>js(`(() => {
+      const target=document.querySelector('#question'), transfer=new DataTransfer();
+      transfer.items.add(new File([new Uint8Array(${source(bytes)})],${JSON.stringify(name)},{type:${JSON.stringify(type)}}));
+      const e=${event==='paste'?"new ClipboardEvent('paste',{clipboardData:transfer,bubbles:true,cancelable:true})":"new DragEvent('drop',{dataTransfer:transfer,bubbles:true,cancelable:true})"};
+      target.dispatchEvent(e);return e.defaultPrevented;
+    })()`);
+    const fileName=()=>js("document.querySelector('#attachmentName').textContent");
+    await wait(()=>js("document.readyState==='complete'"));
+    for(const event of ['drop','paste']){
+      const name=event+'.png';
+      assert.ok(await put(event,name,'image/png',image.toPNG()));
+      await wait(async()=>await fileName()===name);
+      assert.ok(await js("document.querySelector('#attachmentImage').naturalWidth>0 && document.querySelector('#withScreen').disabled"));
+      if(event==='drop'){
+        await js("document.querySelector('#removeAttachment').click()");
+        assert.equal(await fileName(),'');
+      }else{
+        await js("document.querySelector('#question').value='重启绯月';document.querySelector('#questionForm').requestSubmit()");
+        await wait(()=>js("document.querySelector('#reply').dataset.state==='answer' && document.querySelector('#attachment').hidden"));
+        assert.equal(calls,1);assert.equal(captures,0);
+      }
+    }
+    assert.ok(await put('drop','bad.pdf','application/pdf',Buffer.from('%PDF-1.7')));
+    await wait(()=>js("!document.querySelector('#attachmentError').hidden"));
+    assert.equal(await fileName(),'');
+    assert.ok(await put('drop','notes.txt','text/plain',Buffer.from('测试代号：海棠')));
+    await wait(async()=>await fileName()==='notes.txt');
+    await new Promise(resolve=>setTimeout(resolve,30_100));
+    await wait(()=>!host.panel);
+    await host.open();
+    const restored=code=>host.panel.webContents.executeJavaScript(code);
+    await wait(()=>restored("document.querySelector('#attachmentName').textContent==='notes.txt'"));
+    await restored("document.querySelector('#questionForm').requestSubmit()");
+    await wait(()=>restored("document.querySelector('#answer').textContent==='代号是海棠。' && document.querySelector('#attachment').hidden"));
+    assert.equal(captures,0);assert.deepEqual(registered,[]);assert.deepEqual(searched,[]);
+    console.log('PASS：拖入图片、粘贴图片、拖入文本、移除、格式提示、只附文件发送以及按附件内容回答。');
+    return;
+  }
+  if(process.argv.includes('--idle-close')){
+    const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    await pause(5500);
+    await js("const i=document.querySelector('#question'); i.value='  保留原样的草稿  '; i.dispatchEvent(new Event('input',{bubbles:true}));");
+    await pause(28_000);
+    assert.equal(host.panel,panel,'输入后应重新计时');
+    assert.equal(await js(`(() => {
+      const reply=document.querySelector('#reply');
+      reply.dispatchEvent(new PointerEvent('pointermove',{bubbles:true}));
+      const wheel=new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:100});
+      reply.dispatchEvent(wheel);
+      return wheel.defaultPrevented && getComputedStyle(reply).overflowY==='clip';
+    })()`),true,'气泡没有滚轮滚动');
+    await wait(()=>!host.panel);
+    await host.open();
+    const resumed=host.panel, resumedJs=code=>resumed.webContents.executeJavaScript(code);
+    await wait(()=>resumedJs("document.querySelector('#question').value==='  保留原样的草稿  '"));
+    mode='waitingCapture';
+    await resumedJs("document.querySelector('#withScreen').click(); document.querySelector('#questionForm').requestSubmit();");
+    await wait(()=>Boolean(release));
+    await pause(30_400);
+    assert.equal(host.panel,resumed,'查询期间禁止自动关闭');
+    release();
+    await wait(()=>resumedJs("document.querySelector('#reply').dataset.state==='answer'"));
+    await pause(28_000);
+    assert.equal(host.panel,resumed,'回复后获得完整一轮计时');
+    await wait(()=>!host.panel);
+    console.log('PASS：真实 30 秒空闲自动关闭、输入重新计时、鼠标移动和滚轮不续时、草稿恢复、查询期间保持打开。');
+    return;
+  }
+  assert.equal(await js("document.querySelector('#pending').hidden"),true);
+  panel.webContents.send('screen-qa:changed',{state:'error',text:'面板暂不可用。'});
+  await wait(()=>js("document.querySelector('#answer').textContent==='面板暂不可用。'"));
+  assert.equal(await js("document.querySelector('#badge').hidden"),true);
+  if(process.argv.includes('--appearance')){
+    const originalTheme=electron.nativeTheme.themeSource, originalBounds=panel.getBounds();
+    const preview={state:'error',question:'你试着回复我一段100字的内容，介绍下罗马',text:'文字问答失败，请检查连接或稍后重试',retryable:true};
+    for(const theme of ['light','dark']){
+      electron.nativeTheme.themeSource=theme;
+      for(const hasPending of [false,true]){
+        panel.webContents.send('screen-qa:changed',{...preview,hasPending});
+        await wait(()=>js("document.querySelector('#answer').textContent.includes('请检查连接') && matchMedia('(prefers-color-scheme: "+theme+")').matches"
+          +" && document.querySelector('#pending').hidden==="+!hasPending));
+        await js("document.querySelector('#question').focus()");
+        for(const width of [300,originalBounds.width]){
+        panel.webContents.enableDeviceEmulation({screenPosition:'desktop',viewSize:{width,height:originalBounds.height},scale:1});
+        await wait(()=>js('Math.abs(innerWidth-'+width+')<=1'));
+        const layout=await js(`(() => {
+          const rect=id=>document.querySelector(id).getBoundingClientRect();
+          const body=rect('.bubble'), send=rect('#send'), form=rect('form');
+          const firstTool=document.querySelector('#pending').hidden?'#history':'#pending';
+          return {sendInside:send.bottom<form.bottom && form.bottom<body.bottom,
+            badgeFits:!document.querySelector('#badge').hidden && rect('#badge').right<=rect(firstTool).left,
+            toolsFit:rect('#history').right<=rect('#close').left && rect('#close').right<body.right,
+            retryFits:rect('#answer').right<=rect('#retry').left, replyFits:document.querySelector('#reply').scrollHeight<=rect('#reply').height+1,
+            headerBlends:getComputedStyle(document.querySelector('header')).backgroundImage==='none'};
+        })()`);
+        for(const [check,passes] of Object.entries(layout))assert.ok(passes,theme+' '+width+' '+check);
+        }
+      }
+      panel.webContents.disableDeviceEmulation();
+      await snapshot('bubble-'+theme+'.png');
+    }
+    electron.nativeTheme.themeSource=originalTheme;
+    panel.webContents.send('screen-qa:changed',{state:'answer',question:'多行摘要',text:'一\n二\n三\n四\n五\n六\n七\n八\n九\n十'});
+    await wait(()=>js(`(() => {
+      const answer=document.querySelector('#answer'), reply=document.querySelector('#reply'), more=document.querySelector('#full');
+      return answer.textContent.includes('十') && answer.scrollHeight>answer.clientHeight && !more.hidden
+        && more.getBoundingClientRect().bottom<=reply.getBoundingClientRect().bottom && getComputedStyle(reply).overflowY==='clip';
+    })()`));
+    console.log('PASS：问答气泡浅深色、300/360 像素宽、失败提示、重试、焦点和多行回复的无滚动预览。');
+    return;
+  }
+  await js("document.querySelector('#question').value='你好';document.querySelector('#question').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true}));");
+  await wait(()=>js("document.querySelector('#answer').textContent==='你好呀'"));assert.equal(captures,0);
+  await js("document.querySelector('#question').value='介绍下罗马';document.querySelector('#questionForm').requestSubmit()");
+  await wait(()=>js("document.querySelector('#answer').textContent==='罗马坐落在台伯河畔。'"));
+  assert.equal(romeAttempts,2);
+  await js("document.querySelector('#withScreen').click()");
+  await js("document.querySelector('#question').value='现在有天气预警吗';document.querySelector('#questionForm').requestSubmit();");
+  await wait(()=>js("document.querySelector('#answer').textContent.includes('小仓北区')"));
+  assert.match(await js("document.querySelector('#answer').textContent"),/小仓北区.*晴.*16°C/);
+  assert.equal(captures,0);assert.equal(calls,0);
   mode='waiting';await js("document.querySelector('#question').value='这个报错是什么意思？';document.querySelector('#questionForm').requestSubmit();");
   await wait(()=>Boolean(release));assert.equal(await js("document.querySelector('#reply').dataset.state"),'waiting');
   await snapshot('waiting.png');mode='answer';release();
   await wait(()=>js("document.querySelector('#reply').dataset.state==='answer'"));
   assert.equal(captures,1);assert.equal(calls,1);await snapshot('answer.png');
-  mode='error';await js("document.querySelector('#questionForm').requestSubmit()");await wait(()=>js("document.querySelector('#reply').dataset.state==='error'"));
+  mode='error';await js("document.querySelector('#question').value='这个报错是什么意思？';document.querySelector('#questionForm').requestSubmit()");await wait(()=>js("document.querySelector('#reply').dataset.state==='error'"));
   assert.equal(captures,2);assert.equal(calls,3);assert.equal(await js("document.querySelector('#retry').hidden"),false);
   await snapshot('error.png');
   mode='answer';await js("document.querySelector('#retry').click()");await wait(()=>js("document.querySelector('#reply').dataset.state==='answer'"));assert.equal(captures,2);assert.equal(calls,4);
   mode='long';await js("document.querySelector('#questionForm').requestSubmit()");await wait(()=>js("document.querySelector('#answer').textContent.startsWith('<img')"));
   assert.equal(await js("document.querySelectorAll('#reply img').length"),0);assert.equal(await js('document.documentElement.scrollWidth<=innerWidth'),true);
-  assert.equal(await js("document.querySelector('#reply').scrollHeight>document.querySelector('#reply').clientHeight"),true);
-  await snapshot('long-answer.png');
-  assert.equal(await js("Object.keys(window.screenQuestion).sort().join(',')"),'ask,close,fit,onLayout,onState,retry,state');
+  assert.equal(await js("Array.from(new Intl.Segmenter().segment(document.querySelector('#answer').textContent)).length"),50);
+  assert.equal(host.details,null);
+  await js("document.querySelector('#full').click()");
+  await wait(()=>host.details&&!host.details.webContents.isLoading());
+  const historyJs=code=>host.details.webContents.executeJavaScript(code);
+  await wait(()=>historyJs("Boolean(document.querySelector('details[open] p')?.textContent.includes('只能确定'))"));
+  assert.ok(await historyJs("document.querySelector('details[open] p').textContent.length")>50);
+  assert.ok(await historyJs("document.querySelectorAll('details').length")>=4);
+  assert.equal(await historyJs("document.querySelectorAll('img').length"),0);
+  assert.ok(await historyJs("[...document.querySelectorAll('details')].some(n=>n.querySelector('summary').textContent.includes('介绍下罗马')&&n.textContent.includes('罗马坐落在台伯河畔。')&&n.querySelector('.failure-log')?.textContent.includes('HTTP 504 · TIMEOUT'))"));
+  assert.ok(await historyJs("Array.from(document.querySelectorAll('.failure-log')).some(n=>n.textContent.includes('第 1 次请求')&&n.textContent.includes('第 2 次请求')&&n.textContent.includes('HTTP 504')&&n.textContent.includes('AI_TIMEOUT'))"));
+  assert.equal(await historyJs("Array.from(document.querySelectorAll('summary')).filter(n=>n.textContent.includes('手动重试')).length"),1);
+  assert.equal(await historyJs("Array.from(document.querySelectorAll('summary')).filter(n=>n.textContent.includes('这个报错是什么意思')).length"),4);
+  const historyPanel=host.details;
+  await js("document.querySelector('#history').click()");
+  await wait(()=>historyJs("!document.querySelector('details[open]')"));
+  assert.equal(host.details,historyPanel);
+  await host.openReview();await wait(()=>historyJs("document.querySelector('.event')?.textContent.includes('检查资料 · 完成提醒 · 已核实完成')"));
+  await historyJs("document.querySelector('#chat').click()");await wait(()=>historyJs("document.querySelectorAll('details').length>=4"));
+  historyPanel.destroy();
+  assert.equal(searched.length,0);
+  const submit=async text=>{await js("document.querySelector('#question').value="+JSON.stringify(text)+";document.querySelector('#questionForm').requestSubmit()");};
+  await host.open('registration');assert.equal(host.panel,panel);
+  await wait(()=>js("document.querySelector('#mode').value==='registration'"));
+  await submit('午饭拉面');await wait(()=>js("document.querySelector('#answer').textContent.includes('已登记')"));
+  assert.deepEqual(registered,['午饭拉面']);
+  await submit('上网搜一下 Firefox');await wait(()=>js("document.querySelector('#answer').textContent.includes('搜索结果 Firefox')"));
+  await submit('FluxJet 是什么？');await wait(()=>js("document.querySelector('#answer').textContent.includes('搜索结果 FluxJet')"));
+  assert.deepEqual(searched,['Firefox','FluxJet']);assert.equal(captures,3);
+  const pick=value=>js("document.querySelector('#mode').value="+JSON.stringify(value)
+    +";document.querySelector('#mode').dispatchEvent(new Event('change'));true;");
+  assert.deepEqual(await js("Array.from(document.querySelector('#mode').options,x=>x.textContent)"),['自动','登记','查询网络','查询记忆（未开放）']);
+  assert.equal(await js("document.querySelector('option[value=web]').disabled"),false);
+  assert.equal(await js("document.querySelector('option[value=memory]').disabled"),true);
+  await pick('memory');
+  assert.equal(await js("document.querySelector('#send').disabled"),true);
+  await submit('只留入口');
+  assert.equal(await js("document.querySelector('#send').textContent"),'暂未开放');
+  assert.deepEqual(searched,['Firefox','FluxJet']);
+  await pick('web');
+  assert.equal(await js("document.querySelector('#withScreen').disabled"),true);
+  assert.equal(await js("document.querySelector('#withScreen').checked"),false);
+  await submit('Firefox 最新版本');
+  await wait(()=>js("document.querySelector('#answer').textContent.includes('据发布公告')"));
+  assert.equal(await js("document.querySelector('#full').hidden"),false);
+  assert.deepEqual(searched,['Firefox','FluxJet','Firefox 最新版本']);assert.equal(captures,3);
+  assert.deepEqual(registered,['午饭拉面']);
+  await submit('把周报的内容改为定稿');
+  await wait(()=>js("document.querySelector('#answer').textContent.includes('选择一个或多个')"));
+  await wait(()=>js("!document.querySelector('#pending').hidden"));
+  await js("document.querySelector('#pending').click()");
+  await wait(()=>host.details&&historyJs("document.querySelectorAll('.candidate input').length===2"));
+  await historyJs("for(const box of document.querySelectorAll('.candidate input'))box.click();[...document.querySelectorAll('button')].find(b=>b.textContent==='查看修改方案').click()");
+  await wait(()=>historyJs("document.querySelector('#turns').textContent.includes('初稿 → 定稿')"));
+  host.details.destroy();assert.equal(reminderWrites.length,0);
+  await js("document.querySelector('#pending').click()");
+  await wait(()=>host.details&&historyJs("document.querySelectorAll('.event h3').length===2"));
+  await historyJs("[...document.querySelectorAll('button')].find(b=>b.textContent==='同意这组修改').click()");
+  try{await wait(()=>historyJs("document.querySelector('#status').textContent.includes('已更新')"));}
+  catch(error){throw Error(error.message+' · 提醒写入 '+reminderWrites.length+' · '+await historyJs("document.querySelector('#status').textContent"));}
+  assert.equal(reminderWrites.length,2);host.details.destroy();
+  await wait(()=>js("document.querySelector('#pending').hidden"));
+  await submit('把编号1的标题改为周报归档');
+  await wait(()=>js("document.querySelector('#answer').textContent.includes('修改方案')"));
+  await submit('我同意');await wait(()=>js("document.querySelector('#answer').textContent.includes('先打开')"));
+  assert.equal(reminderWrites.length,2);
+  await js("document.querySelector('#pending').click()");
+  await wait(()=>host.details&&historyJs("document.querySelector('#turns').textContent.includes('周报归档')"));
+  host.details.destroy();await submit('我不同意');
+  await wait(()=>js("document.querySelector('#answer').textContent.includes('已放弃')"));
+  await wait(()=>js("document.querySelector('#pending').hidden"));
+  assert.equal(reminderWrites.length,2);
   const before=panel.getBounds();pet.setBounds({x:400,y:400,width:240,height:360});await wait(()=>panel.getBounds().x!==before.x);
+  mode='waiting';release=null;
+  await js("if(!document.querySelector('#withScreen').checked)document.querySelector('#withScreen').click()");
+  await submit('  关闭时也应保留原文  ');await wait(()=>Boolean(release));
   await js("document.querySelector('#close').click()");await wait(()=>!host.panel);
-  console.log('PASS：真实Electron窄IPC/输入/等待/回答/两次失败/原图手动重试/文本安全/长文滚动/跟随/关闭；仅合成图片和mock模型。');
+  release();await host.openReview();
+  await wait(()=>historyJs("document.querySelector('#tasks').getAttribute('aria-pressed')==='true'"));
+  await historyJs("document.querySelector('#chat').click()");
+  await wait(()=>historyJs("Array.from(document.querySelectorAll('summary')).some(n=>n.textContent.endsWith('  关闭时也应保留原文  '))"));
+  console.log('PASS：真实Electron问答/天气/50字预览/历史/登记/搜索/提醒多选/关闭重开/整组同意/单项拒绝/跟随和关闭。使用合成测试数据。');
 }catch(error){console.error(error.stack);process.exitCode=1;}
 finally{host?.close();pet?.destroy();electron.app.exit(process.exitCode||0);}}
 run().catch(error=>{console.error(error.stack);electron.app.exit(1);});

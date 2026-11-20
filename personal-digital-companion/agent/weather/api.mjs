@@ -1,6 +1,6 @@
-const locations = new Map([
-  ['kokurakita', '33.88/130.88'], ['weiyang', '34.31/108.95'], ['yongshou', '34.69/108.14'],
-]);
+import {WEATHER_PLACES} from './data.mjs';
+import {matchWeatherQuestion, answerWeatherQuestion} from './question.mjs';
+const locations = new Map(WEATHER_PLACES.map(place => [place.id, place.coordinates]));
 const japan = new Map([
   ['alerts', 'warning/data/r8/400000.json'], ['tracks', 'typhoon/data/targetTc.json'],
   ['bulletins', 'information/data/r8/information.json'],
@@ -52,4 +52,15 @@ export async function handleWeather(request, env, {fetcher = fetch, now = Date.n
     if (!response.ok) return error(502, 'WEATHER_UPSTREAM_ERROR');
     return reply(await response.json());
   } catch { return error(502, 'WEATHER_UPSTREAM_ERROR'); }
+}
+
+export async function weatherReply(text, request, env, options) {
+  const query = matchWeatherQuestion(text);
+  if (!query) return null;
+  const get = (path, init) => handleWeather(new Request(new URL(path, request.url), init), env, options);
+  try {
+    return {text: await answerWeatherQuestion(query, get, request.signal, options?.now?.())};
+  } catch (error) {
+    return {error: error.code === 'WEATHER_NOT_CONFIGURED' ? 'WEATHER_NOT_CONFIGURED' : 'WEATHER_UNAVAILABLE'};
+  }
 }

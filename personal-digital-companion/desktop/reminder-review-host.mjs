@@ -1,7 +1,9 @@
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {createPanelWindow} from './panel-window.mjs';
 
-export function attachReminderReview({BrowserWindow, ipcMain}, {bundle, root, flow, visible = true}) {
+export function attachReminderReview(electron, {bundle, root, flow, visible = true}) {
+  const {ipcMain}=electron;
   const entry = resolve(bundle, 'reminder-review.html');
   const url = pathToFileURL(entry).href;
   const handlers = {'reminder-review:load': () => flow.load(), 'reminder-review:apply': choices => flow.apply(choices)};
@@ -19,9 +21,9 @@ export function attachReminderReview({BrowserWindow, ipcMain}, {bundle, root, fl
         if (visible) { panel.show(); panel.focus(); }
         return;
       }
-      const window = new BrowserWindow({title: '绯月 · 今日任务', width: 565, height: 565, minWidth: 360, minHeight: 365,
+      const window = createPanelWindow(electron,{title: '绯月 · 今日任务', width: 565, height: 565, minWidth: 360, minHeight: 365,
         show: false, autoHideMenuBar: true, webPreferences: {preload: resolve(root, 'desktop/reminder-review-preload.cjs'),
-          nodeIntegration: false, contextIsolation: true, sandbox: true}});
+          nodeIntegration: false, contextIsolation: true, sandbox: true}},root);
       panel = window;
       window.webContents.setWindowOpenHandler(() => ({action: 'deny'}));
       window.webContents.on('will-navigate', (event, target) => { if (target !== url) event.preventDefault(); });

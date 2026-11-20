@@ -1,8 +1,10 @@
+import {searchInstruction,searchHint} from './search-hint.mjs';
 import {PC_ID_PATTERN} from '../devices/api.mjs';
 import {validateParameters} from '../tasks/parameters.mjs';
 import {normalizeDeadline} from '../tasks/deadline.mjs';
 import {runProviderChain} from './provider-chain.mjs';
 import {encodeJson} from '../execution/json.mjs';
+import {weatherReply} from '../weather/api.mjs';
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const fields=(v,required,optional=[])=>object(v)&&required.every(k=>Object.hasOwn(v,k))&&Object.keys(v).every(k=>required.includes(k)||optional.includes(k));
 const reply=(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -14,7 +16,7 @@ const system=`你是单用户个人桌面精灵的文字助手。仅返回严格
 PC任务必须选清单中的PC，用户明确选择目标时不得改成其它PC；cloud任务目标必须null。不要返回脚本、URL、工具调用或多任务/链式计划。
 截止时间仅在用户明确提出时填写，必须明确时区；用户时间默认日本东京JST(+09:00)，不可无时区或自行延长。不要输出markdown代码围栏或JSON以外文字。`;
 
-export async function handleAssistantMessage(request,DB,createAiClient,env,ownerId) {
+export async function handleAssistantMessage(request,DB,createAiClient,env,weatherOptions,ownerId) {
   if(request.method!=='POST')return fail(405,'METHOD_NOT_ALLOWED','仅支持POST');
   let body;
   try {
@@ -28,21 +30,34 @@ export async function handleAssistantMessage(request,DB,createAiClient,env,owner
     ||body.messages.some(m=>!fields(m,['role','content'])||!['user','assistant'].includes(m.role)||typeof m.content!=='string'||!m.content.trim())
     ||body.messages.at(-1).role!=='user')return fail(400,'INVALID_MESSAGE','仅接受最多20条用户/助手文字，最后一条须为用户消息');
   if(body.messages.reduce((n,m)=>n+[...m.content].length,0)>6000)return fail(413,'MESSAGE_TOO_LARGE','消息文字总量超过6000字符');
+  async function loadPCs() {
+    const {results} = await DB.prepare('SELECT device_id,computer_name,alias FROM devices ORDER BY device_id').all();
+    return results.filter(d => PC_ID_PATTERN.test(d.device_id));
+  }
+  let pcs;
+  if (Object.hasOwn(body,'target_device_id')) {
+    if (!DB) return fail(503,'DATABASE_NOT_CONFIGURED','任务数据库尚未配置');
+    pcs = await loadPCs();
+    if (!pcs.some(d => d.device_id === body.target_device_id)) return fail(400,'INVALID_TARGET','目标必须为已登记PC');
+  }
+  const weather = await weatherReply(body.messages.at(-1).content,request,env,weatherOptions);
+  if (weather?.error) return fail(weather.error === 'WEATHER_NOT_CONFIGURED' ? 503 : 502, weather.error, '天气服务暂不可用');
+  if (weather) return reply({reply:weather.text,proposal:null});
+  if (!DB) return fail(503,'DATABASE_NOT_CONFIGURED','任务数据库尚未配置');
   const {results:definitions}=await DB.prepare("SELECT * FROM tasklist WHERE type <> 'disk.query' ORDER BY type").all();
-  const {results:devices}=await DB.prepare('SELECT device_id,computer_name,alias FROM devices ORDER BY device_id').all();
-  const pcs=devices.filter(d=>PC_ID_PATTERN.test(d.device_id));
-  if(Object.hasOwn(body,'target_device_id')&&(typeof body.target_device_id!=='string'||!pcs.some(d=>d.device_id===body.target_device_id)))return fail(400,'INVALID_TARGET','目标必须为已登记PC');
+  pcs ??= await loadPCs();
   let catalog;
   try{catalog=definitions.map(({parameter_spec_json,...definition})=>({...definition,parameter_spec:JSON.parse(parameter_spec_json)}));}
   catch{return fail(500,'TYPE_CONFIGURATION_ERROR','任务类型定义无效');}
   const context=JSON.stringify({available_tasks:catalog,devices:pcs,selected_target_device_id:body.target_device_id??null});
-  const messages=[{role:'system',content:system},{role:'user',content:context},...body.messages];
+  const hints=request.headers.get('X-Feiyue-Search-Hint')==='1';
+  const messages=[{role:'system',content:hints?system+searchInstruction:system},{role:'user',content:context},...body.messages];
   if(messages.reduce((n,m)=>n+[...m.content].length,0)>16000)return fail(413,'CONTEXT_TOO_LARGE','清单与消息超出本次AI上下文预算');
   function parse(generated){
     try{
       if(generated.finishReason==='length'||typeof generated.text!=='string'||generated.text.length>16000)throw Error();
       const output=JSON.parse(generated.text);
-      if(!fields(output,['reply','proposal'])||typeof output.reply!=='string'||!output.reply.trim()||[...output.reply].length>2000)throw new Error();
+      if(!fields(output,['reply','proposal'],hints?['search_query']:[])||typeof output.reply!=='string'||!output.reply.trim()||[...output.reply].length>2000)throw new Error();
       let proposal=null;
       if(output.proposal!==null) {
         const p=output.proposal;
@@ -56,7 +71,7 @@ export async function handleAssistantMessage(request,DB,createAiClient,env,owner
           ...(Object.hasOwn(p,'deadline_at')?{deadline_at:normalizeDeadline(p.deadline_at)}:{})};
         encodeJson(proposal);
       }
-      return {reply:output.reply.trim(),proposal};
+      return {reply:output.reply.trim(),proposal,...(hints && !proposal ? searchHint(body.messages.at(-1).content,output.search_query) : {})};
     }catch{throw Object.assign(Error(),{code:'INVALID_AI_RESPONSE'});}
   }
   const prompt={version:1,route:'text',messages,maxOutputTokens:512};

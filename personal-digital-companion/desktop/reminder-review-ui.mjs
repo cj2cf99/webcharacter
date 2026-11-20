@@ -3,6 +3,9 @@ const groups = byId('groups'), report = byId('report'), status = byId('status');
 const apply = byId('apply'), refresh = byId('refresh');
 const selected = new Map();
 let busy = false;
+window.addEventListener('companion-page-update',event=>{
+  if(busy||selected.size||!report.hidden)event.preventDefault();
+});
 
 function node(tag, text = '', className = '') {
   const element = document.createElement(tag);

@@ -1,5 +1,6 @@
-import {appendFile, rename, stat} from 'node:fs/promises';
+import {appendFile, mkdir, open, rename, stat} from 'node:fs/promises';
 import {join} from 'node:path';
+import {tokyoDay} from './conversation-history.mjs';
 
 const timestamp = new Intl.DateTimeFormat('sv-SE', {timeZone: 'Asia/Tokyo', dateStyle: 'short', timeStyle: 'medium'});
 const id = value => typeof value === 'string' && /^[a-z0-9_-]{1,128}$/i.test(value) ? value : undefined;
@@ -35,25 +36,73 @@ function responseSummary(body) {
   };
 }
 
-export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock = Date.now} = {}) {
+export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock = Date.now,memory} = {}) {
   const file = join(profile, 'task-traffic.jsonl');
+  const previous = join(profile,'task-traffic.previous.jsonl');
   let pending = Promise.resolve();
   let failed = false;
+  let indexedDay;
   function write(event) {
     const time = timestamp.format(clock()).replace(' ', 'T') + '+09:00';
     pending = pending.then(async () => {
-      const line = JSON.stringify({time, ...await event}) + '\n';
+      const row={time,...await event},line=JSON.stringify(row)+'\n';
+      if(memory){
+        const day=row.archive_day??row.image?.day??time.slice(0,10),dir=join(memory.folder(day),'日志');
+        await mkdir(dir,{recursive:true});
+        await appendFile(join(dir,'任务通信.jsonl'),line,{encoding:'utf8',mode:0o600});
+        if(indexedDay!==day){await memory.refreshIndex(day);indexedDay=day;}
+        return;
+      }
       const size = await stat(file).then(info => info.size, error => {
         if (error.code === 'ENOENT') return 0;
         throw error;
       });
-      if (size && size + Buffer.byteLength(line) > maxBytes) await rename(file, join(profile, 'task-traffic.previous.jsonl'));
+      if (size && size + Buffer.byteLength(line) > maxBytes) await rename(file, previous);
       await appendFile(file, line, {encoding: 'utf8', mode: 0o600});
     }).catch(() => { failed = true; });
     return pending;
   }
+  // 游标只保留文件标识和字节位置。追加日志不改变已打开阅读的分页边界。
+  async function readPage(cursor,day=tokyoDay(clock())) {
+    await pending;
+    const opened=[];
+    try {
+      const paths=memory?['任务通信.jsonl','历史通信.jsonl'].map(name=>join(memory.folder(day),'日志',name)):[file,previous];
+      for(const path of paths){
+        const handle=await open(path,'r').catch(e=>{if(e.code!=='ENOENT')throw e;return null;});
+        if(handle)opened.push({handle});
+      }
+      for(const entry of opened){
+        const info=await entry.handle.stat({bigint:true});
+        entry.key=[info.dev,info.ino,info.birthtimeNs].join('/');
+        entry.end=Number(info.size);
+      }
+      const files=cursor??opened.filter((entry,i)=>entry.end>0&&opened.findIndex(f=>f.key===entry.key)===i).map(({key,end})=>({key,end}));
+      if(!Array.isArray(files)||files.length>2)throw Error('日志页无效，请刷新。');
+      if(!files.length)return {lines:[],next:null,failed};
+      const [{key,end},...rest]=files,entry=opened.find(f=>f.key===key);
+      if(!entry||!Number.isSafeInteger(end)||end<1||end>entry.end)throw Error('日志已轮转，请刷新后查看。');
+      let offset=end,remaining=40;
+      const chunks=[];
+      while(offset>0&&remaining>0){
+        const start=Math.max(0,offset-16384),chunk=Buffer.alloc(offset-start);
+        const {bytesRead}=await entry.handle.read(chunk,0,chunk.length,start);
+        if(bytesRead!==chunk.length)throw Error('日志已变化，请刷新后查看。');
+        offset=start;
+        let index=chunk.length-1;
+        for(;index>=0;index--){
+          if(chunk[index]===10 && start+index!==end-1 && --remaining===0){offset=start+index+1;break;}
+        }
+        chunks.push(chunk.subarray(index+1));
+      }
+      const lines=Buffer.concat(chunks.reverse()).toString('utf8').replace(/\r?\n$/,'').split(/\r?\n/).reverse();
+      const next=offset?[{key,end:offset},...rest]:rest;
+      return {lines,next:next.length?next:null,failed};
+    } finally {await Promise.all(opened.map(f=>f.handle.close()));}
+  }
   return {
-    file, write, flush: () => pending, failed: () => failed,
+    get file(){return memory?join(memory.folder(tokyoDay(clock())),'日志','任务通信.jsonl'):file;},
+    write, readPage, flush: () => pending, failed: () => failed,
     wrap(request) {
       return async (path, options = {}) => {
         // The query can hold filters and headers carry credentials. Record identifiers and statuses only.

@@ -1,6 +1,7 @@
 import {readFileSync, writeFileSync, renameSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {createPanelWindow} from './panel-window.mjs';
 import {createWeatherService, JMA_WARNING_PAGE, JMA_RADAR_PAGE} from './weather-service.mjs';
 import {JMA_TYPOON_PAGE, JMA_BULLETIN_PAGE} from './jma-typhoon.mjs';
 
@@ -10,7 +11,7 @@ const jmaPages = new Map([
 ]);
 
 export function attachWeather(electron, {bundle, root, profile, service, request, background = true, visible = true}) {
-  const {BrowserWindow, ipcMain, Notification, shell} = electron;
+  const {ipcMain, Notification, shell} = electron;
   const noticePath = resolve(profile, 'weather-notices.json');
   let seen = {};
   try {
@@ -20,21 +21,44 @@ export function attachWeather(electron, {bundle, root, profile, service, request
   let panel = null;
   let closed = false;
   const timers = [];
+  const triggers = new Map();
+  function collectReminder(row, items, category = '官方预警') {
+    const reasons = triggers.get(row.id) ?? [];
+    reasons.push(...items.map(item => ({title: item.title, category})));
+    triggers.set(row.id, reasons);
+  }
   function publish(data) {
     if (panel && !panel.isDestroyed()) panel.webContents.send('weather:changed', data);
+    if (data.busy || !triggers.size) return;
+    const body = data.rows.map(row => {
+      const reasons = triggers.get(row.id) ?? [];
+      const weather = row.current.state === 'ready'
+        ? row.current.value.text + ' ' + row.current.value.temperature + '°C' : '实况未更新';
+      let warnings = '警报未更新';
+      if (row.alerts.state === 'ready') {
+        const titles = new Set([
+          ...reasons.filter(item => item.category === '官方预警').map(item => item.title),
+          ...row.alerts.value.values.map(item => item.title),
+        ]);
+        warnings = [...titles].join('、') || '暂无生效预警';
+      }
+      const extra = reasons.filter(item => item.category !== '官方预警').map(item => item.title);
+      return row.name + '：' + [weather, warnings, ...extra].join(' · ');
+    }).join('\n');
+    triggers.clear();
+    notify(body);
   }
-  function notify(row, alerts, category = '官方预警') {
+  function notify(body) {
     const showPanel = () => void open(false).catch(() => {});
     if (!Notification?.isSupported()) { showPanel(); return; }
-    const body = alerts.slice(0, 3).map(alert => alert.title).join('\n');
-    const notice = new Notification({title: row.name + ' · ' + category, body});
+    const notice = new Notification({title: '绯月 · 三地天气与警报', body});
     notice.on('click', () => void open().catch(() => {}));
     notice.on('failed', showPanel);
     try { notice.show(); } catch { showPanel(); }
   }
   const api = service ?? createWeatherService({
     request,
-    important: notify,
+    important: collectReminder,
     seen,
     saveSeen: value => {
       try {
@@ -68,10 +92,10 @@ export function attachWeather(electron, {bundle, root, profile, service, request
       else if (visible && !panel.isVisible()) panel.showInactive();
       return;
     }
-    const created = new BrowserWindow({title: '绯月 · 三地天气', width: 560, height: 465,
+    const created = createPanelWindow(electron,{title: '绯月 · 三地天气', width: 560, height: 465,
       minWidth: 360, minHeight: 330, show: false, autoHideMenuBar: true,
       webPreferences: {preload: resolve(root, 'desktop/weather-preload.cjs'), sandbox: true,
-        nodeIntegration: false, contextIsolation: true, webSecurity: true, offscreen: !visible}});
+        nodeIntegration: false, contextIsolation: true, webSecurity: true, offscreen: !visible}},root);
     panel = created;
     const entry = resolve(bundle, 'weather.html');
     created.webContents.setWindowOpenHandler(() => ({action: 'deny'}));

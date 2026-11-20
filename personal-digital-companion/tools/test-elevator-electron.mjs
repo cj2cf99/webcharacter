@@ -48,7 +48,7 @@ async function run() {
   const runtime=()=>rig.win.webContents.executeJavaScript('window.desktopHost.getRuntime()');
   const loaded=asset=>wait(async()=> (await runtime())?.resource===asset,'未播放 '+asset);
   await wait(()=>rig.getStats().ready&&rig.attachment.history.length,'桌宠未就绪');
-  const attachmentMenu=()=>item(item(desktopMenu,'指令').submenu,'窗口依附').submenu;
+  const attachmentMenu=()=>item(item(desktopMenu,'桌宠动作').submenu,'窗口依附').submenu;
   rig.pcSettings.open();
   const panel=rig.pcSettings.panel;
   const evaluate=code=>panel.webContents.executeJavaScript(code);

@@ -67,8 +67,9 @@ async function fixture(t, { actions = all, register, fault, pending = [] } = {})
     return call('/api/chains', { nodes, temporary_registration: temporary, submission_id: issued.body.submission_id });
   }
   const savedFile = join(profile, 'registration-submission.json');
-  return { db, env, writes, calls, create, call, savedFile,
-    desktop: () => createRegistrationFlow({ profile, request: request() }) };
+  const events=new Map();
+  return { db, env, writes, calls, create, call, savedFile,events,
+    desktop: () => createRegistrationFlow({ profile, request: request(),record:event=>events.set(event.key,event) }) };
 }
 
 const node = (key, type = 'hu-shi.event.create', params = {}) => ({ key, type, params, target_device_id: null });
@@ -81,6 +82,8 @@ test('桌面提交一次后建一链，主动领取六类节点并等待显式�
   const result = await first;
   assert.equal(result.status, 'completed');
   assert.equal(result.chain.nodes.length, 6);
+  assert.equal([...f.events.values()].filter(event=>event.action==='已核实登记成功').length,6);
+  assert.ok([...f.events.values()].some(event=>event.title==='运动记录'&&event.detail.includes('散步半小时')&&event.action==='发起云端登记'));
   assert.deepEqual(f.writes.map(write => write.path), [
     '/api/records/hu-shi/food/entries', '/api/records/hu-shi/exercise/entries', '/api/records/hu-shi/event/entries',
     '/api/diaries', '/api/records', '/api/reminders',

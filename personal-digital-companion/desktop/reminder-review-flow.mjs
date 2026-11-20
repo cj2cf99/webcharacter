@@ -8,9 +8,16 @@ function allowed(row,choice) {
   return !row.reason&&!row.plannerWork&&reminderReviewActions.includes(choice.action);
 }
 
-export function createReminderReviewFlow({request, canStart = () => true, waitForStart = () => {}}) {
+export function createReminderReviewFlow({request, canStart = () => true, waitForStart = () => {}, pauseItem=()=>false, record = () => {}}) {
   let snapshot, loading = null, running = null, report = null;
   let pendingChecks = new Map();
+  function note(key,row,action,result,detail='') {
+    const verb=action===recordPlannerHours?'登记实际投入':action==='tomorrow'?'顺延提醒':'完成提醒';
+    const state={start:'已发起',recorded:'已核实工时',moved:'已核实顺延',completed:'已核实完成',failed:'请求被拒绝',unknown:'结果待核对'};
+    record({key:key+':'+result,taskId:String(row.id),title:row.title,action:verb+' · '+state[result],detail});
+  }
+  const outcomeDetail=result=>result.result==='recorded'?result.actualHours+' 小时':result.deadline?'新到期时间：'+result.deadline+' JST':result.next?'下次到期：'+result.next+' JST':result.message??'';
+
   async function call(route, body) {
     if (!request) throw Error('请先接通绯月的云端连接。');
     const response = await request(route, body ? {method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -46,7 +53,7 @@ export function createReminderReviewFlow({request, canStart = () => true, waitFo
       if (!check) return item;
       const result = await verify(check.row, item.action, check.tomorrow, item.actualHours, check.taskId).catch(() => null);
       if (!result) return item;
-
+      note(check.key, check.row, item.action, result.result, outcomeDetail(result));
       pendingChecks.delete(item.id);
       return {...item, ...result};
     }));
@@ -107,11 +114,15 @@ export function createReminderReviewFlow({request, canStart = () => true, waitFo
         const fields=action===recordPlannerHours?{actualHours}:{};
         const receipt = {id: row.id, title: row.title, action,...fields};
         await waitForStart();
+        if(pauseItem({id:row.id,action,today,version:row.version,identity:row.identity,...fields})){
+          results.push({...receipt,result:'not_run',message:'已排入重启后的任务'});
+          continue;
+        }
         if (!canStart()) {
           results.push({...receipt, result: 'not_run', message: '本次未执行'});
           continue;
         }
-
+        const key='reminder:'+crypto.randomUUID();
         if(action===recordPlannerHours && row.resolvePlannerWork){
           try{
             const status=await call(path+'/'+row.id);
@@ -121,11 +132,11 @@ export function createReminderReviewFlow({request, canStart = () => true, waitFo
               ![status.reminderVersion,status.version].includes(row.version))throw Error('主站计划已变化，请刷新后重新登记。');
             row={...row,plannerWork:status.plannerWork,version:status.version};
           }catch(error){
-
+            note(key,row,action,'failed',error.message);
             results.push({...receipt,result:'failed',message:error.message});continue;
           }
         }
-
+        note(key,row,action,'start',action===recordPlannerHours?actualHours+' 小时':'');
         let taskId, result;
         try {
           if (action === recordPlannerHours) {
@@ -137,15 +148,15 @@ export function createReminderReviewFlow({request, canStart = () => true, waitFo
           }
         } catch (error) {
           if (action === recordPlannerHours && !taskId || error.status >= 400 && error.status < 500) {
-
+            note(key,row,action,'failed',error.message);
             results.push({...receipt, result: 'failed', message: error.message});
             continue;
           }
         }
         // A lost write response only allows a read. Never repeat a write to obtain its receipt.
         result ??= await verify(row, action, tomorrow, actualHours, taskId).catch(() => null);
-        if (!result) unresolved.set(row.id, {row, tomorrow,taskId});
-
+        if (!result) unresolved.set(row.id, {row, tomorrow,key,taskId});
+        note(key,row,action,result?.result??'unknown',result?outcomeDetail(result):'尚未核实云端是否已执行。');
         results.push({...receipt, ...(result ?? {result: 'unknown', message: '暂时查不到预期结果，请刷新核对。'})});
       }
       report = {results: [...results, ...earlier.map(item => ({...item, earlier: true}))],
@@ -158,5 +169,13 @@ export function createReminderReviewFlow({request, canStart = () => true, waitFo
     try { return await running; } finally { running = null; }
   }
 
-  return {load, apply, activeCount: () => running ? 1 : 0, waitForStop: () => running?.catch(() => {})};
+  return {load, apply, reconcile, hasUnknown:()=>pendingChecks.size>0, current:()=>running,
+    async resume(item){
+      const data=await load();
+      const row=data.items.find(row=>row.id===item.id);
+      if(data.today!==item.today||!row||row.version!==item.version||row.identity!==item.identity||!allowed(row,item))
+        throw Error('待恢复提醒已变化，请在今日任务重新核对。');
+      return apply([item]);
+    },
+    activeCount: () => running ? 1 : 0, waitForStop: () => running?.catch(() => {})};
 }

@@ -93,6 +93,22 @@ test('AI06：独立薄binding一次调用固定模型与预算，缺配置/取�
   await assert.rejects(ai.generate(input,{signal:AbortSignal.abort()}),{code:'CANCELLED'});assert.equal(calls,1);
   const db=fixture();try{assert.equal((await send(worker,db.env)).status,503);}finally{db.close();}
 });
+test('普通文字问答让 Gemma 将输出额度用于正文',async()=>{
+  const db=fixture();
+  try{
+    const prompt='你试着回复我一段100字的内容，介绍下罗马';
+    const env={...db.env,clouflareai:{async run(model,input){
+      assert.equal(model,CLOUDFLARE_MODEL);
+      assert.equal(input.messages.at(-1).content,prompt);
+      assert.equal(input.max_completion_tokens,512);
+      return input.chat_template_kwargs?.enable_thinking===false?
+        {choices:[{message:{content:JSON.stringify({reply:'罗马位于台伯河畔。',proposal:null})},finish_reason:'stop'}]}:
+        {choices:[{message:{content:''},finish_reason:'length'}]};
+    }}};
+    const response=await send(worker,env,{messages:[{role:'user',content:prompt}]});
+    assert.equal(response.status,200);assert.equal(response.body.reply,'罗马位于台伯河畔。');
+  }finally{db.close();}
+});
 test('AI07：主站挂载候选复用真实依赖接口、独立DB及同源，不能Bearer替代宿主登录',async()=>{
   const db=fixture();let options,auth=0,calls=0;
   const mount=createCompanionMount({authorizeMarket:async request=>{auth++;if(request.headers.get('x-test-host')!=='ok')throw Object.assign(new Error(),{status:401});return {ownerId:'owner'};},

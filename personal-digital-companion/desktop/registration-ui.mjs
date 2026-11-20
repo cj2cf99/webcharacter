@@ -21,6 +21,9 @@ const tokyoTime = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Tokyo', mon
 const receiptCharacters = new Intl.Segmenter('zh-CN', { granularity: 'grapheme' });
 let active = false;
 let chainPending = false;
+window.addEventListener('companion-page-update',event=>{
+  if(active||chainPending||text.value||receipts.childElementCount||pending.childElementCount)event.preventDefault();
+});
 
 function element(tag, className, value) {
   const node = document.createElement(tag);

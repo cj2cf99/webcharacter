@@ -4,6 +4,7 @@ import {resolve} from 'node:path';
 import {mkdir} from 'node:fs/promises';
 import {attachWeather} from '../desktop/weather-host.mjs';
 import {loadWeatherAuth} from '../desktop/weather-credentials.mjs';
+import {loadCloudConnection} from '../desktop/cloud-connection.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const profile = process.env.FEIYUE_WEATHER_SETUP_PROFILE;
@@ -13,13 +14,34 @@ async function run() {
   electron.app.setName('绯月桌宠试验');
   electron.app.setPath('userData', profile);
   await electron.app.whenReady();
-  const credentials = await loadWeatherAuth();
-  assert.ok(credentials, '未加载本机天气凭据');
-  const live = await fetch(credentials.origin + '/weather/v1/current/33.88/130.88?lang=zh', {
-    headers: credentials.header(), redirect: 'error', signal: AbortSignal.timeout(9000),
-  });
-  assert.equal(live.status, 200, 'Electron 中的和风天气鉴权失败');
-  await live.body?.cancel();
+  const isolated = process.argv.includes('--isolated');
+  let request;
+  if (isolated) {
+    request = async path => {
+      const [, , , place, kind] = path.split('/');
+      if (kind === 'current') return Response.json({validTime:new Date().toISOString(), condition:{text:'小雨'}, temperature:{value:12}, wind:{speed:{value:2}}});
+      if (kind === 'minimum') {
+        const japan = place === 'kokurakita';
+        const zone = japan ? 'Asia/Tokyo' : 'Asia/Shanghai';
+        const date = new Intl.DateTimeFormat('sv-SE',{timeZone:zone}).format(Date.now());
+        const start = date + (japan ? 'T00:00+09:00' : 'T00:00+08:00');
+        return Response.json({days:[{forecastStartTime:start,forecastEndTime:new Date(Date.parse(start)+86400000).toISOString(),temperatureMin:{unit:'°C',value:2}}]});
+      }
+      if (kind !== 'alerts') return Response.json([]);
+      if (place === 'kokurakita') return Response.json([{warning:{class20Items:[{areaCode:'4010000',kinds:[{code:'03',status:'発表'}]}]}}]);
+      return Response.json({alerts:[]});
+    };
+  } else {
+    const credentials = await loadWeatherAuth();
+    assert.ok(credentials, '未加载本机天气凭据');
+    const live = await fetch(credentials.origin + '/weather/v1/current/33.88/130.88?lang=zh', {
+      headers: credentials.header(), redirect: 'error', signal: AbortSignal.timeout(9000),
+    });
+    assert.equal(live.status, 200, 'Electron 中的和风天气鉴权失败');
+    await live.body?.cancel();
+    request = (await loadCloudConnection(profile))?.request;
+    assert.equal(typeof request, 'function', '需要已配置的天气 Worker 连接');
+  }
   const notifications = [];
   class ObservedNotification {
     static isSupported() { return true; }
@@ -28,8 +50,9 @@ async function run() {
     show() { notifications.push(this.value); }
   }
   const host = attachWeather({...electron, Notification: ObservedNotification},
-    {root, bundle: resolve(root, 'output/desktop-bundle'), profile, background: false, visible: false});
+    {root, bundle: resolve(root, 'output/desktop-bundle'), profile, request, background: true, visible: false});
   try {
+    await host.start();
     await host.open();
     const panel = host.panel;
     const dom = expression => panel.webContents.executeJavaScript(expression);
@@ -47,8 +70,19 @@ async function run() {
     assert.ok(result.rows.every(row => row.minimum.state === 'ready'));
     assert.equal(result.rows[0].japan.tracks.state, 'ready');
     assert.equal(result.rows[0].japan.bulletins.state, 'ready');
-    assert.equal(notifications.filter(item => item.title.endsWith(' · 低温提醒')).length,
-      result.rows.filter(row => row.minimum.value.below).length);
+    assert.ok(notifications.length <= 1);
+    if (isolated) {
+      assert.equal(notifications.length,1);
+      assert.equal(notifications[0].title,'绯月 · 三地天气与警报');
+      const lines = notifications[0].body.split('\n');
+      assert.equal(lines.length,3);
+      for (const [index, row] of result.rows.entries()) {
+        assert.ok(lines[index].startsWith(row.name));
+        assert.match(lines[index], /小雨 12°C/);
+        assert.match(lines[index], index === 0 ? /大雨.*警報/ : /暂无生效预警/);
+        assert.match(lines[index], /最低 2°C/);
+      }
+    }
     const notified = notifications.length;
     await dom('window.feiyueWeather.refresh()');
     assert.equal(notifications.length, notified);
@@ -63,7 +97,7 @@ async function run() {
       assert.equal(await dom("document.querySelectorAll('.minimum').length"), 3);
       assert.equal(await dom("document.querySelectorAll('.links button').length"), 4);
     }
-    console.log('原生面板真实接口通过 · 3 地实况、3 地预警及最低温、JMA 台风动态、双主题窄窗、提醒触发与去重');
+    console.log((isolated ? '原生面板隔离验证' : '原生面板真实接口验证') + '通过 · 三地天气与警报汇总、提醒去重及双主题窄窗');
     console.log(JSON.stringify(result.rows.map(({id, current, alerts, minimum, japan}) => ({
       place: id, temperature: current.value.temperature, validTime: current.value.time,
       dailyMinimum: minimum.value.temperature, date: minimum.value.day, belowThreshold: minimum.value.below,

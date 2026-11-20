@@ -11,8 +11,10 @@ try{
  const oldProfile=JSON.parse(readFileSync(store.file,'utf8'));
  for(const id of Object.keys(WINDOW_NODES))delete oldProfile.config.states[id];
  delete oldProfile.config.confineToScreen;
+ delete oldProfile.idleTimingVersion;oldProfile.config.idleSpecialDelaySeconds=10;
  writeFileSync(store.file,JSON.stringify(oldProfile));
  store=new SettingsStore(dir,bundle);
+ assert.equal(store.snapshot().config.idleSpecialDelaySeconds,60);
  assert.equal(store.snapshot().config.states.windowElevator.slots.loop,'elevator-run');
  assert.equal(store.snapshot().config.states.windowLieSpecial.slots.single,'attachment-lie');
  assert.equal(store.snapshot().config.states.idle.sound.single.volume,42);
@@ -20,11 +22,14 @@ try{
  store.save({target:'pc',confineToScreen:true},'display');
  assert.throws(()=>store.save({target:'pc',confineToScreen:'true'},'display'),/锁定设置无效/);
  const windowConfig=store.snapshot().config;
+ windowConfig.idleSpecialDelaySeconds=10;
  windowConfig.states.windowSit.slots.single='attachment-sit';
  store.save(windowConfig,'animation');
  windowConfig.states.windowSit.sound.single={on:true,volume:62,delay:0,voice:'voice:walk-exit'};
  store.save(windowConfig,'sound');
- const windowNode=new SettingsStore(dir,bundle).snapshot().config.states.windowSit;
+ const reopened=new SettingsStore(dir,bundle).snapshot().config;
+ assert.equal(reopened.idleSpecialDelaySeconds,10,'迁移后显式修改的间隔重开保留');
+ const windowNode=reopened.states.windowSit;
  assert.equal(new SettingsStore(dir,bundle).snapshot().config.confineToScreen,true,'重开及其他域保存保留屏幕设置');
  assert.equal(windowNode.slots.single,'attachment-sit');
  assert.equal(windowNode.sound.single.volume,62);

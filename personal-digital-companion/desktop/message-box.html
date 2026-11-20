@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; base-uri 'none'">
+  <title>绯月</title>
+  <link rel="stylesheet" href="feiyue-surface.css">
+  <link rel="stylesheet" href="message-box.css">
+</head>
+<body>
+  <main id="sheet" role="dialog" aria-labelledby="message" aria-describedby="detail">
+    <header class="fy-titlebar fy-compact">
+      <div class="fy-caption"><strong class="fy-caption-title">绯月</strong></div>
+      <span id="context"></span>
+      <button id="close" aria-label="关闭">×</button>
+    </header>
+    <section class="copy" tabindex="-1">
+      <h1 id="message"></h1>
+      <p id="detail"></p>
+    </section>
+    <footer id="actions" aria-label="可选操作"></footer>
+  </main>
+  <script type="module" src="message-box-ui.mjs"></script>
+</body>
+</html>

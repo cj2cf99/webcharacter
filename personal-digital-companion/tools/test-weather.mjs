@@ -3,6 +3,8 @@ import test from 'node:test';
 import {generateKeyPairSync, verify} from 'node:crypto';
 import {qweatherAuth} from '../desktop/weather-credentials.mjs';
 import {createWorker} from '../agent/worker.mjs';
+import {matchWeatherQuestion} from '../agent/weather/question.mjs';
+import {createScreenQuestionClient} from '../desktop/screen-question-client.mjs';
 import {createWeatherService, parseChinaAlerts, parseJapaneseAlerts, parseDailyMinimum, WEATHER_PLACES} from '../desktop/weather-service.mjs';
 import {JMA_TRACKS, JMA_BULLETINS, parseTyphoonTracks, parseJapanBulletins} from '../desktop/jma-typhoon.mjs';
 
@@ -27,6 +29,100 @@ function viaServer(fetcher) {
       headers: {Authorization: 'Bearer isolated-test'}}), proxyEnv);
   };
 }
+
+test('天气分流区分实况、预报、预警、未覆盖地点和普通问题', () => {
+  for (const text of ['今天天气好不好？', '帮我看下今天的天气', '现在外面几度？']) {
+    const result = matchWeatherQuestion(text);
+    assert.equal(result.kind, 'current', text);
+  }
+  assert.equal(matchWeatherQuestion('父母那边今天有没有雨').kind, 'current');
+  assert.equal(matchWeatherQuestion('三地现在有天气预警吗').kind, 'current');
+  assert.match(matchWeatherQuestion('上海今天气温如何').notice, /本地小仓北区/);
+  assert.match(matchWeatherQuestion('下周天气如何').notice, /今明/);
+  for (const text of ['CPU温度是多少', '帮我翻译天气预报', '天气API怎么用', '解释截图里的天气图标', '提醒我明天查天气']) {
+    assert.equal(matchWeatherQuestion(text), null, text);
+  }
+});
+
+test('文字与旧版截图接口通过已鉴权的天气代理答复；上游失败不触发模型', async () => {
+  const urls = [];
+  let failed = false, models = 0;
+  const model = () => { models++; throw Error('不应调用模型'); };
+  const worker = createWorker({createAiClient:model, createVisionClient:model, weatherOptions:{now:()=>at,
+    fetcher:async url => {
+      urls.push(url);
+      return failed ? new Response(null,{status:502}) : Response.json(url.includes('jma.go.jp') ? [report({code:'03',status:'発表'})] : current);
+    }}});
+  async function ask(screen, token = 'isolated-test') {
+    const question = '我爸妈那边天气如何？';
+    const body = screen ? {question,image:{mime_type:'image/jpeg',data_base64:'/9j/'}} : {messages:[{role:'user',content:question}]};
+    const path = screen ? 'screen-question' : 'message';
+    return worker.fetch(new Request('https://worker.test/api/assistant/'+path, {method:'POST',
+      headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)}),proxyEnv);
+  }
+  assert.equal((await ask(false,'wrong')).status,401);
+  assert.equal(urls.length,0);
+  const message = await (await ask(false)).json(), screen = await (await ask(true)).json();
+  assert.match(message.reply, /北九州市小仓北区.*阴.*11.7°C.*JST/);
+  assert.match(message.reply, /当前警报：.*大雨.*警報/);
+  assert.doesNotMatch(message.reply, /未央|永寿/);
+  assert.equal(message.proposal,null);
+  assert.deepEqual(screen,{ok:true,answer:message.reply});
+  failed = true;
+  for (const withScreen of [true,false]) assert.equal((await (await ask(withScreen)).json()).error.code,'WEATHER_UNAVAILABLE');
+  assert.equal(urls.length,8);
+  assert.equal(urls.filter(url => url.includes('/current/33.88/130.88')).length,4);
+  assert.equal(urls.filter(url => url.includes('jma.go.jp/bosai/warning/')).length,4);
+  assert.equal(models,0);
+});
+
+test('气泡两种提交方式和重试只发天气 GET；勾选截图也不采集屏幕', async () => {
+  const calls = [];
+  let failed = false, captures = 0;
+  const client = await createScreenQuestionClient({screen:{getCursorScreenPoint(){captures++;throw Error();}},
+    request:async (path, options) => {
+      calls.push([path,options.method,options.body]);
+      if (failed) return Response.json({error:{code:'WEATHER_UPSTREAM_ERROR'}},{status:502});
+      return path.endsWith('/alerts') ? Response.json([report()]) : Response.json(current);
+    }});
+  assert.match((await client.askText('今天天气怎么样')).text,/小仓北区.*11.7°C/);
+  assert.match((await client.captureAndAsk('妻子那边有天气预警吗')).text,/小仓北区.*11.7°C[\s\S]*暂无生效预警/);
+  failed = true;
+  const error = await client.captureAndAsk('妻子那边有天气预警吗');
+  assert.equal(error.code,'WEATHER_UNAVAILABLE');
+  failed = false;
+  assert.equal((await client.retryLast()).state,'answer');
+  assert.deepEqual(calls.map(([path])=>path),Array(5).fill(['/api/weather/kokurakita/current','/api/weather/kokurakita/alerts']).flat());
+  assert.ok(calls.every(([,method,body]) => method === 'GET' && body === undefined));
+  assert.equal(captures,0);
+});
+
+test('明天带伞只取小仓当地明日预报，附上当前警报', async () => {
+  const worker = createWorker({weatherOptions:{now:()=>Date.parse('2026-11-19T15:30:00Z'),fetcher:async url => {
+    if (url.includes('jma.go.jp')) return Response.json([report()]);
+    assert.match(url,/daily\/33.88\/130.88/);
+    return Response.json({days:[{...dayForecast('2026-11-21','+09:00',7),
+      daytime:{condition:{text:'小雨'},precipitation:{probability:0.8}},nighttime:{condition:{text:'多云'}}}]});
+  }}});
+  const response = await worker.fetch(new Request('https://worker.test/api/assistant/message',{method:'POST',
+    headers:{Authorization:'Bearer isolated-test'},body:JSON.stringify({messages:[{role:'user',content:'老婆那边明天出门要带伞吗？'}]})}),proxyEnv);
+  assert.match((await response.json()).reply,/小仓北区.*11-21.*白天小雨.*80%.*夜间多云.*最低7°C[\s\S]*当前警报：暂无生效预警/);
+});
+
+test('只缺一项时，气泡保留本地查到的天气或警报', async () => {
+  let alertsFailed = true;
+  const client = await createScreenQuestionClient({request: async path => {
+    const alerts = path.endsWith('/alerts');
+    if (alerts === alertsFailed) return new Response(null,{status:502});
+    return Response.json(alerts ? [report({code:'03',status:'発表'})] : current);
+  }});
+  const weather = await client.askText('今天天气怎么样');
+  assert.match(weather.text,/小仓北区.*11.7°C[\s\S]*当前警报暂不可用/);
+  assert.doesNotMatch(weather.text,/暂无生效预警/);
+  alertsFailed = false;
+  const alerts = await client.askText('有警报吗');
+  assert.match(alerts.text,/小仓北区：天气数据暂不可用[\s\S]*大雨.*警報/);
+});
 
 test('JWT 按真实接口声明签名并包含开发者、项目和凭据标识', () => {
   const {privateKey, publicKey} = generateKeyPairSync('ed25519');

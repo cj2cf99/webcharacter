@@ -11,6 +11,17 @@ public class PetWindowInfo {
 }
 public class PetWindows {
  [StructLayout(LayoutKind.Sequential)] public struct Rect {public int Left,Top,Right,Bottom;}
+ [StructLayout(LayoutKind.Sequential)] private struct LastInput {public uint size,tick;}
+ [DllImport("user32.dll")] private static extern bool GetLastInputInfo(ref LastInput info);
+ [DllImport("kernel32.dll")] private static extern ulong GetTickCount64();
+ private static readonly long bootMs=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-(long)GetTickCount64();
+ // 只传最近输入的时间，不采集按键、文字或鼠标按钮内容。
+ public static long LastInputAt() {
+  var info=new LastInput{size=(uint)Marshal.SizeOf(typeof(LastInput))};
+  if(!GetLastInputInfo(ref info))return 0;
+  ulong uptime=GetTickCount64();
+  return bootMs+(long)uptime-unchecked((uint)uptime-info.tick);
+ }
  public delegate bool EnumProc(IntPtr h,IntPtr p);
  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc fn,IntPtr p);
  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
@@ -54,7 +65,7 @@ public class PetWindows {
 "@
 [void][PetWindows]::SetProcessDpiAwarenessContext([IntPtr](-4))
 while(Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue){
- $data=@{foreground=[PetWindows]::GetForegroundWindow().ToInt64().ToString();windows=@([PetWindows]::Read($ExcludeProcessId))}
+ $data=@{lastInputAt=[PetWindows]::LastInputAt();foreground=[PetWindows]::GetForegroundWindow().ToInt64().ToString();windows=@([PetWindows]::Read($ExcludeProcessId))}
  [Console]::WriteLine(($data|ConvertTo-Json -Compress -Depth 4))
  Start-Sleep -Milliseconds 50
 }

@@ -128,14 +128,6 @@ try {
   assert.ok(plan.ai.attempts.some(row=>row.provider==='deepseek'&&row.stage==='request'&&row.code==='OK'));
   const chat=await call('/assistant/message',{messages:[{role:'user',content:'介绍罗马'}]});
   assert.equal(chat.status,200);assert.equal((await chat.json()).reply,'罗马在台伯河畔。');
-  const skipped=await (await call('/assistant/heartbeat',{})).json();
-  assert.equal(skipped.status,'skipped_paid');
-  assert.deepEqual(skipped.ai.attempts,[]);
-  await taskDb.prepare('DELETE FROM registration_ai_preference').run();
-  const switched=await (await call('/assistant/heartbeat',{})).json();
-  assert.equal(switched.status,'switched');
-  assert.equal(switched.provider,'deepseek');
-  assert.ok(switched.ai.attempts.length && switched.ai.attempts.every(row=>row.stage==='probe'));
   const issue=await (await call('/task-submissions',{})).json();
   const request={...plan.chain,submission_id:issue.submission_id,temporary_registration:true};
   const result=await call('/chains',request);

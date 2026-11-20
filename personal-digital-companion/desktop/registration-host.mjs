@@ -1,7 +1,9 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import {createPanelWindow} from './panel-window.mjs';
 
-export function attachRegistration({ BrowserWindow, ipcMain }, { bundle, root, flow, visible = true }) {
+export function attachRegistration(electron, { bundle, root, flow, visible = true }) {
+  const {ipcMain}=electron;
   let panel = null;
   const entry = resolve(bundle, 'registration.html');
   const url = pathToFileURL(entry).href;
@@ -20,14 +22,14 @@ export function attachRegistration({ BrowserWindow, ipcMain }, { bundle, root, f
       if (visible) { panel.show(); panel.focus(); }
       return;
     }
-    const created = new BrowserWindow({
+    const created = createPanelWindow(electron,{
       width: 468, height: 410, minWidth: 360, minHeight: 320, show: false,
       autoHideMenuBar: true, title: '绯月 · 随口登记',
       webPreferences: {
         preload: resolve(root, 'desktop/registration-preload.cjs'),
         nodeIntegration: false, contextIsolation: true, sandbox: true,
       },
-    });
+    },root);
     panel = created;
     created.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     created.webContents.on('will-navigate', (event, target) => { if (target !== url) event.preventDefault(); });

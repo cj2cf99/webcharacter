@@ -4,9 +4,9 @@ import { validateParameters } from './tasks/parameters.mjs';
 import { handleTaskAction } from './tasks/actions.mjs';
 import { normalizeDeadline } from './tasks/deadline.mjs';
 import { handleRecovery } from './tasks/recover.mjs';
-import {runProviderChain} from './assistant/provider-chain.mjs';
 import {handleAssistantMessage} from './assistant/message.mjs';
 import {planRegistration} from './assistant/registration-plan.mjs';
+import {runProviderChain} from './assistant/provider-chain.mjs';
 import {handleWeather} from './weather/api.mjs';
 import {createBindingAiClient,createBindingVisionClient} from './assistant/cloudflare.mjs';
 import {handleScreenQuestion} from './assistant/screen-question.mjs';
@@ -17,9 +17,11 @@ import {gateSQL,gateBindings} from './chains/rules.mjs';
 import {encodeJson} from './execution/json.mjs';
 import {issueTaskSubmission,isSubmissionId} from './tasks/submissions.mjs';
 import {authorizeDailyLogToken,handleDailyLogs} from './assistant/daily-logs.mjs';
+import {handleReminderEdits} from './host/reminder-edits.mjs';
+import {handleReminderReview} from './host/reminder-review.mjs';
 import {executeCloudRegistration} from './tasks/hu-shi-execution.mjs';
 
-// 单用户开发Bearer边界；本轮不接入独立设备凭据或心跳。
+// 单用户开发 Bearer 边界。
 const json = (body, status = 200, headers = {}) => Response.json(body, {
   status, headers: { 'Cache-Control': 'no-store', ...headers },
 });
@@ -193,9 +195,18 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
     }
     if(sameOriginWrites&&!['GET','HEAD','OPTIONS'].includes(request.method)
       &&(request.headers.get('Origin')!==url.origin||request.headers.get('Sec-Fetch-Site')==='cross-site'))return screen?screenError('SAME_ORIGIN_REQUIRED'):error(403,'SAME_ORIGIN_REQUIRED','仅允许同源写请求');
-    if(screen){try{return await handleScreenQuestion(request,createVisionClient,env);}catch{return screenError('INTERNAL_ERROR');}}
+    if(screen){try{return await handleScreenQuestion(request,createVisionClient,env,weatherOptions);}catch{return screenError('INTERNAL_ERROR');}}
     try {
+      if(path==='/api/reminder-edits'||path.startsWith('/api/reminder-edits/')){
+        const edits=await handleReminderEdits(request,env.COMPANION_HOST,path);
+        if(edits)return edits;
+      }
+      if(path==='/api/reminder-review'||path.startsWith('/api/reminder-review/')){
+        const review=await handleReminderReview(request,env.COMPANION_HOST,path);
+        if(review)return review;
+      }
       if(path.startsWith('/api/weather/'))return await handleWeather(request,env,weatherOptions);
+      if(path==='/api/assistant/message')return await handleAssistantMessage(request,env.DB,createAiClient,env,weatherOptions,identity.ownerId);
       if(!env.DB)return error(503,'DATABASE_NOT_CONFIGURED',dailyLogs?'日志数据库尚未配置':'任务数据库尚未配置');
       if(path==='/api/assistant/heartbeat'){
         if(request.method!=='POST')return error(405,'METHOD_NOT_ALLOWED','仅支持 POST',{Allow:'POST'});
@@ -204,7 +215,6 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
       }
       if(dailyLogs)return await handleDailyLogs(request,url,env,identity.ownerId);
       const chainResponse=await handleChainRequest(request,env.DB,readTasks,identity.ownerId);if(chainResponse)return chainResponse;
-      if(path==='/api/assistant/message')return await handleAssistantMessage(request,env.DB,createAiClient,env,identity.ownerId);
       if(path==='/api/assistant/recording-plan')return await planRegistration(request,env,identity.ownerId,createAiClient,loadRegistrationCategories);
       const terminalResponse = await handleTerminalRequest(request, env.DB);
       if (terminalResponse) return terminalResponse;

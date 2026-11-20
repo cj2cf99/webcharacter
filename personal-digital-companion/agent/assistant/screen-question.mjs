@@ -1,5 +1,7 @@
+import {searchInstruction,searchHint} from './search-hint.mjs';
 import {CLOUDFLARE_MODEL} from './cloudflare.mjs';
 import {screenReply,screenError,screenFault} from './screen-errors.mjs';
+import {weatherReply} from '../weather/api.mjs';
 const bodyLimit=6*1024*1024,imageLimit=4*1024*1024;
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const fields=(v,keys)=>object(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
@@ -37,7 +39,7 @@ async function generate(client,input,signal){
   try{return await Promise.race([Promise.resolve().then(()=>client.generate(input,{signal})),stopped]);}
   finally{clearTimeout(timer);signal.removeEventListener('abort',onAbort);}
 }
-export async function handleScreenQuestion(request,createVisionClient,env){
+export async function handleScreenQuestion(request,createVisionClient,env,weatherOptions){
   if(request.method!=='POST')return screenError('METHOD_NOT_ALLOWED');
   if(request.signal.aborted)return screenError('REQUEST_CANCELLED');
   if(request.headers.get('Content-Type')?.split(';',1)[0].trim().toLowerCase()!=='application/json')return screenError('UNSUPPORTED_MEDIA_TYPE');
@@ -48,10 +50,15 @@ export async function handleScreenQuestion(request,createVisionClient,env){
       ||!fields(body.image,['mime_type','data_base64'])||!['image/png','image/jpeg'].includes(body.image.mime_type))throw screenFault('INVALID_REQUEST');
     validateImage(body.image);
   }catch(error){return screenError(error?.screenCode??'INTERNAL_ERROR');}
+  const weather = await weatherReply(body.question,request,env,weatherOptions);
+  if(request.signal.aborted)return screenError('REQUEST_CANCELLED');
+  if(weather?.error)return screenError(weather.error);
+  if(weather)return screenReply({ok:true,answer:weather.text});
   let client;
   try{client=createVisionClient?.(env);}catch(error){return screenError(['NOT_CONFIGURED','CONFIG_ERROR'].includes(error?.code)?'AI_NOT_CONFIGURED':'INTERNAL_ERROR');}
   if(typeof client?.generate!=='function')return screenError('AI_NOT_CONFIGURED');
-  const messages=[{role:'system',content:system},{role:'user',content:[{type:'text',text:body.question.trim()},
+  const hints=request.headers.get('X-Feiyue-Search-Hint')==='1';
+  const messages=[{role:'system',content:hints?system+searchInstruction:system},{role:'user',content:[{type:'text',text:body.question.trim()},
     {type:'image_url',image_url:{url:`data:${body.image.mime_type};base64,${body.image.data_base64}`}}]}];
   let output;
   try{output=await generate(client,{version:1,route:'vision',messages,maxOutputTokens:1024},request.signal);}
@@ -64,7 +71,7 @@ export async function handleScreenQuestion(request,createVisionClient,env){
   try{
     if(output?.provider!=='cloudflare'||output.model!==CLOUDFLARE_MODEL||output.finishReason==='length'||typeof output.text!=='string'||output.text.length>20000)throw new Error();
     const value=JSON.parse(output.text);
-    if(!fields(value,['answer'])||typeof value.answer!=='string'||!value.answer.trim()||[...value.answer.trim()].length>2000)throw new Error();
-    return screenReply({ok:true,answer:value.answer.trim()});
+    if(!(fields(value,['answer'])||(hints && fields(value,['answer','search_query'])))||typeof value.answer!=='string'||!value.answer.trim()||[...value.answer.trim()].length>2000)throw new Error();
+    return screenReply({ok:true,answer:value.answer.trim(),...(hints?searchHint(body.question,value.search_query):{})});
   }catch{return screenError('INVALID_AI_RESPONSE');}
 }

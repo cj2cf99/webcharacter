@@ -14,7 +14,7 @@ import { createDesktopTasks } from '../../desktop/task-lifecycle.mjs';
 const device = 'pc-12345678-1234-4123-8123-123456789abc';
 const other = 'pc-22345678-1234-4123-8123-123456789abc';
 const tick = () => new Promise(setImmediate);
-test('桌面半小时心跳不重入，退出取消在途请求并清除定时器',{timeout:5000},async t => {
+test('桌面半小时心跳不重入，不阻塞重启，退出取消在途请求并清除定时器',{timeout:5000},async t => {
   t.mock.timers.enable({apis:['setInterval']});
   const profile=mkdtempSync(join(tmpdir(),'companion-heartbeat-'));
   t.after(()=>rmSync(profile,{recursive:true,force:true}));
@@ -45,7 +45,7 @@ test('桌面半小时心跳不重入，退出取消在途请求并清除定时�
   t.mock.timers.tick(1800000);
   await tick();
   assert.equal(beats.length,2);
-  tasks.beginQuitCheck();
+  await tasks.drainForRestart();
   t.mock.timers.tick(1800000);
   await tick();
   assert.equal(beats.length,2);

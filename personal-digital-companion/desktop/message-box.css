@@ -1,0 +1,36 @@
+* {box-sizing:border-box}
+html,body {height:100%;margin:0;background:transparent}
+body {padding:9px;font:14px/1.5 var(--fy-sans);color:var(--fy-ink)}
+#sheet {
+  position:relative;isolation:isolate;display:flex;flex-direction:column;max-height:100%;overflow:hidden;
+  border:1px solid var(--fy-line);border-radius:16px;background:var(--fy-paper);
+  box-shadow:0 3px 8px #271a2429;
+}
+#sheet::before,#sheet::after {
+  content:"";position:absolute;z-index:-1;pointer-events:none;width:160px;height:160px;
+  right:-65px;top:-116px;border:1px solid color-mix(in srgb,var(--fy-gold) 42%,transparent);border-radius:50%;
+}
+#sheet::after {width:182px;height:182px;right:-76px;top:-127px}
+#sheet.sized {height:100%}
+#context {padding-left:10px;border-left:1px solid var(--fy-line);color:var(--fy-muted);font-size:12px}
+button {font:inherit;cursor:pointer}
+.copy {flex:1 1 auto;min-height:0;overflow:auto;padding:12px 24px 19px;scrollbar-width:thin;overflow-wrap:anywhere}
+h1 {margin:0;color:var(--fy-ink);font:700 23px/1.44 var(--fy-serif);white-space:pre-wrap}
+#detail {margin:8px 0 0;color:var(--fy-muted);font-size:13px;line-height:1.65;white-space:pre-wrap}
+#detail:empty {display:none}
+#sheet[data-type=error] #context {color:light-dark(#983d51,#f4abc0)}
+#actions {display:flex;flex:none;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding:12px 20px;border-top:1px solid var(--fy-line);background:var(--fy-surface)}
+#actions button {
+  min-width:72px;max-width:100%;padding:7px 15px;overflow-wrap:anywhere;
+  border:1px solid var(--fy-line);border-radius:7px;color:var(--fy-ink);background:transparent;
+}
+#actions .primary {background:var(--fy-accent);color:var(--fy-on-accent);border-color:var(--fy-accent)}
+#actions button:hover {border-color:var(--fy-gold)}
+#actions.list {display:grid;grid-template-columns:1fr;justify-content:stretch;max-height:52vh;overflow:auto;scrollbar-width:thin}
+#actions.list button {text-align:left}
+:focus-visible {outline:2px solid var(--fy-gold);outline-offset:2px}
+@media(prefers-reduced-motion:no-preference) {
+  .copy {animation:arrive .16s ease-out}
+  button {transition:border-color .12s,background-color .12s}
+}
+@keyframes arrive {from{opacity:.55;transform:translateY(2px)}}

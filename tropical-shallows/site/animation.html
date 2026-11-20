@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#10292a"><title>热带浅滩 · 离线旧版</title>
+<link rel="icon" href="data:,"><link rel="stylesheet" href="style.css">
+<body>
+<header><div class="title"><span class="sun" aria-hidden="true">☀</span><h1>热带浅滩</h1><span class="tag">离线旧版</span></div><div class="modes" role="group" aria-label="查看范围"><a href="./" style="color:inherit;align-self:center;margin-right:8px">实时3D ↗</a><button data-mode="full" aria-pressed="true">整体</button><button data-mode="shore" aria-pressed="false">岸边特写</button></div></header>
+<main>
+<section class="viewer" aria-label="热带浅滩动态场景">
+<video id="scene" poster="assets/poster.png" controls autoplay muted loop playsinline preload="metadata" aria-label="完整场景动画，可暂停、拖动进度和全屏"></video>
+<div id="loading" role="status"><span class="ripple" aria-hidden="true"></span><span id="loading-text">正在加载完整动画…</span><button id="retry" hidden>重试</button></div>
+</section>
+<footer><span><i id="dot"></i><span id="state" aria-live="polite">加载中</span></span><span id="quality"></span><span class="note">更新前动画 · 固定机位</span></footer>
+</main>
+<script type="module" src="player.mjs"></script>
+</body></html>

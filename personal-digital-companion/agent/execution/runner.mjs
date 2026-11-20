@@ -4,9 +4,10 @@ import { randomUUID } from 'node:crypto';
 import { DEVICE_ID_PATTERN } from '../devices/identity.mjs';
 import { encodeJson, copyJson } from './json.mjs';
 import { recoverySnapshot, validRecovery } from './recovery-data.mjs';
+import { taskReview } from './review.mjs';
 
 // 只供已认证的可信宿主显式调用，不监听网络，不领取或调度其它任务。
-export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canExecute = () => true, waitForExecution = async () => {} } = {}) {
+export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canExecute = () => true, waitForExecution = async () => {},onReviewChanged } = {}) {
   if (typeof databasePath !== 'string' || !databasePath.trim()) throw new Error('必须指定本地数据库路径');
   if (typeof deviceId !== 'string' || !DEVICE_ID_PATTERN.test(deviceId)) throw new Error('必须指定本机固定PC标识');
   const registered = new Map();
@@ -25,6 +26,7 @@ export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canE
       SELECT task_id,type,NULL FROM local_tasks`);
   } catch (error) { db.close(); throw error; }
   const active = new Set();
+  const review=taskReview(db,{onChange:onReviewChanged});
   let interrupted = false;
 
   function transaction(work) {
@@ -82,7 +84,7 @@ export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canE
     if (active.has(task.task_id)) throw new Error('该任务正在本进程执行');
     active.add(task.task_id);
     try {
-      prepare(task);
+      prepare(input);
       while (true) {
         await waitForExecution();
         if (interrupted || !canExecute()) throw Object.assign(new Error('任务已中断，保留原记录'), {code:'INTERRUPTED'});
@@ -97,9 +99,10 @@ export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canE
           const now = new Date().toISOString();
           db.prepare(`UPDATE local_tasks SET status='RUNNING',attempt_count=?,updated_at=?,error=NULL WHERE task_id=?`).run(number, now, task.task_id);
           db.prepare(`INSERT INTO executions (execution_id,task_id,attempt_no,status,started_at) VALUES (?,?,?,'RUNNING',?)`).run(executionId, task.task_id, number, now);
-          return { executionId, number };
+          return { executionId, number, startedAt:now };
         });
         if (!attempt) return getTask(task.task_id);
+        onReviewChanged?.(attempt.startedAt);
         let result = null;
         let failure = null;
         try { result = copyJson(await registered.get(task.type).execute(copyJson(task.params))); }
@@ -108,8 +111,8 @@ export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canE
           failure = '任务执行失败';
         }
         // 保存失败只针对工具调用；SQLite保存故障绝不被当作工具失败再执行。
+        const now = new Date().toISOString();
         transaction(() => {
-          const now = new Date().toISOString();
           const status = failure ? 'FAILED' : 'COMPLETED';
           const taskStatus = failure && attempt.number === 1 ? 'RUNNING' : status;
           const serialized = result === null ? null : encodeJson(result);
@@ -118,6 +121,8 @@ export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canE
           db.prepare('UPDATE local_tasks SET status=?,updated_at=?,result_json=?,error=? WHERE task_id=?')
             .run(taskStatus, now, serialized, failure, task.task_id);
         });
+        onReviewChanged?.(attempt.startedAt);
+        if(now!==attempt.startedAt)onReviewChanged?.(now);
         if (!failure || attempt.number === 2) return getTask(task.task_id);
       }
     } finally { active.delete(task.task_id); }
@@ -140,7 +145,7 @@ export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canE
     return getRecovery(id);
   }
   return {
-    prepare, execute, getTask, getRecovery, decideRecovery,
+    prepare, execute, getTask, getRecovery, decideRecovery, review,
     claimRequestId(id) {
       const row=db.prepare('SELECT claim_request_id FROM local_task_metadata WHERE task_id=?').get(id);
       if(!row)throw new Error('必须先保存本地任务再申请领取');
@@ -152,8 +157,19 @@ export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canE
       ...getTask(row.task_id),metadata:db.prepare('SELECT * FROM local_task_metadata WHERE task_id=?').get(row.task_id)||null,
       recovery:getRecovery(row.task_id),active:active.has(row.task_id),
     })); },
-    markUploaded(id) { db.prepare('UPDATE local_task_metadata SET uploaded=1 WHERE task_id=?').run(id); },
-    acknowledgeRecovery(id) { db.prepare('UPDATE local_recoveries SET acknowledged=1 WHERE task_id=?').run(id); },
+    markUploaded(id) { transaction(()=>{
+      const task=db.prepare('SELECT name FROM local_task_metadata WHERE task_id=? AND uploaded=0').get(id);
+      if(!task)return;
+      review.record({key:'upload:'+id,taskId:id,title:task.name,action:'云端已确认收到本机执行结果'});
+      db.prepare('UPDATE local_task_metadata SET uploaded=1 WHERE task_id=?').run(id);
+    }); },
+    acknowledgeRecovery(id) { transaction(()=>{
+      const saved=getRecovery(id), task=db.prepare('SELECT name FROM local_task_metadata WHERE task_id=?').get(id);
+      if(!saved||saved.acknowledged)return;
+      const next=saved.payload.replacement_task_id;
+      review.record({key:'recovery:'+id,taskId:id,title:task.name,action:next?'已确认重做':'已确认放弃原任务',detail:next?'新任务编号：'+next:''});
+      db.prepare('UPDATE local_recoveries SET acknowledged=1 WHERE task_id=?').run(id);
+    }); },
     discardRejectedRecovery(id) { db.prepare('DELETE FROM local_recoveries WHERE task_id=? AND acknowledged=0').run(id); },
     activeCount() { return active.size; },
     interrupt() { interrupted=true; },
