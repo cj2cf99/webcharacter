@@ -46,7 +46,9 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     async onFinish(row){
       if(disposed)return;
       const at=Date.now(),text=[row.text,row.archiveWarning,row.archivedOutput??row.output??row.completed?.at(-1)?.output].filter(Boolean).join('\n');
-      const turn={id:row.job,at:row.at,answeredAt:at,question:row.original,state:row.state==='done'?'answer':'error',text};
+      const turn={id:row.job,at:row.at,answeredAt:at,question:row.original,state:row.state==='done'?'answer':'error',text,
+        ...(row.serverTaskId?{serverTaskId:row.serverTaskId}:{imageJob:row.job})};
+      if(!row.serverTaskId&&latest?.imageJob===row.job)latest={...turn,text:row.text,imageJob:row.job};
       if(records!==memory||!memory?.archiveImageTask)try{await records.save(turn);}catch{unsavedReplies.set(turn.id,turn);}
       if(!panel&&visible&&electron.Notification?.isSupported()){
         const note=new electron.Notification({title:'绯月 · 图像任务',body:row.text});
@@ -177,14 +179,23 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     }
     if(mode==='auto'&&!args?.withScreen&&conversationRoute(text).kind==='question'&&files.every(f=>f.kind==='image')&&imageRequest(text,files.length)){
       return track(async()=>{
+        if(busy)return {state:'error',code:'BUSY',text:'正在处理上一条。'};
+        busy=true;
+        const token=++generation;
+        publish({state:'waiting',question:text,text:'正在提交图像任务…'},token);
         try{
           const row=await images.submit(text,files);
-          return {state:'answer',question:text,text:row.text};
+          if(token!==generation)return cancelled();
+          const result={state:'answer',question:text,text:row.text,imageJob:row.job};
+          latest={...result,id:row.job,at:row.at};
+          publish(result,token);
+          return result;
         }catch(error){
           const turn={id:crypto.randomUUID(),at:Date.now(),question:text,state:'error',text:error.message};
+          if(token===generation){latest=turn;publish(turn,token);}
           try{await records.save({...turn,answeredAt:Date.now()});}catch{unsavedReplies.set(turn.id,turn);}
           return turn;
-        }
+        }finally{if(token===generation)busy=false;}
       });
     }
     if(extra.length)return {state:'error',text:'请说明如何使用这些参考图，例如“把图1的外套换成图2的”。'};
@@ -571,13 +582,15 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   }
   const handlers={
     'screen-qa:attachment-review':(_e,value)=>typeof value?.approve==='boolean'?inquiry.respond(value.id,{action:value.approve?'confirm':'cancel'}):{state:'error',text:'无效的登记操作。'},
-    'screen-qa:image-list':async()=>Promise.all((await images.list()).slice(0,8).map(async row=>{
+    'screen-qa:image-list':async()=>{
+      const [row]=await images.list(state.imageJob??null);
+      if(!row)return [];
       const path=await images.result(row.job);
-      if(!path)return row;
+      if(!path)return [row];
       let preview;
       try{preview=(await electron.nativeImage.createThumbnailFromPath(path,{width:110,height:80})).toDataURL();}catch{}
-      return {...row,preview,canOpen:true};
-    })),
+      return [{...row,preview,canOpen:true}];
+    },
     'screen-qa:image-open':(_e,job)=>openImage(job),
     'screen-qa:state':view,
     'screen-qa:ask':(_e,q)=>ask(q),
@@ -625,11 +638,18 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const today=tokyoDay(Date.now());
     if(!latest||tokyoDay(latest.at)!==today){
       let stored;
-      try{stored=await records.latest?.(today);}catch{}
+      try{
+        stored=await records.latest?.(today);
+        if(stored?.report?.serverTaskId||stored?.serverTaskId){
+          stored=null;
+          stored=(await records.read(today)).find(turn=>!turn.report?.serverTaskId&&!turn.serverTaskId);
+        }
+      }catch{}
       if(panel!==created||created.isDestroyed())return;
       latest=stored??null;
     }
-    if(latest)state={state:latest.state??'answer',question:latest.question,text:latest.text,sources:latest.sources};
+    if(latest)state={state:latest.state??'answer',question:latest.question,text:latest.text,sources:latest.sources,
+      imageJob:latest.imageJob??latest.report?.job};
     if(panel!==created||created.isDestroyed())return;
     try{await created.loadFile(entry);}catch(error){if(panel!==created||created.isDestroyed())return;created.destroy();throw error;}
     if(disposed||panel!==created||created.isDestroyed())return;

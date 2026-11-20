@@ -18,6 +18,7 @@ const webMode=mode.querySelector('option[value="web"]');
 let busy=false,composing=false,idleTimer,draftReady=false;
 let attachment=null,reading=false,attachmentReady=false;
 let references=[],audit=false;
+let imageJob=null,imageRequest=0;
 
 const resetIdle=()=>{
   clearTimeout(idleTimer);
@@ -95,6 +96,15 @@ document.addEventListener('paste',event=>{
 byId('removeAttachment').onclick=()=>{showAttachment(null);attachmentError();retry.hidden=true;question.focus();};
 function render(value){
   if(!value||!['idle','waiting','answer','error'].includes(value.state))return;
+  const job=value.imageJob??null;
+  if(job!==imageJob){
+    imageJob=job;
+    imageRequest++;
+    const list=byId('imageResults');
+    list.hidden=true;
+    list.replaceChildren();
+    if(job)void refreshImages();
+  }
   const waiting=value.state==='waiting';
   if(waiting!==busy){busy=waiting;resetIdle();}
   reply.dataset.state=value.state;reply.setAttribute('aria-busy',String(busy));
@@ -190,12 +200,14 @@ if(!host.details){
 resetIdle();
 window.addEventListener('pagehide',()=>{clearTimeout(idleTimer);off.forEach(remove=>remove?.());});
 
-let listRequest=0;
 async function refreshImages(){
-  if(!host.imageList)return;
-  const current=++listRequest;
-  const rows=await host.imageList();
-  if(current!==listRequest)return;
+  if(!imageJob||!host.imageList)return;
+  const current=++imageRequest;
+  let rows;
+  try{rows=await host.imageList();}
+  catch{if(current===imageRequest)attachmentError('图像任务记录暂时无法读取。');return;}
+  if(current!==imageRequest)return;
+  rows=rows.filter(row=>row.job===imageJob);
   const list=byId('imageResults');
   list.hidden=!rows.length;
   list.replaceChildren(...rows.map(row=>{
@@ -208,6 +220,4 @@ async function refreshImages(){
   }));
   if(rows.length)host.fit(Math.min(420,Math.max(320,innerHeight)));
 }
-const refresh=()=>{void refreshImages().catch(()=>attachmentError('图像任务记录暂时无法读取。'));};
-if(host.onImages)off.push(host.onImages(refresh));
-refresh();
+if(host.onImages)off.push(host.onImages(refreshImages));

@@ -461,3 +461,10 @@ Qwen 会话通过 local-model-process.mjs 中的 systemPrompt 加载绯月人设
 Windows 旧 PID 33608 经原生窗口正常退出，安装前备份清单到准备目录 desktop-previous，安装后 04:18:04 JST 核验新 PID 23400、35 个文件、原资料目录、快捷方式、登录启动项和 /infoguide。使用临时资料从正式目录复验冷启动复盘和任务详情，候选气泡复测通过。保留桌宠本机动画文件。Access 线上页面效果待用户截图确认。
 
 确认后的精确清单及 SQL 已提交 e27038c。重启后的绯月在 04:20:37 JST 接收唯一批次 feiyue-seven-20261121，04:23:58 核对步骤，04:24:03 回读结束，state=done、revision=106。花园将网页角色组件 #16 的绯月（桌面精灵）#61 从 5.2 升至 6.0，新增发布 #55 与明细 #125，收录七项桌宠及配套云端更新。机器回执位于主站 database/changes/feiyue-seven-20261121/release-receipt.json。
+
+## 2026-11-21 JST · 问绯月的单回合图片卡
+
+旧气泡在打开及图像回执变化时取最近八条任务。本次将图片卡关联到当前提问的作业编号，切换回合即清空卡片并使在途缩略图失效。冷启动恢复当天最近一次用户对话时跳过独立服务器生图。沿用现有本机归档、对话状态与缩略图读取接口。依据为 SCREEN_QA_REQUIREMENTS.md 的用户反馈、TASK_TEMPLATE_PREVIEW.md 的备忘录索引及全局 FRAMEWORK_PREFERENCES.md 的紧凑和按需加载约定。正式安装基线上的候选通过问答与服务器生图 25 项测试、真实 Electron 单回合气泡专项及七面板回归。使用合成 PNG 和临时资料。候选清单和日志在 output/bubble-turn-l9an2toc。当前等待本次安装许可。
+
+
+2026-11-21 04:37:10 JST 已按用户确认安装并重启，本次不登记花园。首次关闭请求未退出宿主，核对桌宠主窗口后重试并正常退出 PID 23400。备份见 output/bubble-turn-l9an2toc/before-6cd8266c，六项安装摘要与 manifest.json 相符。新 PID 16092 使用原安装及资料目录，监听 8765，/infoguide 可读。已核实桌面快捷方式及登录项指向正式安装树。从安装目录用临时资料运行 tools/test-bubble-image-turn-electron.mjs，通过双生图、重开、文字清卡、旧缩略图与作业晚到、冷启动及归档原图回读。详细日志在 output/bubble-turn-l9an2toc/installed-ui.log，实例回执在 installed.json。无生产 SQL 或云端部署，无花园批次。

@@ -285,3 +285,21 @@ Windows 旧 PID 33608 经原生窗口正常退出，安装前备份清单到准�
 
 确认后的精确清单及 SQL 已提交 e27038c。重启后的绯月在 04:20:37 JST 接收唯一批次 feiyue-seven-20261121，04:23:58 核对步骤，04:24:03 回读结束，state=done、revision=106。花园将网页角色组件 #16 的绯月（桌面精灵）#61 从 5.2 升至 6.0，新增发布 #55 与明细 #125，收录七项桌宠及配套云端更新。机器回执位于主站 database/changes/feiyue-seven-20261121/release-receipt.json。
 七项发布 Git 已普通推送并逐一回读相符。主站 main b1a2175，API 精确生产分支 codex/feiyue-seven-production-20261121 d8943ae，API main c3c170d，桌宠 codex/workspace-checkpoint-20261120 eff1759。此次同步附记只记录发布提交的远端核验结果。
+
+## 2026-11-21 JST · 问绯月单回合图片卡
+
+用户需求与验收：用户反馈“这个图片卡这里不走了，不合理，我这里只保留一个回合的对话”。连续生图只展示本轮任务；点击发送后立即移除旧卡；旧任务完成和晚到的缩略图均不能重新占用普通对话；重开辨认本轮图；历史图片仍可在复盘查看。
+
+目标：Windows 正式绯月。本次准备时监听 8765 的主进程 PID 23400，Electron 加载本目录 desktop，参数 --feiyue-login。来源 G:/selftool/WebCharacter/personal-digital-companion，开发 Git HEAD 3b55903，安装树 Git HEAD 39fd098。基线采用安装目录实际文件字节。候选与逐文件安装前后 SHA-256 见 G:/selftool/WebCharacter/personal-digital-companion/output/bubble-turn-l9an2toc/manifest.json。可用 git diff --no-index 逐项比较本目录与该目录下 candidate 的同名文件，image-tasks.mjs 从安装现件只合入按编号读取的改动。
+
+- desktop/screen-question-host.mjs 将提问、图像作业与最新一轮关联，仅请求本轮的缩略图。原先会在打开气泡时读取最近八个任务。按当天用户对话恢复，跳过另行发起的后台生图。
+- desktop/image-tasks.mjs 支持精确读取一个任务，沿用现有归档及继续编辑原图行为。
+- desktop/screen-question-ui.mjs 和 output/desktop-bundle/screen-question-ui.mjs 随回合切换即时清除旧卡，用请求序号防止旧异步回执覆盖新视图。
+- desktop/conversation-history.mjs 在已有加密对话回执内保留可选图像任务标识。原格式仍可解码。tools/test-bubble-image-turn-electron.mjs 新增隔离回归。
+- 生产数据库迁移、历史回填、配置和云端部署：无。本机历史任务及原图无需清理。旧加密回执缺少图像关联时仅显示已有文字。
+- 已执行：开发树和安装候选分别运行 node --test agent/tests/screen-question-host.test.mjs agent/tests/server-image-task.test.mjs agent/tests/desktop-screen-question.test.mjs，均通过 25/25。首轮暴露无本轮图片时过早结束 IPC 的兼容问题，改为等待原队列恢复再返回结果并复测通过。候选用实际 Electron 各运行 tools/test-bubble-image-turn-electron.mjs 和 tools/test-panel-titlebar-electron.mjs，单回合、迟到回执、冷启动、归档可读及七面板通过。日志在清单同目录。测试使用临时资料和受控图像提交、等待替身。未发送真实生图任务。复核按原需求检查显示边界及原图留存，未发现剩余问题。
+- 安装与恢复：获本次明确授权后复核运行目录和清单中的旧摘要，备份六项路径，等待绯月正常退出，再复制候选并核对新摘要。按原登录参数启动，核验新 PID、安装目录、原资料及 /infoguide，用临时数据从安装目录重跑单回合专项；开发与部署纪要补记实际时间和结果。异常时退出后按备份恢复原文件，仅撤下本次新加的测试，再用原参数启动。
+- 用户安装确认、花园登记意愿：待本次答复。第三方审核：未执行。未部署、未提交或推送本次改动。
+
+
+2026-11-21 04:37:10 JST 已按用户确认安装并重启，本次不登记花园。首次关闭请求未退出宿主，核对桌宠主窗口后重试并正常退出 PID 23400。备份见 output/bubble-turn-l9an2toc/before-6cd8266c，六项安装摘要与 manifest.json 相符。新 PID 16092 使用原安装及资料目录，监听 8765，/infoguide 可读。已核实桌面快捷方式及登录项指向正式安装树。从安装目录用临时资料运行 tools/test-bubble-image-turn-electron.mjs，通过双生图、重开、文字清卡、旧缩略图与作业晚到、冷启动及归档原图回读。详细日志在 output/bubble-turn-l9an2toc/installed-ui.log，实例回执在 installed.json。无生产 SQL 或云端部署，无花园批次。
