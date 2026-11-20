@@ -424,3 +424,17 @@ Qwen 会话通过 local-model-process.mjs 中的 systemPrompt 加载绯月人设
 服务器仅接收 prompt 与标准 PC 任务字段。成功回执含 job_id、format、width、height、archived。图片报告保存服务器任务号；默认归档根目录为 F:/feiyuememory。失败沿用标准 FAILED 回执，具体步骤和错误在本机查看。同一服务器任务绑定同一本地图像作业。设计沿用 TASK_TEMPLATE_PREVIEW.md 的备忘录索引和全局 FRAMEWORK_PREFERENCES.md 的最简原则。
 
 联调命令为 `node personal-digital-companion/tools/test-server-image-live.mjs --live`（从工作区根目录运行）。使用隔离的 Worker 数据库、模拟桌面 IPC 和真实本机 ComfyUI，输出及测试归档在 work/server-image-qa。两次独立建单均实际生成并归档 512×512 PNG，最终测试任务 734bd5bc-d212-4bd7-8d90-cccce2fff7c8 收到 COMPLETED。单测 server-image-task.test.mjs 另验证派给 all、无模板、空提示词、注入失败和同一任务不会重复生图。线上发布与当前桌宠进程加载另行进行。
+
+资源登记采用 resources.create 和 pc.resources.create，使用 resource-registration 技能。业务接口 POST /api/resources 接收 body（标题）、note（完整正文）、url 和 category_id。模板来源是 agent/seeds/tasklist-registration.sql 与 tasklist-pc.sql。
+
+## 桌宠既有功能补登（2026-11-20 JST）
+
+本次升级为鱼与熊掌资源登记。以下为本地已有能力清单，包含本地开发中的实现；本清单不作为各项生产发布时间的依据。
+
+- 桌宠显示与动作：托盘和角色菜单、显示与隐藏、移动与归位、工作状态、窗口左右攀爬和上沿坐卧、全屏避让、动画与声音设置。
+- 问绯月：点头打开气泡、文字和 Windows 听写输入、本地模型与技能分流、公开搜索、截图与图片问答、回答详情和失败记录。
+- 登记与核对：吃喝、运动、一键事件、随手记、日记、提醒登记；本地工作区另已实现独立确认窗、逐项补缺、同字段批量填写和按任务选择最多三张图片。
+- 提醒与天气：当天首次启动提醒、到期事项检查、三地天气与预警、无变化时抑制重复天气提示、未读菜单及未读／全部／已读筛选、一键已读。
+- 轮询与启动：任务、到期事项和天气分别启停，间隔 10–300 分钟、允许推延 0–100 次，到限入队去重；检查历史与下次时间；Windows 登录后延迟一分钟自启动、提醒延迟生效。
+- 任务及生图：今日任务、投入工时、指定或空闲 PC 领取、串行任务链、中断恢复与补传、基于本地 ComfyUI 的文字生图和图片任务。
+- 复盘与维护：东京日期归档对话和图片、任务结果复盘、待确认与任务通信日志、云端连接和供应商测试、菜单与界面资源热更新、受控重启。

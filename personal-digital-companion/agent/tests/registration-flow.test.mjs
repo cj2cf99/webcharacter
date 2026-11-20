@@ -5,6 +5,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRegistrationFlow } from '../../desktop/registration-flow.mjs';
+import {attachScreenQuestion} from '../../desktop/screen-question-host.mjs';
+import {fixture as questionFixture} from './screen-question-fixture.mjs';
 import { createWorker } from '../worker.mjs';
 import { initializeDatabase, openTestDatabase } from './sqlite-d1.mjs';
 
@@ -219,4 +221,21 @@ test('解析保留待确认项，旧临时链同号重放后仍可领到原节�
   assert.equal(replayed.body.temporary_registration, true);
   assert.equal((await f.call(`/api/tasks/${legacy.nodes[0].current_task.task_id}/execute`, {})).status, 200);
   assert.equal(f.writes.length, 1);
+});
+
+test('鱼与熊掌：确认前展示四栏，标题与完整正文写入真实接口对应字段',async t=>{
+  const url='https://posewear.pages.dev/#portrait';
+  const text='我要登记一个资源：['+url+']('+url+') ，这是个包含成人要素的姿势服装参考网站，后面可以拿来用。';
+  const title='成人向姿势与服装参考网站';
+  const f=await fixture(t,{actions:[{type:'resources.create',params:{title,body:'摘要',url:'https://model.invalid/'}}]});
+  const ui=questionFixture(),flow=f.desktop();
+  const host=attachScreenQuestion(ui.electron,{win:ui.win,root:join(import.meta.dirname,'../..'),bundle:'unused',profile:'unused',history:ui.history,registration:flow,visible:false});
+  t.after(()=>host.close());await host.open();
+  const ask=text=>ui.handlers.get('screen-qa:ask')(ui.event(host.panel),{text});
+  const review=await ask(text);
+  assert.ok(review.reviewId,review.text);
+  for(const field of ['标题：'+title,'正文：'+text,'分类：其他','网址：'+url])assert.ok(review.fields.includes(field),review.fields);
+  assert.equal(f.writes.length,0);
+  assert.match((await ask('确认登记')).text,/已登记/);
+  assert.deepEqual(f.writes.map(({path,body})=>({path,body})),[{path:'/api/resources',body:{body:title,note:text,url,category_id:'other'}}]);
 });

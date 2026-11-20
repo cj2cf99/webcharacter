@@ -1,3 +1,4 @@
+import {requestsResource} from '../agent/assistant/resource-registration.mjs';
 import {isReminderCommand} from './reminder-command.mjs';
 const recordCommand = /^(?:(?:请|绯月|帮我|给我|麻烦你|麻烦)[，,\s]*)*(?:(?:新增|添加|创建|写)(?:一[条篇个份])?(?:提醒|日记|随手记)|(?:记下|记一下|记录一下|登记一下|提醒我|记一笔|记一条)|(?:登记|记录|随手记|日记)[：:\s])/;
 const recordSuffix = /[，,。\s](?:帮我|请)?(?:记一下|记录一下|登记一下|记下来|登记|记录)[吧。！!]?$/;
@@ -53,6 +54,7 @@ export function conversationRoute(text, mode = 'auto', withScreen = false) {
   if (/(?:是什么意思|怎么(?:用|操作)|如何使用)[？?。]?$/.test(text) && !searchCommand.test(text) && !simpleSearch.test(text)) return {kind:'question'};
   if (suppliedSummaryText(text)) return {kind:'question'};
   if (mentionsReminder(text)&&(reminderOptOut.test(text)||reminderHelp.test(text)))return {kind:'question'};
+  if (requestsResource(text)) return {kind:'registration'};
   if (requestsRegistration(text)) return {kind:'registration'};
   const query = requestedSearch(text);
   if (query !== null) return {kind:'search',query};
@@ -72,7 +74,7 @@ export function publicQuery(text) {
     && !/https?:\/\/\S*[?@]|[A-Z]:[\\/]|[\w.+-]+@[\w.-]+\.\w+|(?:密码|令牌|密钥|token|secret|api[_-]?key)\s*[:=：]|\b\d{7,}\b/i.test(text);
 }
 
-export const registrationTypes = {'hu-shi.food.create':'吃喝记录','hu-shi.exercise.create':'运动记录','hu-shi.event.create':'事件记录','records.create':'随手记','diaries.create':'日记','reminders.create':'提醒'};
+export const registrationTypes = {'resources.create':'资源（鱼与熊掌）','hu-shi.food.create':'吃喝记录','hu-shi.exercise.create':'运动记录','hu-shi.event.create':'事件记录','records.create':'随手记','diaries.create':'日记','reminders.create':'提醒'};
 const types=registrationTypes;
 const receiptTime=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 const states = {COMPLETED:'已登记',RUNNING:'待核对',PENDING:'待登记',FAILED:'登记失败',CANCELLED:'已取消'};

@@ -1,6 +1,9 @@
 -- 与 tasklist-hu-shi.sql 一起加载。三类胡适登记复用现有定义。
 INSERT INTO tasklist (type, name, description, executor, parameter_spec_json, procedure, report_spec)
 VALUES
+  ('resources.create', '登记资源（鱼与熊掌）', '登记资源，保留原文、网址及简要用途，分类默认其他', 'cloud',
+   '{"title":{"type":"string","required":true,"pattern":"^(?=[\\s\\S]*\\S)[\\s\\S]{1,200}$"},"body":{"type":"string","required":true,"pattern":"^(?=[\\s\\S]*\\S)[\\s\\S]{1,2000}$"},"category_id":{"type":"string","pattern":"^\\S{1,100}$"},"url":{"type":"string","pattern":"^https?://\\S+$"}}',
+   '标题概括这是什么及参考用途，打算用它做什么一栏保留整段原文，网址取自原文。', '返回鱼与熊掌资源 ID。'),
   ('records.create', '新增随手记', '在已有分类下登记随手记', 'cloud',
    '{"body":{"type":"string","required":true,"pattern":"^(?=[\\s\\S]*\\S)[\\s\\S]{1,4000}$"},"category_id":{"type":"string","required":true,"pattern":"^\\S+$"}}',
    '使用已有分类，保留正文内的链接。', '返回随手记记录 ID。'),

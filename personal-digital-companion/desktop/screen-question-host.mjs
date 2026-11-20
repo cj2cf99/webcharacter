@@ -1,6 +1,7 @@
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createScreenQuestionClient} from './screen-question-client.mjs';
+import {requestsResource} from '../agent/assistant/resource-registration.mjs';
 import {conversationRoute, mentionsReminder, publicQuery, refersToPrevious, registrationReply} from './conversation-routing.mjs';
 import {searchPublicWeb} from './public-search.mjs';
 import {createConversationHistory,tokyoDay} from './conversation-history.mjs';
@@ -111,7 +112,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const previous=latest?.state==='answer'?{用户:String(latest.question??'').slice(0,180),绯月:String(latest.text??'').slice(0,220)}:undefined;
     try{
       const menu=hint==='auto'&&menuEntry(text);
-      const selected=await (menu?readInteractionSkill(menu.action,'menu'):readInteractionSkill(hint)).catch(()=>null);
+      const selected=await (menu?readInteractionSkill(menu.action,'menu'):readInteractionSkill(hint==='registration'&&requestsResource(text)?'resourceRegistration':hint)).catch(()=>null);
       signal.throwIfAborted();
       const skillInstruction=selected?.localAi
         ? {...selected.localAi,name:selected.skill,version:selected.version} : selected?.instruction;
@@ -278,7 +279,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       if(route.kind==='decision'||route.kind==='registration'){
         if(!registration)throw Error('未配置随口登记。');
         let input=mode==='supplement'&&supplement?supplement+'\n补充：'+text:text;
-        const wantsReminder=!decision&&mentionsReminder(input);
+        const wantsReminder=!decision&&mentionsReminder(input)&&!requestsResource(input);
         let planned;
         if(!decision&&registration.preview&&!registration.hasSaved?.()){
           if(wantsReminder&&refersToPrevious(text)&&mode!=='supplement'){

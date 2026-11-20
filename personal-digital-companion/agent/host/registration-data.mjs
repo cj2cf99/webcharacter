@@ -2,6 +2,7 @@ const targets = new Map([
   ['/api/records/hu-shi/food/entries', ['ra_hushi_records', 'id', 'created_at']],
   ['/api/records/hu-shi/exercise/entries', ['ra_hushi_records', 'id', 'created_at']],
   ['/api/records/hu-shi/event/entries', ['ra_hushi_records', 'id', 'created_at']],
+  ['/api/resources', ['rl_resources', 'id', 'created_at']],
   ['/api/records', ['ra_records', 'id', 'created_at']],
   ['/api/diaries', ['diaries', 'seq', 'NULL']],
   ['/api/reminders', ['reminders', 'seq', 'NULL']],

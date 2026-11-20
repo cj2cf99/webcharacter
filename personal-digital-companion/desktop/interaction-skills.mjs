@@ -1,3 +1,4 @@
+import {requestsResource,resourceCategoryNames} from '../agent/assistant/resource-registration.mjs';
 import {execFile} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
@@ -40,7 +41,7 @@ export function menuGuidance(text){
 }
 
 const targets={
-  'hu-shi.food.create':/吃喝|饮食|餐食|用餐/u,'hu-shi.exercise.create':/运动|锻炼/u,
+  'resources.create':/资源/u,'hu-shi.food.create':/吃喝|饮食|餐食|用餐/u,'hu-shi.exercise.create':/运动|锻炼/u,
   'hu-shi.event.create':/一键事件/u,'records.create':/随手记|笔记/u,'diaries.create':/日记/u,'reminders.create':/提醒|待办/u
 };
 export function attachmentRegistration(text){
@@ -54,12 +55,13 @@ export function validatePreview(planned,text){
   if(planned?.pending?.length)throw Error(planned.pending.map(p=>p.question).join('\n'));
   if(!Array.isArray(nodes)||!nodes.length)throw Error('没有提取到可登记的内容，请说明事项和登记类型。');
   const requested=Object.keys(targets).filter(type=>targets[type].test(text));
-  const fields={title:'标题',content:'内容',body:'正文',category_id:'分类编号',deadline:'到期日',level:'等级',
+  if(requestsResource(text)&&!nodes.some(n=>n.type==='resources.create'))throw Error('没有取得鱼与熊掌资源草案，请重新准备。');
+  const fields={url:'网址',title:'标题',content:'内容',body:'正文',category_id:'分类编号',deadline:'到期日',level:'等级',
     reflection:'感想',photos:'图片',tag_ids:'标签'};
   return nodes.map((n,i)=>{
     if(!Object.hasOwn(registrationTypes,n.type)||n.target_device_id!==null||!n.params||typeof n.params!=='object'||
        (requested.length&&!requested.includes(n.type)))throw Error('提取结果与指定登记类型不符，请说明要登记的内容。');
     return [String(i+1)+'. '+registrationTypes[n.type],...Object.entries(n.params).map(([k,v])=>
-      (fields[k]??k)+'：'+(typeof v==='string'?v:JSON.stringify(v))),...(n.type==='reminders.create'&&!n.params.deadline?['到期日：不设日期']:[]),...(n.depends_on?['前置事项：'+n.depends_on]:[])].join('\n');
+      (n.type==='resources.create'&&k==='category_id'?'分类':fields[k]??k)+'：'+(n.type==='resources.create'&&k==='category_id'?(resourceCategoryNames[v]??v):typeof v==='string'?v:JSON.stringify(v))),...(n.type==='reminders.create'&&!n.params.deadline?['到期日：不设日期']:[]),...(n.depends_on?['前置事项：'+n.depends_on]:[])].join('\n');
   }).join('\n\n');
 }

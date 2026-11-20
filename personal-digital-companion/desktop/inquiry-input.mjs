@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {registrationTypes} from './conversation-routing.mjs';
 
 export function missingRows(pending=[]){
-  const fields={deadline:'到期日',category_id:'分类',title:'标题',body:'正文',content:'内容',level:'等级',reflection:'感想'};
+  const fields={url:'网址',deadline:'到期日',category_id:'分类',title:'标题',body:'正文',content:'内容',level:'等级',reflection:'感想'};
   return pending.map((item,index)=>{
     const key=item.field??Object.keys(fields).find(k=>item.question.includes(fields[k]))
       ??(/日期|哪一天/u.test(item.question)?'deadline':null);

@@ -6,6 +6,7 @@
     "attachment": "evidence-reading",
     "registration": "record-submission",
     "supplement": "record-submission",
+    "resourceRegistration": "resource-registration",
     "attachmentRegistration": "evidence-reading",
     "decision": "task-lifecycle",
     "task": "task-lifecycle",

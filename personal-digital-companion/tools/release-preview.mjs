@@ -13,7 +13,8 @@ const {build} = require('esbuild');
 const {Miniflare, convertV4MiniflareOptions} = require('miniflare');
 const serve = process.argv.includes('--serve');
 const visual = process.argv.includes('--visual-check');
-const input = '隔离验收文字';
+const resourceText = '登记一个资源：https://example.test/#portrait，这是个姿势与服装参考网站。';
+const input = '隔离验收文字。'+resourceText;
 const actions = [
   {type:'hu-shi.food.create', params:{body:'午餐面条'}},
   {type:'hu-shi.exercise.create', params:{body:'散步半小时'}},
@@ -21,6 +22,7 @@ const actions = [
   {type:'diaries.create', params:{title:'验收日记',content:'整理资料'}},
   {type:'records.create', params:{body:'合成资源 https://example.test', category_id:'fixture-resource'}},
   {type:'reminders.create', params:{title:'检查资料',deadline:'tomorrow'}},
+  {type:'resources.create', params:{title:'姿势与服装参考网站',body:resourceText}},
 ];
 async function bundle(contents, resolveDir) {
   return (await build({stdin:{contents,resolveDir}, bundle:true,write:false,format:'esm',platform:'browser',
@@ -41,7 +43,7 @@ function gateway(env) {
   return companionGateway(env,{fetcher: async (url,options) => {
     if (url !== 'https://api.deepseek.com/chat/completions') return new Response(null,{status:503});
     const input=JSON.parse(options.body);
-    if(input.messages.length===1 && input.messages[0].content==='请直接恢复你好，我在')return Response.json({choices:[{finish_reason:'stop',message:{content:'你好，我在'}}]});
+    if(input.messages.at(-1)?.content==='请直接恢复你好，我在')return Response.json({choices:[{finish_reason:'stop',message:{content:'你好，我在'}}]});
     if(input.messages.at(-1).content==='介绍罗马')return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'罗马在台伯河畔。',proposal:null})}}]});
     return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({actions:${JSON.stringify(actions)},pending:[]})}}]});
   }});
@@ -104,7 +106,7 @@ try {
     assert.ok(sql, name);
     await apply(db,sql);
   }
-  for(const file of ['0020_records.sql','0022_records_parent.sql','0030_hu_shi.sql','0031_companion_registration_receipts.sql']) {
+  for(const file of ['0020_records.sql','0022_records_parent.sql','0029_resources.sql','0030_hu_shi.sql','0031_companion_registration_receipts.sql']) {
     await apply(db,await readFile(join(main,'migrations',file),'utf8'));
   }
   await db.prepare('INSERT INTO ra_categories(id,name) VALUES (?,?)').bind('fixture-resource','资源').run();
@@ -123,7 +125,7 @@ try {
   const parsed=await call('/assistant/recording-plan',{text:input});
   const plan=await parsed.json();
   assert.equal(parsed.status,200,JSON.stringify(plan));
-  assert.equal(plan.chain.nodes.length,6);
+  assert.equal(plan.chain.nodes.length,actions.length);
   assert.ok(plan.ai.attempts.some(row=>row.provider==='deepseek'&&row.stage==='probe'&&row.code==='OK'));
   assert.ok(plan.ai.attempts.some(row=>row.provider==='deepseek'&&row.stage==='request'&&row.code==='OK'));
   const chat=await call('/assistant/message',{messages:[{role:'user',content:'介绍罗马'}]});
@@ -146,7 +148,9 @@ try {
     assert.equal(response.status,200,JSON.stringify(value));
     assert.equal(value.status,'COMPLETED',JSON.stringify(value));
   }
-  assert.equal((await db.prepare('SELECT count(*) AS n FROM companion_registration_receipts').first()).n,6);
+  assert.equal((await db.prepare('SELECT count(*) AS n FROM companion_registration_receipts').first()).n,actions.length);
+  const resource = await db.prepare('SELECT body,note,url,category_id FROM rl_resources').all();
+  assert.deepEqual(resource.results,[{body:'姿势与服装参考网站',note:resourceText,url:'https://example.test/#portrait',category_id:'other'}]);
   for(const [table,count] of [['ra_hushi_records',3],['ra_records',1],['diaries',1],['reminders',1]]) {
     assert.equal((await db.prepare('SELECT count(*) AS n FROM '+table).first()).n,count);
   }
@@ -161,7 +165,7 @@ try {
   assert.equal((await runtime.dispatchFetch('http://127.0.0.1/api/companion/chains/'+chain.chain_id+'/stop',{
     headers:{...siteHeaders,Origin:'https://cross.invalid'},method:'POST',body:'{}',
   })).status,403);
-  console.log('PASS: real Worker handlers, real business SQL, six receipts and recovery, same chain via private RPC.');
+  console.log('PASS: real Worker handlers, real business SQL, seven receipts including resource registration and recovery, same chain via private RPC.');
   if(visual) {
     const page=new URL('/companion/chains/',await runtime.ready).href;
     assert.equal((await fetch(page)).status,200);
