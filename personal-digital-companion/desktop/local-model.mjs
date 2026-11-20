@@ -1,18 +1,15 @@
 import {stat} from 'node:fs/promises';
-import {join} from 'node:path';
+import {basename,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 export const LOCAL_MODEL_FILE = 'Qwen3.5-0.8B-Q4_K_M.gguf';
 const entry = fileURLToPath(new URL('./local-model-process.mjs', import.meta.url));
-const MODEL = 'Qwen3.5-0.8B';
-const intentBudgetMs = 6500;
-const replyBudgetMs = 12000;
-
-export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 15000}) {
+export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 15000,device='cpu',intentBudgetMs=6500,replyBudgetMs=12000}) {
+  const modelName=basename(modelPath).replace(/-Q4_K_M\.gguf$/i,'');
   let status = {state: 'idle'};
-  let child, loading, finishLoad, request, loadTimer;
+  let child, loading, finishLoad, request, loadTimer, exited;
   const write = (stage, start, error, skill) => {
-    void log?.({direction:'local',route:'本地 AI',stage,model:MODEL,duration_ms:Math.round(performance.now()-start),error,
+    void log?.({direction:'local',route:'本地 AI',stage,model:modelName,duration_ms:Math.round(performance.now()-start),error,
       ...(skill?.name&&skill.version?{skill:skill.name,skill_version:skill.version}:{})});
   };
 
@@ -21,12 +18,12 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
     const started = performance.now();
     status = {state:'loading'};
     loading = new Promise(resolve => {
-      finishLoad = (state, error) => {
+      finishLoad = (state, error, details) => {
         clearTimeout(loadTimer);
         if (status.state !== 'loading') return;
         const durationMs = Math.round(performance.now()-started);
-        status = {state, durationMs, ...(error ? {error} : {})};
-        if (state !== 'stopped') write(state === 'ready' ? '模型已就绪' : '模型加载失败', started, error);
+        status = {state, durationMs, ...details, ...(error ? {error} : {})};
+        if (state !== 'stopped') write(state === 'ready' ? '模型已就绪 · '+status.backend : '模型加载失败', started, error);
         resolve();
       };
     });
@@ -40,11 +37,12 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
       try {
         if (!(await stat(modelPath)).isFile()) throw Object.assign(Error(), {code:'ENOENT'});
         if (status.state !== 'loading') return;
-        const worker = utilityProcess.fork(entry,[modelPath],{serviceName:'Feiyue Local AI',stdio:'ignore'});
+        const worker = utilityProcess.fork(entry,[modelPath,device],{serviceName:'Feiyue Local AI',stdio:'ignore'});
         child = worker;
+        exited=new Promise(resolve=>worker.once('exit',resolve));
         worker.on('message', value => {
           if (child !== worker) return;
-          if (value?.type === 'ready') finishLoad('ready');
+          if (value?.type === 'ready') finishLoad('ready',undefined,{backend:value.backend,gpuLayers:value.gpuLayers,vramMiB:value.vramMiB});
           if (value?.type === 'load-error') {
             finishLoad('unavailable',value.code);
             worker.kill();
@@ -68,9 +66,9 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
     return loading;
   }
 
-  async function analyze(text, {hint, previous, signal, onProgress, imageSkill,skillInstruction} = {}) {
+  async function analyze(text, {hint, previous, signal, onProgress, imageSkill,skillInstruction,reviewLimit=3,revision} = {}) {
     const started = performance.now();
-    const budgetMs = ['image-plan','serverTask'].includes(hint) ? 16000 : hint === 'auto' ? replyBudgetMs : intentBudgetMs;
+    const budgetMs = hint==='personalityMemory'?120000:['image-plan','serverTask'].includes(hint) ? Math.max(16000,intentBudgetMs) : hint === 'auto' ? replyBudgetMs : intentBudgetMs;
     const deadline = AbortSignal.timeout(budgetMs);
     const wait = signal ? AbortSignal.any([signal,deadline]) : deadline;
     signal?.throwIfAborted();
@@ -101,13 +99,13 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
       };
       request = {id,finish,message(value) {
         if (value.type === 'review') onProgress?.(`本地思索 · 复核 ${value.pass}/2…`);
-        if (value.type === 'answer-review') onProgress?.(`本地思索 · 回复自审 ${value.pass}/3…`);
-        if (value.type === 'answer-rewrite') onProgress?.(`本地思索 · 按反馈重写 ${value.pass}/3…`);
+        if (value.type === 'answer-review') onProgress?.(`本地思索 · 回复自审 ${value.pass}/${reviewLimit}…`);
+        if (value.type === 'answer-rewrite') onProgress?.(`本地思索 · 按反馈重写 ${value.pass}/${reviewLimit}…`);
         if (value.type === 'result') finish(value.result);
       }};
       wait.addEventListener('abort',abort,{once:true});
       try {
-        worker.postMessage({type:'analyze',id,text,hint,previous,imageSkill,skillInstruction,intentBudgetMs,remainingMs:Math.max(1, Math.floor(budgetMs-(performance.now()-started)))});
+        worker.postMessage({type:'analyze',id,text,hint,previous,imageSkill,skillInstruction,reviewLimit,revision,intentBudgetMs,remainingMs:Math.max(1, Math.floor(budgetMs-(performance.now()-started)))});
       } catch {
         finish({error:'LOCAL_AI_PROCESS_EXITED'});
       }
@@ -127,9 +125,10 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
     const worker = child;
     child = null;
     worker?.kill();
+    return exited;
   }
 
-  return {start,analyze,close,snapshot:()=>({...status})};
+  return {start,analyze,close,snapshot:()=>({...status,model:modelName})};
 }
 
 export function desktopModelPath(app, root) {

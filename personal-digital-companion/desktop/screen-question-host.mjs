@@ -33,11 +33,12 @@ export function questionBounds(pet,area,preferredHeight=260){
   return {bounds:{x,y,width,height},tail,tailX:Math.max(20,Math.min(width-60,pet.x+pet.width/2-x-20))};
 }
 
-export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,readTasks,readTraffic,checks,reminderRequest,requestRestart,localModel,log,search=searchPublicWeb,visible=true}={}){
+export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,readTasks,readTraffic,checks,reminderRequest,requestRestart,localModel,log,onForeground=()=>{},search=searchPublicWeb,visible=true}={}){
   const {ipcMain,screen,desktopCapturer}=electron;
   let panel=null,servicePromise=null,controller=null,busy=false,disposed=false,generation=0,panelHeight=260,state={state:'idle',text:'想问我什么？'};
   const records=history??memory??createConversationHistory(profile,electron.safeStorage);
-  let details,reviewedGroup='';
+  let details,reviewedGroup='',nag=null;
+  function leaveNag(reason){const session=nag;nag=null;session?.leave(reason);}
   const images=createImageTasks({root,profile,localModel,archive:memory?.archiveImageTask,
     onChange:()=>{if(panel&&!panel.isDestroyed())panel.webContents.send('screen-qa:images-changed');details?.panel?.webContents.send('conversation:tasks-changed');},
     async onFinish(row){
@@ -81,6 +82,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   async function askUser(prompt,{source='',rows=[],canConfirm=false}={}){
     if(disposed||draining||registrationDraft||pendingQuestion)throw Error('已有询问正在处理。');
     if(typeof prompt!=='string'||!prompt.trim())throw Error('请提供具体问题。');
+    if(nag)hide();
     const id=crypto.randomUUID();
     const answer=Promise.withResolvers();
     pendingQuestion=()=>{pendingQuestion=null;answer.resolve({action:'cancel'});};
@@ -125,6 +127,19 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     idleDraft=null;
     const mode=inputModes.has(args?.mode)?args.mode:'auto';
     const text=typeof args?.text==='string'?args.text.trim():'';
+    onForeground();
+    if(nag&&text&&mode==='auto'&&!args?.withScreen&&!args?.attachment){
+      if(busy)return {state:'error',text:'正在听你刚才的解释。',nag:true,nagReply:true};
+      const session=nag;busy=true;
+      try{
+        const reply=await session.reply(text);
+        const result={state:'answer',question:text,text:reply.text,nag:!reply.done,nagReply:true};
+        if(nag===session){publish(result,generation);reply.shown?.();if(reply.done)nag=null;}
+        return result;
+      }catch{if(nag===session)leaveNag('interrupted');return {state:'error',text:'解释已留在本机，稍后接着聊。'};}
+      finally{busy=false;}
+    }
+    if(nag)leaveNag('interrupted');
     if(!busy&&registrationDraft&&!args?.withScreen&&!args?.attachment&&!args?.references?.length){
       if(/^(?:确认登记|确认|同意登记|同意|登记吧|是的)[。！!]?$/u.test(text))return inquiry.respond(registrationDraft.id,{action:'confirm'});
       if(/^(?:取消登记|不同意|放弃登记|放弃|取消|不用了|不登记)[。！!]?$/u.test(text))return inquiry.respond(registrationDraft.id,{action:'cancel'});
@@ -415,7 +430,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     return display;
   }
   function cancel(){lastRequest=null;generation++;controller?.abort();controller=null;busy=false;panelHeight=260;state={state:'idle',text:'想问我什么？'};servicePromise?.then(api=>api.forget()).catch(()=>{});}
-  function hide(){if(!draining&&!pendingQuestion)cancel();if(panel&&!panel.isDestroyed()){const closing=panel;panel=null;closing.destroy();}}
+  function hide(){leaveNag('interrupted');if(!draining&&!pendingQuestion)cancel();if(panel&&!panel.isDestroyed()){const closing=panel;panel=null;closing.destroy();}}
   function abandon(){idleDraft=null;supplement='';reviewedGroup='';chainActions=[];hide();}
   const view=()=>({...state,mode:inputMode,actions:chainActions,canSupplement:Boolean(supplement),
     webSearch:true,attachmentInput:true,hasPending:pending(),idleDraft});
@@ -513,12 +528,13 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       const refs=input.draft?.references;
       const references=Array.isArray(refs)&&refs.length<=15&&refs.every(a=>validAttachment(a)&&a.kind==='image')?refs:[];
       idleDraft=text||attachment?{text,mode:inputModes.has(mode)?mode:'auto',withScreen:withScreen===true,...(attachment?{attachment,references}:{})}:null;
-      hide();
-    }else abandon();
+      leaveNag('idle');hide();
+    }else {leaveNag(input?.reason==='button'?'button':'interrupted');abandon();}
   };ipcMain.on('screen-qa:close',dismiss);
   const fit=(event,height)=>{if(!trusted(event)||!Number.isInteger(height)||height<260||height>420||height===panelHeight)return;panelHeight=height;place();};ipcMain.on('screen-qa:fit',fit);
   win.on('move',place);win.on('resize',place);
-  async function open(mode='auto'){
+  async function open(mode='auto',forNag=false){
+    if(!forNag){onForeground();leaveNag('interrupted');}
     inputMode=mode==='registration'?'registration':'auto';
     if(disposed)return;
     if(panel&&!panel.isDestroyed()){if(!ready)return;place();panel.webContents.send('screen-qa:mode',inputMode);if(visible){panel.show();panel.focus();}return;}
@@ -529,7 +545,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     ready=false;
     panel=created;const entry=resolve(bundle,'screen-question.html'),url=pathToFileURL(entry).href;
     created.webContents.setWindowOpenHandler(()=>({action:'deny'}));created.webContents.on('will-navigate',(event,target)=>{if(target!==url)event.preventDefault();});
-    created.on('closed',()=>{if(panel===created){panel=null;idleDraft=null;if(!draining)cancel();}});
+    created.on('closed',()=>{if(panel===created){leaveNag('interrupted');panel=null;idleDraft=null;if(!draining)cancel();}});
     const today=tokyoDay(Date.now());
     if(!latest||tokyoDay(latest.at)!==today){
       let stored;
@@ -541,11 +557,21 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(panel!==created||created.isDestroyed())return;
     try{await created.loadFile(entry);}catch(error){if(panel!==created||created.isDestroyed())return;created.destroy();throw error;}
     if(disposed||panel!==created||created.isDestroyed())return;
+    if(forNag?.signal?.aborted){created.destroy();return;}
     ready=true;place();created.webContents.send('screen-qa:changed',view());if(visible){created.show();created.focus();}
   }
   function close(){if(disposed)return;disposed=true;registrationDraft=null;pendingQuestion?.();inquiry.close();hide();details.close();records.close?.();for(const name of Object.keys(handlers))ipcMain.removeHandler(name);ipcMain.removeListener('screen-qa:close',dismiss);ipcMain.removeListener('screen-qa:fit',fit);win.removeListener('move',place);win.removeListener('resize',place);}
-  return {open,askUser,get inquiryPanel(){return inquiry.panel;},generateServerImage:images.generateServerImage,openReview:(view='tasks')=>details.open(null,view),openLog:()=>details.open(null,'log'),hide,abandon,
-    get hasLocalWork(){return busy||activeCommands.size>0||images.busy||Boolean(registrationDraft)||pending();},
+  async function showNag(session){
+    if(disposed||panel||busy||draining||pendingQuestion||registrationDraft||idleDraft?.text)return false;
+    await open('auto',session);
+    if(session.signal?.aborted||!panel?.isVisible()||!ready||busy)return false;
+    nag=session;
+    publish({state:'answer',text:session.prompt,nag:true,nagReply:true},generation);
+    session.visible();
+    return true;
+  }
+  return {open,showNag,askUser,get inquiryPanel(){return inquiry.panel;},generateServerImage:images.generateServerImage,openReview:(view='tasks')=>details.open(null,view),openLog:()=>details.open(null,'log'),hide,abandon,
+    get hasLocalWork(){return Boolean(nag)||busy||activeCommands.size>0||images.busy||Boolean(registrationDraft)||pending();},
     async drainForRestart(){
       draining=true;
       const results=await Promise.allSettled([edits?.drainForRestart(),...activeCommands]);

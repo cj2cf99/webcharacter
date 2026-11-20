@@ -17,7 +17,7 @@ export async function checkDueItems(request,signal){
   return due.length?'今日 '+(due.length-overdue)+' 项，逾期 '+overdue+' 项 · '+titles+(due.length>5?' 等':''):'没有到期未完成事项';
 }
 
-export function createReminderChecks({profile,check,handlers={},isBusy,changed=()=>{},now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout}){
+export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,changed=()=>{},now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout}){
   const db=new DatabaseSync(join(profile,'reminder-checks.sqlite'));
   db.exec(`CREATE TABLE IF NOT EXISTS checks(
     id INTEGER PRIMARY KEY, day TEXT NOT NULL, at INTEGER NOT NULL, due INTEGER NOT NULL,
@@ -38,11 +38,15 @@ export function createReminderChecks({profile,check,handlers={},isBusy,changed=(
   }
   const due=check&&((signal)=>check(AbortSignal.any([signal,AbortSignal.timeout(30_000)])));
   const scheduler=createPollScheduler({db,handlers:{due,...handlers},isBusy,changed,now,setTimer,clearTimer,add,
-    weatherLastAt:()=>{const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value).lastCheck;}});
+    lastRun,weatherLastAt:()=>{const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value).lastCheck;}});
   return {
-    start:scheduler.start,polls:scheduler.snapshot,configure:scheduler.configure,
+    start:scheduler.start,enqueue:scheduler.enqueue,polls:scheduler.snapshot,configure:scheduler.configure,
     get pending(){return scheduler.pending;},
     get unread(){return db.prepare('SELECT count(*) AS n FROM notices WHERE seen=0').get().n;},
+    weatherDiary(day){
+      const start=Date.parse(day+'T00:00:00+09:00');
+      return db.prepare('SELECT id,at,body FROM notices WHERE at>=? AND at<? ORDER BY at,id').all(start,start+86400000);
+    },
     weatherState(){const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value);},
     saveWeather(value,brief,at){
       db.exec('BEGIN');

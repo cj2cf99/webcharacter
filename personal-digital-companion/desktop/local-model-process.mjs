@@ -217,7 +217,8 @@ function truncate(text, limit) {
 
 async function start() {
   const {getLlama,LlamaChatSession,QwenChatWrapper} = await import('node-llama-cpp');
-  const engine = await getLlama({gpu:false,maxThreads:threads,build:'never',skipDownload:true,logLevel:'error'});
+  const gpu=process.argv[3]==='cpu'?false:{type:'auto',exclude:[false]};
+  const engine = await getLlama({gpu,maxThreads:threads,build:'never',skipDownload:true,logLevel:'error'});
   const model = await engine.loadModel({modelPath:process.argv[2]});
   const context = await model.createContext({contextSize,threads});
   const grammar = await engine.createGrammarForJsonSchema(schema);
@@ -334,7 +335,7 @@ async function start() {
           ? profileReply(current.trim()) ?? suppliedSummary(current.trim())
             ?? (data.skillInstruction?.profile==='conversation' && straightforwardConversation(current)
               ? recallUserFact(current.trim(),previous) : null) : null;
-        if (hint === 'serverTask') {
+        if (hint === 'serverTask' || hint === 'personalityMemory') {
           activeSignal = signal;
           const taskGrammar = await engine.createGrammarForJsonSchema(data.skillInstruction.schema);
           result = await pass(text,signal,data.skillInstruction.instruction,undefined,taskGrammar,420);
@@ -378,7 +379,7 @@ async function start() {
       if (!controller.signal.aborted) send({type:'result',id,result});
     })();
   });
-  send({type:'ready'});
+  send({type:'ready',backend:engine.gpu || 'cpu',gpuLayers:model.gpuLayers,vramMiB:Math.floor(model.memoryUsage.vram/2**20)});
 }
 
 void start().catch(error => {

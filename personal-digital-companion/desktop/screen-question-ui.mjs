@@ -103,12 +103,17 @@ function render(value){
   const full=value.text??'';
   const chars=[];
   for(const {segment} of segmenter.segment(full)){chars.push(segment);if(chars.length===51)break;}
-  answer.textContent=chars.length>50?chars.slice(0,49).join('')+'…':full;
+  if(!waiting){
+    reply.dataset.nag=String(Boolean(value.nagReply));
+    const close=byId('close');close.dataset.nag=String(Boolean(value.nag));
+    close.textContent=value.nag?'结束追问':'×';close.setAttribute('aria-label',value.nag?'结束这次追问':'关闭问答');
+  }
+  answer.textContent=!value.nagReply&&chars.length>50?chars.slice(0,49).join('')+'…':full;
   byId('unsaved').hidden=!value.unsaved;
   question.disabled=busy;mode.disabled=busy;retry.disabled=busy;
   retry.hidden=value.state!=='error'||!value.retryable;
   const clipped=answer.scrollHeight>answer.clientHeight+1;
-  byId('full').hidden=busy||value.state==='idle'||(chars.length<=50&&!clipped&&!value.sources?.length);
+  byId('full').hidden=value.nagReply||busy||value.state==='idle'||(chars.length<=50&&!clipped&&!value.sources?.length);
   badge.textContent={idle:'对话',waiting:'处理中',answer:'回复',error:'未完成'}[value.state];
   badge.hidden=value.state==='error'&&!(typeof value.question==='string'&&value.question.trim()&&full.trim());
   if(Object.hasOwn(value,'hasPending'))updatePending(value.hasPending);
@@ -162,12 +167,12 @@ question.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey
 for(const event of ['keydown','input','pointerdown','change']){
   document.addEventListener(event,resetIdle,{capture:true,passive:true});
 }
-document.addEventListener('wheel',event=>{if(!event.target.closest?.('#imageResults'))event.preventDefault();},{capture:true,passive:false});
+document.addEventListener('wheel',event=>{if(!event.target.closest?.('#imageResults,#reply[data-nag=true]'))event.preventDefault();},{capture:true,passive:false});
 question.addEventListener('compositionstart',()=>{composing=true;resetIdle();});
 question.addEventListener('compositionend',()=>{composing=false;resetIdle();});
 retry.onclick=async()=>{const value=await invoke(()=>host.retry());if(attachment&&value?.state==='answer'){question.value='';showAttachment(null);attachmentError();}};
 for(const [id,full] of [['full',true],['history',false]])byId(id).onclick=()=>host.details(full).catch(()=>render({state:'error',text:'对话记录窗口未能打开。'}));
-byId('close').onclick=()=>host.close();
+byId('close').onclick=()=>host.close('button');
 pending.onclick=()=>host.pending().catch(()=>render({state:'error',text:'待确认窗口未能打开。'}));
 document.onkeydown=event=>{if(event.key==='Escape')host.close();};
 window.addEventListener('companion-page-update',event=>{if(busy||reading||attachment||question.value||withScreen.checked||reply.dataset.state!=='idle')event.preventDefault();});

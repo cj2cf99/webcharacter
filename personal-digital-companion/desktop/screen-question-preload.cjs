@@ -13,7 +13,7 @@ contextBridge.exposeInMainWorld('screenQuestion',{
   decide:action=>ipcRenderer.invoke('screen-qa:decision',action),
   onMode:callback=>subscribe('screen-qa:mode',callback),
   retry:()=>ipcRenderer.invoke('screen-qa:retry'),
-  close:()=>ipcRenderer.send('screen-qa:close'),
+  close:reason=>ipcRenderer.send('screen-qa:close',{reason:reason==='button'?'button':'interrupted'}),
   idleClose:draft=>ipcRenderer.send('screen-qa:close',{reason:'idle',draft}),
   fit:height=>ipcRenderer.send('screen-qa:fit',height),
   onState:callback=>subscribe('screen-qa:changed',callback),

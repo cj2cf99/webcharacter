@@ -1,3 +1,4 @@
+import {personalityMemory} from './assistant/personality-memory.mjs';
 import {isPcRegistration} from './tasks/pc-types.mjs';
 import {executePcRegistration,pcOperationKey,readPcResult} from './tasks/pc-registration.mjs';
 import { handleDeviceRequest, PC_ID_PATTERN } from './devices/api.mjs';
@@ -216,6 +217,11 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
       if(path.startsWith('/api/weather/'))return await handleWeather(request,env,weatherOptions);
       if(path==='/api/assistant/message')return await handleAssistantMessage(request,env.DB,createAiClient,env,weatherOptions,identity.ownerId);
       if(!env.DB)return error(503,'DATABASE_NOT_CONFIGURED',dailyLogs?'日志数据库尚未配置':'任务数据库尚未配置');
+      if(path==='/api/memory/expenses'&&request.method==='GET'){
+        if(!env.COMPANION_HOST?.memoryExpenses)return error(503,'EXPENSES_UNAVAILABLE','消费来源未连接');
+        return json(await env.COMPANION_HOST.memoryExpenses(Object.fromEntries(url.searchParams)));
+      }
+      if(path.startsWith('/api/memory/'))return await personalityMemory(request,env,identity.ownerId);
       if(path==='/api/assistant/heartbeat'){
         if(request.method!=='POST')return error(405,'METHOD_NOT_ALLOWED','仅支持 POST',{Allow:'POST'});
         const {value,code,ai}=await runProviderChain({env,ownerId:identity.ownerId,signal:request.signal,heartbeat:true});

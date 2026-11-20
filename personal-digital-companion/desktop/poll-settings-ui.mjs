@@ -9,6 +9,7 @@ function render(rows){
       forms.set(row.id,form);form.dataset.poll=row.id;section.append(form);
       form.querySelector('h2').textContent=row.name;
       form.elements.enabled.checked=row.enabled;
+      if(row.id==='diary')form.elements.minutes.max=720;
       form.elements.minutes.value=row.minutes;form.elements.maximum.value=row.maximum;
       form.onsubmit=async event=>{
         event.preventDefault();

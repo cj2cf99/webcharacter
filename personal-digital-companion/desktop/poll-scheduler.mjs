@@ -2,9 +2,12 @@ const types=[
   {id:'tasks',name:'任务轮询',minutes:15},
   {id:'due',name:'到期事项',minutes:20},
   {id:'weather',name:'三地天气',minutes:60},
+  {id:'nag',name:'绯月念叨',minutes:120},
+  {id:'diary',name:'写日记',minutes:720},
+  {id:'review',name:'补行动评价',minutes:60},
 ];
 
-export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,clearTimer,add,weatherLastAt}){
+export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,clearTimer,add,weatherLastAt,lastRun=()=>null}){
   db.exec(`CREATE TABLE IF NOT EXISTS local_polls (
     id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, minutes INTEGER NOT NULL, maximum INTEGER NOT NULL,
     misses INTEGER NOT NULL, queuedAt INTEGER)`);
@@ -46,7 +49,7 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
   function postpone(j,due,existing=null){
     if(j.queuedAt===null){
       j.misses++;
-      if(j.misses>=j.maximum)j.queuedAt=due;
+      if(['diary','nag','review'].includes(j.id)||j.misses>=j.maximum)j.queuedAt=due;
       persist(j);
     }
     const queued=j.queuedAt!==null;
@@ -64,7 +67,12 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
     try{
       const result=await handlers[j.id](abort.signal);
       blocked=result?.deferred===true;
-      detail=blocked?'执行前被本地任务占用':result;
+      detail=blocked?'执行前被本地任务占用':result?.detail??result;
+      if(!closed&&j.enabled&&!blocked&&['nag','diary'].includes(j.id)){
+        const anchor=lastRun(j.id);
+        const next=result?.nextAt??(anchor&&anchor+j.minutes*60000);
+        if(next>now())arm(j,next);
+      }
     }catch(error){status=error.code==='NO_CONNECTION'?'未执行':'查询失败';detail=error.message;}
     if(closed)return;
     j.running=false;
@@ -86,7 +94,7 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
     void execute(j,due);
   }
   function initial(j){
-    const last=j.id==='weather'?weatherLastAt():null;
+    const last=j.id==='weather'?weatherLastAt():lastRun(j.id);
     const earliest=j.id==='tasks'?now():Math.max(now(),warmUntil);
     return last?Math.max(earliest,Math.min(now(),last)+j.minutes*60_000):earliest;
   }
@@ -96,7 +104,7 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
   }
   function configure(id,input){
     const j=jobs.get(id);
-    if(!j||!input||typeof input.enabled!=='boolean'||!Number.isInteger(input.minutes)||input.minutes<10||input.minutes>300||
+    if(!j||!input||typeof input.enabled!=='boolean'||!Number.isInteger(input.minutes)||input.minutes<10||input.minutes>(id==='diary'?720:300)||
         !Number.isInteger(input.maximum)||input.maximum<0||input.maximum>100)throw Error('间隔须为 10–300 分钟，最大推延须为 0–100 次，均为整数。');
     const enabledBefore=j.enabled,minutesBefore=j.minutes;
     Object.assign(j,{enabled:input.enabled,minutes:input.minutes,maximum:input.maximum});
@@ -110,7 +118,11 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
     if(!queue().length){clearTimer(retry);retry=null;}
     retryLater();changed();return snapshot();
   }
-  return {snapshot,configure,get pending(){return queue().length>0;},get(id){return jobs.get(id);},
+  function enqueue(id){
+    const j=jobs.get(id);if(closed||!j?.enabled)return;
+    j.queuedAt??=now();persist(j);retryLater();
+  }
+  return {snapshot,configure,enqueue,get pending(){return queue().length>0;},get(id){return jobs.get(id);},
     start(){if(started||closed)return;started=true;warmUntil=now()+60_000;
       for(const j of jobs.values())if(j.enabled)arm(j,initial(j));
       retryLater();

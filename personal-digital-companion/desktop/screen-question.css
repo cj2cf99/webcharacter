@@ -178,3 +178,7 @@ button:disabled, select:disabled { cursor: default; opacity: .55; }
   #hint { position: absolute; clip-path: inset(50%); }
   #send { margin-left: auto; }
 }
+
+.bubble .fy-compact #close[data-nag=true] { width:auto; padding:3px 6px; font-size:12px; color:var(--fy-ink); }
+#reply[data-nag=true] { overflow-y:auto; }
+#reply[data-nag=true] #answer { display:block; overflow:visible; max-height:none; white-space:pre-wrap; }

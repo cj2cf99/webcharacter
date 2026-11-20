@@ -28,7 +28,10 @@ import {createReminderChecks,checkDueItems} from './reminder-checks.mjs';
 import {attachPollSettings} from './poll-settings-host.mjs';
 import {attachReminderReview} from './reminder-review-host.mjs';
 import {attachTaskInbox} from './task-inbox-host.mjs';
-import {createLocalModel,desktopModelPath} from './local-model.mjs';
+import {desktopModelPath} from './local-model.mjs';
+import {createPersonalityDiary} from './personality-diary.mjs';
+import {createPersonalityNags} from './personality-nags.mjs';
+import {createBalancedLocalModel} from './balanced-local-model.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const ROAM_DELAY=90_000;
@@ -115,16 +118,39 @@ export async function startDesktop(electron,options={}){
       additionalArguments:options.benchmark?['--feiyue-benchmark']:[]}});
   const pcSettings=attachSettings(electron,{win,profile,bundle,root,legacySound:sound,onDisplayChange:applyScreenLock});
   let confineToScreen=pcSettings.store.snapshot().config.confineToScreen;
-  const localModel=options.localModel??(!options.benchmark&&electron.utilityProcess?createLocalModel({
+  const localModel=options.localModel??(!options.benchmark&&electron.utilityProcess?createBalancedLocalModel({
     utilityProcess:electron.utilityProcess,modelPath:desktopModelPath(app,root),log:tasks.traffic?.write
   }):null);
   let pendingCheckVisible=false,menuUnread=0;
+  let diary,nags,backgroundJob,backgroundController;
+  const hasMemory=Boolean(memory?.readTasks&&localModel?.memory&&!options.benchmark);
+  const memoryIdle=()=>!quitPending&&!work&&!screenQuestion.hasLocalWork&&!screenQuestion.panel&&
+    !reminderReview?.panel?.isVisible()&&!taskInbox?.panel?.isVisible()&&tasks.activeCount()===0&&(!tasks.canPoll||tasks.canPoll());
+  function interruptMemory(){backgroundController?.abort();}
+  async function memoryJob(kind,signal,manual=false){
+    if(backgroundJob||!memoryIdle())return {deferred:true};
+    backgroundController=new AbortController();
+    const combined=AbortSignal.any([signal,backgroundController.signal]);
+    const work=async()=>{
+      if(kind==='nag')return nags.poll(combined,{manual});
+      await nags.flush();
+      if(kind==='diary'){
+        const nextAt=(diary.last(kind)??0)+checks.polls().find(p=>p.id===kind).minutes*60000;
+        if(nextAt>Date.now())return {detail:'本周期已写过日记',nextAt};
+      }
+      const result=await diary.run(kind,combined);diary.mark(kind,Date.now());return result;
+    };
+    backgroundJob=work();
+    try{return await backgroundJob;}catch(error){if(combined.aborted)return {deferred:true};throw error;}
+    finally{backgroundJob=null;backgroundController=null;}
+  }
   const checks=createReminderChecks({profile,check:signal=>checkDueItems(tasks.weatherRequest,signal),
-    handlers:{weather:()=>weather.check(),tasks:()=>{
+    lastRun:id=>diary?.last(id==='nag'?'nag-shown':id),
+    handlers:{...(hasMemory?Object.fromEntries(['diary','nag','review'].map(k=>[k,s=>memoryJob(k,s)])):{}),weather:()=>weather.check(),tasks:()=>{
       if(!tasks.pollOnce)throw Object.assign(Error('任务轮询未连接'),{code:'NO_CONNECTION'});
       return tasks.pollOnce();
     }},
-    isBusy:id=>quitPending||work||screenQuestion.hasLocalWork||tasks.activeCount()>0||
+    isBusy:id=>(['diary','review','nag'].includes(id)&&(backgroundJob||!memoryIdle()))||quitPending||work||screenQuestion.hasLocalWork||tasks.activeCount()>0||
       (id==='tasks'&&tasks.canPoll&&!tasks.canPoll()),
     changed:()=>{
       screenQuestion.details?.webContents.send('conversation:checks-changed');
@@ -137,12 +163,21 @@ export async function startDesktop(electron,options={}){
   menuUnread=checks.unread;pendingCheckVisible=checks.pending;
   const pollSettings=attachPollSettings(electron,{root,bundle,checks});
   const serverTask=createServerTaskCommand({profile,tasks,localModel,dialog:messages});
-  const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,checks,serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
+  const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,checks,onForeground:interruptMemory,serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
     memory,vision:memory&&(options.vision??localVision(desktopModelPath(app,root))),readTasks:memory?.readTasks??tasks.executor?.review.read,
     readTraffic:tasks.traffic?.readPage,client:options.screenQuestionClient,requestRestart,localModel,log:tasks.traffic?.write});
   const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark,recordCheck:checks.record,checks});
   const reminderReview=tasks.reminderReview?attachReminderReview(electron,{bundle,root,flow:tasks.reminderReview}):null;
   const taskInbox=tasks.taskInbox?attachTaskInbox(electron,{bundle,root,flow:tasks.taskInbox}):null;
+  if(hasMemory){
+    diary=createPersonalityDiary({profile,memory,model:localModel,request:tasks.weatherRequest,weather:checks.weatherDiary});
+    nags=createPersonalityNags({store:diary,show:session=>screenQuestion.showNag(session),idle:()=>memoryIdle()&&win.isVisible(),changed:()=>{if(tray&&!cleaned)menu();},onInterrupted:()=>checks.enqueue('nag')});
+    if(nags.pending()?.status==='意外中断')checks.enqueue('nag');
+  }
+  const suspendMemory=()=>{interruptMemory();if(nags?.pending()?.status==='提问中')screenQuestion.hide();};
+  const focusMemory=(_event,other)=>{if(other!==win&&other!==screenQuestion.panel)suspendMemory();};
+  app.on('browser-window-focus',focusMemory);
+  electron.powerMonitor?.on?.('suspend',suspendMemory);
   attachment=new AttachmentController({
     areaFor:rect=>screen.getDisplayNearestPoint({x:Math.round(rect.x+rect.width/2),y:Math.round(rect.y+rect.height/2)}).workArea,
     onPlace:(p,state)=>{
@@ -426,7 +461,7 @@ export async function startDesktop(electron,options={}){
   function show(){pointerOutside=false;resetIdle();win.showInactive();win.webContents.send('desktop:visible',true);updatePosture(true);if(previousReady)beginPoll();}
   function hide(){screenQuestion.hide();detachAttachment('hidden');cancelMovement();travelPosture=null;drag=null;stopPoll();ignore(true);win.webContents.send('desktop:visible',false);win.hide();}
   function setWork(value){
-    work=value;resetIdle();
+    work=value;if(value)suspendMemory();resetIdle();
     win.webContents.send('desktop:work',work);menu();
   }
   function openSoundSettings(){
@@ -562,6 +597,7 @@ export async function startDesktop(electron,options={}){
       weather:{click:()=>{void weather.open().catch(()=>{
         if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'三地天气',message:'天气面板打不开，请重新启动绯月后重试。',buttons:['确定']}).catch(()=>{});
       });}},
+      continueNag:nags?.pending()&&{click:()=>taskNotice(memoryJob('nag',reminderStartup.signal,true))},
       question:{click:openQuestion},
       registration:tasks.registration && {click:()=>{
         if(!win.isVisible()){show();menu();}
@@ -698,6 +734,8 @@ export async function startDesktop(electron,options={}){
   function cleanup(){
     if(cleaned)return;cleaned=true;
     reminderStartup.abort();
+    app.removeListener('browser-window-focus',focusMemory);
+    interruptMemory();electron.powerMonitor?.removeListener?.('suspend',suspendMemory);
     pollSettings.close();checks.close();
     stopLayout();
     clearTimeout(refreshTimer);stopSources?.();
@@ -706,6 +744,7 @@ export async function startDesktop(electron,options={}){
     stopWindows?.();stopWindows=null;
     messages.close();
     screenQuestion.close();
+    if(diary)void Promise.allSettled([backgroundJob,nags.close()]).then(()=>diary.close());
     localModel?.close();
     reminderReview?.close();
     taskInbox?.close();

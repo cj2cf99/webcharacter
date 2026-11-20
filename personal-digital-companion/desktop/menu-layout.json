@@ -1,5 +1,6 @@
 [
   {"action":"question","label":"问绯月"},
+  {"action":"continueNag","label":"接着解释上次的事"},
   {"action":"weather","label":"三地天气"},
   {"action":"notices"},
   "-",
