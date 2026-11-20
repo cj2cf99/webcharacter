@@ -1,4 +1,4 @@
-import {isPcRegistration} from './pc-types.mjs';
+import {isPcRegistration, PC_IMAGE_GENERATE} from './pc-types.mjs';
 import { PC_ID_PATTERN } from '../devices/api.mjs';
 import { encodeJson } from '../execution/json.mjs';
 import { activityStatement } from './activity.mjs';
@@ -84,6 +84,15 @@ export async function handleTaskAction(request, DB, id, action, readTask, verify
   let valid;
   try { valid = reportValid(body, id); } catch { valid = false; }
   if (!valid) return fail(400, 'INVALID_RESULT', '结果、执行次数或尝试记录不符合任务规则');
+  if (task.type === PC_IMAGE_GENERATE && body.status === 'COMPLETED') {
+    const result = body.result;
+    if (!exact(result, ['job_id', 'format', 'width', 'height', 'archived'])
+      || result.job_id !== id.replaceAll('-', '') || result.format !== 'PNG' || result.archived !== true
+      || !Number.isSafeInteger(result.width) || result.width < 1
+      || !Number.isSafeInteger(result.height) || result.height < 1) {
+      return fail(400, 'INVALID_IMAGE_RECEIPT', '生图回执须含本任务作业号、PNG 格式、有效尺寸和本地归档状态');
+    }
+  }
   if(isPcRegistration(task.type)&&body.status==='COMPLETED'&&!(await verifyBusinessReceipt(task,body.result)))
     return fail(409,task.type==='pc.exercise.create'?'EXERCISE_RECEIPT_MISMATCH':'BUSINESS_RECEIPT_MISMATCH','业务回执尚未核实');
   if(task.superseded_by_task_id){
