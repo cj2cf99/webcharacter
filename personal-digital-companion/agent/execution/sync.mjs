@@ -29,8 +29,8 @@ export function createTaskSync({ request, executor, deviceId, pauseBeforeExecute
     if (!response.ok) throw Object.assign(new Error('任务同步请求失败，保留本地记录'), { status: response.status, code: body?.error?.code });
     return body;
   }
-  function verifyTask(task, id) {
-    if (!task || task.task_id !== id || task.target_device_id !== deviceId || typeof task.type !== 'string'
+  function verifyTask(task, id, allowPool=false) {
+    if (!task || task.task_id !== id || (task.target_device_id !== deviceId && !(allowPool&&task.target_device_id==='all'&&task.status==='PENDING'&&task.definition?.executor==='pc')) || typeof task.type !== 'string'
       || !task.params || typeof task.params !== 'object' || Array.isArray(task.params)) throw new Error('云端任务身份或参数不一致，停止同步');
     if (task.type === 'disk.query') throw new Error('磁盘查询已按用户要求暂缓');
   }
@@ -71,9 +71,9 @@ export function createTaskSync({ request, executor, deviceId, pauseBeforeExecute
     active.add(taskId);
     try {
       const remote = await call(`/api/tasks/${encodeURIComponent(taskId)}`);
-      verifyTask(remote, taskId);
+      verifyTask(remote, taskId,true);
       let local = executor.getTask(taskId);
-      if (local) sameContent(local, remote);
+      if (local) sameContent(local, remote.target_device_id==='all'?{...remote,target_device_id:deviceId}:remote);
       if(remote.superseded_by_task_id) {
         if(local&&terminal(local.status))return await upload(local,taskId);
         throw new Error('该任务已被新轮替代，保留旧轮本地记录');
@@ -90,7 +90,7 @@ export function createTaskSync({ request, executor, deviceId, pauseBeforeExecute
       }
       if (local && terminal(local.status)) return await upload(local, taskId);
       if(local?.status==='RUNNING')throw new Error('上次执行状态待核对，未自动重跑');
-      local = executor.prepare({...taskContent(remote),definition:remote.definition,deadline_at:remote.deadline_at});
+      local = executor.prepare({...taskContent(remote),target_device_id:deviceId,definition:remote.definition,deadline_at:remote.deadline_at});
       const requestId=executor.claimRequestId(taskId);
       const claimed = await call(`/api/tasks/${encodeURIComponent(taskId)}/claim`, 'POST', { device_id: deviceId,request_id:requestId });
       verifyTask(claimed?.task, taskId);

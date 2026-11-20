@@ -1,3 +1,5 @@
+import {isPcRegistration} from './tasks/pc-types.mjs';
+import {executePcRegistration,pcOperationKey,readPcResult} from './tasks/pc-registration.mjs';
 import { handleDeviceRequest, PC_ID_PATTERN } from './devices/api.mjs';
 import { handleTerminalRequest } from './terminals/api.mjs';
 import { validateParameters } from './tasks/parameters.mjs';
@@ -36,7 +38,8 @@ function typeView(row) {
 
 function taskView(row) {
   return {
-    task_id: row.task_id, type: row.type, target_device_id: row.target_device_id,
+    task_id: row.task_id, type: row.type, target_device_id: row.target_device_id ?? (row.dispatch_all ? 'all' : null),
+    ...(row.dispatch_all ? {dispatch_target:'all'} : {}),
     submission_id: row.submission_id ?? null,
     params: JSON.parse(row.params_json), status: row.status, attempt_count: row.attempt_count,
     created_at: row.created_at, result: row.result_json === null ? null : JSON.parse(row.result_json),
@@ -124,11 +127,11 @@ async function createTask(request, DB, ownerId) {
   try { params = encodeJson(body.params); }
   catch { return error(400, 'INVALID_PARAMS', '参数必须为有效JSON'); }
   async function replay() {
-    const saved = await DB.prepare(`SELECT t.task_id, t.type, t.target_device_id, t.params_json, t.deadline_at
+    const saved = await DB.prepare(`SELECT t.task_id, t.type, t.target_device_id,t.dispatch_all, t.params_json, t.deadline_at
       FROM tasks t JOIN task_submissions s ON s.submission_id = t.submission_id
       WHERE t.submission_id = ? AND s.owner_id = ?`).bind(body.submission_id, ownerId).first();
     if (!saved) return null;
-    if (saved.type !== body.type || saved.target_device_id !== target || saved.deadline_at !== deadline
+    if (saved.type !== body.type || (saved.dispatch_all?'all':saved.target_device_id) !== target || saved.deadline_at !== deadline
         || encodeJson(JSON.parse(saved.params_json)) !== params) {
       return error(409, 'SUBMISSION_CONFLICT', '该提交号已用于不同的任务内容');
     }
@@ -144,10 +147,10 @@ async function createTask(request, DB, ownerId) {
   if (!checked.valid) return error(400, 'INVALID_PARAMS', '参数不符合该任务类型定义');
   if (definition.executor === 'pc') {
     if (typeof target !== 'string' || !target) return error(400, 'TARGET_REQUIRED', 'PC任务必须指定目标设备');
-    if (!await DB.prepare('SELECT device_id FROM devices WHERE device_id = ?').bind(target).first()) {
+    if (target !== 'all' && !await DB.prepare('SELECT device_id FROM devices WHERE device_id = ?').bind(target).first()) {
       return error(404, 'DEVICE_NOT_FOUND', '目标设备不存在');
     }
-    if (!PC_ID_PATTERN.test(target)) return error(400, 'INVALID_TARGET', '网页终端不能执行PC任务');
+    if (target !== 'all' && !PC_ID_PATTERN.test(target)) return error(400, 'INVALID_TARGET', '网页终端不能执行PC任务');
   } else if (target !== null) {
     return error(400, 'INVALID_TARGET', '云端任务不能指定PC设备');
   }
@@ -155,18 +158,19 @@ async function createTask(request, DB, ownerId) {
   // 此条 SQL 同时检查签发记录和占用提交号。并发不能各写一条。
   const now = Date.now();
   const inserted = await DB.prepare(`INSERT INTO tasks
-    (task_id, type, target_device_id, params_json, status, attempt_count, created_at, deadline_at, submission_id)
-    SELECT ?, ?, ?, ?, 'PENDING', 0, ?, ?, s.submission_id FROM task_submissions s
+    (task_id, type, target_device_id, dispatch_all, params_json, status, attempt_count, created_at, deadline_at, submission_id)
+    SELECT ?, ?, ?, ?, ?, 'PENDING', 0, ?, ?, s.submission_id FROM task_submissions s
     WHERE s.submission_id = ? AND s.owner_id = ?
       AND NOT EXISTS (SELECT 1 FROM chains c WHERE c.chain_id=s.submission_id AND c.submission_fingerprint IS NOT NULL)
     ON CONFLICT(submission_id) DO NOTHING`)
-    .bind(id, body.type, target, params, new Date(now).toISOString(), deadline, body.submission_id, ownerId).run();
+    .bind(id, body.type, target==='all'?null:target, Number(target==='all'), params, new Date(now).toISOString(), deadline, body.submission_id, ownerId).run();
   if (!inserted.meta.changes) {
     return await replay() ?? error(409, 'SUBMISSION_UNAVAILABLE', '提交号未为当前账户签发');
   }
   return json(await readTask(DB, id), 201);
 }
 
+const exercisePath='/api/records/hu-shi/exercise/entries';
 async function authorizeDevelopment(request,env) {
   if(typeof env.API_TOKEN!=='string'||!env.API_TOKEN.trim()||request.headers.get('Authorization')!==`Bearer ${env.API_TOKEN}`)throw Object.assign(new Error('未认证'),{status:401});
   return {ownerId:'development'};
@@ -235,17 +239,41 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
         if (request.method !== 'POST') return error(405, 'METHOD_NOT_ALLOWED', '仅支持POST', { Allow: 'POST' });
         return await createTask(request, env.DB, identity.ownerId);
       }
-      const actionMatch = /^\/api\/tasks\/([^/]+)\/(claim|result|progress|cancel|recover|execute|receipt)$/.exec(path);
+      const actionMatch = /^\/api\/tasks\/([^/]+)\/(claim|result|progress|cancel|recover|execute|receipt|pc-exercise|pc-registration)$/.exec(path);
       if (actionMatch) {
         if (request.method !== 'POST') return error(405, 'METHOD_NOT_ALLOWED', '仅支持POST', { Allow: 'POST' });
         let id;
         try { id = decodeURIComponent(actionMatch[1]); } catch { return error(400, 'INVALID_TASK_ID', '任务标识无效'); }
+        if(['pc-exercise','pc-registration'].includes(actionMatch[2])){
+          const task=await readTask(env.DB,id);
+          let claim;try{claim=await request.json();}catch{return error(400,'INVALID_JSON','领取信息无效');}
+          if(!task||!isPcRegistration(task.type)||(actionMatch[2]==='pc-exercise'&&task.type!=='pc.exercise.create')||task.definition.executor!=='pc'||task.status!=='RUNNING'||task.superseded_by_task_id||
+             !PC_ID_PATTERN.test(claim?.device_id??'')||claim.device_id!==task.target_device_id||
+             !claim.request_id||claim.request_id!==task.claim_request_id)return error(409,'CLAIM_MISMATCH','须持有当前运动任务领取回执');
+          if(task.type!=='pc.exercise.create'){
+            try{return json(await executePcRegistration(env,task,await pcOperationKey(env.DB,task)));}
+            catch(e){if(['PLANNER_REJECTED','PC_REJECTED'].includes(e.code))return error(422,'BUSINESS_REJECTED',e.message);throw e;}
+          }
+          if(!writeRegistrationEntry)return error(503,'RECORDS_NOT_CONFIGURED','未接入运动登记');
+          const root=await pcOperationKey(env.DB,task);
+          const receipt=await writeRegistrationEntry({env,path:exercisePath,
+            body:{body:task.params.body,reflection:null,tag_ids:[],photos:[]},idempotencyKey:root});
+          if(typeof receipt?.id!=='string'||!receipt.id||!Number.isSafeInteger(receipt.created_at))return error(502,'RECEIPT_UNKNOWN','运动记录回执待核对');
+          return json({record_id:receipt.id,created_at:receipt.created_at});
+        }
         if (actionMatch[2] === 'recover') return await handleRecovery(request, env.DB, id, readTask);
         if (actionMatch[2] === 'execute' || actionMatch[2] === 'receipt') {
           return await executeCloudRegistration({request,env,taskId:id,ownerId:identity.ownerId,readTask,
             writeEntry:writeHuShiEntry,writeRegistrationEntry,readRegistrationReceipt,receiptOnly:actionMatch[2]==='receipt'});
         }
-        return await handleTaskAction(request, env.DB, id, actionMatch[2], readTask);
+        return await handleTaskAction(request, env.DB, id, actionMatch[2], readTask, async(task,result)=>{
+          if(task.type!=='pc.exercise.create'){
+            const saved=await readPcResult(env.DB,await pcOperationKey(env.DB,task));
+            return saved!==null&&encodeJson(saved)===encodeJson(result);
+          }
+          const found=await readRegistrationReceipt?.({path:exercisePath,idempotencyKey:await pcOperationKey(env.DB,task),env});
+          return found?.id && found.id===result?.record_id && Number.isSafeInteger(found.created_at) && found.created_at===result.created_at;
+        });
       }
       const taskMatch = /^\/api\/tasks\/([^/]+)$/.exec(path);
       if (taskMatch) {

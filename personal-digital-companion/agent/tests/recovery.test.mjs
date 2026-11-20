@@ -108,7 +108,11 @@ test('L01/R01：身份重开不变，无配置显示名称参数JST，稍后/离
   try{
     const identity=await getDeviceIdentity(profile);await localInterrupted(profile,{task_id:'old',type:'mock.unit',target_device_id:identity.device_id,params:{value:'原参数'}});
     const prompts=[];lifecycle=await createDesktopTasks({profile,request:null,dialog:{async showMessageBox(p){prompts.push(p);return {response:0};}}});
-    assert.equal(lifecycle.identity.device_id,identity.device_id);await lifecycle.startup();assert.equal(prompts.length,1);
+    assert.equal(lifecycle.identity.device_id,identity.device_id);
+    const warmup=Promise.withResolvers(),startup=lifecycle.startup(warmup.promise);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(prompts.length,0,'首分钟不主动提示中断');
+    warmup.resolve(true);await startup;assert.equal(prompts.length,1);
     assert.match(prompts[0].detail,/模拟登记/);assert.match(prompts[0].detail,/原参数/);assert.match(prompts[0].detail,/JST/);
     assert.equal(lifecycle.executor.getRecovery('old'),null);
     await assert.rejects(lifecycle.decide('old','redo'),/待同步/);

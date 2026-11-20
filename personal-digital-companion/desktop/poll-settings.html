@@ -1,0 +1,9 @@
+<!doctype html><html lang="zh-CN" class="fy-panel"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'"><title>绯月 · 轮询设定</title><link rel="stylesheet" href="feiyue-surface.css"><link rel="stylesheet" href="poll-settings.css"></head>
+<body><header class="fy-titlebar"><div class="fy-caption"><h1>轮询设定</h1></div></header>
+<main class="fy-scroll"><p>轮询遇忙会顺延，达到设定次数就加入队列。设为 0 时首次遇忙即入队。</p><section id="polls" aria-label="轮询项目"></section>
+<section id="waiting" tabindex="-1"><h2>本地待处理队列</h2><ul id="queue"></ul><p id="empty">暂无等待中的轮询任务</p></section>
+<p id="feedback" role="status"></p></main>
+<template id="editor"><form><div class="heading"><h2></h2><label><input type="checkbox" name="enabled"> 启用</label></div>
+<div class="fields"><label>轮询间隔（分钟）<input type="number" name="minutes" min="10" max="300" required step="1"></label>
+<label>最大推延（次）<input type="number" name="maximum" min="0" max="100" required step="1"></label><button>保存</button></div>
+<small class="state"></small></form></template><script type="module" src="poll-settings-ui.mjs"></script></body></html>

@@ -6,6 +6,7 @@ import re
 import shutil
 import tempfile
 import uuid
+import sys
 
 ROOT = Path(__file__).resolve().parent
 
@@ -26,16 +27,16 @@ def resolve_skill(skill, version=None, root=ROOT):
     source = base / "source"
     if not (source / "SKILL.md").is_file():
         raise ValueError("未登记此 skill")
-    files = {p.relative_to(source): p.read_bytes() for p in sorted(source.rglob("*")) if p.is_file()}
-    digest = hashlib.sha256()
-    for path, data in files.items():
-        digest.update(path.as_posix().encode() + b"\0" + hashlib.sha256(data).digest())
-    fingerprint = digest.hexdigest()
     import msvcrt
     with (base / ".publish.lock").open("a+b") as lock:
         lock.seek(0)
         msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
         try:
+            files = {p.relative_to(source): p.read_bytes() for p in sorted(source.rglob("*")) if p.is_file()}
+            digest = hashlib.sha256()
+            for path, data in files.items():
+                digest.update(path.as_posix().encode() + b"\0" + hashlib.sha256(data).digest())
+            fingerprint = digest.hexdigest()
             pointer = base / "latest.json"
             latest = json.loads(pointer.read_bytes()) if pointer.exists() else {}
             if latest.get("sha256") == fingerprint:
@@ -69,3 +70,36 @@ def resolve_skill(skill, version=None, root=ROOT):
         finally:
             lock.seek(0)
             msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+
+
+def child_skill(folder, purpose, version=None):
+    links = json.loads((folder / "children.json").read_bytes())
+    child = links[purpose]
+    release, location = resolve_skill(child, version)
+    return child, release, location
+
+
+def route_skill(hint, group="hints"):
+    root_version, folder = resolve_skill("feiyue-interaction")
+    routes = json.loads((folder / "routes.json").read_bytes())
+    skill = routes[group][hint]
+    version, child = resolve_skill(skill)
+    def body(path):
+        return path.read_text(encoding="utf-8").split("---", 2)[2].strip()
+    instruction = body(folder / "SKILL.md") + "\n\n" + body(child / "SKILL.md")
+    selected = {"routerVersion": root_version, "skill": skill, "version": version, "content": body(child / "SKILL.md")}
+    if hint == "attachmentRegistration" and group == "hints":
+        sub, sub_version, location = child_skill(child, "registration")
+        selected["child"] = {"skill": sub, "version": sub_version}
+        instruction += "\n\n" + body(location / "SKILL.md")
+    local = child / "local-ai.json"
+    if local.is_file():
+        selected["localAi"] = json.loads(local.read_bytes())
+    return {**selected, "instruction": instruction}
+
+
+if __name__ == "__main__":
+    if len(sys.argv) == 2 and sys.argv[1] == "list":
+        print(json.dumps({p.parent.name: resolve_skill(p.parent.name)[0] for p in sorted(ROOT.glob("*/source"))}))
+    else:
+        print(json.dumps(route_skill(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "hints")))

@@ -18,6 +18,7 @@ const webMode=mode.querySelector('option[value="web"]');
 let busy=false,composing=false,idleTimer,draftReady=false;
 let attachment=null,reading=false,attachmentReady=false;
 let references=[];
+let reviewId=null;
 const resetIdle=()=>{
   clearTimeout(idleTimer);
   if(busy||composing||reading)return;
@@ -97,6 +98,9 @@ function render(value){
   const waiting=value.state==='waiting';
   if(waiting!==busy){busy=waiting;resetIdle();}
   reply.dataset.state=value.state;reply.setAttribute('aria-busy',String(busy));
+  reviewId=value.reviewId??null;
+  byId('recordReview').hidden=!reviewId;
+  byId('recordFields').textContent=value.fields??'';
   byId('asked').hidden=!value.question;
   byId('asked').textContent=value.question??'';
   const full=value.text??'';
@@ -150,18 +154,25 @@ async function invoke(run){
 }
 mode.onchange=()=>{updateMode();retry.hidden=true;};
 withScreen.onchange=()=>{retry.hidden=true;};
-question.oninput=()=>{retry.hidden=true;};
+question.oninput=()=>{retry.hidden=true;if(reviewId){reviewId=null;byId('recordReview').hidden=true;}};
 form.onsubmit=async event=>{
   event.preventDefault();
   const text=question.value;if((!text.trim()&&!attachment)||send.disabled)return;
   const value=await invoke(()=>host.ask(text,withScreen.checked,mode.value,attachment,references));
-  if(value?.state==='answer'){question.value='';showAttachment(null);attachmentError();updateMode('auto');question.focus();}
+  if(value?.state==='answer'&&!value.reviewId){question.value='';showAttachment(null);attachmentError();updateMode('auto');question.focus();}
 };
+for(const [id,approve] of [['approveRecord',true],['discardRecord',false]]){
+  byId(id).onclick=async()=>{
+    const token=reviewId;if(!token||busy)return;
+    const result=await invoke(()=>host.reviewAttachment(token,approve));
+    if(result?.state==='answer'){question.value='';showAttachment(null);attachmentError();}
+  };
+}
 question.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();form.requestSubmit();}};
 for(const event of ['keydown','input','pointerdown','change']){
   document.addEventListener(event,resetIdle,{capture:true,passive:true});
 }
-document.addEventListener('wheel',event=>event.preventDefault(),{capture:true,passive:false});
+document.addEventListener('wheel',event=>{if(!event.target.closest?.('#recordFields,#imageResults'))event.preventDefault();},{capture:true,passive:false});
 question.addEventListener('compositionstart',()=>{composing=true;resetIdle();});
 question.addEventListener('compositionend',()=>{composing=false;resetIdle();});
 retry.onclick=async()=>{const value=await invoke(()=>host.retry());if(attachment&&value?.state==='answer'){question.value='';showAttachment(null);attachmentError();}};

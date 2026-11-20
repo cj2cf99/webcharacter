@@ -4,7 +4,7 @@ export const validId=v=>typeof v==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(v);
 export const why=(code,message)=>({code,message});
 export async function heldCount(DB,deviceId){return (await DB.prepare("SELECT COUNT(*) n FROM tasks WHERE target_device_id=? AND status='RUNNING'").bind(deviceId).first()).n;}
 export async function nodeInfo(DB,taskId) {
-  return DB.prepare(`SELECT n.*,c.stopped_at FROM tasks t JOIN chain_nodes n ON n.node_id=t.chain_node_id
+  return DB.prepare(`SELECT n.*,c.stopped_at,c.serial_pc FROM tasks t JOIN chain_nodes n ON n.node_id=t.chain_node_id
     JOIN chains c ON c.chain_id=n.chain_id WHERE t.task_id=?`).bind(taskId).first();
 }
 // SQL 直接检查当前祖先轮。已领取任务回报不经过此领取守卫。
@@ -36,6 +36,7 @@ export async function eligibility(DB,task,deviceId,action='claim',context=null) 
   if(node?.stopped_at)reasons.push(why('CHAIN_STOPPED','任务组已停止新领取'));
   const ready=context?context.ancestorsReady:await DB.prepare(`SELECT t.task_id FROM tasks t WHERE t.task_id=? AND ${ancestorsReadySQL}`).bind(task.task_id).first();
   if(!ready)reasons.push(why('DEPENDENCY_PENDING','等待前置节点成功或用户跳过'));
+  if(node?.serial_pc&&(action==='skip'||action==='force'))reasons.push(why('SERIAL_ORDER','串行链须等待本节点成功，或停止整条链'));
   if(action==='skip') {
     if(!node||task.status!=='FAILED')reasons.push(why('NOT_FAILED','只能跳过当前轮最终失败的节点'));
     return reasons;
@@ -43,13 +44,14 @@ export async function eligibility(DB,task,deviceId,action='claim',context=null) 
   if(task.type==='disk.query')reasons.push(why('TYPE_PAUSED','该具体任务已暂停'));
   if(task.deadline_at!==null&&task.deadline_at!==undefined&&Date.now()>=Date.parse(task.deadline_at)+DEADLINE_GRACE_MS)reasons.push(why('TASK_DEADLINE_PASSED','截止已满7天，不可接取'));
   if(action==='claim'){
-    if(task.target_device_id!==deviceId)reasons.push(why('TARGET_MISMATCH','普通领取仅限原目标PC'));
+    if(task.target_device_id!=='all'&&task.target_device_id!==deviceId)reasons.push(why('TARGET_MISMATCH','普通领取仅限原目标PC'));
     if(task.status!=='PENDING')reasons.push(why(task.status==='RUNNING'?'ALREADY_CLAIMED':task.status==='FAILED'?'FAILED_AWAITING_DECISION':'TASK_FINISHED',task.status==='RUNNING'?'已经被领取':task.status==='FAILED'?'最终失败，等待继续、停止或跳过':'任务已结束'));
   } else if(action==='continue') {
+    if(node?.serial_pc&&task.dispatch_target!=='all'&&task.target_device_id!==deviceId)reasons.push(why('TARGET_MISMATCH','请由指定电脑继续任务'));
     if(!node||task.status!=='FAILED')reasons.push(why('NOT_FAILED','只有当前失败节点可继续新一轮'));
   } else if(!['RUNNING','COMPLETED'].includes(task.status))reasons.push(why('FORCE_NOT_AVAILABLE','强制接取仅适用于执行中或已完成任务'));
   const held=context?context.held:await heldCount(DB,deviceId??'');
-  const replaceOwn=action==='force'&&task.status==='RUNNING'&&task.target_device_id===deviceId?1:0;
+  const replaceOwn=(action==='force'||action==='redo')&&task.status==='RUNNING'&&task.target_device_id===deviceId?1:0;
   if(held-replaceOwn>=2)reasons.push(why('CAPACITY_FULL','当前终端已持有两个未结束任务'));
   return reasons;
 }

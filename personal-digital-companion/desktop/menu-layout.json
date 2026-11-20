@@ -1,11 +1,13 @@
 [
   {"action":"question","label":"问绯月"},
   {"action":"weather","label":"三地天气"},
+  {"action":"notices"},
   "-",
   {"label":"任务","items":[
     {"action":"today","label":"今日任务"},
     {"action":"tasks","label":"接取任务与任务链"},
     {"action":"retry","label":"中断任务与补传"},
+    {"action":"pendingCheck","label":"提醒检查 · 待执行"},
     {"action":"review","label":"本地复盘"},
     {"action":"log","label":"任务日志"}
   ]},
@@ -26,6 +28,8 @@
   ]},
   {"label":"设置与维护","items":[
     {"action":"settings","label":"动画与声音"},
+    {"action":"pollSettings","label":"轮询设定"},
+    {"action":"loginStart","label":"登录 Windows 后延迟 1 分钟启动"},
     {"action":"connection","label":"云端连接"},
     "-",
     {"action":"restart","label":"重启绯月"}

@@ -157,7 +157,7 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
     return { status: 'paused', chain, pending: saved.pending };
   }
 
-  function once(text, action) {
+  function once(text, action, reviewed) {
     if(!canEnter())return Promise.reject(Error('正在准备重启或退出，暂缓新的登记。'));
     if (active) {
       if (action === undefined && (active.text === text || text === undefined)) return active.promise;
@@ -192,7 +192,7 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
         if (action !== undefined) throw Error('没有待处理的登记链');
         return null;
       }
-      const planned = await call('/api/assistant/recording-plan', { text });
+      const planned = reviewed ?? await call('/api/assistant/recording-plan', { text });
       if (!Array.isArray(planned?.pending)) throw Error('AI 登记计划回执无效');
       if (planned.chain === null) return { status: 'needs_input', chain: null, pending: planned.pending };
       if (!Array.isArray(planned.chain?.nodes) || !planned.chain.nodes.length) throw Error('AI 登记计划回执无效');
@@ -211,6 +211,8 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
   }
 
   return {
+    preview:text=>call('/api/assistant/recording-plan',{text}),
+    submitReviewed:(text,plan)=>once(text,undefined,plan),
     submit(text) {
       if (typeof text !== 'string' || !text.trim()) return Promise.reject(Error('请输入登记内容'));
       return once(text);

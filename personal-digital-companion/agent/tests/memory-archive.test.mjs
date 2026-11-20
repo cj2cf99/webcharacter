@@ -16,6 +16,30 @@ function screenClient(options){
     desktopCapturer:{getSources:async()=>[{display_id:'1',thumbnail:source}]},...options});
 }
 
+test('多步生图归档独立于作业目录，可重复补档并与普通任务同时复盘',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'feiyue-report-')),memory=createMemoryArchive(join(dir,'记忆'));
+  const job='ab'.repeat(16),png=join(dir,'source.png'),missing=join(dir,'later.png');
+  await writeFile(png,source.toPNG());
+  const row={job,at:turn.at,state:'done',original:'先画，再放大',text:'已完成',completed:[
+    {step:1,operation:'generate',output:png,width:640,height:320},{step:2,operation:'upscale',output:missing,width:2560,height:1280}]};
+  const day='2026-11-19';
+  assert.equal((await memory.archiveImageTask(row)).complete,false);
+  await rename(png,missing);
+  const result=await memory.archiveImageTask(row);
+  assert.equal(result.complete,true);
+  assert.equal(result.output,memory.taskImage(day,job,2));
+  await memory.saveTasks(day,[{task_id:'register',at:row.at,title:'提醒',action:'已登记'}]);
+  assert.equal((await memory.readTasks(day)).length,2);
+  const report=await memory.readImageReport(day,job);
+  assert.equal(report.report.steps.length,2);
+  assert.ok(report.report.steps.every(s=>s.image.startsWith('对话/图片/')));
+  const moved=join(dir,'移动后的日期包');
+  await rename(memory.folder(day),moved);
+  for(const s of report.report.steps)assert.deepEqual(await readFile(join(moved,s.image)),source.toPNG());
+  assert.match(await readFile(join(moved,'复盘.html'),'utf8'),/对话\/图片\//);
+  assert.throws(()=>memory.taskImage(day,'../escape',1));
+});
+
 test('东京日期包搬走后可直接查看对话、任务、图片和跨午夜完成的日志',async()=>{
   const dir=await mkdtemp(join(tmpdir(),'feiyue-portable-')),memory=createMemoryArchive(dir);
   const ref=await memory.storeImage(turn,source);

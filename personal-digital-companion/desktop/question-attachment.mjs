@@ -23,7 +23,12 @@ export async function readAttachment(file){
       ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
       ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
       const attachment={kind:'image',name,data:canvas.toDataURL('image/jpeg',0.88)};
-      if(validAttachment(attachment))return attachment;
+      if(validAttachment(attachment)){
+        if(['image/png','image/jpeg','image/webp'].includes(file.type)){
+          attachment.originalBytes=new Uint8Array(await file.arrayBuffer());
+        }
+        return attachment;
+      }
     }catch{}finally{bitmap?.close();}
     throw Error('无法读取这张图片，请使用 PNG、JPEG 或 WebP。');
   }

@@ -114,13 +114,13 @@ test('P03：单计时器只刷新清单，不自动领取；退出检查暂停�
   };
   const poller = createTaskPoller({ request, identity: { device_id: device, computer_name: 'TEST' },
     canStart: () => allowed, supports: task => task.type === 'mock.unit',
-    runTask: id => { runs.push(id); },onTasks:tasks=>pages.push(tasks), setTimer: callback => { assert.equal(timer, undefined); timer = callback; return 1; }, clearTimer: () => { timer = undefined; } });
+    runTask: id => { runs.push(id); },onTasks:tasks=>pages.push(tasks), setTimer: (callback,ms) => { assert.equal(ms,900_000); assert.equal(timer, undefined); timer = callback; return 1; }, clearTimer: () => { timer = undefined; } });
   const fire = async () => { const fn = timer; timer = undefined; fn(); await tick(); };
   poller.start(); poller.start(); await tick(); assert.deepEqual(runs, []);assert.equal(pages[0].length,2);
   await fire(); assert.deepEqual(runs, []); assert.equal(registration, 1);assert.equal(pages[1].length,3);
   allowed = false; await fire(); assert.equal(scans, 2);
-  allowed = true; poller.kick(); await tick(); assert.equal(scans, 3); assert.deepEqual(runs, []);
-  poller.stop(); assert.equal(timer, undefined); await tick(); poller.kick(); assert.equal(scans, 3);
+  allowed = true; await fire(); assert.equal(scans, 3); assert.deepEqual(runs, []);
+  poller.stop(); assert.equal(timer, undefined); await tick(); assert.equal(scans, 3);
 });
 
 test('P04：停止后的迟到清单不执行，失败仅等下一普通周期', async () => {
@@ -136,7 +136,48 @@ test('P04：停止后的迟到清单不执行，失败仅等下一普通周期',
   await tick(); assert.equal(runs, 0); assert.equal(scheduled, 1);
 });
 
-test('P05：桌面只发现任务，显式接取后真实线程执行回传，未知类型保持待执行', async t => {
+test('分页中途出现本地任务时丢弃本轮清单，下一次空闲周期重新读取',async()=>{
+  let busy=false,scheduled,reads=0;
+  const pages=[],first=Promise.withResolvers();
+  const poller=createTaskPoller({identity:{device_id:device,computer_name:'TEST'},canStart:()=>!busy,
+    request:async(path,opts)=>{
+      if(opts.method==='PUT')return Response.json({device:{device_id:device}});
+      reads++;
+      assert.ok(path.endsWith('/pending'));
+      if(reads===1)return first.promise;
+      return Response.json({tasks:[],next_after:null});
+    },onTasks:tasks=>pages.push(tasks),setTimer:(fn,ms)=>{assert.equal(ms,900_000);scheduled=fn;return 1;},clearTimer(){}});
+  poller.start();await tick();
+  busy=true;first.resolve(Response.json({tasks:[{task_id:'a',type:'mock.unit'}],next_after:'a'}));await tick();
+  assert.equal(reads,1);assert.deepEqual(pages,[]);
+  scheduled();await tick();assert.equal(reads,1);
+  busy=false;scheduled();await tick();assert.equal(reads,2);assert.deepEqual(pages,[[]]);poller.stop();
+});
+
+test('启动时有桌面工作或上次执行结果待补传，自动轮询按原间隔跳过',async t=>{
+  const profile=mkdtempSync(join(tmpdir(),'companion-poll-idle-'));
+  t.after(()=>rmSync(profile,{recursive:true,force:true}));
+  const identity=await getDeviceIdentity(profile);
+  const executor=createTaskExecutor({databasePath:join(profile,'tasks.sqlite'),deviceId:identity.device_id,
+    handlers:{'mock.unit':{risk:'L1',validate(){},execute(){return {ok:true};}}}});
+  await executor.execute({task_id:'prior',type:'mock.unit',target_device_id:identity.device_id,params:{}});
+  executor.close();
+  let busy=false,next;
+  const calls=[];
+  const runtime=await createDesktopTasks({profile,dialog:{},desktopBusy:()=>busy,
+    request:async(path,opts)=>{calls.push(path);return Response.json(opts.method==='PUT'?{device:identity}:{tasks:[],next_after:null});},
+    pollerOptions:{setTimer:(fn,ms)=>{assert.equal(ms,900_000);next=fn;return 1;},clearTimer(){}}});
+  try{
+    runtime.startPolling();await tick();assert.deepEqual(calls,[]);
+    runtime.executor.markUploaded('prior');
+    busy=true;next();await tick();assert.deepEqual(calls,[]);
+    busy=false;runtime.cancelRestart();runtime.cancelQuitCheck();await tick();assert.deepEqual(calls,[]);
+    next();await tick();
+    assert.deepEqual(calls,[`/api/devices/${identity.device_id}`,`/api/devices/${identity.device_id}/pending`]);
+  }finally{await runtime.stop();}
+});
+
+test('P05：空闲轮询自动领取，真实线程执行回传，未知类型保持待执行', async t => {
   const { sqlite, request } = fixture(t);
   const profile = mkdtempSync(join(tmpdir(), 'companion-poll-'));
   const identity = await getDeviceIdentity(profile);
@@ -146,22 +187,30 @@ test('P05：桌面只发现任务，显式接取后真实线程执行回传，�
     VALUES (?,?,?,?,'PENDING',?)`);
   insert.run('auto', 'mock.unit', identity.device_id, '{"value":"x"}', new Date().toISOString());
   insert.run('unknown', 'not.installed', identity.device_id, '{}', new Date().toISOString());
-  let nextTimer;
-  const runtime = await createDesktopTasks({ profile, request, dialog: { async showMessageBox() { return { response: 0 }; } },
+  let nextTimer,polls=0;
+  const reading=Promise.withResolvers(),release=Promise.withResolvers();
+  const runtime = await createDesktopTasks({ profile, request:async(path,options)=>{
+    if(path.endsWith('/pending'))polls++;
+    if(path==='/api/tasks/auto'&&options.method==='GET'){reading.resolve();await release.promise;}
+    return request(path,options);
+  }, dialog: { async showMessageBox() { return { response: 0 }; } },
     handlerModule: new URL('./fixtures/thread-handlers.mjs', import.meta.url).href,
     pollerOptions: { setTimer: fn => { nextTimer = fn; return 1; }, clearTimer: () => { nextTimer = null; } } });
   try {
     runtime.startPolling();
-    for (let i = 0; i < 200 && !nextTimer; i++) await new Promise(resolve => setTimeout(resolve, 5));
+    await reading.promise;
     assert.equal(sqlite.prepare("SELECT status FROM tasks WHERE task_id='auto'").get().status, 'PENDING');
     assert.equal(runtime.executor.getTask('auto'),null);
-    assert.equal(runtime.getAvailableTasks().length,2);
-    await runtime.runTask('auto');
+    runtime.startPolling();await tick();assert.equal(polls,1);
+    release.resolve();
+    for(let i=0;i<400&&!nextTimer;i++)await new Promise(resolve=>setTimeout(resolve,5));
+    assert.ok(nextTimer);
+    nextTimer();await tick();assert.equal(polls,2);
     assert.equal(sqlite.prepare("SELECT status FROM tasks WHERE task_id='auto'").get().status, 'COMPLETED');
     assert.equal(sqlite.prepare("SELECT status FROM tasks WHERE task_id='unknown'").get().status, 'PENDING');
     assert.equal(sqlite.prepare('SELECT computer_name FROM devices WHERE device_id=?').get(identity.device_id).computer_name, identity.computer_name);
     assert.equal(runtime.executor.getTask('auto').attempt_count, 1);
-  } finally { await runtime.stop(); assert.equal(nextTimer, null); rmSync(profile, { recursive: true }); }
+  } finally { release.resolve();await runtime.stop(); assert.equal(nextTimer, null); rmSync(profile, { recursive: true }); }
 });
 
 test('P06：自动获取不能绕过中断重做的继续执行选择，无配置不启动网络', async t => {

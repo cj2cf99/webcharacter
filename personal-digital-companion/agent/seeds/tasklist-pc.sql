@@ -1,0 +1,13 @@
+INSERT OR IGNORE INTO tasklist(type,name,description,executor,parameter_spec_json,procedure,report_spec) VALUES
+ ('pc.image.generate','文字生图','按原文提示词调用领取电脑的绯月 ComfyUI 工作流生成一张 PNG','pc','{"prompt":{"type":"string","required":true,"pattern":"^(?=[\\s\\S]*\\S)[\\s\\S]{1,2000}$"}}','后台生成并在领取电脑的对话目录归档','作业号、PNG 尺寸和本地归档状态'),
+ ('pc.echo','回显文字','领取电脑原样返回文字','pc','{"text":{"type":"string","required":true}}','回传输入文字','文字'),
+ ('pc.exercise.create','登记运动','领取电脑提交运动正文，主站记录当前时间','pc','{"body":{"type":"string","required":true,"pattern":"^(?=[\\s\\S]{1,4000}$)[\\s\\S]*\\S"}}','按领取回执提交一次运动记录','业务记录编号和时间');
+
+INSERT OR IGNORE INTO tasklist(type,name,description,executor,parameter_spec_json,procedure,report_spec) VALUES
+ ('pc.food.create','登记吃喝','我也是胡适 · 吃喝流水','pc','{"body":{"type":"string","required":true,"pattern":"^(?=[\\s\\S]*\\S)[\\s\\S]{1,4000}$"},"reflection":{"type":"string","pattern":"^[\\s\\S]{0,4000}$"},"tag_ids":{"type":"string_array","max_items":50,"pattern":"^.{1,80}$"},"photos":{"type":"string_array","max_items":20,"pattern":"^https://\\S+$"}}','由领取电脑提交业务操作','核对业务回执'),
+ ('pc.event.create','登记撸管','我也是胡适 · 只登记发生事件','pc','{}','由领取电脑提交业务操作','核对业务回执'),
+ ('pc.diaries.create','登记日记','创建主站日记','pc','{"title":{"type":"string","required":true,"pattern":"^(?=[\\s\\S]*\\S)[\\s\\S]{1,300}$"},"content":{"type":"string","required":true,"pattern":"^(?=[\\s\\S]*\\S)[\\s\\S]{1,100000}$"}}','由领取电脑提交业务操作','核对业务回执'),
+ ('pc.records.create','新增随手记','在已有分类下登记随手记','pc','{"body":{"type":"string","required":true,"pattern":"^(?=[\\s\\S]*\\S)[\\s\\S]{1,4000}$"},"category":{"type":"string","required":true,"pattern":"^(?=[\\s\\S]*\\S)[\\s\\S]{1,200}$"}}','由领取电脑提交业务操作','核对业务回执'),
+ ('pc.reminders.create','登记提醒','创建一条单次提醒','pc','{"title":{"type":"string","required":true,"pattern":"^(?=[\\s\\S]*\\S)[\\s\\S]{1,300}$"},"content":{"type":"string","pattern":"^[\\s\\S]{0,30000}$"},"deadline":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},"level":{"type":"string","pattern":"^(高|中|低)$"}}','由领取电脑提交业务操作','核对业务回执'),
+ ('pc.planner.hours','登记长期计划实际投入','给东京当天选定的计划任务登记实际投入小时数','pc','{"title":{"type":"string","required":true,"pattern":"^(?=[\\s\\S]*\\S)[\\s\\S]{1,200}$"},"actualHours":{"type":"number","required":true,"min":0,"max":24}}','由领取电脑提交业务操作','核对业务回执'),
+ ('pc.reminders.move','移动指定提醒','按未完成提醒的完整名称调整东京截止日期','pc','{"title":{"type":"string","required":true,"pattern":"^(?=[\\s\\S]*\\S)[\\s\\S]{1,200}$"},"deadline":{"type":"string","required":true,"pattern":"^\\d{4}-\\d{2}-\\d{2}$"}}','由领取电脑提交业务操作','核对业务回执');

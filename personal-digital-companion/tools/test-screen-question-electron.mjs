@@ -65,7 +65,29 @@ async function run(){try{
   const snapshot=async name=>{await new Promise(resolve=>setTimeout(resolve,250));writeFileSync(join(output,name),(await panel.webContents.capturePage()).toPNG());};
   await wait(()=>js('Boolean(window.screenQuestion)'));
   assert.equal(await js("document.querySelector('#withScreen').checked"),false);
-  if(process.argv.includes('--attachments')){
+  if(process.argv.includes('--image-live')){
+    await js("document.querySelector('#question').value='画一张水彩猫咪';document.querySelector('#questionForm').requestSubmit()");
+    await wait(()=>js("document.querySelector('#answer').textContent.includes('已排队')"));
+    assert.equal(await js("document.querySelector('#question').disabled"),false);
+    host.hide();await host.open();
+    const until=Date.now()+605000;
+    while(Date.now()<until){
+      const rows=await host.panel.webContents.executeJavaScript('window.screenQuestion.imageList()');
+      if(rows[0]?.state==='failed')throw Error(rows[0].text);
+      if(rows[0]?.state==='done'){
+        assert.match(rows[0].preview,/^data:image\//);assert.ok(rows[0].canOpen);
+        await wait(()=>host.panel.webContents.executeJavaScript("document.querySelector('#imageResults img')?.naturalWidth>0"));
+        assert.equal(calls,0);assert.equal(captures,0);
+        console.log('PASS：中文指令异步提交、气泡关闭重开后收到真实 PNG 缩略图，任务号 '+rows[0].job);
+        return;
+      }
+      // 隐藏窗口会按普通空闲规则关闭。实际显示结果时重新打开。
+      await new Promise(resolve=>setTimeout(resolve,500));
+      if(!host.panel)await host.open();
+    }
+    throw Error('未收到图像任务结果');
+  }
+  if(process.argv.includes('--attachments')||process.argv.includes('--skill-review')){
     const source=bytes=>JSON.stringify([...bytes]);
     const put=async(event,name,type,bytes)=>js(`(() => {
       const target=document.querySelector('#question'), transfer=new DataTransfer();
@@ -75,6 +97,27 @@ async function run(){try{
     })()`);
     const fileName=()=>js("document.querySelector('#attachmentName').textContent");
     await wait(()=>js("document.readyState==='complete'"));
+    if(process.argv.includes('--skill-review')){
+      const plan={pending:[],chain:{nodes:[{key:'entry-1',type:'records.create',target_device_id:null,params:{body:'合成测试图片',category_id:1}}]}};
+      registration.preview=async()=>plan;
+      registration.submitReviewed=async(_text,approved)=>{assert.equal(approved,plan);registered.push(approved);return {status:'completed',chain:{nodes:[]}};};
+      await put('drop','base.png','image/png',image.toPNG());
+      await wait(async()=>await fileName()==='base.png');
+      await put('paste','reference.png','image/png',image.toPNG());
+      await wait(async()=>(await fileName()).includes('图2 reference.png'));
+      await js("document.querySelector('#removeAttachment').click()");
+      await put('paste','source.png','image/png',image.toPNG());
+      await wait(async()=>await fileName()==='source.png');
+      await js("document.querySelector('#question').value='把图里内容记成随手记';document.querySelector('#questionForm').requestSubmit()");
+      await wait(()=>js("!document.querySelector('#recordReview').hidden"));
+      assert.match(await js("document.querySelector('#recordFields').textContent"),/合成测试图片/);
+      assert.equal(registered.length,0);
+      await js("document.querySelector('#approveRecord').click()");
+      await wait(()=>registered.length===1);
+      assert.equal(captures,0);
+      console.log('PASS：拖入底图、粘贴图2、合成图识读、预览零提交、确认一次提交。');
+      return;
+    }
     for(const event of ['drop','paste']){
       const name=event+'.png';
       assert.ok(await put(event,name,'image/png',image.toPNG()));

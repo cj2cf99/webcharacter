@@ -3,5 +3,18 @@ body{margin:0}main.fy-scroll{box-sizing:border-box;width:100%;margin:0 auto}.fil
 .candidate{display:flex;align-items:baseline;gap:.5rem;padding:.35rem 0;overflow-wrap:anywhere;white-space:pre-wrap}.event h3{font-size:1rem;margin:.7rem 0 .15rem}.event button{margin:.4rem .4rem 0 0}#status{white-space:pre-wrap}
 .failure-log{border-inline-start:2px solid var(--fy-line);padding-inline-start:10px;margin-block:10px}.failure-log strong{font-size:.9rem}.failure-log time{margin-top:.5rem}.failure-log p{margin:.2rem 0}
 .event pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; margin: .3rem 0; }
+#schedule{margin-block:10px;padding:8px 10px;border-inline-start:3px solid var(--fy-muted);background:var(--fy-surface)}
+#remaining,#checkPage{margin-inline:.55em}#checkState{display:block;color:var(--fy-muted)}
+.filters [role=group]{display:flex;flex-wrap:wrap;gap:3px}.filters [role=group] button{margin:0}
 #older { margin: .75rem 0; }
 .image-preview{display:block;padding:3px;max-width:100%;margin:.4rem 0}.image-preview img{display:block;width:180px;max-width:100%;min-height:40px;height:auto;border-radius:4px}
+#taskReport{box-sizing:border-box;width:min(58rem,calc(100% - 1.5rem));max-height:calc(100% - 2rem);overflow:auto;color:var(--fy-ink);background:var(--fy-paper);border:1px solid var(--fy-line);border-radius:12px;padding:0 1rem 1rem}
+#taskReport::backdrop{background:#20192566}
+#taskReport header{position:sticky;top:0;background:var(--fy-paper);padding:.65rem 0;border-bottom:1px solid var(--fy-line)}
+#taskReport h2,#taskReport h3{margin:.35em 0}#reportContents small{color:var(--fy-muted);overflow-wrap:anywhere}
+.result-picture{display:block;width:fit-content;max-width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}
+.result-picture img{display:block;max-width:100%;height:auto;border-radius:6px}
+#pictureViewer{box-sizing:border-box;inset:0;width:100vw;height:100vh;max-width:none;max-height:none;margin:0;padding:0;border:0;background:#171419;color:#fff}
+#pictureViewer[open]{display:flex;flex-direction:column}#pictureViewer nav{display:flex;justify-content:flex-end;gap:.5rem;padding:.5rem}
+#pictureCanvas{flex:1;min-height:0;overflow:auto;display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr)}#pictureOriginal{margin:auto;max-width:100%;max-height:100%;object-fit:contain}
+#pictureCanvas.actual{display:block}#pictureCanvas.actual img{display:block;max-width:none;max-height:none}

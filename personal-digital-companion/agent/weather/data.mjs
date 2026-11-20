@@ -55,7 +55,9 @@ export function parseDailyMinimum(data, {timezone, low}, now = Date.now()) {
     && Date.parse(value.forecastStartTime) <= now && now < Date.parse(value.forecastEndTime));
   const temperature = forecast?.temperatureMin?.value;
   if (!Number.isFinite(temperature) || forecast.temperatureMin.unit !== '°C') throw new Error('今日最低温预报不可用');
-  return {day, temperature, threshold: low, below: temperature < low, notices: attribution(data)};
+  const max=forecast.temperatureMax;
+  const maximum=max?.unit==='°C'&&Number.isFinite(max.value)&&max.value>=temperature?max.value:null;
+  return {day, temperature, maximum, threshold: low, below: temperature < low, notices: attribution(data)};
 }
 
 function attribution(data) {
@@ -77,6 +79,8 @@ export function parseChinaAlerts(data, now = Date.now()) {
     && !superseded.has(alert.id) && !(Date.parse(alert.expireTime) <= now)).map(alert => ({
       key: [alert.senderName, alert.eventType?.code ?? alert.eventType?.name ?? alert.id].join('/'),
       title: alert.headline || alert.eventType?.name || '气象预警',
+      shortTitle:alert.eventType?.name ? alert.eventType.name.replace(/预警(信号)?$/,'')+
+        ({red:'红色',orange:'橙色',yellow:'黄色',blue:'蓝色'}[alert.color?.code]??'')+'预警' : alert.headline?.slice(0,40),
       focus: weatherFocus(alert.eventType?.name || alert.headline || ''),
       issuer: alert.senderName ?? '',
       level: chinaLevel(alert),

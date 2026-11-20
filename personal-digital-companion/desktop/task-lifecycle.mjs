@@ -1,3 +1,4 @@
+import {pcRegistrations,PC_IMAGE_GENERATE} from '../agent/tasks/pc-types.mjs';
 import {join} from 'node:path';
 import {getDeviceIdentity} from '../agent/devices/identity.mjs';
 import {createTaskExecutor} from '../agent/execution/runner.mjs';
@@ -22,7 +23,7 @@ export function interruptionDetail(task) {
   const time=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',dateStyle:'medium',timeStyle:'medium'}).format(new Date(date));
   return `任务：${task.metadata?.name||task.type} (${task.task_id})\n参数：${JSON.stringify(task.params)}\n最后记录：${last?`第${last.attempt_no}次 ${last.status}`:task.status}，${time} JST\n结果未知，可能已产生部分操作。重做可能重复原操作。`;
 }
-export async function createDesktopTasks({profile,dialog,request,handlerModule,pollerOptions={},memory}={}) {
+export async function createDesktopTasks({profile,dialog,request,handlerModule,pollerOptions={},memory,generateImage,desktopBusy=()=>false}={}) {
   const identity=await getDeviceIdentity(profile);
   let configurationError=null, connection;
   if(request===undefined)try {connection=await loadCloudConnection(profile); request=connection?.request;} catch(error){configurationError=error.message;request=null;}
@@ -58,6 +59,31 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     request=async(...args)=>{outstanding++;try{return await logged(...args);}finally{outstanding--;}};
   }
   const threads=await createThreadHandlers(handlerModule?{module:handlerModule}:{});
+  if(generateImage)threads.handlers[PC_IMAGE_GENERATE]={
+    risk:'L2',
+    validate(params){
+      if(Object.keys(params).length!==1||typeof params.prompt!=='string'||!params.prompt.trim()||params.prompt.length>2000)throw Error('生图描述需为 1 至 2000 字。');
+    },
+    execute:({prompt},taskId)=>generateImage(prompt,taskId)
+  };
+  if(request&&!handlerModule)for(const type of Object.keys(pcRegistrations))threads.handlers[type]={
+    risk:'L2',
+    validate(params){
+      if(type==='pc.exercise.create'&&(Object.keys(params).length!==1||typeof params.body!=='string'||!params.body.trim()||params.body.length>4000))throw Error('运动正文无效');
+    },
+    async execute(_params,id){
+      const claim=executor.claimRequestId(id);
+      try{
+        const response=await request('/api/tasks/'+encodeURIComponent(id)+(type==='pc.exercise.create'?'/pc-exercise':'/pc-registration'),{method:'POST',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:identity.device_id,request_id:claim})});
+        if(response.status===422)throw Object.assign(Error('业务端拒绝本次登记'),{code:'BUSINESS_REJECTED'});
+        if(!response.ok)throw Error('未获得登记回执');
+        const result=await response.json();
+        if(!result.record_id||(type==='pc.exercise.create'&&!Number.isSafeInteger(result.created_at)))throw Error('业务回执无效');
+        return result;
+      }catch(e){if(e.code==='BUSINESS_REJECTED')throw e;throw Object.assign(Error('业务登记等待核对'),{code:'INTERRUPTED'});}
+    }
+  };
   let checking=false,stopped=false,gate=null,release=null,showing=null;
   const inFlight=new Set();
   const operations=new Set();
@@ -90,9 +116,26 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     pauseItem:item=>defer('reminder',item.id,item),record});
   const sync=request?createTaskSync({request,executor,deviceId:identity.device_id,pauseBeforeExecute:()=>draining}):null;
   let availableTasks=[];
+  function canPoll(){
+    if(!canStart()||desktopBusy()||activeCount()||operations.size||outstanding||resuming)return false;
+    if(continuation.entries().length||chainClient.pending().length||executor.hasUnsettledWork())return false;
+    return !registration.hasSaved()&&!reminderReview.hasUnknown();
+  }
   const poller=sync?createTaskPoller({...pollerOptions,request,identity,
-    canStart,
-    onTasks:tasks=>{availableTasks=tasks;},
+    canStart:canPoll,
+    onTasks:async tasks=>{
+      availableTasks=tasks;
+      for(const task of tasks){
+        if(!canPoll())break;
+        if(!Object.hasOwn(threads.handlers,task.type)||executor.isRecoveryReplacement(task.task_id))continue;
+        try{await runTask(task.task_id,true);break;}
+        catch(error){
+          if(error.status===404||error.status===409)continue;
+          void traffic.write({direction:'local',route:'自动接取',task_id:task.task_id,error:error.message});
+          break;
+        }
+      }
+    },
   }):null;
   const tell=(message,detail='')=>stopped?Promise.resolve():dialog.showMessageBox({type:'info',title:'任务记录',message,detail,buttons:['确定']});
   const chainClient=createChainClient({profile,request,deviceId:identity.device_id,executor,record,
@@ -112,8 +155,8 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     await tell('任务最终失败，本轮已结束',`${result.task.definition?.name||result.task.type}\n已执行两次。${result.task.error||''}`);
     if(!stopped&&!checking&&result.task.chain?.current)await chainDialogs.inspect(result.task.chain.chain_id);
   }
-  function runTask(id){return trackOperation(()=>runTaskOperation(id));}
-  async function runTaskOperation(id) {
+  function runTask(id,automatic=false){return trackOperation(()=>runTaskOperation(id,automatic));}
+  async function runTaskOperation(id,automatic) {
     if(!canStart())throw new Error('正在重启或退出，暂缓启动任务');
     if(!sync)throw new Error('未配置云端连接，任务未执行');
     const prior=executor.getTask(id);
@@ -121,11 +164,14 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     if(!prior||!terminal(prior))if(inFlight.size>=2)throw new Error('本机已有两个任务，结束后才能接取');
     if(!prior||!terminal(prior)){
       const response=await request(`/api/tasks/${encodeURIComponent(id)}`,{method:'GET',cache:'no-store'});
-      if(!response.ok)throw new Error('任务读取失败');
+      if(!response.ok)throw Object.assign(new Error('任务读取失败'),{status:response.status});
       const task=await response.json();
       if(defer('task',id))return {paused:true};
       if(checking||stopped)throw new Error('正在退出，未领取任务');
-      executor.prepare(task);
+      if(automatic&&(desktopBusy()||operations.size>1||activeCount()))return {paused:true};
+      if(task.status!=='PENDING')throw Object.assign(Error('该任务已被领取或结束'),{status:409});
+      if(task.target_device_id==='all')executor.validateTask({...task,target_device_id:identity.device_id});
+      else executor.prepare(task);
       return chainClient.claim(task);
     }
     const pending=(async()=>{const result=await sync.syncTask(id);executor.markUploaded(id);chainClient.forgetTask(id);return result;})();
@@ -223,10 +269,9 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     })();
     try{return await showing;}finally{showing=null;}
   }
-  async function startup() {
+  async function startup(remindersReady = true) {
     if(stopped||checking)return;
-    await resumePaused();
-    if(configurationError)await tell(configurationError);
+    const pauseErrors=await resumePaused();
     if(stopped||checking)return;
     let pendingResults=0;
     for(const task of executor.listTasks()) {
@@ -236,6 +281,9 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
         else if(request&&task.recovery&&!task.recovery.acknowledged)await syncDecision(task.task_id);
       } catch {if(terminal(task))pendingResults++;}
     }
+    if(!(await remindersReady)||stopped||checking)return;
+    for(const detail of pauseErrors)await tell('暂停的任务仍待核对',detail);
+    if(configurationError)await tell(configurationError);
     if(pendingResults&&!stopped)await tell(`${pendingResults}个任务结果仍待补传`,'本地结果已保留，不会重新执行；可通过“中断任务与补传”再次尝试。');
     if(!stopped)await showPending();
   }
@@ -287,6 +335,7 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
   function resumePaused(){
     if(resuming)return resuming;
     resuming=(async()=>{
+      const errors=[];
       for(const [key,job] of continuation.entries()){
         if(!canStart())break;
         try{
@@ -298,8 +347,9 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
           }else if(job.kind==='reminder')await reminderReview.resume(job.data);
           else throw Error('未知的恢复记录。');
           if(!draining)continuation.done(key);
-        }catch(error){await tell('暂停的任务仍待核对',error.message);}
+        }catch(error){errors.push(error.message);}
       }
+      return errors;
     })().finally(()=>{resuming=null;});
     return resuming;
   }
@@ -319,15 +369,21 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
       (terminal(task)&&!task.metadata?.uploaded)||(task.status==='RUNNING'&&!task.recovery?.acknowledged)))
       throw Error('仍有任务结果或回执未确认，请在任务菜单核对后再重启。');
   }
-  return {identity,executor,runTask,decide,syncDecision,showPending,startup,registration,reminderReview,traffic,showCloudConnection,
-    drainForRestart,cancelRestart(){draining=false;poller?.kick();},
+  function activeCount(){return executor.activeCount()+inFlight.size+chainClient.activeCount()+registration.activeCount()+reminderReview.activeCount();}
+  return {identity,executor,runTask,supportsTask:type=>Object.hasOwn(threads.handlers,type),decide,syncDecision,showPending,startup,registration,reminderReview,traffic,showCloudConnection,
+    drainForRestart,cancelRestart(){draining=false;},
     weatherRequest: request,
     chainClient,showTasks:()=>chainDialogs.show(),
     getAvailableTasks:()=>availableTasks.map(task=>({...task})),
-    startPolling(){if(!stopped){poller?.start();startHeartbeat();}},
-    activeCount:()=>executor.activeCount()+inFlight.size+chainClient.activeCount()+registration.activeCount()+reminderReview.activeCount(),
+    startPolling({managed=false}={}){if(!stopped){if(!managed)poller?.start();startHeartbeat();}},
+    canPoll,
+    pollOnce(){
+      if(!poller)throw Object.assign(Error('云端连接未配置'),{code:'NO_CONNECTION'});
+      return poller.scanOnce();
+    },
+    activeCount,
     beginQuitCheck(){checking=true;if(!gate)gate=new Promise(resolve=>{release=resolve;});},
-    cancelQuitCheck(){checking=false;release?.();release=null;gate=null;poller?.kick();},
+    cancelQuitCheck(){checking=false;release?.();release=null;gate=null;},
     async stop(){stopped=true;clearInterval(heartbeatTimer);poller?.stop();executor.interrupt();controller.abort();release?.();release=null;gate=null;
       const closed=!inFlight.size&&!executor.activeCount()&&!registration.activeCount()&&!reminderReview.activeCount()&&!chainClient.activeCount();
       if(closed)executor.close();

@@ -109,7 +109,7 @@ try {
   }
   await db.prepare('INSERT INTO ra_categories(id,name) VALUES (?,?)').bind('fixture-resource','资源').run();
   for(const file of (await readdir(migrationRoot)).sort())await apply(taskDb,await readFile(join(migrationRoot,file),'utf8'));
-  for(const file of ['tasklist-hu-shi.sql','tasklist-registration.sql']) {
+  for(const file of ['tasklist-hu-shi.sql','tasklist-registration.sql','tasklist-pc.sql']) {
     await apply(taskDb,await readFile(join(api,'src/companion/agent/seeds',file),'utf8'));
   }
   const w=await runtime.getWorker('subscriptions-isolated');

@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {startDesktop} from '../desktop/shell.mjs';
+import {createReminderChecks} from '../desktop/reminder-checks.mjs';
 import {prepareDesktopPages} from '../desktop/source-updates.mjs';
 import {createTaskTrafficLog} from '../desktop/task-traffic-log.mjs';
 import {warnLiveUpdate} from '../desktop/live-files.mjs';
@@ -31,7 +32,12 @@ async function until(check,message){
 }
 let nativeMenu,popup,startCount=0,stopCount=0,tip='';
 const traffic=createTaskTrafficLog(profile);
-const tasks={traffic,startup:async()=>{startCount++;},activeCount:()=>1,beginQuitCheck(){},stop:async()=>{stopCount++;}};
+let busyTasks=1,checksRequested=0;
+const tasks={traffic,startup:async()=>{startCount++;},activeCount:()=>busyTasks,beginQuitCheck(){},stop:async()=>{stopCount++;},
+  weatherRequest:async path=>{
+    assert.equal(path,'/api/reminder-review');checksRequested++;
+    return Response.json({today:'2026-11-20',items:[{title:'隔离日期事项',deadline:'2026-11-20'}]});
+  }};
 // 不加入用户的托盘或显示窗口；菜单、窗口、IPC、页面脚本均用真实 Electron。
 class HiddenWindow extends electron.BrowserWindow{
   constructor(options){super({...options,show:false,webPreferences:{...options.webPreferences,offscreen:true,backgroundThrottling:false}});}
@@ -42,6 +48,11 @@ class TestTray{
   setContextMenu(menu){nativeMenu=menu;} popUpContextMenu(){popup=nativeMenu;}
 }
 async function run(){
+  if(process.argv.includes('--check-schedule')){
+    mkdirSync(profile,{recursive:true});
+    const fixtureChecks=createReminderChecks({profile,isBusy:()=>false});
+    fixtureChecks.saveWeather({},{title:'天气提醒',body:'未央区：大风预警'},Date.now());fixtureChecks.close();
+  }
   if(process.argv.includes('--closed-stderr')){
     assert.throws(()=>writeSync(2,'pipe probe\n'));
     warnLiveUpdate('工具输出测试',Error('启动终端已关闭'));
@@ -52,6 +63,20 @@ async function run(){
   });
   const wc=shell.win.webContents,winId=shell.win.id,initialBounds=shell.win.getBounds();
   await until(()=>shell.getStats().ready,'角色未就绪');
+  if(process.argv.includes('--check-schedule')){
+    const notice=nativeMenu.items.find(item=>item.label==='提醒（1 条未读）');assert.ok(notice);
+    notice.click();
+    await until(()=>shell.screenQuestion.details?.webContents.executeJavaScript("!!document.querySelector('#turns button')").catch(()=>false),'未读入口未打开');
+    await shell.screenQuestion.details.webContents.executeJavaScript("document.querySelector('#readAll').click()");
+    await until(()=>!nativeMenu.items.some(item=>item.label.startsWith('提醒（')),'一键已读后菜单未隐藏');
+  }
+  if(process.platform==='win32'){
+    const loginItem=nativeMenu.getMenuItemById('loginStart');
+    assert.equal(loginItem.type,'checkbox');
+    assert.equal(loginItem.enabled,true,'可从 Windows 读取真实启动项');
+    wc.emit('context-menu');
+    assert.equal(popup.getMenuItemById('loginStart'),loginItem,'角色与托盘共用自启动开关');
+  }
   await wc.executeJavaScript(`window.decodedUpdate=false;const loadMedia=HTMLMediaElement.prototype.load;
     HTMLMediaElement.prototype.load=function(){
       if(this.src.includes('idle-basic.webm?v='))this.addEventListener('loadeddata',()=>{window.decodedUpdate=this.videoWidth>0;},{once:true});
@@ -102,6 +127,21 @@ async function run(){
   assert.deepEqual(readFileSync(join(voice,soundFile)),readFileSync(join(bundle,'voice',soundFile)));
   replace(join(desktop,'main.mjs'),'// 后台代码变更');await until(()=>tip.includes('后台代码'),'后台更新未提示');
   assert.equal(startCount,1);assert.equal(stopCount,0);
+  if(process.argv.includes('--check-schedule')){
+    await shell.screenQuestion.openReview();
+    const review=shell.screenQuestion.details.webContents;
+    const dom=code=>review.executeJavaScript(code);
+    await dom("document.querySelector('#checks').click()");
+    await until(()=>dom("document.querySelector('#nextCheck').textContent.includes('等待首次检查')"),'首轮计划时间缺失');
+    const first=await dom("window.conversations.read(undefined,'checks')");
+    assert.equal(checksRequested,0);busyTasks=0;
+    await delay(Math.max(0,first.nextAt-Date.now()));
+    await until(()=>dom("document.querySelector('#turns').textContent.includes('隔离日期事项')"),'日期事项回执没有自动显示');
+    const next=await dom("window.conversations.read(undefined,'checks')");
+    assert.equal(checksRequested,1);assert.equal(next.nextAt,first.nextAt+20*60_000);
+    assert.equal(next.events.find(row=>row.project==='到期事项')?.status,'已检查');
+    console.log('PASS 实际桌宠宿主首分钟后只读查询、复盘自动刷新及下一轮 20 分钟时点。');
+  }
   console.log('PASS 隔离 Electron：原生菜单改组和动作、双入口、坏文件恢复、外部 PC 设置、草稿保存后更新、角色同窗刷新、媒体版本、后台重启提示。');
 }
 run().then(()=>electron.app.exit(0),error=>{console.log(error.stack??error);electron.app.exit(1);});

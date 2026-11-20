@@ -5,6 +5,7 @@ import {watchWindows} from './native-windows.mjs';
 import {screenPosture} from './screen-posture.mjs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
 import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
 import {createMessageBoxes} from './message-box.mjs';
 import {createPanelWindow} from './panel-window.mjs';
@@ -13,12 +14,16 @@ import {watchFileChanges,setLiveWarningLog,warnLiveUpdate} from './live-files.mj
 import {menuTemplate} from './menu-layout.mjs';
 import {pages,watchDesktopSources} from './source-updates.mjs';
 import {DEFAULT_SOUND,validSound,normalizeSound,SOUND_NODES} from './sound.mjs';
+import {createServerTaskCommand} from './server-task-command.mjs';
 import {createDesktopTasks} from './task-lifecycle.mjs';
+import {hasLocalImageBackend} from './image-tasks.mjs';
 import {createMemoryArchive} from './memory-archive.mjs';
 import {migrateMemory} from './migrate-memory.mjs';
 import {localVision} from './local-vision.mjs';
 import {attachScreenQuestion} from './screen-question-host.mjs';
 import {attachWeather} from './weather-host.mjs';
+import {createReminderChecks,checkDueItems} from './reminder-checks.mjs';
+import {attachPollSettings} from './poll-settings-host.mjs';
 import {attachReminderReview} from './reminder-review-host.mjs';
 import {createLocalModel,desktopModelPath} from './local-model.mjs';
 
@@ -27,6 +32,12 @@ const ROAM_DELAY=90_000;
 const displayEvents=['display-added','display-removed','display-metrics-changed'];
 const roamInterrupts=['hover','click','drag','work'];
 const boundsKeys=['x','y','width','height'];
+export function waitForStartupReminders(signal){
+  return delay(60_000,true,{signal,ref:false}).catch(error=>{
+    if(error.name==='AbortError')return false;
+    throw error;
+  });
+}
 export function initialBounds(area,height=360){
   const h=Math.min(height,area.height-24),w=Math.round(h*464/688);
   return {x:Math.round(area.x+area.width-w-16),y:Math.round(area.y+area.height-h-12),width:w,height:h};
@@ -52,13 +63,16 @@ export async function startDesktop(electron,options={}){
   await app.whenReady();
   const messages=options.messageBoxes??createMessageBoxes(electron,{bundle,root});
   const memory=options.memory??(!options.profile&&!options.benchmark&&process.platform==='win32'?createMemoryArchive():null);
-  const tasks=options.tasks||await createDesktopTasks({profile,dialog:messages,memory});
+  const tasks=options.tasks||await createDesktopTasks({profile,dialog:messages,memory,
+    generateImage:memory?.archiveImageTask&&await hasLocalImageBackend(root)?(prompt,id)=>screenQuestion.generateServerImage(prompt,id):undefined,
+    desktopBusy:()=>quitPending||work||screenQuestion.hasLocalWork});
   setLiveWarningLog(tasks.traffic?.write);
   if(memory){
     try{await migrateMemory(profile,memory,electron.safeStorage);}
     catch(error){void messages.showMessageBox({type:'warning',title:'记忆归档',message:'旧记录暂未全部导入，原文件已保留，下次启动会重试。',detail:error.message,buttons:['确定']});}
   }
   let quitApproved=false,quitPending=false,restartRequested=false,cleaned=false;
+  const reminderStartup=new AbortController();
   function taskNotice(work){void work.catch(()=>{
     if(!quitApproved&&!quitPending&&electron.dialog)void messages.showMessageBox({type:'error',title:'任务记录',message:'任务处理未完成，记录已保留，请从“中断任务与补传”重试。',buttons:['确定']}).catch(()=>{});
   });}
@@ -101,10 +115,29 @@ export async function startDesktop(electron,options={}){
   const localModel=options.localModel??(!options.benchmark&&electron.utilityProcess?createLocalModel({
     utilityProcess:electron.utilityProcess,modelPath:desktopModelPath(app,root),log:tasks.traffic?.write
   }):null);
-  const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
+  let pendingCheckVisible=false,menuUnread=0;
+  const checks=createReminderChecks({profile,check:signal=>checkDueItems(tasks.weatherRequest,signal),
+    handlers:{weather:()=>weather.check(),tasks:()=>{
+      if(!tasks.pollOnce)throw Object.assign(Error('任务轮询未连接'),{code:'NO_CONNECTION'});
+      return tasks.pollOnce();
+    }},
+    isBusy:id=>quitPending||work||screenQuestion.hasLocalWork||tasks.activeCount()>0||
+      (id==='tasks'&&tasks.canPoll&&!tasks.canPoll()),
+    changed:()=>{
+      screenQuestion.details?.webContents.send('conversation:checks-changed');
+      pollSettings.update();
+      const unread=checks.unread;
+      if(pendingCheckVisible!==checks.pending||menuUnread!==unread){
+        pendingCheckVisible=checks.pending;menuUnread=unread;if(tray)menu();
+      }
+    }});
+  menuUnread=checks.unread;pendingCheckVisible=checks.pending;
+  const pollSettings=attachPollSettings(electron,{root,bundle,checks});
+  const serverTask=createServerTaskCommand({profile,tasks,localModel,dialog:messages});
+  const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,checks,serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
     memory,vision:memory&&(options.vision??localVision(desktopModelPath(app,root))),readTasks:memory?.readTasks??tasks.executor?.review.read,
     readTraffic:tasks.traffic?.readPage,client:options.screenQuestionClient,requestRestart,localModel,log:tasks.traffic?.write});
-  const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark});
+  const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark,recordCheck:checks.record,checks});
   const reminderReview=tasks.reminderReview?attachReminderReview(electron,{bundle,root,flow:tasks.reminderReview}):null;
   attachment=new AttachmentController({
     areaFor:rect=>screen.getDisplayNearestPoint({x:Math.round(rect.x+rect.width/2),y:Math.round(rect.y+rect.height/2)}).workArea,
@@ -337,6 +370,7 @@ export async function startDesktop(electron,options={}){
   function followDrag(cursor){
     const {bounds:b}=drag,dx=cursor.x-drag.cursor.x,dy=cursor.y-drag.cursor.y;
     if(!drag.moved&&Math.hypot(dx,dy)<5)return;
+    if(!drag.moved&&drag.detachOnMove)detachAttachment('drag');
     drag.moved=true;
     const display=displayAt(cursor);
     if(fullscreen.has(display.id))return;
@@ -454,6 +488,29 @@ export async function startDesktop(electron,options={}){
     if(tray)menu();
   }
   const layoutFile=options.menuFile||resolve(root,'desktop/menu-layout.json');
+  const loginName='绯月桌面精灵';
+  const loginScript=resolve(root,'desktop/login-start.js');
+  const loginOptions={path:resolve(process.env.SystemRoot||'C:/Windows','System32/wscript.exe'),
+    args:['//B','//NoLogo',loginScript,process.execPath]};
+  function loginEnabled(){
+    const {launchItems}=app.getLoginItemSettings(loginOptions);
+    return launchItems.some(item=>item.name===loginName&&item.scope==='user'&&item.enabled&&item.args.includes(loginScript));
+  }
+  function refreshLoginItem(item){
+    try{item.checked=loginEnabled();item.enabled=true;}
+    catch{item.checked=false;item.enabled=false;}
+  }
+  function toggleLogin(item){
+    const requested=item.checked;
+    try{
+      app.setLoginItemSettings({...loginOptions,name:loginName,openAtLogin:requested,enabled:true});
+      if(loginEnabled()!==requested)throw Error('Windows 未保存此设置。');
+    }catch(error){
+      void messages.showMessageBox({type:'error',title:'登录自启动',message:'无法更改绯月的登录自启动设置。',
+        detail:error.message,buttons:['确定']}).catch(()=>{});
+    }
+    refreshLoginItem(item);
+  }
   let layout=[{action:'restart',label:'重启绯月'},{action:'quit',label:'退出'}];
   function menu(candidate=layout){
     const attachedCommand=click=>({enabled:windowsReady,click});
@@ -469,15 +526,11 @@ export async function startDesktop(electron,options={}){
       move:{submenu:moveMenu()},
       work:{label:work?'结束工作':'开始工作',click:()=>setWork(!work)},
       settings:{click:pcSettings.open},soundSettings:{click:pcSettings.open},
+      loginStart:process.platform==='win32'&&{id:'loginStart',type:'checkbox',click:toggleLogin},
       weather:{click:()=>{void weather.open().catch(()=>{
         if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'三地天气',message:'天气面板打不开，请重新启动绯月后重试。',buttons:['确定']}).catch(()=>{});
       });}},
-      question:{click:()=>{
-        if(!win.isVisible()){show();menu();}
-        void screenQuestion.open().catch(()=>{
-          if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'看屏幕提问',message:'问答气泡未能打开，请重新启动精灵后再试。',buttons:['确定']}).catch(()=>{});
-        });
-      }},
+      question:{click:openQuestion},
       registration:tasks.registration && {click:()=>{
         if(!win.isVisible()){show();menu();}
         taskNotice(screenQuestion.open('registration'));
@@ -485,6 +538,9 @@ export async function startDesktop(electron,options={}){
       today:reminderReview && {click:()=>taskNotice(reminderReview.open())},
       tasks:{click:()=>{if(tasks.showTasks)taskNotice(tasks.showTasks());}},
       review:{click:()=>taskNotice(screenQuestion.openReview())},
+      notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
+      pendingCheck:checks.pending&&{click:()=>taskNotice(pollSettings.open(true))},
+      pollSettings:{click:()=>taskNotice(pollSettings.open())},
       retry:{click:()=>{taskNotice(tasks.retryPending());}},
       connection:tasks.showCloudConnection && {click:()=>taskNotice(tasks.showCloudConnection(localModel))},
       log:tasks.traffic && {click:()=>taskNotice(screenQuestion.openLog())},
@@ -495,7 +551,9 @@ export async function startDesktop(electron,options={}){
     const template=menuTemplate(candidate,actions);
     if(!template.some(item=>item.type!=='separator'))throw Error('菜单中没有可用项');
     const contextMenu=Menu.buildFromTemplate(template);
-    contextMenu.on?.('menu-will-show',()=>{menuOpen=true;resetIdle();});
+    const loginItem=contextMenu.getMenuItemById?.('loginStart');
+    if(loginItem)refreshLoginItem(loginItem);
+    contextMenu.on?.('menu-will-show',()=>{if(loginItem)refreshLoginItem(loginItem);menuOpen=true;resetIdle();});
     contextMenu.on?.('menu-will-close',()=>{menuOpen=false;resetIdle();});
     tray.setContextMenu(contextMenu);
     layout=candidate;
@@ -514,14 +572,27 @@ export async function startDesktop(electron,options={}){
       if(localModel)setImmediate(()=>{if(!cleaned)localModel.start();});
     }
   };
-  const onDragStart=event=>{
+  function openQuestion(){
+    if(!win.isVisible()){show();menu();}
+    void screenQuestion.open().catch(()=>{
+      if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'问绯月',message:'问答气泡未能打开，请重新启动绯月后再试。',buttons:['确定']}).catch(()=>{});
+    });
+  }
+  const onToggleConversation=event=>{
+    if(!own(event)||!win.isVisible()||quitPending)return;
+    resetIdle();
+    if(screenQuestion.panel){screenQuestion.abandon();return;}
+    openQuestion();
+  };
+  const onDragStart=(event,head)=>{
     if(!own(event)||!win.isVisible()||ignored||pinned())return;
     const cursor=screen.getCursorScreenPoint(),b=win.getBounds();
     if(cursor.x<b.x||cursor.y<b.y||cursor.x>=b.x+b.width||cursor.y>=b.y+b.height)return;
     const top=attachment.topDragAnchor();
-    if(!top)detachAttachment('drag');
+    const detachOnMove=!top&&head===true&&Boolean(attachment.active);
+    if(!top&&!detachOnMove)detachAttachment('drag');
     resetIdle();cancelMovement();travelPosture=null;
-    drag={cursor,bounds:top?b:{...b,width:bounds.width,height:bounds.height},moved:false,top};
+    drag={cursor,bounds:top?b:{...b,width:bounds.width,height:bounds.height},moved:false,top,detachOnMove};
   };
   const onDragEnd=(event,canceled)=>{
     if(!own(event)||!drag)return;
@@ -534,6 +605,7 @@ export async function startDesktop(electron,options={}){
     else if(!attachment.releaseTopDrag(top,win.getBounds()))return;
     if(deferred&&attachment.active?.id===top.id)advanceAttachment(deferred);
   };
+  ipcMain.on('desktop:toggle-conversation',onToggleConversation);
   ipcMain.on('desktop:hit',onHit);ipcMain.on('desktop:ready',onReady);
   ipcMain.on('desktop:drag-start',onDragStart);ipcMain.on('desktop:drag-end',onDragEnd);
   const icon=nativeImage.createFromPath(resolve(bundle,'tray.png'));
@@ -554,7 +626,7 @@ export async function startDesktop(electron,options={}){
     if(media.length)pcSettings.mediaChanged(media.map(name=>resolve(bundle,name)));
     if(files.includes('tray.png'))tray.setImage(nativeImage.createFromPath(resolve(bundle,'tray.png')));
     for(const [page,panel] of [['index.html',win],['settings.html',pcSettings.panel],['weather.html',weather.panel],
-      ['conversation.html',screenQuestion.details],['reminder-review.html',reminderReview?.panel],
+      ['conversation.html',screenQuestion.details],['reminder-review.html',reminderReview?.panel],['poll-settings.html',pollSettings.panel],
       ['screen-question.html',screenQuestion.panel],['sound-settings.html',settingsWindow],
       ...(messages.panels??[]).map(panel=>['message-box.html',panel])]){
       if(!panel||panel.isDestroyed())continue;
@@ -575,7 +647,7 @@ export async function startDesktop(electron,options={}){
   }
   const stopSources=options.benchmark?null:watchDesktopSources({root:options.sourceRoot||root,bundle,updated,
     restartNeeded:()=>tray.setToolTip('绯月 · 后台代码有更新，可从右键菜单重启')});
-  app.on('second-instance',()=>{show();menu();});
+  app.on('second-instance',(_event,argv)=>{if(!argv?.includes('--feiyue-login')){show();menu();}});
   function handleDisplays(){
     if(win.isDestroyed())return;
     displays=readDisplays();
@@ -591,6 +663,8 @@ export async function startDesktop(electron,options={}){
   }
   function cleanup(){
     if(cleaned)return;cleaned=true;
+    reminderStartup.abort();
+    pollSettings.close();checks.close();
     stopLayout();
     clearTimeout(refreshTimer);stopSources?.();
     ipcMain.removeListener('desktop:attachment-done',onAttachmentDone);
@@ -604,6 +678,7 @@ export async function startDesktop(electron,options={}){
     movement=null;ipcMain.removeListener('pc:runtime',onMovementRuntime);pcSettings.close();
     stopPoll();ipcMain.removeListener('desktop:sound-ready',soundReady);ipcMain.removeListener('desktop:sound-change',soundChange);ipcMain.removeListener('desktop:sound-preview',soundPreview);
     if(settingsWindow&&!settingsWindow.isDestroyed())settingsWindow.destroy();
+    ipcMain.removeListener('desktop:toggle-conversation',onToggleConversation);
     ipcMain.removeListener('desktop:hit',onHit);ipcMain.removeListener('desktop:ready',onReady);
     ipcMain.removeListener('desktop:drag-start',onDragStart);ipcMain.removeListener('desktop:drag-end',onDragEnd);
     for(const event of displayEvents)screen.removeListener(event,handleDisplays);
@@ -678,9 +753,10 @@ export async function startDesktop(electron,options={}){
       const first=!windowsReady;windowsReady=true;attachment.update({foreground:data.foreground,windows},now());if(first)menu();
     },onError:()=>{windowsReady=false;if(attachment.active)attachment.detach('service-error');if(tray)menu();}});
   }
-  tasks.startPolling?.();
+  tasks.startPolling?.({managed:true});
   taskNotice(Promise.resolve(screenQuestion.resumePaused()));
-  void weather.start();
-  taskNotice(tasks.startup());
+  const remindersReady=waitForStartupReminders(reminderStartup.signal);
+  if(!options.benchmark)checks.start();
+  taskNotice(tasks.startup(remindersReady));
   return {win,show,hide,moveTo,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,getStats:()=>({pointerMessages,visible:win.isVisible(),ready:previousReady})};
 }

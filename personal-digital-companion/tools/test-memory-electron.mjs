@@ -1,6 +1,6 @@
 import * as electron from 'electron';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,existsSync,renameSync} from 'node:fs';
+import {mkdtempSync,readFileSync,existsSync,renameSync,writeFileSync,mkdirSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {setTimeout as wait} from 'node:timers/promises';
@@ -16,7 +16,7 @@ const root=resolve(import.meta.dirname,'..'),profile=mkdtempSync(join(tmpdir(),'
 electron.app.setPath('userData',profile);
 async function until(fn){
   for(let i=0;i<600;i++){if(await fn())return;await wait(100);}
-  throw Error('等待图片复盘测试超时');
+  throw Error('等待图片复盘测试超时：'+fn.toString());
 }
 async function test(){
   await electron.app.whenReady();
@@ -45,9 +45,46 @@ async function test(){
       uploads.push(body.question);
       return Response.json({ok:true,answer:'云端测试回执'});
     }});
-  const host=attachScreenQuestion(electron,{win,profile,root,bundle:join(root,'output/desktop-bundle'),memory,client,
+  const reportCase=process.argv.includes('--task-reports'),job='ab'.repeat(16),input=join(profile,'render.png'),dayNow=tokyoDay(Date.now());
+  if(reportCase){
+    writeFileSync(input,source.toPNG());
+    mkdirSync(join(profile,'image-tasks'),{recursive:true});
+    writeFileSync(join(profile,'image-tasks',job+'.json'),JSON.stringify({job,state:'done',original:'生成测试字样',at:Date.now(),
+      text:'已完成测试图',output:input,completed:[{step:1,operation:'generate',output:input,width:640,height:200}]}));
+    await memory.saveTasks(dayNow,[{at:Date.now(),task_id:'task-123',title:'随手记',action:'已登记',detail:'记录编号 123'}]);
+  }
+  // Windows 仅向已显示的原生窗口反馈全屏状态；透明测试窗不抢焦点。
+  class ReportTestWindow extends electron.BrowserWindow{
+    constructor(options){super({...options,opacity:0,focusable:false,skipTaskbar:true,
+      webPreferences:{...options.webPreferences,offscreen:false,backgroundThrottling:false}});}
+  }
+  const runtime=reportCase?{...electron,BrowserWindow:ReportTestWindow}:electron;
+  const host=attachScreenQuestion(runtime,{win,profile,root,bundle:join(root,'output/desktop-bundle'),memory,client,
     log:traffic.write,readTraffic:traffic.readPage,readTasks:memory.readTasks,visible:false});
   try{
+    if(reportCase){
+      await until(()=>existsSync(memory.taskImage(dayNow,job,1))&&existsSync(join(memory.folder(dayNow),'对话',job+'.json')));
+      renameSync(input,input+'.moved');
+      await host.openReview();
+      host.details.showInactive();
+      const js=code=>host.details.webContents.executeJavaScript(code);
+      await until(()=>js("document.querySelectorAll('#turns button').length===2"));
+      await js("[...document.querySelectorAll('#turns section')].find(e=>e.textContent.includes('随手记')).querySelector('button').click()");
+      await until(()=>js("document.querySelector('#taskReport').open&&document.querySelector('#reportContents').textContent.includes('记录编号 123')"));
+      await js("document.querySelector('#reportClose').click();[...document.querySelectorAll('#turns section')].find(e=>e.textContent.includes('ComfyUI')).querySelector('button').click()");
+      await until(()=>js("document.querySelector('.result-picture img')?.naturalWidth>0"));
+      await js("document.querySelector('.result-picture').click()");
+      await until(()=>js("document.querySelector('#pictureViewer').open&&document.querySelector('#pictureOriginal').naturalWidth===640"));
+      await until(()=>host.details.isFullScreen());
+      assert.equal(await js("document.querySelector('#pictureOriginal').naturalHeight"),200);
+      await js("document.querySelector('#pictureScale').click()");
+      assert.equal(await js("document.querySelector('#pictureCanvas').classList.contains('actual')"),true);
+      await js("document.querySelector('#pictureClose').click()");
+      await until(()=>js("!document.querySelector('#pictureViewer').open&&document.querySelector('#taskReport').open"));
+      await until(()=>!host.details.isFullScreen());
+      console.log('PASS：历史回执补档、文本和图片报告、失去原作业文件后查看、全屏原图及返回。');
+      return;
+    }
     await host.open();
     const wc=host.panel.webContents;
     async function ask(q,answer){

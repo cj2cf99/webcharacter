@@ -1,0 +1,7 @@
+body{margin:0}
+main{padding:0 14px 12px}form,#waiting{padding:10px 0;border-bottom:1px solid var(--fy-line)}
+.heading,.fields{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.heading{justify-content:space-between;margin-bottom:6px}
+h2{margin:0;font-size:1rem}label,small,#empty{font-size:.85rem}small,#empty{color:var(--fy-muted)}
+.fields label{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.fields input{width:4.5em;box-sizing:border-box}
+.state{display:block;margin-top:5px}#queue{padding-left:1.3em}#queue:empty,#feedback:empty{display:none}
+#empty,#queue{margin-block:6px}input[type=checkbox]{accent-color:var(--fy-accent)}#feedback{color:var(--fy-accent)}

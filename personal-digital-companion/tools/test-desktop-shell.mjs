@@ -8,6 +8,22 @@ import {EventEmitter} from 'node:events';
 import {startDesktop,initialBounds} from '../desktop/shell.mjs';
 assert.deepEqual(initialBounds({x:0,y:0,width:1440,height:900}),{x:1181,y:528,width:243,height:360});
 const app=new EventEmitter();Object.assign(app,{requestSingleInstanceLock:()=>true,setName(){},setPath(){},whenReady:async()=>{},quit(){this.emit('before-quit')}});
+let loginEntries=[],loginWrites=0,loginError=false;
+app.getLoginItemSettings=()=>({launchItems:loginEntries});
+app.setLoginItemSettings=settings=>{
+  loginWrites++;
+  if(loginError)return;
+  assert.equal(settings.name,'绯月桌面精灵');
+  assert.match(settings.path,/System32[\\/]wscript\.exe$/i);
+  assert.match(settings.args[2],/desktop[\\/]login-start\.js$/);
+  assert.equal(settings.args[3],process.execPath);
+  loginEntries=settings.openAtLogin?[{...settings,scope:'user'}]:[];
+};
+function buildMenu(template){
+  template.getMenuItemById=id=>template.flatMap(group=>group.submenu??[]).find(item=>item.id===id);
+  const events=new EventEmitter();template.on=events.on.bind(events);template.emit=events.emit.bind(events);
+  return template;
+}
 let win,tray,network,permission,timer=null,clears=0,intervalMs=0;
 let systemIdle=1000,clock=0,publishWindows,roamRandom=0.999;
 let cursor={x:1200,y:600};
@@ -34,8 +50,9 @@ const session={defaultSession:{webRequest:{onBeforeRequest(_filter,fn){network=f
 const profile=mkdtempSync(join(tmpdir(),'companion-sound-'));
 let modelStarts=0,modelStops=0;
 const model={start(){assert.equal(win.visible,true);modelStarts++;},close(){modelStops++;}};
-const result=await startDesktop({app,shell:{},powerMonitor:{getSystemIdleTime:()=>systemIdle},BrowserWindow:Window,Tray,Menu:{buildFromTemplate:x=>x},nativeImage:{createFromPath:x=>x},screen,ipcMain,session},
-  {profile,localModel:model,windowSource:({onSnapshot})=>{publishWindows=onSnapshot;return ()=>{};},now:()=>clock,random:()=>roamRandom,
+const loginErrors=[];
+const result=await startDesktop({app,shell:{},powerMonitor:{getSystemIdleTime:()=>systemIdle},BrowserWindow:Window,Tray,Menu:{buildFromTemplate:buildMenu},nativeImage:{createFromPath:x=>x},screen,ipcMain,session},
+  {profile,localModel:model,messageBoxes:{showMessageBox:async data=>{loginErrors.push(data);return {response:0};},close(){}},windowSource:({onSnapshot})=>{publishWindows=onSnapshot;return ()=>{};},now:()=>clock,random:()=>roamRandom,
     setInterval:(fn,ms)=>{timer=fn;intervalMs=ms;return 1},clearInterval:()=>{timer=null;clears++}});
 assert.equal(win.options.transparent,true);assert.equal(win.options.frame,false);assert.equal(win.options.webPreferences.nodeIntegration,false);
 assert.equal(win.options.webPreferences.contextIsolation,true);assert.equal(win.options.webPreferences.sandbox,true);
@@ -78,7 +95,21 @@ const labels=items=>items.filter(item=>item.type!=='separator').map(item=>item.l
 assert.deepEqual(labels(tray.menu),['问绯月','三地天气','任务','桌宠动作','设置与维护','隐藏','退出']);
 win.webContents.emit('context-menu');assert.equal(tray.openedMenu,tray.menu,'角色右键与托盘使用同一菜单');
 assert.deepEqual(labels(tray.menu.find(item=>item.label==='任务').submenu),['今日任务','接取任务与任务链','中断任务与补传','本地复盘','任务日志']);
-assert.deepEqual(labels(tray.menu.find(item=>item.label==='设置与维护').submenu),['动画与声音','云端连接','重启绯月']);
+const settingsLabels=labels(tray.menu.find(item=>item.label==='设置与维护').submenu);
+if(process.platform==='win32'){
+  assert.deepEqual(settingsLabels,['动画与声音','轮询设定','登录 Windows 后延迟 1 分钟启动','云端连接','重启绯月']);
+  const item=tray.menu.getMenuItemById('loginStart');
+  assert.equal(item.type,'checkbox');assert.equal(item.checked,false);assert.equal(loginWrites,0);
+  item.checked=true;item.click(item);assert.equal(item.checked,true);
+  loginEntries[0].enabled=false;tray.menu.emit('menu-will-show');assert.equal(item.checked,false);
+  tray.menu.emit('menu-will-close');
+  item.checked=true;item.click(item);assert.equal(item.checked,true);
+  loginError=true;item.checked=false;item.click(item);assert.equal(item.checked,true);
+  assert.equal(loginErrors.at(-1).title,'登录自启动');
+  loginError=false;item.checked=false;item.click(item);assert.equal(item.checked,false);assert.equal(loginEntries.length,0);
+  result.hide();app.emit('second-instance',{},['--feiyue-login']);assert.equal(win.visible,false);
+  app.emit('second-instance',{},[]);assert.equal(win.visible,true);
+}else assert.deepEqual(settingsLabels,['动画与声音','轮询设定','云端连接','重启绯月']);
 ipcMain.emit('desktop:sound-preview',event,'click');assert.equal(win.sent.at(-1)[0],'desktop:sound-preview');
 const savedBounds={...win.getBounds()};
 const postureMessages=()=>win.sent.filter(m=>m[0]==='desktop:posture');

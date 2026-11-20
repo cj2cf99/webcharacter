@@ -20,7 +20,7 @@ export async function handlePendingRequest(request, DB) {
     return fail(404, 'DEVICE_NOT_FOUND', '设备不存在');
   }
   const { results } = await DB.prepare(`SELECT t.task_id,t.type FROM tasks t JOIN tasklist l ON l.type=t.type
-    WHERE t.target_device_id=? AND t.status='PENDING' AND l.executor='pc' AND t.type<>'disk.query'
+    WHERE (t.target_device_id=? OR (t.dispatch_all=1 AND t.target_device_id IS NULL)) AND t.status='PENDING' AND l.executor='pc' AND t.type<>'disk.query'
       AND ${gateSQL()} AND t.task_id>?
     ORDER BY t.task_id LIMIT 51`).bind(match[1],...gateBindings(match[1]),after ?? '').all();
   const tasks = results.slice(0, 50);

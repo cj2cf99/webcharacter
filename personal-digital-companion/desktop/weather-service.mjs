@@ -6,7 +6,7 @@ export {WEATHER_PLACES, parseCurrent, parseDailyMinimum, parseChinaAlerts, parse
 export const JMA_WARNING_PAGE = 'https://www.jma.go.jp/bosai/warning/#area_type=class20s&area_code=4010000';
 export const JMA_RADAR_PAGE = 'https://www.jma.go.jp/bosai/nowc/#lat:33.88/lon:130.88/zoom:10';
 
-export function createWeatherService({request, clock = Date.now,
+export function createWeatherService({request, clock = Date.now, remindersEnabled = () => true,
   onChange = () => {}, important = () => {}, seen = {}, saveSeen = () => {}}) {
   const rows = WEATHER_PLACES.map(({id, owner, name}) => ({
     id, owner, name, current: {state: 'idle'}, alerts: {state: 'idle'}, minimum: {state: 'idle'},
@@ -29,7 +29,7 @@ export function createWeatherService({request, clock = Date.now,
       const values = parse(await query('kokurakita', part), clock());
       if (lifecycle.signal.aborted) return;
       rows[0].japan[part] = {state: 'ready', values};
-      if (part !== 'bulletins') return;
+      if (part !== 'bulletins' || !remindersEnabled()) return;
       const notified = new Set(Array.isArray(seen.japanBulletins) ? seen.japanBulletins : []);
       const fresh = values.filter(item => {
         if (!item.local || notified.has(item.key)) return false;
@@ -66,6 +66,7 @@ export function createWeatherService({request, clock = Date.now,
       }
       if (lifecycle.signal.aborted) return;
       row[target] = {state: 'ready', checked: clock(), value};
+      if (!remindersEnabled()) return;
       if (target === 'minimum') checkMinimum(row, value);
       if (target === 'alerts' && !lifecycle.signal.aborted) {
         const mostImportant = new Map();
@@ -100,6 +101,7 @@ export function createWeatherService({request, clock = Date.now,
   const refreshCurrent = () => Promise.all([refresh('current'), refresh('minimum')]);
   return {
     snapshot,
+    whenIdle: () => Promise.all(Object.values(pending)),
     async refreshAll() { await Promise.all([refreshCurrent(), refresh('alerts')]); return snapshot(); },
     refreshCurrent,
     refreshAlerts: () => refresh('alerts'),

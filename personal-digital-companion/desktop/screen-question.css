@@ -172,6 +172,8 @@ button:disabled, select:disabled { cursor: default; opacity: .55; }
 #imageResults { max-height: 82px; overflow: auto; flex: 0 1 auto; }
 #imageResults button { display: flex; gap: 6px; align-items: center; width: 100%; padding: 3px 6px; text-align: start; color: var(--fy-ink); background: var(--soft); border: 0; border-radius: 6px; }
 #imageResults img { width: 48px; height: 38px; object-fit: contain; }
+#recordFields { margin: 0 0 4px; padding: 5px; max-height: 105px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; background: var(--soft); }
+#recordReview button { border: 1px solid var(--edge); border-radius: 6px; background: var(--editor); color: var(--fy-ink); }
 @media (max-width: 315px) {
   .bubble { padding-inline: 8px; }
   .bubble header.fy-titlebar { gap: 2px; }

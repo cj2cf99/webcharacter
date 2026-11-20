@@ -1,16 +1,104 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {EventEmitter} from 'node:events';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import worker from '../worker.mjs';
+import {openTestDatabase,initializeDatabase} from './sqlite-d1.mjs';
+import {seedMockTask} from './fixtures.mjs';
+import {getDeviceIdentity} from '../devices/identity.mjs';
+import {createDesktopTasks} from '../../desktop/task-lifecycle.mjs';
+import {createServerTaskCommand} from '../../desktop/server-task-command.mjs';
+import {fixture} from './screen-question-fixture.mjs';
+import {checkEditConstraints,imageRequest,literalPlan} from '../../desktop/image-tasks.mjs';
+import {attachmentRegistration,menuGuidance,validatePreview} from '../../desktop/interaction-skills.mjs';
 import {attachScreenQuestion,questionBounds} from '../../desktop/screen-question-host.mjs';
-function fixture(){
-  const ipcMain=new EventEmitter(),handlers=new Map();ipcMain.handle=(k,fn)=>handlers.set(k,fn);ipcMain.removeHandler=k=>handlers.delete(k);
-  class Window extends EventEmitter{
-    constructor(options){super();this.options=options;this.bounds={x:600,y:500,width:240,height:360};this.visible=false;this.destroyed=false;this.sent=[];this.webContents=new EventEmitter();Object.assign(this.webContents,{mainFrame:{},send:(...args)=>this.sent.push(args),setWindowOpenHandler:fn=>this.popup=fn});}
-    isDestroyed(){return this.destroyed;}getBounds(){return this.bounds;}setBounds(b){this.bounds=b;}show(){this.visible=true;}showInactive(){this.visible=true;}focus(){}hide(){this.visible=false;}destroy(){this.destroyed=true;this.emit('closed');}async loadFile(){}
-  }
-  const win=new Window(),screen={getDisplayNearestPoint:()=>({workArea:{x:0,y:0,width:1280,height:900}})};
-  return {win,handlers,ipcMain,history:{save(){},read(){return [];}},electron:{BrowserWindow:Window,screen,ipcMain},event:panel=>({sender:panel.webContents,senderFrame:panel.webContents.mainFrame})};
-}
+
+test('图像确定性步骤、附件角色与负面指令',()=>{
+  const input='生成车站女孩，再换上图1的风衣，最后放大';
+  assert.deepEqual(literalPlan(input,1).map(s=>[s.op,s.refs]),[['generate',[]],['edit',[1]],['upscale',[]]]);
+  assert.deepEqual(literalPlan('画一只猫，不用放大',0).map(s=>s.op),['generate']);
+  assert.deepEqual(literalPlan('保留图1的脸，换成图2的外套',2)[0].refs,[2]);
+  const keep='保留脸，换成图2的雨衣，最后高清放大';
+  assert.doesNotThrow(()=>checkEditConstraints(keep,literalPlan(keep,2)));
+  assert.throws(()=>checkEditConstraints(keep,[{op:'edit',quote:'换成图2的雨衣'}]),/漏掉了「保留脸」/);
+  for(const q of ['怎么画一只猫','不要生图','生成一份生图提示词','帮我记录今天吃了什么'])assert.equal(imageRequest(q),false);
+  assert.equal(imageRequest('放大这张照片',1),true);
+  assert.equal(attachmentRegistration('把图里的会议记成提醒'),true);
+  assert.equal(attachmentRegistration('请描述这张图片'),false);
+  assert.match(menuGuidance('本地复盘怎么打开'),/任务 → 本地复盘/);
+  assert.match(menuGuidance('要怎么才能登记日记？'),/问绯月.*帮我写日记/);
+});
+
+test('附件登记核对同一份计划，放弃、旧令牌和重复确认都不提交',async t=>{
+  const f=fixture(),plans=[],writes=[];
+  const plan={pending:[],chain:{nodes:[{key:'entry-1',type:'reminders.create',target_device_id:null,params:{title:'会议',deadline:'2026-11-24'}}]}};
+  assert.throws(()=>validatePreview(plan,'登记成运动'),/类型/);
+  const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:'unused',
+    client:{forget(){},async askText(_text,opts){assert.equal(opts.document.name,'会议.txt');return {state:'answer',text:'会议，2026-11-24'};}},
+    registration:{preview:async input=>{plans.push(input);return plan;},submitReviewed:async(input,exact)=>{
+      assert.equal(exact,plan);writes.push(input);return {status:'completed',chain:{nodes:[]}};
+    }}});
+  t.after(()=>host.close());await host.open();
+  const event=f.event(host.panel);
+  const ask=()=>f.handlers.get('screen-qa:ask')(event,{text:'把附件记成提醒',attachment:{name:'会议.txt',kind:'text',data:'会议，2026-11-24'}});
+  const decide=(id,approve)=>f.handlers.get('screen-qa:attachment-review')(event,{id,approve});
+  const first=await ask();assert.match(first.fields,/2026-11-24/);assert.equal(writes.length,0);
+  assert.equal((await decide(first.reviewId,false)).state,'answer');
+  const second=await ask();assert.equal((await decide(first.reviewId,true)).state,'error');assert.equal(writes.length,0);
+  assert.equal((await decide(second.reviewId,true)).state,'answer');
+  assert.equal((await decide(second.reviewId,true)).state,'error');assert.deepEqual(writes,[plans[1]]);
+});
+test('云端任务和服务器任务从问绯月按本机模板确认、创建、领取并回传',async t=>{
+  const f=fixture(),db=openTestDatabase();initializeDatabase(db.sqlite);
+  seedMockTask(db.sqlite,{type:'mock.unit',spec:{value:{type:'string',required:true}}});
+  const profile=await mkdtemp(join(tmpdir(),'feiyue-server-command-'));
+  const identity=await getDeviceIdentity(profile);
+  db.sqlite.prepare('INSERT INTO devices VALUES (?,?,NULL,?)').run(identity.device_id,'本机测试',new Date().toISOString());
+  const posts=[];let loseResponse=false;
+  const request=async(path,options={})=>{
+    if(options.method==='POST')posts.push(path);
+    const response=await worker.fetch(new Request('https://test.invalid'+path,{...options,
+      headers:{...options.headers,Authorization:'Bearer test'}}),{DB:db.DB,API_TOKEN:'test'});
+    if(path==='/api/tasks'&&loseResponse){loseResponse=false;throw Error('模拟创建回执丢失');}
+    return response;
+  };
+  const dialog={async showMessageBox(){return {response:0};}};
+  const tasks=await createDesktopTasks({profile,request,dialog,handlerModule:new URL('./fixtures/thread-handlers.mjs',import.meta.url).href});
+  const analyze=async(input,{hint,skillInstruction})=>{
+    const parsed=JSON.parse(input);
+    assert.equal(hint,'serverTask');assert.equal(skillInstruction.name,'server-pc-task');
+    assert.match(parsed.指令,/春天/);assert.deepEqual(parsed.模板.map(t=>t.type),['mock.unit']);
+    return {type:'mock.unit',params:{value:'春天'},deadline_at:'2024-01-01T00:00:00Z'};
+  };
+  const serverTask=createServerTaskCommand({profile,tasks,localModel:{analyze},dialog});
+  const h=attachScreenQuestion(f.electron,{win:f.win,profile,history:f.history,bundle:'unused',root:'unused',serverTask});
+  t.after(async()=>{h.close();await tasks.stop();db.close();await rm(profile,{recursive:true,force:true});});
+  await h.open();const ask=text=>f.handlers.get('screen-qa:ask')(f.event(h.panel),{text});
+  assert.match((await ask('云端任务有哪些？')).text,/mock.unit/);
+  assert.match((await ask('服务器任务：回显春天')).text,/已取消/);assert.deepEqual(posts,[]);
+  dialog.showMessageBox=async options=>{
+    assert.match(options.detail,/春天/);assert.ok(options.detail.includes(identity.device_id));return {response:1};
+  };
+  loseResponse=true;
+  assert.match((await ask('提交一个云端任务：回显春天')).text,/原提交号/);
+  assert.match((await ask('服务器任务：回显春天')).text,/待核对/);
+  const answer=await ask('服务器任务：恢复上次提交');
+  assert.match(answer.text,/已执行完成/);
+  assert.equal(posts.filter(path=>path==='/api/task-submissions').length,1);
+  assert.equal(posts.filter(path=>path.endsWith('/claim')).length,1);
+  const rows=db.sqlite.prepare('SELECT * FROM tasks').all();
+  assert.equal(rows.length,1);assert.equal(rows[0].deadline_at,null);assert.equal(rows[0].target_device_id,identity.device_id);
+  assert.equal(rows[0].attempt_count,1);assert.equal(rows[0].status,'COMPLETED');assert.equal(JSON.parse(rows[0].result_json).value,'春天');
+  assert.match(answer.text,new RegExp(rows[0].task_id));
+  assert.match((await ask('云端任务：恢复上次提交')).text,/没有待恢复/);
+  assert.match((await ask('服务器任务：回显春天，任务截止明天')).text,/截止日期和时间/);
+  assert.match((await ask('服务器任务：回显春天，任务截止 2099-02-03 12:00')).text,/已执行完成/);
+  assert.equal(db.sqlite.prepare('SELECT deadline_at FROM tasks WHERE deadline_at IS NOT NULL').get().deadline_at,'2099-02-03T03:00:00.000Z');
+  db.sqlite.prepare("UPDATE tasklist SET executor='cloud' WHERE type='mock.unit'").run();
+  assert.match((await ask('云端任务：回显春天')).text,/没有本机可领取/);
+});
+
 test('QH01：头顶跟随及负坐标/边缘时仍在屏内，不改角色尺寸',()=>{
   for(const [pet,area]of [[{x:600,y:500,width:240,height:360},{x:0,y:0,width:1280,height:900}],[{x:-1700,y:0,width:240,height:360},{x:-1920,y:0,width:1920,height:1080}],[{x:1100,y:10,width:180,height:360},{x:0,y:0,width:1280,height:900}]]){
     const {bounds:b}=questionBounds(pet,area);assert.ok(b.x>=area.x&&b.y>=area.y);assert.ok(b.x+b.width<=area.x+area.width);assert.ok(b.y+b.height<=area.y+area.height);
@@ -29,10 +117,13 @@ test('气泡超时请求在查询中被拒绝，空闲关闭保留草稿且手�
   const idle={reason:'idle',draft};
   const run=f.handlers.get('screen-qa:ask')(event,{text:'查询期间'});
   await started;
+  assert.equal(host.hasLocalWork,true);
   f.ipcMain.emit('screen-qa:close',event,idle);
   assert.equal(host.panel,before);
   release({state:'answer',text:'查询结束'});
   await run;
+  await f.handlers.get('screen-qa:image-list')(event);
+  assert.equal(host.hasLocalWork,false);
   f.ipcMain.emit('screen-qa:close',{sender:before.webContents,senderFrame:{}},idle);
   assert.equal(host.panel,before);
   f.ipcMain.emit('screen-qa:close',event,idle);
@@ -108,7 +199,9 @@ test('本地思索先于问答和任务，云端接收原文并分别记录耗�
   const f=fixture(),events=[],logs=[];
   const pause=()=>new Promise(resolve=>setTimeout(resolve,12));
   let mode='chat';
-  const model={async analyze(text,{hint,onProgress}){
+  const skills=[];
+  const model={async analyze(text,{hint,onProgress,skillInstruction}){
+    skills.push(skillInstruction);
     events.push(['local',text,hint]);onProgress('本地思索 · 理解输入…');
     await pause();
     if(hint==='registration')onProgress('本地思索 · 复核 1/2…');
@@ -137,6 +230,11 @@ test('本地思索先于问答和任务，云端接收原文并分别记录耗�
   assert.ok(logs[1].local_ms>0&&logs[1].cloud_ms>0);
   assert.ok(logs[1].duration_ms>=logs[1].local_ms+logs[1].cloud_ms-1);
   assert.equal(logs[1].operation,'随口登记');
+  assert.deepEqual(skills.map(skill=>[skill.name,skill.profile]),[
+    ['personal-conversation','conversation'],['record-submission','registration']
+  ]);
+  assert.match(skills[0].version,/^\d+\.\d$/u);
+  assert.ok(skills[0].review && skills[0].rewrite && skills[1].draft);
 
   mode='fail';
   const q='  罗马的历史是什么？  ';

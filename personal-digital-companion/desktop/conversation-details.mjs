@@ -1,18 +1,22 @@
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {readFile} from 'node:fs/promises';
 import {tokyoDay} from './conversation-history.mjs';
 import {createPanelWindow} from './panel-window.mjs';
 
-export function attachConversationDetails(electron,{root,bundle,history,memory,readTasks,readTraffic,edits,visible,onReview}) {
+export function attachConversationDetails(electron,{root,bundle,history,memory,readTasks,readTraffic,checks,edits,visible,onReview}) {
   const {ipcMain,shell}=electron;
   let initialView='chat';
   let panel=null, selection=null, shownSources=new Set(), loading=null;
+  let reportDay='',shownTasks=new Set(),activeReport=null,imageFullscreen=false;
   const entry=resolve(bundle,'conversation.html');
   const trusted = event => panel && !panel.isDestroyed() && event.sender===panel.webContents && event.senderFrame===panel.webContents.mainFrame;
   ipcMain.handle('conversation:read',async(event,day,view=initialView,cursor)=>{
     if (!trusted(event)) throw Error('仅对话记录窗口可读');
     const selected=selection;
     day=day??(selected?tokyoDay(selected.at):tokyoDay(Date.now()));
+    if(view==='checks')return {day,view,...checks.read(day,cursor)};
+    if(view==='notices')return {day,view,...checks.notices(cursor?.filter,cursor?.page)};
     if(view==='log'){
       try{return {day,view,dated:Boolean(memory),...await readTraffic(cursor,day)};}
       catch{return {day,view,lines:[],next:null,warning:'日志已轮转或暂时无法读取，请刷新日志。'};}
@@ -23,7 +27,9 @@ export function attachConversationDetails(electron,{root,bundle,history,memory,r
     }
     if(view==='tasks'){
       if(!readTasks)throw Error('任务记录未连接');
-      return {day,view,events:await readTasks(day)};
+      const events=await readTasks(day);
+      reportDay=day;shownTasks=new Set(events.map(e=>e.task_id));
+      return {day,view,events};
     }
     let turns,warning;
     try{turns=await history.read(day);}catch(error){
@@ -35,7 +41,28 @@ export function attachConversationDetails(electron,{root,bundle,history,memory,r
       if(index<0)turns.unshift(selected);else turns[index]=selected;
     }
     shownSources=new Set(turns.flatMap(turn=>(turn.sources??[]).map(source=>source.url)));
+    reportDay=day;shownTasks=new Set(turns.filter(t=>t.report?.job===t.id).map(t=>t.id));
     return {day,view:'chat',turns,selectedId:selected?.id,warning};
+  });
+  ipcMain.handle('conversation:report',async(event,day,id)=>{
+    if(!trusted(event)||day!==reportDay||!shownTasks.has(id))throw Error('请选择任务复盘中的记录');
+    const turn=await memory?.readImageReport?.(day,id);
+    let events=turn?[]:await memory?.taskHistory?.(id)??[];
+    if(!turn&&!events.length)events=(await readTasks(day)).filter(e=>e.task_id===id);
+    activeReport={day,id,steps:new Set(turn?.report?.steps.filter(s=>s.image).map(s=>s.step))};
+    return {turn,events};
+  });
+  ipcMain.handle('conversation:report-image',async(event,day,id,step,full)=>{
+    if(!trusted(event)||activeReport?.day!==day||activeReport.id!==id||!activeReport.steps.has(step))throw Error('请先打开对应任务报告');
+    const file=memory.taskImage(day,id,step);
+    if(full==='copy'){electron.clipboard.writeText(file);return true;}
+    if(full===true)return 'data:image/png;base64,'+(await readFile(file)).toString('base64');
+    return (await electron.nativeImage.createThumbnailFromPath(file,{width:950,height:850})).toDataURL();
+  });
+  ipcMain.handle('conversation:report-fullscreen',(event,enable)=>{
+    if(!trusted(event)||typeof enable!=='boolean')throw Error('无法切换图片全屏');
+    if(enable&&activeReport?.steps.size&&!panel.isFullScreen()){panel.setFullScreen(true);imageFullscreen=true;}
+    if(!enable&&imageFullscreen){imageFullscreen=false;panel.setFullScreen(false);}
   });
   ipcMain.handle('conversation:source',(event,url)=>{
     if(trusted(event)&&shownSources.has(url)&&/^https?:\/\//i.test(url))return shell.openExternal(url);
@@ -45,6 +72,10 @@ export function attachConversationDetails(electron,{root,bundle,history,memory,r
     return open===true?shell.openPath(memory.original(day,id)):memory.thumbnail(day,id);
   });
   ipcMain.on('conversation:reviewed',reviewed);
+  ipcMain.handle('conversation:read-notices',(event,id)=>{
+    if(!trusted(event)||!checks)throw Error('仅复盘窗口可标记提醒');
+    checks.markRead(id);
+  });
   function reviewed(event,token){if(trusted(event)&&typeof token==='string')onReview?.(token);}
   ipcMain.handle('conversation:reminder-decision',async(event,input)=>{
     if(!trusted(event)||!edits)throw Error('请从待确认窗口操作。');
@@ -67,7 +98,7 @@ export function attachConversationDetails(electron,{root,bundle,history,memory,r
       panel=created;
       created.webContents.setWindowOpenHandler(()=>({action:'deny'}));
       created.webContents.on('will-navigate',(event,url)=>{if(url!==pathToFileURL(entry).href)event.preventDefault();});
-      created.on('closed',()=>{if(panel===created){panel=null;selection=null;shownSources.clear();}});
+      created.on('closed',()=>{if(panel===created){panel=null;selection=null;shownSources.clear();shownTasks.clear();activeReport=null;imageFullscreen=false;}});
       loading=created.loadFile(entry).catch(error=>{if(!created.isDestroyed())created.destroy();throw error;});
     }
     const current=panel;
@@ -77,6 +108,8 @@ export function attachConversationDetails(electron,{root,bundle,history,memory,r
     if(visible){current.show();current.focus();}
   }
   return {open,get panel(){return panel;},close(){
+    ipcMain.removeHandler('conversation:read-notices');
+    for(const name of ['report','report-image','report-fullscreen'])ipcMain.removeHandler('conversation:'+name);
     ipcMain.removeHandler('conversation:read');ipcMain.removeHandler('conversation:source');ipcMain.removeHandler('conversation:reminder-decision');ipcMain.removeHandler('conversation:image');
     ipcMain.removeListener('conversation:reviewed',reviewed);
     if(panel&&!panel.isDestroyed())panel.destroy();
