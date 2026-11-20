@@ -40,7 +40,7 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
       const finish=(error,response)=>{clearTimeout(timeout);controller.signal.removeEventListener('abort',abort);if(error)reject(error);else resolve(response);};
       const abort=()=>{local.abort();finish(Object.assign(new Error('应用正在退出，记录保留'),{code:'CANCELLED'}));};
       if(controller.signal.aborted){abort();return;}
-      const wait=['/api/assistant/recording-plan','/api/assistant/heartbeat'].includes(path)?240000:path.endsWith('/execute')||path.startsWith('/api/weather/')?15000:5000;
+      const wait=['/api/assistant/recording-plan','/api/assistant/heartbeat','/api/assistant/provider-test'].includes(path)?240000:path.endsWith('/execute')||path.startsWith('/api/weather/')?15000:5000;
       timeout=setTimeout(()=>{local.abort();finish(Object.assign(new Error('连接超时，记录仍保留'),{code:'TIMEOUT'}));},wait);
       controller.signal.addEventListener('abort',abort,{once:true});
       Promise.resolve().then(()=>{
@@ -314,17 +314,46 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
       detail:['Qwen3.5 0.8B · '+duration+' 毫秒',error?(reasons[error]??'本地模型无法响应。')+'（'+error+'）':reply].join('\n'),
       buttons:['确定']});
   }
+  let activeProviderTest;
+  async function testCloudAi(){
+    const title='AI 轮询测试';
+    let message='未能取得完整的服务器测试结果',detail='',success=false,error;
+    try{
+      if(!request)throw Object.assign(Error(),{code:'NOT_CONFIGURED'});
+      const response=await request('/api/assistant/provider-test',{method:'POST',cache:'no-store'});
+      const result=await response.json().catch(()=>null);
+      const attempts=result?.ai?.attempts;
+      const valid=Array.isArray(attempts)&&attempts.length>0&&attempts.length<=16&&attempts.every(a=>
+        typeof a?.provider==='string'&&/^[a-z][a-z0-9-]{0,31}$/.test(a.provider)&&typeof a.code==='string'&&a.code.length>0);
+      const last=valid?attempts.at(-1):null;
+      if(response.ok&&result?.status==='success'&&last?.code==='OK'&&last.provider===result.provider&&last.model===result.model&&
+        typeof result.model==='string'&&/^[@a-z0-9_./:-]{1,96}$/i.test(result.model)){
+        success=true;message='成功 · '+result.provider;detail=result.model;
+        if(last.reply_check==='matched'&&typeof result.answer==='string'&&result.answer.length<=256)detail+='\n'+result.answer+'（东京时间）';
+      }else if(response.status===503&&result?.status==='all_failed'&&result.error?.code==='ALL_PROVIDERS_FAILED'&&valid&&attempts.every(a=>a.code!=='OK')){
+        message='已测试的 AI 接口全部失败';detail=attempts.map(a=>a.provider).join('、');error='ALL_PROVIDERS_FAILED';
+      }else error='INCOMPLETE_TEST_RECEIPT';
+    }catch(e){error=e?.code==='NOT_CONFIGURED'?'NOT_CONFIGURED':e?.code==='TIMEOUT'?'TIMEOUT':'CONNECTION_ERROR';}
+    await traffic.write({direction:'local',route:'AI 轮询测试',stage:'测试结束',result:success?'success':error==='ALL_PROVIDERS_FAILED'?'all_failed':'incomplete',error});
+    if(!stopped)await dialog.showMessageBox({title,type:success?'info':'warning',message,detail,buttons:['确定']});
+  }
   async function showCloudConnection(localModel) {
     const buttons=[];
     if(request)buttons.push('测试云端连接');
     const localIndex=buttons.length;
     if(localModel)buttons.push('测试本地 AI');
+    const testIndex=buttons.length;
+    buttons.push('AI 轮询测试');
     const cancelId=buttons.length;
     buttons.push('关闭');
     const choice = await dialog.showMessageBox({title:'绯月连接测试',type:'info',
       message:connection ? connection.mode : configurationError || '等待发布配置',
       detail:connection?.origin ?? '',buttons,defaultId:0,cancelId});
     if(stopped)return;
+    if(choice.response===testIndex){
+      activeProviderTest??=testCloudAi().finally(()=>{activeProviderTest=undefined;});
+      return activeProviderTest;
+    }
     if(localModel && choice.response===localIndex)return testLocalAi(localModel);
     if(!request || choice.response!==0)return;
     try {
