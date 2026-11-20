@@ -1,5 +1,11 @@
 # WebCharacter 开发指南
 
+2026-11-20 JST，本机 AI 代理可通过 `tools/comfy_job.py` 提交离线 ComfyUI 生图和图生图作业。已在 RTX 4060 Laptop 上用本地 SDXL Turbo 验证提交返回后后台继续、并发提交串行占用 GPU、512×512 PNG 交付、同名保护和后端退出。[命令与任务回执](COMFY_JOBS.md)
+
+2026-11-16 人鱼公主 3D 模型位于 `model/mermaid/`：按设定 V1.1 及用户参考图，在 Blender 5.2.4 中程序化建模（人体 + 鱼尾连续体素网格、独立交叠鳞片、三层尾鳍、半盘发、贝壳胸衣与全部饰品），加 38 根骨骼与 4 秒 `MM_Swim` 游动循环。重建：`& G:/blender/app/blender.exe --background --factory-startup --python-exit-code 1 --python model/mermaid/build_mermaid.py -- --anim`，产物在 `work/mermaid/`。用户参考图仅本地（已忽略）。自评综合还原约 75–78%（第 7 轮程序化调整后），脸与头发仍是主要差距，外观待用户确认。[说明](../model/mermaid/README.md) / [复核报告](reviews/MERMAID_3D_REVIEW_2026-11-16.md)。
+
+2026-11-16 极乐鸟 2D 独立试验位于 `bird-2d/`：按用户最新决定取消四态按钮，改为 32 秒连续求偶舞；镜头作为母鸟机位，雄鸟主要朝镜头展示，可明显横向挪步，桌面/手机均检查不出画。原生 Canvas 2D 加两张生成拆层纹理，无新增依赖；未改 3D 模型、未加入母鸟、未部署。运行 `node tools/dev-server.mjs 8784`，访问 `http://localhost:8784/bird-2d/`；验证 `node tools/bird-2d-qa.mjs review`。[原始需求及最新变更](../bird-2d/README.md)、[实际复核与限制](reviews/BIRD_2D_REVIEW_2026-11-16.md)。90% 是目标，尚无客观评分和用户外观验收，不以数值检查替代真实还原结论。
+
 2026-11-16 新增子项目：巴黎圣母院写实场景在 `cathedral/`（需求、设计、审核、计划、进度记录、Blender 脚本、网页与当前可运行的资源，约 14 MB）。运行：`node cathedral/tools/dev-server.mjs 8780`，打开 `http://localhost:8780/site/?cycle`。测试：`node cathedral/tools/test-collision.mjs`、`test-sun.mjs`、`check-assets.mjs`。本次只是源码同步，不部署网站，也没有新增自动部署；仓库公开，所以下载的参考图纸、烘焙缓存（约 700 MB）、渲染图、帧序列和参考视频都没有上传（清单见 `cathedral/docs/PROGRESS_2026-11-16.md` 第 8 节）。极乐鸟线另有程序化早期版脚本 `model/bird-procedural-v0/`，建模优化以 `model/bird/` 为准。`model/bird/reference/` 里 4 张用户参考图（约 8.6 MB）因来源和授权未确认，暂未提交。
 
 最新前颈/胸羽：前颈局部向前补足并修正覆羽外法线，612 样本全部向外（旧源码 147 个向内）；按用户追加要求，常态胸羽直接贴胸收拢，求偶展开形态保留。MCP 9877 新窗口已更新并停在常态正面。13 形态样本、保存重开、独立上下喙/低喙角/胸羽贴体与展开保留检查通过；当前 11451 片羽毛。首轮整圈截面扩大导致胸羽遮挡已撤回，未作为最终结果。外观待用户确认。[本轮复核](reviews/BIRD_NECK_CHEST_REVIEW_2026-11-15.md)。下文为历史迭代，不代表当前验收结论。
@@ -98,3 +104,19 @@ node tools/check-project.mjs
 用户已确认按现有交接推进。新增 CharacterPlayer 同源 iframe 适配器、页面桥接、多实例验收页及 `docs/PLAYER_API.md`。提供 load/play/pause/seek/replay/倍速/循环/resize/destroy 和事件；资源根地址可配置。原剧场画面复用，嵌入模式隐藏原控件。
 
 浏览器已通过实例独立控制、暂停、完成、重复创建销毁和加载失败重试。取消 RAF 和 WebGL 释放挂在子页面销毁及 pagehide；宿主移除 iframe、监听与 ResizeObserver。没有实测显存占用/回收量、真实后台及目标设备性能，因此本阶段不宣称全部性能验收完成。后续动作调度仍待开发。
+
+2026-11-16 热带浅滩独立 3D 实验位于 tropical-shallows/，按用户参考图使用本机 Blender/Cycles/OPTIX 搭建并完成三轮实际渲染复核。最终图 work/tropical-shallows/round-3.png，已打包工程 work/tropical-shallows/tropical-shallows.blend；保存重开及资源/前景构图检查通过，但写实还原未达到 90% 目标，按三轮上限停止，待用户确认。需求、重建命令及完整差距见 [实验说明](../tropical-shallows/README.md) / [实际复核](../tropical-shallows/REVIEW.md)。无新增软件依赖、网页开发或部署。
+
+2026-11-16 热带浅滩继续优化：用户已明确解除本场景三轮上限；最新要求集中水效果、海风微风弱浪，并纠正岸缘应冲滩和回退。当前工程 work/tropical-shallows/tropical-shallows-swash.blend，外海原生 Ocean，岸缘薄水舌/碎沫/湿痕以形态键沿砂坡推进退水。保存重开已验证约 1.51 m 前推、1.36 m 回退，不能替代90%视觉验收。重建、验证和最新预览路径见 [说明](../tropical-shallows/README.md) / [继续版实际记录](../tropical-shallows/REVIEW_V2.md)。初批三轮停止及 sea-breeze-preview 的固定岸线起伏为历史，已被本轮用户决定覆盖。未部署或 Git 推送。
+
+2026-11-16 热带浅滩整体网页已按用户选择采用完整预渲染动画，入口 http://127.0.0.1:8786/，启动 node tropical-shallows/dev-server.mjs 8786。默认完整画面 1152×768/12 fps，约6秒，支持暂停、定位和岸边特写切换；实际浏览器、390/1280布局与视频Range已检查。本地服务保持运行，不代表实时WebGL或90%还原验收；无部署。详见 [网页复核](../tropical-shallows/WEB_REVIEW.md)。
+
+2026-11-16 热带浅滩实时转换准备：用户明确选择参考机位附近拖动/缩放和持续海浪。已检查317个网格对象、约2553万实例三角面，提取8.50MB岸缘动画数据，保留原水舌精度并修正末段位置循环接缝；独立Node读取验证前推1.51m/回退1.36m。当前网页仍为视频，尚未实现实时WebGL、烘焙导出或性能验收。后续方案与未完成项见 [准备记录](../tropical-shallows/INTERACTIVE_PLAN.md)，不修改教堂相关文件，不引入新依赖或部署。
+
+2026-11-16 用户进一步明确“切换为实时3d”：当前 http://127.0.0.1:8786/ 已默认真实WebGL，旧视频移到 /animation.html。现有Three.js引擎独立复用，静态资产批量表面颜色烘焙＋实时照明/阴影，独立海水折射/反射及岸缘冲退；已修正合并UV错用导致黑叶片的问题。实际拖动、缩放、复位、暂停/恢复及390布局通过，本机参考机位约59–61FPS，模型约200MB首次加载仍重，未达到90%写实确认。启动仍为 node tropical-shallows/dev-server.mjs 8786，无部署。详见 [实时复核](../tropical-shallows/REALTIME_REVIEW.md)。
+
+2026-11-16 用户要求场景合理化、做最小补充：新增 rationalize_scene.py，由批量导出前自动补齐接地岩基、连续树根分枝、5925片叶柄、16朵花梗及顶部椰羽所属树干，修正鸟眼并补寄居蟹胸部；删除6块重复远礁保留2处。10项重开接触检查和真实网页复核通过，当前资产约348万面/190MB，海浪冲退不变。服务因文件占用短暂停启，现已恢复 http://127.0.0.1:8786/ 并保持运行；打包前应先停本实验服务。旧离线动画未更新，无部署/Git同步。详见 [结构复核](../tropical-shallows/STRUCTURE_REVIEW.md)。
+
+2026-11-16 用户继续要求提升观感与场景交互：增加共享风场、同姿态动态阴影/倒影、退水觅食、脚边弱水纹、蟹触须/钳动作，以及水面/花叶/鸟/蟹四类轻点反馈；暂停统一冻结所有动态。调整环境填光、粗糙度、细砂和湿润反光，模型包保持190MB，仅提取37KB鸟头颈数据。运行模块语法、test-living.mjs及实际四类输入/暂停/拖动/390布局通过，1280×900采样约44FPS。仍为局部形变与外观近似，不是完整物理求解或90%验收，无新增依赖/部署/Git同步。详见 [环境联动复核](../tropical-shallows/LIVING_REVIEW.md)。
+绯月桌面精灵的文字提醒修改及整组合并确认见[子项目开发记录](../personal-digital-companion/docs/DEVELOPMENT.md)和[使用说明](../personal-digital-companion/desktop/README.md)。本次完成桌面及两个 Worker 的本地源码接线与隔离验证。
+

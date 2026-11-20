@@ -2,13 +2,12 @@
 import {readFileSync,writeFileSync,mkdirSync,copyFileSync,existsSync,cpSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
-import {stripTypeScriptTypes} from 'node:module';
 import {Script} from 'node:vm';
 import {run} from './media.mjs';
+import {prepareDesktopPages} from '../desktop/source-updates.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url)),out=resolve(root,'output/desktop-bundle'),media=resolve(root,'output/four-states-v3');
 mkdirSync(out,{recursive:true});
-for(const name of ['companion-state','companion-player'])writeFileSync(resolve(out,name+'.mjs'),stripTypeScriptTypes(readFileSync(resolve(root,'src',name+'.ts'),'utf8')));
-for(const name of ['index.html','style.css','renderer.mjs','sound.mjs','sound-settings.html','sound-settings.css','sound-settings.mjs','settings.html','settings-ui.mjs','settings.css','configured-renderer.mjs','behavior-controller.mjs','effect-preview.mjs','window-nodes.mjs','screen-posture.mjs','screen-question.html','screen-question.css','screen-question-ui.mjs'])copyFileSync(resolve(root,'desktop',name),resolve(out,name));
+prepareDesktopPages(root,out);
 mkdirSync(resolve(out,'voice'),{recursive:true});
 cpSync(resolve(root,'assets/voice'),resolve(out,'voice'),{recursive:true});
 cpSync(resolve(root,'assets/walk-20261118'),resolve(out,'walk'),{recursive:true});
@@ -21,8 +20,7 @@ if(existsSync(resolve(committed,'clip-catalog.json'))&&!process.argv.includes('-
   cpSync(committed,out,{recursive:true});
   const clips=JSON.parse(readFileSync(resolve(out,'clip-catalog.json'),'utf8'));
   writeFileSync(resolve(out,'local-clips.js'),'window.localClips='+JSON.stringify(clips)+';');
-  const page=readFileSync(resolve(out,'index.html'),'utf8').replace('<script type="module"','<script src="local-clips.js"></script><script type="module"');
-  writeFileSync(resolve(out,'index.html'),page);console.log('已从Git正式资源构建：'+out);process.exit(0);
+  console.log('已从Git正式资源构建：'+out);process.exit(0);
 }
 copyFileSync(resolve(media,'baseline.png'),resolve(out,'baseline.png'));
 const manifest=JSON.parse(readFileSync(resolve(media,'manifest.json'),'utf8')),clips={};
@@ -58,6 +56,5 @@ copyFileSync(resolve(root,'output/hover-seamless/normal.webm'),resolve(out,'clip
 copyFileSync(resolve(root,'output/hover-seamless/compact.webm'),resolve(out,'clips-compact/hover-seamless.webm'));
 writeFileSync(resolve(out,'clip-catalog.json'),JSON.stringify(clips));
 const resources='window.localClips='+JSON.stringify(clips)+';';new Script(resources);writeFileSync(resolve(out,'local-clips.js'),resources);
-const page=readFileSync(resolve(out,'index.html'),'utf8').replace('<script type="module"','<script src="local-clips.js"></script><script type="module"');writeFileSync(resolve(out,'index.html'),page);
 run(['-loglevel','error','-y','-i',resolve(media,'baseline.png'),'-vf','crop=200:200:140:20,scale=32:32:flags=lanczos','-frames:v','1',resolve(out,'tray.png')]);
 console.log('桌面本地资源已准备：'+out);

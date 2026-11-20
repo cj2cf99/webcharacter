@@ -37,6 +37,7 @@ export function openTestDatabase(path = ':memory:') {
 }
 
 export function initializeDatabase(sqlite) {
+  sqlite.exec(readFileSync(new URL('../migrations/013-ai-route-cooldown.sql', import.meta.url),'utf8'));
   for (const path of ['../migrations/001-task-units.sql', '../migrations/002-executions.sql', '../migrations/003-task-activity.sql', '../seeds/tasklist.sql']) {
     sqlite.exec(readFileSync(new URL(path, import.meta.url), 'utf8'));
   }
@@ -50,5 +51,19 @@ export function initializeDatabase(sqlite) {
   }
   if (!sqlite.prepare('PRAGMA table_info(tasks)').all().some(column => column.name === 'submission_id')) {
     sqlite.exec(readFileSync(new URL('../migrations/007-task-submissions.sql', import.meta.url), 'utf8'));
+  }
+  if (!sqlite.prepare('PRAGMA table_info(chains)').all().some(column => column.name === 'submission_fingerprint')) {
+    sqlite.exec(readFileSync(new URL('../migrations/009-chain-submissions.sql', import.meta.url), 'utf8'));
+  }
+  const chainSql = sqlite.prepare("SELECT sql FROM sqlite_schema WHERE name='chain_nodes'").get().sql;
+  if (chainSql.includes('position BETWEEN 0 AND 4')) {
+    const migration = readFileSync(new URL('../migrations/010-temporary-chain-positions.sql', import.meta.url), 'utf8');
+    sqlite.exec(`BEGIN;\n${migration}\nCOMMIT;`);
+  }
+  if (!sqlite.prepare('PRAGMA table_info(chains)').all().some(column => column.name === 'temporary_registration')) {
+    sqlite.exec(readFileSync(new URL('../migrations/011-temporary-registration.sql', import.meta.url), 'utf8'));
+  }
+  if (!sqlite.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='registration_ai_preference'").get()) {
+    sqlite.exec(readFileSync(new URL('../migrations/012-registration-ai-preference.sql', import.meta.url), 'utf8'));
   }
 }

@@ -1,4 +1,4 @@
-import {movementGrid,snapMovement} from '../desktop/movement.mjs';
+import {movementGrid,snapMovement,displayRoutes,displaySize,displayPosition,movementTarget} from '../desktop/movement.mjs';
 import * as electron from 'electron';
 import assert from 'node:assert/strict';
 import {mkdtempSync,writeFileSync,readFileSync} from 'node:fs';
@@ -10,7 +10,8 @@ electron.app.setPath('userData',profile);await electron.app.whenReady();
 let host,win;
 try{
  const display=electron.screen.getPrimaryDisplay(),area=display.workArea,grid=movementGrid(display.scaleFactor),probes=[];
- for(const method of ['readback','fixed','aligned']){
+ const screenOnly=process.argv.includes('--screen-only');
+ for(const method of screenOnly?[]:['readback','fixed','aligned']){
   const probe=new electron.BrowserWindow({x:area.x+20,y:area.y+20,width:243,height:360,show:false,frame:false,transparent:true,resizable:false});
   probes.push(probe);const sizes=[];
   for(let i=0;i<120;i++){const base=method==='readback'?probe.getBounds():{width:method==='aligned'?snapMovement(243,grid):243,height:360};const x=area.x+20+i%8*5,y=area.y+20+i%6*5;probe.setBounds({...base,x:method==='aligned'?snapMovement(x,grid):x,y:method==='aligned'?snapMovement(y,grid):y},false);await new Promise(r=>setTimeout(r,4));sizes.push(probe.getBounds());}
@@ -20,11 +21,79 @@ try{
  win=new electron.BrowserWindow({width:243,height:360,show:false,webPreferences:{preload:resolve(root,'desktop/preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
  probes.forEach(w=>w.destroy());
  win.webContents.on('console-message',(_e,...args)=>console.log('renderer',args));
- host=attachSettings(electron,{win,profile,bundle:resolve(root,'output/desktop-bundle'),root,legacySound:{enabled:false,volume:50}});
+ const hostElectron=screenOnly?{...electron,BrowserWindow:class extends electron.BrowserWindow{
+   constructor(options){super({...options,show:false});}
+ }}:electron;
+ let lockApplied=null;
+ host=attachSettings(hostElectron,{win,profile,bundle:resolve(root,'output/desktop-bundle'),root,legacySound:{enabled:false,volume:50},onDisplayChange:value=>{lockApplied=value;}});
  await win.loadFile(resolve(root,'output/desktop-bundle/index.html'));host.open();
  const panel=host.panel;await new Promise(r=>panel.webContents.once('did-finish-load',r));
  const wait=async(fn)=>{for(let i=0;i<100;i++){if(await fn())return;await new Promise(r=>setTimeout(r,100));}throw Error('timed out');};
  await wait(()=>panel.webContents.executeJavaScript("Boolean(document.querySelector('#states button'))"));
+ if(screenOnly){
+   await panel.webContents.executeJavaScript("document.querySelector('#screenLock').click()");
+   await wait(()=>lockApplied===true);
+   assert.equal(JSON.parse(readFileSync(join(profile,'pc-behavior-settings.json'),'utf8')).config.confineToScreen,true);
+   await new Promise(r=>{panel.once('closed',r);panel.close();});host.open();
+   await new Promise(r=>host.panel.webContents.once('did-finish-load',r));
+   await wait(()=>host.panel.webContents.executeJavaScript("document.querySelector('#screenLock').checked"));
+   await host.panel.webContents.executeJavaScript("document.querySelector('#screenLock').click()");
+   await wait(()=>lockApplied===false);
+   host.panel.setSize(740,740);
+   const fits="document.querySelector('#screenLock').getBoundingClientRect().right<=innerWidth&&document.documentElement.scrollWidth<=innerWidth";
+   await wait(()=>host.panel.webContents.executeJavaScript(fits));
+   await host.panel.webContents.executeJavaScript("document.querySelector('#theme').click()");
+   assert(await host.panel.webContents.executeJavaScript(fits));
+   await wait(()=>win.webContents.executeJavaScript("Boolean(document.querySelector('#character').getContext('2d').getImageData(120,175,1,1).data[3])"));
+   for(const factor of [1,1.25,1.5,2,1]){
+     win.webContents.send('desktop:scale',factor);
+     const raster=`(()=>{const c=document.querySelector('#character'), ctx=c.getContext('2d');
+       return [c.clientWidth,c.width,c.height,ctx.getImageData(0,0,1,1).data[3],
+         ctx.getImageData(Math.floor(c.width*.49),Math.floor(c.height*.49),1,1).data[3]]})()`;
+     await wait(async()=>{
+       const [viewport,width,height,corner,body]=await win.webContents.executeJavaScript(raster);
+       const expected=Math.min(464,Math.round(viewport*factor));
+       return width===expected&&height===Math.round(expected*688/464)&&corner===0&&body>0;
+     });
+   }
+   console.log('PASS SCREEN：实际 Electron 设置立即保存/重开/取消、窄窗深浅主题、运行中切换 DPR 并复画透明画布。');
+   const displays=electron.screen.getAllDisplays().map(display=>({...display,
+     physicalArea:electron.screen.dipToScreenRect(null,display.workArea)
+   }));
+   console.log('NATIVE DISPLAYS',JSON.stringify(displays.map(({scaleFactor,bounds,workArea})=>({scaleFactor,bounds,workArea}))));
+   const start=displays.find(item=>item.id===electron.screen.getPrimaryDisplay().id),nominal={width:243,height:360};
+   const nearby=[...displayRoutes(displays,start,nominal).values()].find(route=>route.length===1);
+   if(nearby){
+     const [edge]=nearby;
+     const crossing=new electron.BrowserWindow({x:area.x+40,y:area.y+40,show:false,frame:false,transparent:true,resizable:false,...displaySize(start,nominal)});
+     try{
+       const toSize=displaySize(edge.to,nominal);
+       const landing=displayPosition(movementTarget(edge.to.workArea,toSize,'center'),edge.to,toSize);
+       for(const [point,display] of [[edge.exit,edge.from],[edge.entry,edge.to],[landing,edge.to]]){
+         const size=displaySize(display,nominal);
+         const requested={...point,...size};
+         crossing.setBounds(requested,false);
+         let box,owner;
+         try{
+           await wait(()=>{
+             box=crossing.getBounds();
+             owner=electron.screen.getDisplayNearestPoint({x:Math.round(box.x+box.width/2),y:Math.round(box.y+box.height/2)});
+             // 跨缝时 Windows 在两屏的整数 DIP 表示间可舍入 1 像素。
+             return owner.id===display.id&&Object.keys(requested).every(key=>Math.abs(box[key]-requested[key])<=1);
+           });
+         }catch(e){
+           throw Error(JSON.stringify({requested,actual:box,expectedDisplay:display.id,actualDisplay:owner?.id}),{cause:e});
+         }
+         if(point===landing){
+           for(let i=0;i<25;i++)crossing.setBounds(requested,false);
+           assert.deepEqual(crossing.getBounds(),box,'连续请求不会积累尺寸舍入');
+         }
+       }
+     }finally{crossing.destroy();}
+     console.log('PASS NATIVE SEAM：隐藏原生窗口跨过真实相邻屏接缝，所属屏幕与窗口尺寸正确。');
+   }else console.log('SKIP NATIVE SEAM：当前环境没有可通行的相邻屏幕。');
+   return;
+ }
  win.webContents.send('desktop:posture','left');await wait(()=>win.webContents.executeJavaScript("document.querySelector('#character').style.transform==='scaleX(-1)'"));
  win.webContents.send('desktop:posture','right');await wait(()=>win.webContents.executeJavaScript("document.querySelector('#character').style.transform==='none'"));console.log('PASS POSTURE：真实renderer收到左右姿态后应用/取消水平镜像。');
 

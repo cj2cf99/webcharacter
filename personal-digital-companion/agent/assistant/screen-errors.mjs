@@ -1,4 +1,5 @@
 const errors={
+  WEATHER_UNAVAILABLE:[502,true,'天气服务暂不可用，请稍后重试'],WEATHER_NOT_CONFIGURED:[503,false,'天气服务尚未配置'],
   INVALID_JSON:[400,false,'请求必须是有效JSON'],INVALID_REQUEST:[400,false,'问题或图片字段不符合接口要求'],
   INVALID_IMAGE:[400,false,'图片编码或类型无效'],UNAUTHORIZED:[401,false,'需要有效认证'],FORBIDDEN:[403,false,'没有访问权限'],
   SAME_ORIGIN_REQUIRED:[403,false,'仅允许同源写请求'],METHOD_NOT_ALLOWED:[405,false,'仅支持POST'],

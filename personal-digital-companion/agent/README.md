@@ -1,5 +1,7 @@
 # 个人精灵任务API与本地执行
 
+每日日志使用 `POST /api/daily-logs` 生成、`GET /api/daily-logs` 按日期读取。接口契约、关键词查询预留、本地命令和配置见[每日日志 API](../docs/DAILY_LOG_API.md)。
+
 2026-11-18 截图问答接口与云端完成：`POST /api/assistant/screen-question`（主站候选`/api/companion/assistant/screen-question`）。传question及一张PNG/JPEG Base64；固定返回`{ok:true,answer}`或`{ok:false,error:{code,message,retryable}}`。只调用Cloudflare视觉能力，不读写D1/生成task。11项专项、全套119项通过，第2轮复核通过。字段、限额、错误表、认证、配置和PowerShell示例统一见 [SCREEN_QA_API.md](../docs/SCREEN_QA_API.md)。精灵端暂缓；无真实截图/模型/部署。现有wrangler.jsonc未开启远程AI binding，缺视觉能力返回503 AI_NOT_CONFIGURED。
 
 2026-11-18 链式增量：已实现最多5节点、显式领取、所有任务共用每终端2名额、全部祖先依赖、失败继续/停止/跳过、强制换终端新轮及旧结果归档。poller只读，不自动领取。用户确认当前中断节点“放弃”即跳过，已实现并经第2轮复核通过；主会话独立108项测试与三桌面回归通过。见 [设计](../docs/AGENT_CHAIN_DESIGN.md)、[接口](../docs/AGENT_CHAIN_API_HANDOFF.md)、[主复核](../docs/reviews/AGENT_CHAIN_MAIN_REVIEW_2026-11-18.md)。下方各组相反范围是历史。截图问答仅整理需求，尚未开发。
@@ -96,6 +98,7 @@ wrangler dev --local --ip 127.0.0.1 --port 8795 --persist-to .local/state
 | PATCH /api/devices/:id | `{ "alias": "homepc" }`；空白清除，重复返回409 |
 | POST /api/task-submissions | 为当前账户签发一次性提交号，返回 `{submission_id}`，提交号无有效期 |
 | POST /api/tasks | `{submission_id,type,target_device_id,params,deadline_at?}`；首次创建 201，同号同内容返回原任务 200，同号不同内容 409。[完整协议](../docs/TASK_SUBMISSION.md) |
+| POST /api/tasks/:id/execute | `{}`；共用的「我也是胡适」三类云端任务执行入口，使用任务保存的参数。[模板、接线与回执](../docs/HU_SHI_TASK_API.md) |
 | GET /api/tasks/:id | 返回任务参数、状态、次数、结果、关联类型说明和设备名 |
 | POST /api/tasks/:id/claim | `{device_id}`；目标匹配才领取，claimed:false表示已在RUNNING，需要本地核对 |
 | POST /api/tasks/:id/result | `{device_id,status,attempt_count,result,error,executions}`；同内容重复确认，不覆盖冲突终态 |

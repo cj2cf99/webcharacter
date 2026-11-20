@@ -8,5 +8,6 @@
 - `assets/white/` 是正式演示资源，`assets/source-layers/` 是绑定输入；`work/` 是可重建临时产物。
 - 不把 `local-backup/`、日志、原始 PSD、凭据或本机配置提交到远端。
 - 运行：`node tools/dev-server.mjs`；测试见 README。
+- 用户要求本机 ComfyUI 后台生图或图生图时，代理用 `python tools/comfy_job.py submit` 提交，按任务号查询，成功后交付本地 PNG。示例见 [代理调用本机 ComfyUI](docs/COMFY_JOBS.md)。
 - 完成阶段后更新开发指南的现状和注意事项；历史记录不可冒充当前结论。
 - 每次实际部署前，先在根目录准备完整 `RELEASE_REVIEW.md`（需求/验收、目标、基线与差异、逐项文件/行为、数据和配置影响、实际验证、未完成事项、风险与恢复、部署和发布后验证、用户确认与第三方审核状态），再请求本次部署明确确认；等待许可后才部署。触发自动部署的 push 同样受此限制。一般源代码同步不等于网站部署。

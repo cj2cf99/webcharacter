@@ -11,7 +11,7 @@ function report(task, deviceId) {
 }
 
 // 一次显式同步一个任务；调用方提供已认证请求，不保存凭据，不轮询或调度。
-export function createTaskSync({ request, executor, deviceId } = {}) {
+export function createTaskSync({ request, executor, deviceId, pauseBeforeExecute=()=>false } = {}) {
   if (typeof request !== 'function' || !executor || typeof executor.prepare !== 'function'
       || typeof executor.getTask !== 'function' || typeof executor.execute !== 'function') throw new Error('需要已认证请求函数和本地执行器');
   if (typeof deviceId !== 'string' || !DEVICE_ID_PATTERN.test(deviceId)) throw new Error('需要本机PC标识');
@@ -61,6 +61,7 @@ export function createTaskSync({ request, executor, deviceId } = {}) {
     if(remote.status!=='RUNNING'||remote.superseded_by_task_id||remote.chain?.current===false||remote.claim_request_id!==claimReceipt.request_id)throw new Error('领取回执已失效，未执行任务');
     if(local?.status==='RUNNING')throw new Error('本地执行结果未知，不能重跑');
     executor.prepare({...remote});
+    if(pauseBeforeExecute())return {paused:true};
     const completed=await executor.execute(taskContent(remote));return upload(completed,id);
   }
 

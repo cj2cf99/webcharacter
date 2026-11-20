@@ -1,7 +1,8 @@
-<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!doctype html><html lang="zh-CN" class="fy-workbench"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'">
-<title>声音设置 · 绯月</title><link rel="stylesheet" href="sound-settings.css">
-<main><header><span class="icon" aria-hidden="true">♫</span><div><h1>声音设置</h1><small>绯月 · 按动作节点管理</small></div><span id="status" role="status">读取中…</span></header>
+<title>声音设置 · 绯月</title><link rel="stylesheet" href="sound-settings.css"><link rel="stylesheet" href="feiyue-surface.css">
+<header class="fy-titlebar"><div class="fy-caption"><h1>声音设置</h1></div></header>
+<main><span id="status" role="status">读取中…</span>
 <section class="master"><label class="row" for="enabled"><span>总声音</span><input id="enabled" type="checkbox" role="switch" disabled></label>
 <label class="row" for="volume"><span>总音量</span><output id="percent">50%</output></label><input id="volume" type="range" min="0" max="100" step="1" value="50" aria-label="总音量" disabled></section>
 <p class="hint">实际音量 = 总音量 × 节点音量 · 声音跟随动画轮次 · 新声音接替旧声音</p>

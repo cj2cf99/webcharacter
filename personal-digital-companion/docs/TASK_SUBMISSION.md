@@ -7,8 +7,12 @@
 > 把这个功能做出来，看起来不是很难的内容，但是我不确定每个现有表都有可以记录编号的地方，这个内容可以考虑作为同名称列给必要的数据库表一个个加，不急于一次全部加上。
 >
 > 不用限制时间，取消时间到了重新领这部分的需求，这是无效的多于设计
+>
+> 和restapi走一个worker吧，省事
 
 每次签发独立随机 UUID，已经签发的提交号无有效期，可按任意顺序提交。本轮覆盖普通任务的 POST /api/tasks，包含手工任务和助手确认后的任务。
+
+2026-11-19 JST，按前文已确认的「主站现有 Cloudflare AI 接口」理解 REST API。任务领号与创建共用该 REST API 所在的主站 Worker `myapp`。预定路径为 `POST /api/companion/task-submissions` 和 `POST /api/companion/tasks`，使用现有 `createCompanionMount` 接线，继续使用 `COMPANION_DB` 和主站鉴权。此条记录部署目标决定，实际主站挂载尚未执行。
 
 依据 WebCharacter CLAUDE.md、根和子项目开发指南、TASK_TEMPLATE_PREVIEW.md、AGENT_CHAIN_DESIGN.md、ASSISTANT_API_HANDOFF.md，以及 `G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md`。项目和全局索引未发现独立设计备忘录。沿用单人同账户多终端及 D1 条件写入，签发简化为单条记录插入。
 

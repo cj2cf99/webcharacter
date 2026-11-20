@@ -23,7 +23,7 @@ test('L02：真实shell确认前不清理，取消保留，重复合并，关闭
     session:{defaultSession:{webRequest:{onBeforeRequest(){}},setPermissionRequestHandler(){}}},
     dialog:{showMessageBox(){dialogs++;return new Promise(resolve=>{answer=resolve;});}}};
   try{
-    const shell=await startDesktop(electron,{profile,tasks});shell.show();shell.hide();assert.equal(dialogs,0);assert.equal(stops,0);
+    const shell=await startDesktop(electron,{profile,tasks,messageBoxes:{...electron.dialog,close(){}}});shell.show();shell.hide();assert.equal(dialogs,0);assert.equal(stops,0);
     assert.equal(app.quit().prevented,true);assert.equal(dialogs,1);assert.ok(!tray.destroyed);assert.ok(ipcMain.listenerCount('desktop:hit'));
     app.quit();assert.equal(dialogs,1);answer({response:0});await tick();assert.equal(cancels,1);assert.ok(!tray.destroyed);
     let closePrevented=false;win.emit('close',{preventDefault(){closePrevented=true;}});assert.ok(closePrevented);assert.equal(dialogs,2);

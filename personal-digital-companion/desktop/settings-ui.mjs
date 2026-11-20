@@ -35,12 +35,40 @@ function stopVoice(){clearTimeout(audioTimer);audioTimer=null;if(previewAudio){p
 function playVoice(setting,delay){effect.stop();clearTimeout(audioTimer);audioTimer=null;const v=voices.find(v=>v[0]===setting.voice);const level=$('masterOn').checked&&setting.on?Number($('masterVolume').value)*setting.volume/10000:0;if(!v||!level){$('toast').textContent='未配语音或声音已关闭';return}const start=()=>{stopVoice();previewAudio=new Audio(v[2]);previewAudio.volume=level;previewAudio.play().catch(()=>{$('toast').textContent='语音无法播放，请检查资源'});previewAudio.onended=()=>{previewAudio=null}};if(delay&&setting.delay){$('toast').textContent='语音将在 '+setting.delay+' 秒后播放';audioTimer=setTimeout(start,setting.delay*1000)}else start()}
 function payload(){return {version:1,target:'pc',idleSpecialDelaySeconds:Number($('delay').value),master:{enabled:$('masterOn').checked,volume:Number($('masterVolume').value)},states:structuredClone(config)};}
 let soundQueue=Promise.resolve();
+let pageUpdatePending=false;
+async function applyPageUpdate(){
+ if(!pageUpdatePending)return;
+ await soundQueue;
+ if(dirty){$('toast').textContent='界面有更新，保存动画或重新读取后刷新';return;}
+ location.reload();
+}
+host.onPageUpdate?.(()=>{pageUpdatePending=true;void applyPageUpdate();});
+
+const screenLock=$('screenLock');
+host.onSettings(value=>{
+ if(!value.external)return;
+ catalogs(value);saved=value.config;
+ if(dirty){for(const id of Object.keys(config))config[id].sound=structuredClone(saved.states[id].sound);}
+ else{config=structuredClone(saved.states);$('delay').value=saved.idleSpecialDelaySeconds;}
+ screenLock.checked=saved.confineToScreen;$('masterOn').checked=saved.master.enabled;$('masterVolume').value=saved.master.volume;
+ draw();library();audioLibrary();$('toast').textContent=dirty?'本地配置已更新，保留当前动画草稿':'已应用外部配置';
+});
+screenLock.checked=saved.confineToScreen;
+screenLock.onchange=async()=>{
+ screenLock.disabled=true;
+ try{
+   const result=await host.saveSettings({target:'pc',confineToScreen:screenLock.checked},'display');
+   saved.confineToScreen=result.config.confineToScreen;
+   $('toast').textContent=saved.confineToScreen?'已锁定在当前屏幕':'已允许跨屏漫游';
+ }catch(e){$('toast').textContent='屏幕设置保存失败：'+e.message;}
+ finally{screenLock.checked=saved.confineToScreen;screenLock.disabled=false;}
+};
 function saveSound(){const data=payload();soundQueue=soundQueue.then(async()=>{try{const result=await host.saveSettings(data,'sound');saved=result.config;$('toast').textContent='声音已保存 · 本地 PC';}catch(e){for(const id of Object.keys(config))config[id].sound=structuredClone(saved.states[id].sound);$('masterOn').checked=saved.master.enabled;$('masterVolume').value=saved.master.volume;draw();$('toast').textContent='声音保存失败：'+e.message;}});}
 async function importResource(kind){try{const result=await host.importResource(kind);if(result){catalogs(result);draw();library();audioLibrary();$('toast').textContent='已导入本地 PC 媒体目录';}}catch(e){$('toast').textContent='导入失败：'+e.message;}}
 async function editName(id,label,name){const input=document.createElement('input');input.type='text';input.value=name;input.maxLength=80;label.replaceChildren(input);input.focus();let done=false;const save=async()=>{if(done)return;done=true;try{const result=await host.renameResource(id,input.value);catalogs(result);draw();library();audioLibrary();}catch(e){label.textContent=name;$('toast').textContent='重命名失败：'+e.message;}};input.onkeydown=e=>{if(e.key==='Enter')save();if(e.key==='Escape'){done=true;label.textContent=name;}};input.onblur=save;}
 $('import').onclick=()=>importResource('video');$('audioImport').onclick=()=>importResource('audio');
-$('save').onclick=async()=>{const button=$('save');button.disabled=true;try{await soundQueue;const result=await host.saveSettings(payload(),'animation');saved=result.config;dirty=false;$('dirty').textContent='已保存到本地 PC';$('toast').textContent='已通知桌面精灵应用';}catch(e){$('toast').textContent='保存失败：'+e.message;}finally{button.disabled=false;}};
-$('reset').onclick=async()=>{effect.stop();await soundQueue;const result=await host.getSettings();catalogs(result);saved=result.config;config=structuredClone(saved.states);$('masterOn').checked=saved.master.enabled;$('masterVolume').value=saved.master.volume;$('delay').value=saved.idleSpecialDelaySeconds;dirty=false;$('dirty').textContent='已重新读取本地 PC 配置';draw();library();audioLibrary();};
+$('save').onclick=async()=>{const button=$('save');button.disabled=true;try{await soundQueue;const result=await host.saveSettings(payload(),'animation');saved=result.config;dirty=false;void applyPageUpdate();$('dirty').textContent='已保存到本地 PC';$('toast').textContent='已通知桌面精灵应用';}catch(e){$('toast').textContent='保存失败：'+e.message;}finally{button.disabled=false;}};
+$('reset').onclick=async()=>{effect.stop();await soundQueue;const result=await host.getSettings();catalogs(result);saved=result.config;config=structuredClone(saved.states);$('masterOn').checked=saved.master.enabled;$('masterVolume').value=saved.master.volume;$('delay').value=saved.idleSpecialDelaySeconds;screenLock.checked=saved.confineToScreen;dirty=false;void applyPageUpdate();$('dirty').textContent='已重新读取本地 PC 配置';draw();library();audioLibrary();};
 function runtime(v){if(v)$('route').textContent='运行中：'+(states.find(s=>s[0]===v.state)?.[2]||v.state)+' / '+v.phase+' · 本地 PC';}
 host.onRuntime(runtime);runtime(await host.getRuntime());
 const effect=new EffectPreview({canvas:$('effectCanvas'),label:$('effectStatus'),getDraft:()=>({selected,config:payload(),assets:snapshot.assets}),beforePlay:()=>{stopPreview?.();stopVoice();}});

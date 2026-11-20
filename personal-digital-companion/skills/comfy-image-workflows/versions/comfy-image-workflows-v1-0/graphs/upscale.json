@@ -1,0 +1,37 @@
+{
+  "1": {
+    "class_type": "UpscaleModelLoader",
+    "inputs": {
+      "model_name": "4xNMKDSuperscale_upscaler01.pth"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "$base"
+    }
+  },
+  "6": {
+    "class_type": "ImageUpscaleWithModel",
+    "inputs": {
+      "upscale_model": [
+        "1",
+        0
+      ],
+      "image": [
+        "2",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "6",
+        0
+      ],
+      "filename_prefix": "result"
+    }
+  }
+}

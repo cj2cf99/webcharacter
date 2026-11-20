@@ -14,7 +14,14 @@
 
 均沿用现有可信宿主 authorizer 或开发 Bearer。无新设备凭据。主站前缀由既有 mount 处理。
 
-- `POST /api/chains`：`{name?,nodes:[{key,type,target_device_id,params,depends_on?,deadline_at?}]}`。1–5 节点，depends_on 引用本请求的 key；不接受缺失前置、自引用、循环。成功 201 返回完整组。
+- `POST /api/assistant/recording-plan` 收 `{text}`，文字和听写文本共用。经模型提取和模板校验，返回 `{chain,pending}`。缺少必要信息的事项列入 `pending`。该入口只生成计划，实际建链由精灵以随机提交号发起。
+- `POST /api/tasks/:id/execute` 收空对象，精灵对刚建成的临时链主动发起。Worker 原子确认当前节点、前置、停止状态和失败状态，逐项执行，重复请求读取进行中状态或最终回执。主站登记端收稳定节点 ID；接收方必须按该标识落库去重并提供回执查证。
+- 临时云端登记的继续和跳过使用同一决定接口且省略 `device_id`。继续为同一节点创建待领取新轮，此时 `claimReceipt` 为空。停止请求只需 `request_id`。桌面先保存决定请求再发送，同号重放取回原决定。
+- 迁移 `011-temporary-registration.sql` 增加临时链标记，旧链默认保留已有执行行为。持有原提交号的发起方重放完全一致的临时链请求时，可以恢复旧链标记及原回执。
+
+- `POST /api/chains`：`{name?,submission_id?,temporary_registration?,nodes:[{key,type,target_device_id,params,depends_on?,deadline_at?}]}`。任务模板最多五节点。语句解析生成的临时登记传 `temporary_registration: true`，必须携带提交号。按原顺序创建一条云端登记链，节点默认独立，显式 `depends_on` 引用同组 key，拒绝循环。成功 201 返回完整组。
+- 临时登记链在第一次提交前从 `POST /api/task-submissions` 领取随机 UUID，并保存该号和解析后的节点。回执丢失时重发同号和同数据，返回 200 及原链的当前状态。同号不同链内容返回 409。一个号只用于一次普通任务或任务链，分别发起的两次相同登记用不同号。迁移 `009-chain-submissions.sql` 只增加可空请求摘要，旧链和旧调用方式继续可读可用。建链防重复独立于随后各业务写入的回执和去重。
+- 迁移 `010-temporary-chain-positions.sql` 去掉节点位置的五项存储上限，并原样恢复现有链、节点和任务轮次的关联。生产应用前按约定备份，应用后核对行数、旧关联和外键。
 - `GET /api/chains?after=<chain_id>&device_id=<pc>`：20 条轻量列表，返回 `{chains:[{chain_id,name,status,created_at}],next_after}`。
 - `GET /api/chains/:id?device_id=<pc>`：完整组及当前终端资格。
 - `POST /api/tasks/:id/claim`：`{device_id,request_id}`。桌面必须先持久化 request_id；响应 `{task,claimed:true,claimReceipt:{request_id,task}}`。相同请求回放，不同请求不能重复领取 RUNNING。仅为旧调用兼容允许省略 request_id，此时不能获得网络重试幂等保证。

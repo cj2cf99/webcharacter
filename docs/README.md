@@ -1,5 +1,7 @@
 # 网页角色组件文档索引
 
+2026-11-16 极乐鸟单页 2D 连续求偶舞：[需求、母鸟视角与安全构图设计](../bird-2d/README.md)、[实际复核报告](reviews/BIRD_2D_REVIEW_2026-11-16.md)。运行 `node tools/dev-server.mjs 8784`，访问 `http://localhost:8784/bird-2d/`；未部署。
+
 2026-11-16 新增子项目：巴黎圣母院写实场景在 `cathedral/`（需求、设计、审核、计划、进度记录、Blender 脚本、网页与当前可运行的资源，约 14 MB）。运行：`node cathedral/tools/dev-server.mjs 8780`，打开 `http://localhost:8780/site/?cycle`。测试：`node cathedral/tools/test-collision.mjs`、`test-sun.mjs`、`check-assets.mjs`。本次只是源码同步，不部署网站，也没有新增自动部署；仓库公开，所以下载的参考图纸、烘焙缓存（约 700 MB）、渲染图、帧序列和参考视频都没有上传（清单见 `cathedral/docs/PROGRESS_2026-11-16.md` 第 8 节）。极乐鸟线另有程序化早期版脚本 `model/bird-procedural-v0/`，建模优化以 `model/bird/` 为准。`model/bird/reference/` 里 4 张用户参考图（约 8.6 MB）因来源和授权未确认，暂未提交。
 
 ## 极乐鸟模型优化（2026-11-15）

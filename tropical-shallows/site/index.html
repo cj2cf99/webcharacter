@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#10292a">
+<title>热带浅滩 · 实时 3D</title><link rel="icon" href="data:,"><link rel="stylesheet" href="realtime.css">
+<script type="importmap">{"imports":{"three":"./vendor/three/three.module.min.js"}}</script>
+<body><header><div class="title"><span class="sun" aria-hidden="true">☀</span><h1>热带浅滩</h1><span class="tag">实时 3D</span></div><div class="modes"><a href="animation.html">旧版动画对照 ↗</a></div></header>
+<main><section class="viewer"><canvas id="view" tabindex="0" aria-label="实时三维浅滩，拖动旋转、滚轮缩放，方向键调整视角，Home复位，Enter轻点水面"></canvas><div class="hint">拖动看景 · 轻点水面 / 花叶 / 动物</div><div class="tools"><button id="reset">↺ 参考机位</button><button id="waves" aria-pressed="true">Ⅱ 暂停动态</button></div><div id="loading" role="status"><span class="ripple"></span><span id="loading-text">正在准备实时场景…</span><button id="retry" hidden>重试</button></div></section><footer><span><i id="dot"></i><span id="state" aria-live="polite">加载中</span></span><span id="stats"></span><span class="note">实时 3D · 微风弱浪</span></footer></main>
+<script type="module" src="realtime.mjs"></script></body></html>

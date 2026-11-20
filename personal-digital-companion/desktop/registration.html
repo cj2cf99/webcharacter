@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'">
+<title>绯月 · 随口登记</title>
+<link rel="stylesheet" href="registration.css">
+  <link rel="stylesheet" href="feiyue-surface.css">
+<header class="fy-titlebar"><div class="fy-caption"><h1>随口登记</h1></div></header>
+<main class="fy-scroll">
+  <form id="entry">
+    <label for="text">今天想记录什么？</label>
+    <textarea id="text" rows="4" autofocus aria-describedby="hint"></textarea>
+    <p id="hint">可以输入文字，也可以按 Win + H 听写。</p>
+    <div class="actions">
+      <button id="submit" type="submit">交给绯月</button>
+      <button id="resume" type="button" hidden>恢复原链</button>
+    </div>
+  </form>
+  <p id="status" role="status"></p>
+  <ul id="receipts" aria-label="登记结果" hidden></ul>
+  <ul id="pending" aria-label="待补充内容" hidden></ul>
+  <div id="decisions" class="actions" hidden>
+    <button type="button" data-action="continue">继续</button>
+    <button type="button" data-action="skip">跳过</button>
+    <button type="button" data-action="stop">停止后续</button>
+  </div>
+</main>
+<script type="module" src="registration-ui.mjs"></script>
+</html>

@@ -1,0 +1,9 @@
+.companion-page{max-width:58rem;margin:auto;padding:1rem;display:grid;gap:.5rem}
+.companion-page h1,.companion-page p{margin:.2rem 0}
+#companion-chains{display:grid;gap:.4rem}
+#companion-chains details{border:1px solid currentColor;border-radius:.6rem;padding:.5rem .8rem;overflow-wrap:anywhere}
+#companion-chains summary{cursor:pointer;font-weight:600}
+#companion-chains small{display:inline-block;margin-inline:.45rem;opacity:.8}
+#companion-chains ul{margin:.5rem 0;padding-inline-start:1.2rem}
+#companion-chains li{padding:.2rem 0}
+.companion-page button{min-height:2rem;margin:.15rem .3rem .15rem 0}

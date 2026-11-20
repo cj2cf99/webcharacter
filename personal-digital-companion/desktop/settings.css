@@ -10,3 +10,5 @@
 .top>.panel:first-child .state small{display:none}.top>.panel:first-child .state.active small{display:block}.top>.panel:first-child>.note{display:none}.top>.panel:first-child .map{gap:5px}.audio-preview{height:150px}.workspace-tabs button.active,.resource-tabs button.active{color:#17121f}.light .workspace-tabs button.active,.light .resource-tabs button.active{color:white}
 
 .node-group{grid-column:1/-1;padding:8px 2px 2px;font-weight:600}
+.screen-lock{display:inline-flex;align-items:center;gap:6px;min-height:38px;white-space:nowrap;cursor:pointer}.screen-lock input{margin:0}
+@media(max-width:780px){header{gap:10px;flex-wrap:wrap}}

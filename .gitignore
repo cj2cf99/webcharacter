@@ -16,3 +16,7 @@
 Thumbs.db
 __pycache__/
 *.pyc
+
+# 人鱼公主用户参考图（来源与授权未确认，仅本地）
+/model/mermaid/reference/
+/model/bird/reference/

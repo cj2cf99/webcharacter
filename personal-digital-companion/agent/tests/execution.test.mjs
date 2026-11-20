@@ -71,6 +71,26 @@ test('E02：首次失败立即同参数重试，处理函数修改副本不污�
   assert.equal(result.error, null);
 });
 
+test('本地复盘跨东京午夜读取旧执行明细，保留失败和重试，重复补传只有一条回执',async t=>{
+  let attempt=0;
+  const f=fixture(t,async()=>{if(!attempt++)throw Error('failed');return {message:'已整理两份资料'};});
+  const input={...task(),definition:{name:'整理资料'}};
+  f.runner.prepare(input);await f.runner.execute(input);
+  const seed=new DatabaseSync(f.databasePath);
+  seed.prepare('UPDATE executions SET started_at=?,finished_at=? WHERE attempt_no=1')
+    .run('2026-11-19T14:59:58.000Z','2026-11-19T14:59:59.000Z');
+  seed.prepare('UPDATE executions SET started_at=?,finished_at=? WHERE attempt_no=2')
+    .run('2026-11-19T14:59:59.500Z','2026-11-19T15:00:01.000Z');
+  seed.close();
+  const runner=f.reopen();
+  assert.deepEqual(runner.review.read('2026-11-19').map(e=>e.action),['第 1 次开始执行','第 1 次执行失败','第 2 次开始执行']);
+  const [done]=runner.review.read('2026-11-20');
+  assert.equal(done.title,'整理资料');assert.equal(done.detail,'说明：已整理两份资料');
+  runner.markUploaded(input.task_id);runner.markUploaded(input.task_id);
+  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo'}).format(Date.now());
+  assert.equal(runner.review.read(today).filter(e=>e.action.includes('收到')).length,1);
+});
+
 test('E03：两次失败即结束，重开不会第三次执行', async t => {
   let calls = 0;
   const f = fixture(t, async () => { calls++; throw new Error('secret'); });

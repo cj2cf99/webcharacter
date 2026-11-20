@@ -1,0 +1,40 @@
+{
+  "colorScale": 8,
+  "cameraMatrix": [
+    [
+      1,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0.04370817914605141,
+      -0.9990443587303162,
+      -14
+    ],
+    [
+      0,
+      0.9990443587303162,
+      0.04370817914605141,
+      2.1500000953674316
+    ],
+    [
+      0,
+      0,
+      0,
+      1
+    ]
+  ],
+  "fovY": 42.322519633656555,
+  "objects": 1,
+  "uniqueMeshes": 1,
+  "trianglesWithInstances": 3479613,
+  "glbBytes": 190235744,
+  "note": "真实三维几何，顶点表面颜色烘焙；浏览器实时光照、阴影和海水。",
+  "shading": "albedo-vertex-bake-realtime-lighting",
+  "colorEncoding": "log8",
+  "compaction": {
+    "verticesAfter": 8141125
+  }
+}

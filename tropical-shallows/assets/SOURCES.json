@@ -1,0 +1,74 @@
+[
+  {
+    "asset": "coast_sand_01",
+    "kind": "Diffuse",
+    "file": "coast_sand_01_diff_2k.jpg",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_01/coast_sand_01_diff_2k.jpg",
+    "md5": "bde59bb3bcdd8d4e9d6fcadc19f038fa",
+    "license": "CC0"
+  },
+  {
+    "asset": "coast_sand_01",
+    "kind": "nor_gl",
+    "file": "coast_sand_01_nor_gl_2k.jpg",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_01/coast_sand_01_nor_gl_2k.jpg",
+    "md5": "2a9d793676562b38b5760b9147aa40ea",
+    "license": "CC0"
+  },
+  {
+    "asset": "coast_sand_01",
+    "kind": "Displacement",
+    "file": "coast_sand_01_disp_2k.jpg",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_01/coast_sand_01_disp_2k.jpg",
+    "md5": "a76050d099be09eed79e0c280d5b73f7",
+    "license": "CC0"
+  },
+  {
+    "asset": "coast_sand_01",
+    "kind": "Rough",
+    "file": "coast_sand_01_rough_2k.jpg",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_01/coast_sand_01_rough_2k.jpg",
+    "md5": "66e3bcd9f7158cd8919487afb51eabf2",
+    "license": "CC0"
+  },
+  {
+    "asset": "rock_pitted_mossy",
+    "kind": "Diffuse",
+    "file": "rock_pitted_mossy_diff_2k.jpg",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rock_pitted_mossy/rock_pitted_mossy_diff_2k.jpg",
+    "md5": "e05930fbfebb59176a238e3c1fa2186f",
+    "license": "CC0"
+  },
+  {
+    "asset": "rock_pitted_mossy",
+    "kind": "nor_gl",
+    "file": "rock_pitted_mossy_nor_gl_2k.jpg",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rock_pitted_mossy/rock_pitted_mossy_nor_gl_2k.jpg",
+    "md5": "adbadd8113de993a8f7f55f7ae54acbe",
+    "license": "CC0"
+  },
+  {
+    "asset": "rock_pitted_mossy",
+    "kind": "Displacement",
+    "file": "rock_pitted_mossy_disp_2k.jpg",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rock_pitted_mossy/rock_pitted_mossy_disp_2k.jpg",
+    "md5": "d4ea7d3fbe778a1931ff908ad07f36c4",
+    "license": "CC0"
+  },
+  {
+    "asset": "rock_pitted_mossy",
+    "kind": "Rough",
+    "file": "rock_pitted_mossy_rough_2k.jpg",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rock_pitted_mossy/rock_pitted_mossy_rough_2k.jpg",
+    "md5": "c45a252e5ade7f3109f70bd0c5114a77",
+    "license": "CC0"
+  },
+  {
+    "asset": "kloofendal_48d_partly_cloudy_puresky",
+    "kind": "hdri",
+    "file": "kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+    "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+    "md5": "2eba3a4d7eeb23cbfbeca364c97e7980",
+    "license": "CC0"
+  }
+]

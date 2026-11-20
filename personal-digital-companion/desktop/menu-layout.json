@@ -1,0 +1,36 @@
+[
+  {"action":"question","label":"问绯月"},
+  {"action":"weather","label":"三地天气"},
+  "-",
+  {"label":"任务","items":[
+    {"action":"today","label":"今日任务"},
+    {"action":"tasks","label":"接取任务与任务链"},
+    {"action":"retry","label":"中断任务与补传"},
+    {"action":"review","label":"本地复盘"},
+    {"action":"log","label":"任务日志"}
+  ]},
+  {"label":"桌宠动作","items":[
+    {"action":"work"},
+    {"action":"move","label":"移动到"},
+    {"action":"home","label":"回到右下角"},
+    "-",
+    {"action":"attachment","items":[
+      {"action":"climbLeft","label":"左侧电梯上行"},
+      {"action":"climbRight","label":"右侧电梯上行"},
+      {"action":"sit","label":"上沿坐姿"},
+      {"action":"lie","label":"上沿侧卧"},
+      {"action":"continuous","label":"坐卧连续循环"},
+      "-",
+      {"action":"detach","label":"解除依附"}
+    ]}
+  ]},
+  {"label":"设置与维护","items":[
+    {"action":"settings","label":"动画与声音"},
+    {"action":"connection","label":"云端连接"},
+    "-",
+    {"action":"restart","label":"重启绯月"}
+  ]},
+  "-",
+  {"action":"visibility"},
+  {"action":"quit","label":"退出"}
+]

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>林间 · 华丽极乐鸟 / 2D 动作试验</title>
+<link rel="stylesheet" href="style.css">
+<body>
+<main>
+  <header><div><span class="eyebrow">PARADISE / MOTION STUDY 01</span><h1>林间<span>华丽极乐鸟</span></h1></div><span class="tag">CANVAS 2D <i></i> 实时绘制</span></header>
+  <section class="stage" aria-label="极乐鸟舞姿动画"><canvas id="scene" aria-label="母鸟视角：雄性极乐鸟面向镜头，在树干上连续求偶展示"></canvas><div class="corner">NEW GUINEA<br><span>母鸟视角 · 固定机位</span></div><div class="pose-label"><span id="number">COURTSHIP / CONTINUOUS</span><strong id="pose-name">观察 · 轻转头</strong></div><div class="stage-note">二维分层羽片 · 非 3D 渲染</div><div id="loading">正在绘制林间舞台…</div></section>
+  <div class="timeline"><label for="seek">舞蹈进度</label><input id="seek" type="range" min="0" max="32" step="0.01" value="0" aria-label="跳转舞蹈进度"><output id="elapsed">0.0 / 32 秒</output></div>
+  <footer><div class="playback"><button id="play" aria-label="暂停动画">Ⅱ 暂停</button><button id="replay">↺ 重播</button><button id="loop" aria-pressed="true">↻ 循环</button><label>速度 <select id="speed" aria-label="播放速度"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option></select></label></div><p>它的展示对象，就是镜头前的你。<span>连续二维求偶舞 · 左右移动始终保留在画面内</span></p></footer>
+</main><script type="module" src="main.mjs"></script>
+</body></html>

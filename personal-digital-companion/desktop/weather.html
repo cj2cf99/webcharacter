@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+  <title>绯月 · 三地天气</title>
+  <link rel="stylesheet" href="weather.css">
+  <link rel="stylesheet" href="feiyue-surface.css">
+</head>
+<body>
+  <header class="fy-titlebar"><div class="fy-caption"><h1>三地天气</h1></div><button id="refresh" type="button">刷新</button></header>
+  <div class="fy-scroll weather-content">
+  <main id="places" aria-label="三地天气与预警" aria-busy="true"></main>
+  <p role="status" id="status">正在读取天气…</p>
+  <footer id="sources"></footer>
+  </div>
+  <script src="weather-ui.mjs" type="module"></script>
+</body>
+</html>

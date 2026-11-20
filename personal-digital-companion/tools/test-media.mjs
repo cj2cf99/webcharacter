@@ -1,6 +1,6 @@
 // 用人工生成的色块验证时序与 Alpha；不冒充真实角色动作验收。
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -75,4 +75,72 @@ for (const [kind, w, h] of [['green', 64, 64], ['alpha', 96, 48]]) {
   const retry = spawnSync(process.execPath, [cli, 'gif-webm', '--input', variable, '--output', webm]);
   assert.notEqual(retry.status, 0, '不得覆盖已有输出');
 }
-console.log(`PASS：两种画布尺寸、图片→GIF、帧序列→GIF、绿幕/透明GIF→WebM、不等间隔时序、Alpha、输出保护。\n产物：${dir}`);
+const mp4 = join(dir, 'motion.mp4');
+run(['-loglevel', 'error', '-n', '-framerate', '20', '-i', join(dir, 'green', 'frame-%04d.png'),
+  '-c:v', 'libx264', '-qp', '0', '-pix_fmt', 'yuv444p', mp4]);
+const outline = JSON.parse(command('outline', '--input', mp4, '--key', 'green').stdout);
+assert.equal(outline.frameCount, 4);
+assert.equal(outline.emptyFrames, 0);
+assert.deepEqual(outline.edgeFrames, []);
+assert.equal(outline.last.left - outline.first.left, 9, '轮廓检查保留动作中的位移');
+assert.equal(outline.bounds.right, outline.last.right);
+assert.deepEqual(JSON.parse(command('outline', '--input', mp4).stdout).edgeFrames, [0, 1, 2, 3]);
+
+const refRaw = join(dir, 'reference.rgba'), reference = join(dir, 'reference.png');
+const refPixels = Buffer.alloc(104 * 112 * 4);
+for (let y = 20; y < 89; y++) {
+  for (let x = 40; x < 76; x++) refPixels.writeUInt32BE(0xf0281eff, (y * 104 + x) * 4);
+}
+writeFileSync(refRaw, refPixels);
+run(['-loglevel', 'error', '-n', '-f', 'rawvideo', '-pixel_format', 'rgba', '-video_size', '104x112',
+  '-i', refRaw, '-frames:v', '1', reference]);
+const refOutline = JSON.parse(command('outline', '--input', reference).stdout);
+const alignedPath = join(dir, 'aligned.webm');
+const aligned = JSON.parse(command('video-webm', '--input', mp4, '--key', 'green',
+  '--reference', reference, '--output', alignedPath).stdout);
+assert(aligned.alignment.scale > 1.4);
+assert.equal(aligned.after.frameCount, 4);
+assert.equal(aligned.after.width, 104);
+assert.equal(aligned.after.height, 112);
+assert.equal(aligned.after.emptyFrames, 0);
+assert.deepEqual(aligned.after.edgeFrames, []);
+for (const key of ['left', 'top', 'right', 'bottom']) {
+  assert(Math.abs(aligned.after.first[key] - refOutline.first[key]) <= 3, `对齐后 ${key} 接近基准`);
+}
+assert(aligned.after.last.left > aligned.after.first.left + 10, '整段位移未被逐帧对齐消除');
+const alignedAlpha = alpha(alignedPath);
+assert.equal(alignedAlpha[0], 0);
+assert(alignedAlpha[35 * 104 + 50] > 240);
+
+const shared = JSON.parse(command('video-webm', '--input', join(dir, 'green.webm'), '--key', 'green',
+  '--reference', reference, '--anchor', mp4, '--output', join(dir, 'shared.webm')).stdout);
+assert.deepEqual(shared.alignment, aligned.alignment, '同一源基准对各段给出同一变换');
+const withoutFit = JSON.parse(command('video-webm', '--input', mp4, '--key', 'green',
+  '--output', join(dir, 'unaligned.webm')).stdout);
+assert.equal(withoutFit.alignment, null);
+assert.equal(withoutFit.after.width, 64);
+assert.equal(withoutFit.after.height, 64);
+
+const left = JSON.parse(command('video-webm', '--input', mp4, '--key', 'green',
+  '--reference', join(dir, 'green', 'frame-0000.png'), '--reference-key', 'green',
+  '--anchor-frame', '3', '--output', join(dir, 'translated-left.webm')).stdout);
+assert.equal(left.alignment.x, -9);
+const right = JSON.parse(command('video-webm', '--input', mp4, '--key', 'green',
+  '--reference', join(dir, 'green', 'frame-0003.png'), '--reference-key', 'green',
+  '--output', join(dir, 'translated-right.webm')).stdout);
+assert.equal(right.alignment.x, 9);
+const identity = JSON.parse(command('video-webm', '--input', mp4, '--key', 'green',
+  '--reference', join(dir, 'green', 'frame-0000.png'), '--reference-key', 'green',
+  '--output', join(dir, 'identity.webm')).stdout);
+assert.deepEqual([identity.alignment.scale, identity.alignment.x, identity.alignment.y], [1, 0, 0]);
+
+const silhouette = join(dir, 'silhouette.png');
+run(['-loglevel', 'error', '-n', '-i', reference, '-vf', 'crop=34:112:40:0', '-frames:v', '1', silhouette]);
+const unusable = join(dir, 'unusable.webm');
+const clipped = spawnSync(process.execPath, [cli, 'video-webm', '--input', mp4, '--key', 'green',
+  '--reference', silhouette, '--output', unusable], { encoding: 'utf8', windowsHide: true });
+assert.notEqual(clipped.status, 0);
+assert.match(clipped.stderr, /移出画布/);
+assert(!existsSync(unusable), '裁切风险时不产生输出');
+
+console.log(`PASS：旧 GIF 流程、视频轮廓、透明度、对齐、共用变换及裁切保护。\n产物：${dir}`);

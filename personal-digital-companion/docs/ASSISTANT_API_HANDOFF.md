@@ -1,5 +1,8 @@
 # 第八组AI接口与主站接线准备
 
+2026-11-20 JST，统一气泡调用文字问答时发送可选请求头 `X-Feiyue-Search-Hint: 1`。仅当无法回答、需要公开搜索且能从本次提问原文提取关键词时，成功 JSON 可以额外带字符串 `search_query`。普通成功回执沿用原结构。未携带该请求头的调用方仍收到下述原契约。桌面端在发起搜索前再次检查关键词，不把图片送给搜索方。
+
+
 后续独立接口：截图问答使用 `POST /api/assistant/screen-question`，精确字段、统一成功/失败回执、图片限制、认证与重试含义见 [SCREEN_QA_API.md](SCREEN_QA_API.md)。该路由不读写D1，独立createVisionClient默认复用Cloudflare binding，图片不送入下方原共享文字contract。原文字接口及确认任务行为不变。精灵截图/客户端/气泡按用户决定暂缓。
 
 2026-11-18 JST。按用户“按照准备扩展接口的前提”实施；主站未修改、未部署。真实机器Access接入、真实模型及花园/随手记任务模板验证留第十组。非UI模块，无聊天页面，默认tasklist/handlers仍为空，disk.query继续暂停。
@@ -42,7 +45,9 @@ confirm 在用户明确接受后，先从 POST /api/task-submissions 取提交�
 
 提交断网、500、坏 JSON 或回执不符时保留当前建议和原提交号，避免换号后重复创建。用户再次确认可核对原任务；确认结果未知时暂停替换建议。助手客户端只在当前实例内保存原提交号，宿主如需跨重启继续核对，应保存原号和请求数据。
 
-## 主站挂载候选
+## 主站挂载
+
+2026-11-19 JST，用户确认「和restapi走一个worker吧，省事」。按照前文的 REST API 指主站现有 Cloudflare AI 接口，挂载目标采用同一个 `myapp` Worker。以下是待实施接线。
 
 `agent/host/main-site.mjs`导出`createCompanionMount({authorizeMarket,createEnvAiClient})`。未来主站接线时传入它现有的真实函数；缺任一函数直接失败，不能用请求字段或开发Bearer替代Access登录。
 

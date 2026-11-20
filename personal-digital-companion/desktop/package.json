@@ -9,6 +9,9 @@
     "start": "node ../tools/run-desktop.mjs",
     "test": "node ../tools/test-desktop-shell.mjs"
   },
+  "dependencies": {
+    "node-llama-cpp": "3.22.3"
+  },
   "devDependencies": {
     "electron": "45.3.4"
   }
