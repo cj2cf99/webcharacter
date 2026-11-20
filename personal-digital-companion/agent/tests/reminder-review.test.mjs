@@ -27,9 +27,9 @@ test('按选择逐条执行并回读，丢回执只读不重写，失败与空�
       next: {id: 9, deadline: '2026-11-27'}});
   }});
   await flow.load();
-  await assert.rejects(flow.apply([{id: 5, action: 'complete'}]), /不能执行/);
+  await assert.rejects(flow.apply([{id: 5, action: 'complete'}]), /所选操作无效/);
   const report = await flow.apply([{id: 2, action: 'complete'}, {id: 1, action: 'tomorrow'}, {id: 3, action: 'complete'}]);
-  assert.equal(report.unchanged, 1);
+  assert.equal(report.unchanged, 2); // 未选的普通提醒及可登记工时的当天计划。
   assert.deepEqual(report.results.map(item => [item.id, item.result]), [[1, 'moved'], [2, 'completed'], [3, 'failed']]);
   assert.equal(report.results[1].next, '2026-11-27');
   assert.deepEqual(calls.slice(1).map(([path, method]) => [path.at(-1), method]),

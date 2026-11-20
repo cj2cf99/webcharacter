@@ -1,6 +1,7 @@
 import { canClaim, DEADLINE_GRACE_MS } from './deadline.mjs';
 import { ancestorsReadySQL } from '../chains/rules.mjs';
 import { encodeJson } from '../execution/json.mjs';
+import { executePlannerTask, plannerHoursType, readPlannerReceipt, validatePlannerTask } from './planner-hours.mjs';
 import { executeMainSiteTask, isHuShiTaskType, isRegistrationTaskType, prepareMainSiteTask } from '../host/main-site-task-adapter.mjs';
 
 const reply = (value, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -26,21 +27,28 @@ export async function executeCloudRegistration({ request, env, taskId, ownerId, 
   if (!owned) return fail(404, 'TASK_NOT_FOUND', '任务不存在');
   const temporary = owned.temporary_registration === 1;
   const task = await readTask(DB, taskId);
+  const planner = task?.type === plannerHoursType;
   if (!task || task.definition.executor !== 'cloud' || task.target_device_id !== null
-    || !(temporary ? isRegistrationTaskType(task.type) : !task.chain && isHuShiTaskType(task.type))) {
+    || !(temporary ? planner || isRegistrationTaskType(task.type) : !task.chain && (planner || isHuShiTaskType(task.type)))) {
     return fail(409, 'EXECUTOR_UNAVAILABLE', '此类任务没有接入云端登记');
   }
   if (temporary && !task.chain?.current) return fail(409, 'OLD_ROUND', '任务已切换到新一轮');
   if (['COMPLETED', 'FAILED'].includes(task.status)) return reply(task);
-  if (receiptOnly || temporary && task.status === 'RUNNING') {
-    if (!temporary || task.status !== 'RUNNING') return fail(409, 'RECEIPT_NOT_PENDING', '当前节点没有待核对的回执');
-    if (!readRegistrationReceipt) return reply(task, 202);
+  if (receiptOnly || (temporary || planner) && task.status === 'RUNNING') {
+    if (!(temporary || planner) || task.status !== 'RUNNING') return fail(409, 'RECEIPT_NOT_PENDING', '当前节点没有待核对的回执');
     let recovered;
     try {
-      const {path} = prepareMainSiteTask(task);
-      const found = await readRegistrationReceipt({path, idempotencyKey: task.chain.node_id, env});
-      if (!found) return reply(task, 202);
-      recovered = encodeJson(await executeMainSiteTask(task, () => found));
+      if (planner) {
+        const found = await readPlannerReceipt(env.COMPANION_HOST, task.params);
+        if (!found) return reply(task, 202);
+        recovered = encodeJson(found);
+      } else {
+        if (!readRegistrationReceipt) return reply(task, 202);
+        const {path} = prepareMainSiteTask(task);
+        const found = await readRegistrationReceipt({path, idempotencyKey: task.chain.node_id, env});
+        if (!found) return reply(task, 202);
+        recovered = encodeJson(await executeMainSiteTask(task, () => found));
+      }
     } catch { return reply(task, 202); }
     const at = new Date().toISOString();
     await DB.batch([
@@ -57,10 +65,10 @@ export async function executeCloudRegistration({ request, env, taskId, ownerId, 
   }
   if (task.status === 'RUNNING') return fail(409, 'EXECUTION_NOT_FINISHED', task.activity?.progress_message || '任务正在执行或等待核对');
   if (!canClaim(task)) return fail(409, 'TASK_NOT_AVAILABLE', '任务已取消或超过可执行期限');
-  if (typeof (temporary ? writeRegistrationEntry : writeEntry) !== 'function') {
+  if (planner ? !env.COMPANION_HOST : typeof (temporary ? writeRegistrationEntry : writeEntry) !== 'function') {
     return fail(503, 'RECORDS_NOT_CONFIGURED', '主站登记接口尚未接入');
   }
-  try { prepareMainSiteTask(task); }
+  try { if (planner) validatePlannerTask(task.params); else prepareMainSiteTask(task); }
   catch { return fail(400, 'INVALID_PARAMS', '任务参数不符合登记模板'); }
 
   const claim = temporary
@@ -89,26 +97,30 @@ export async function executeCloudRegistration({ request, env, taskId, ownerId, 
   for (let number = 1; number <= 2; number++) {
     const start = new Date().toISOString();
     try {
-      result = await executeMainSiteTask(task, operation => temporary
+      result = planner ? await executePlannerTask(env.COMPANION_HOST, task.params) : await executeMainSiteTask(task, operation => temporary
         ? writeRegistrationEntry({ ...operation, env })
         : writeEntry(request, env, operation.path, operation.body, operation.idempotencyKey));
       status = 'COMPLETED';
       error = null;
     } catch (failure) {
       // 仅主站明确拒绝且未写入时可立即再试。失去回执时可能已经写入。
-      if (failure?.code !== 'RECORDS_REJECTED') {
+      if (planner && failure?.code === 'PLANNER_REJECTED') {
+        status = 'FAILED';
+        error = failure.message;
+      } else if (failure?.code !== 'RECORDS_REJECTED') {
         error = null;
         break;
+      } else {
+        status = number === 2 ? 'FAILED' : 'RUNNING';
+        error = failure.status === 429 ? '登记冷却中，请稍后再试。' : '主站拒绝登记，请核对内容后再试。';
       }
-      status = number === 2 ? 'FAILED' : 'RUNNING';
-      error = failure.status === 429 ? '登记冷却中，请稍后再试。' : '主站拒绝登记，请核对内容后再试。';
     }
     attempts.push(DB.prepare(`INSERT INTO executions
       (execution_id, task_id, attempt_no, status, started_at, finished_at, result_json, error)
       SELECT ?, ?, ?, ?, ?, ?, ?, ? FROM tasks WHERE task_id=? AND status='RUNNING'`)
       .bind(crypto.randomUUID(), taskId, number, error ? 'FAILED' : 'COMPLETED',
         start, new Date().toISOString(), result === null ? null : encodeJson(result), error, taskId));
-    if (status === 'COMPLETED') break;
+    if (status !== 'RUNNING') break;
   }
 
   await DB.batch([

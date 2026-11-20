@@ -6,7 +6,9 @@ export function validateParameters(spec, params) {
   const patterns = new Map();
   for (const [name, rule] of Object.entries(spec)) {
     if (!object(rule) || !['string', 'number', 'boolean', 'string_array'].includes(rule.type)
-      || Object.keys(rule).some(key => !['type', 'required', 'pattern', 'max_items'].includes(key))
+      || Object.keys(rule).some(key => !['type', 'required', 'pattern', 'max_items', 'min', 'max'].includes(key))
+      || ['min', 'max'].some(key => Object.hasOwn(rule, key) && (rule.type !== 'number' || !Number.isFinite(rule[key])))
+      || (rule.min > rule.max)
       || (Object.hasOwn(rule, 'required') && typeof rule.required !== 'boolean')
       || (Object.hasOwn(rule, 'pattern') && (!['string', 'string_array'].includes(rule.type) || typeof rule.pattern !== 'string'))
       || (rule.type === 'string_array'
@@ -28,7 +30,7 @@ export function validateParameters(spec, params) {
           || value.some(item => typeof item !== 'string' || (pattern && !pattern.test(item)))) return { valid: false };
       continue;
     }
-    if (typeof value !== rule.type || (rule.type === 'number' && !Number.isFinite(value))
+    if (typeof value !== rule.type || (rule.type === 'number' && (!Number.isFinite(value) || value < rule.min || value > rule.max))
       || (pattern && !pattern.test(value))) return { valid: false };
   }
   return { valid: true };

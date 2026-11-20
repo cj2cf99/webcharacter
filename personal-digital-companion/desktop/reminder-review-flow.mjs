@@ -1,11 +1,16 @@
-import {reminderReviewActions} from '../agent/host/reminder-review.mjs';
+import {reminderReviewActions,recordPlannerHours,validPlannerHours} from '../agent/host/reminder-review.mjs';
+import {isSubmissionId} from '../agent/tasks/submissions.mjs';
+import {plannerHoursType} from '../agent/tasks/planner-hours.mjs';
 
 const path = '/api/reminder-review';
+function allowed(row,choice) {
+  if(choice.action===recordPlannerHours)return Boolean(row.plannerWork?.dispatchId||row.resolvePlannerWork)&&validPlannerHours(choice.actualHours);
+  return !row.reason&&!row.plannerWork&&reminderReviewActions.includes(choice.action);
+}
 
 export function createReminderReviewFlow({request, canStart = () => true, waitForStart = () => {}}) {
   let snapshot, loading = null, running = null, report = null;
   let pendingChecks = new Map();
-
   async function call(route, body) {
     if (!request) throw Error('请先接通绯月的云端连接。');
     const response = await request(route, body ? {method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -25,24 +30,51 @@ export function createReminderReviewFlow({request, canStart = () => true, waitFo
       const data = await call(path);
       if (!Array.isArray(data.items) || !/^\d{4}-\d{2}-\d{2}$/.test(data.today)
         || !/^\d{4}-\d{2}-\d{2}$/.test(data.tomorrow)) throw Error('云端返回的提醒列表无效。');
-      if (pendingChecks.size) {
-        const results = await Promise.all(report.results.map(async item => {
-          const check = pendingChecks.get(item.id);
-          if (!check) return item;
-          const result = await verify(check.row, item.action, check.tomorrow).catch(() => null);
-          if (!result) return item;
-          pendingChecks.delete(item.id);
-          return {id: item.id, title: item.title, action: item.action, earlier: item.earlier, ...result};
-        }));
-        report = {...report, results};
-      }
-      snapshot = data;
-      return {...data, report};
+      await reconcile();
+      // 旧列表只给出归属。提交时再按编号从主站取受版本保护的当日派发。
+      snapshot = {...data,items:data.items.map(row=>row.reason==='由长期计划管理'&&!row.plannerWork&&!row.plannerUnavailable
+        && row.deadline?.slice(0,10)===data.today && row.identity && row.version?{...row,resolvePlannerWork:true}:row)};
+      return {...snapshot, report};
     })();
     try { return await loading; } finally { loading = null; }
   }
 
-  async function verify(row, action, tomorrow) {
+  async function reconcile() {
+    if (!pendingChecks.size) return;
+    const results = await Promise.all(report.results.map(async item => {
+      const check = pendingChecks.get(item.id);
+      if (!check) return item;
+      const result = await verify(check.row, item.action, check.tomorrow, item.actualHours, check.taskId).catch(() => null);
+      if (!result) return item;
+
+      pendingChecks.delete(item.id);
+      return {...item, ...result};
+    }));
+    report = {...report, results};
+  }
+
+  function plannerResult(task, row, actualHours) {
+    if (task?.status === 'FAILED') return {result:'failed', message:task.error || '主站拒绝了工时登记。'};
+    if (task?.status === 'COMPLETED' && task.result?.record_id === row.plannerWork.dispatchId
+      && task.result.actualHours === actualHours && Number.isFinite(Date.parse(task.result.recordedAt))) {
+      return {result:'recorded', actualHours};
+    }
+    return null;
+  }
+
+  async function createPlannerTask(row, today, actualHours) {
+    const issued = await call('/api/task-submissions', {});
+    if (!isSubmissionId(issued.submission_id)) throw Error('未取得有效的工时任务提交号。');
+    const params = {reminderId:row.id, dispatchId:row.plannerWork.dispatchId, today, version:row.version, actualHours};
+    const task = await call('/api/tasks', {type:plannerHoursType, submission_id:issued.submission_id, params});
+    if (!isSubmissionId(task.task_id)) throw Error('未取得有效的工时任务编号。');
+    return task.task_id;
+  }
+
+  async function verify(row, action, tomorrow, actualHours, taskId) {
+    if (action === recordPlannerHours) {
+      return plannerResult(await call('/api/tasks/' + taskId + '/receipt', {}), row, actualHours);
+    }
     const result = await call(path + '/' + row.id);
     if (!row.identity || result.identity !== row.identity) return null;
     if (action === 'tomorrow' && result.finished === false && result.deadline === tomorrow + row.deadline.slice(10)) {
@@ -60,38 +92,64 @@ export function createReminderReviewFlow({request, canStart = () => true, waitFo
     if (running || loading || !canStart() || !snapshot) throw Error('现在无法执行，请刷新后再试。');
     if (!Array.isArray(choices) || !choices.length) throw Error('请先选择要处理的提醒。');
     const {today, tomorrow, items} = snapshot;
-    const selected = new Map(choices.map(({id, action}) => [id, action]));
+    const selected = new Map(choices.map(choice => [choice.id, choice]));
     const queue = items.filter(row => selected.has(row.id));
-    if (selected.size !== choices.length || queue.length !== selected.size || queue.some(row => row.reason
-      || !reminderReviewActions.includes(selected.get(row.id)))) throw Error('所选提醒不能执行，请刷新后重选。');
+    if (selected.size !== choices.length || queue.length !== selected.size || queue.some(row => !allowed(row,selected.get(row.id))))
+      throw Error('所选操作无效，请检查实际投入小时数并刷新核对。');
 
     async function process() {
       const results = [];
       const earlier = (report?.results ?? []).filter(item => pendingChecks.has(item.id) && !selected.has(item.id));
       const unresolved = new Map(earlier.map(item => [item.id, pendingChecks.get(item.id)]));
-      for (const row of queue) {
-        const action = selected.get(row.id);
-        const receipt = {id: row.id, title: row.title, action};
+      for (const listed of queue) {
+        let row=listed;
+        const {action,actualHours} = selected.get(row.id);
+        const fields=action===recordPlannerHours?{actualHours}:{};
+        const receipt = {id: row.id, title: row.title, action,...fields};
         await waitForStart();
         if (!canStart()) {
           results.push({...receipt, result: 'not_run', message: '本次未执行'});
           continue;
         }
+
+        if(action===recordPlannerHours && row.resolvePlannerWork){
+          try{
+            const status=await call(path+'/'+row.id);
+            if(status.plannerUnavailable)throw Error(status.plannerUnavailable);
+            if(!status.plannerWork?.dispatchId||!status.version)throw Error('主站工时接口尚未返回当天的派发信息，请更新服务后再试。');
+            if(status.today!==today||status.id!==row.id||status.identity!==row.identity||status.finished!==false||
+              ![status.reminderVersion,status.version].includes(row.version))throw Error('主站计划已变化，请刷新后重新登记。');
+            row={...row,plannerWork:status.plannerWork,version:status.version};
+          }catch(error){
+
+            results.push({...receipt,result:'failed',message:error.message});continue;
+          }
+        }
+
+        let taskId, result;
         try {
-          await call(path + '/' + row.id, {action, today, version: row.version});
+          if (action === recordPlannerHours) {
+            taskId = await createPlannerTask(row, today, actualHours);
+            const task = await call('/api/tasks/' + taskId + '/execute', {});
+            result = plannerResult(task, row, actualHours);
+          } else {
+            await call(path + '/' + row.id, {action, today, version: row.version});
+          }
         } catch (error) {
-          if (error.status >= 400 && error.status < 500) {
+          if (action === recordPlannerHours && !taskId || error.status >= 400 && error.status < 500) {
+
             results.push({...receipt, result: 'failed', message: error.message});
             continue;
           }
         }
         // A lost write response only allows a read. Never repeat a write to obtain its receipt.
-        const result = await verify(row, action, tomorrow).catch(() => null);
-        if (!result) unresolved.set(row.id, {row, tomorrow});
+        result ??= await verify(row, action, tomorrow, actualHours, taskId).catch(() => null);
+        if (!result) unresolved.set(row.id, {row, tomorrow,taskId});
+
         results.push({...receipt, ...(result ?? {result: 'unknown', message: '暂时查不到预期结果，请刷新核对。'})});
       }
       report = {results: [...results, ...earlier.map(item => ({...item, earlier: true}))],
-        unchanged: items.filter(row => !row.reason).length - queue.length};
+        unchanged: items.filter(row => !row.reason||row.plannerWork||row.resolvePlannerWork).length - queue.length};
       pendingChecks = unresolved;
       snapshot = null;
       return report;
