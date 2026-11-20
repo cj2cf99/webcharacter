@@ -1,0 +1,40 @@
+body { margin:0; font-size:14px }
+button { font:inherit; cursor:pointer; padding:6px 10px }
+button:disabled { cursor:wait; opacity:.7 }
+.toolbar { flex:none; display:flex; gap:8px; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--fy-line) }
+[role=tablist] { display:flex; gap:5px; min-width:0 }
+[role=tab] { min-width:0; white-space:nowrap; font-weight:600 }
+.fy-panel button[role=tab] { transition:none }
+.fy-panel [role=tab][aria-selected=true] { background:var(--fy-accent); color:var(--fy-on-accent); border-color:var(--fy-accent) }
+#refresh { font-size:17px; line-height:1; padding:6px 8px }
+main { padding:12px 14px }
+#cloud section+section { margin-top:16px }
+h2 { margin:0 0 5px; font-size:14px }
+ul { padding:0; margin:0; list-style:none }
+li { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; margin:5px 0; border:1px solid var(--fy-line); border-radius:8px; background:var(--fy-surface) }
+li div { min-width:0; overflow-wrap:anywhere }
+li button { flex:none }
+li small,.hint { display:block; color:var(--fy-muted); font-size:12px }
+li small { margin-top:3px }
+.hint { margin:4px 0 }
+.hint:empty { display:none }
+.chain-item { display:block; padding:0 }
+.chain-item summary { display:grid; grid-template-columns:12px minmax(0,1fr) auto; gap:3px 7px; align-items:center; padding:8px 10px; cursor:pointer; list-style:none }
+.chain-item summary::-webkit-details-marker { display:none }
+.chain-item summary::before { content:"›"; grid-row:1 / span 2; color:var(--fy-accent); font-size:20px }
+.chain-item details[open] summary::before { transform:rotate(90deg) }
+.chain-item summary strong { overflow-wrap:anywhere }
+.chain-item summary small { grid-column:2 / -1; margin:0 }
+.chain-state { border-radius:10px; padding:2px 8px; background:var(--fy-paper); font-size:11px; color:var(--fy-muted) }
+.chain-item details>div { padding:7px 10px 9px 26px; border-top:1px solid var(--fy-line) }
+.chain-steps { margin:0 0 7px; padding:0 0 0 9px; border-left:1px solid var(--fy-line) }
+.chain-steps li { background:var(--fy-paper) }
+.chain-steps dl { margin:6px 0 0; display:grid; grid-template-columns:auto minmax(0,1fr); gap:3px 8px; font-size:12px }
+.chain-steps dt { color:var(--fy-muted); overflow-wrap:anywhere; max-width:95px }
+.chain-steps dd { margin:0; white-space:pre-wrap; overflow-wrap:anywhere }
+#notice { flex:none; margin:0; padding:7px 14px; border-bottom:1px solid var(--fy-line); color:var(--fy-ink); overflow-wrap:anywhere }
+[hidden] { display:none !important }
+@media(max-width:375px) {
+  .toolbar,main { padding-inline:9px }
+  [role=tab] { padding-inline:6px; font-size:13px }
+}

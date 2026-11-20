@@ -260,3 +260,53 @@ test('P07：本机配置可映射主站扩展前缀，不需要改内部任务�
     assert.deepEqual(paths, [`/api/companion/devices/${identity.device_id}`, `/api/companion/devices/${identity.device_id}/pending`]);
   } finally { await runtime.stop(); rmSync(profile, { recursive: true }); }
 });
+
+test('桌宠自动领取任一电脑和指定本机的任务，完成后从云端清单移除',async t=>{
+  const {request}=fixture(t);
+  const profile=mkdtempSync(join(tmpdir(),'companion-inbox-'));
+  let legacy=false,reads=[];
+  const runtime=await createDesktopTasks({profile,request:(path,options)=>{
+    if(path.includes('/tasks?')){
+      reads.push(new URLSearchParams(path.split('?')[1]).get('scope'));
+      if(legacy&&reads.at(-1)==='standalone')return Response.json({error:{code:'INVALID_OFFSET'}},{status:400});
+    }
+    return request(path,options);
+  },dialog:{},
+    handlerModule:new URL('./fixtures/thread-handlers.mjs',import.meta.url).href});
+  t.after(async()=>{await runtime.stop();rmSync(profile,{recursive:true});});
+  const deviceId=runtime.identity.device_id;
+  await request('/api/devices/'+deviceId,{method:'PUT',body:JSON.stringify({computer_name:'INBOX TEST'})});
+  async function create(target_device_id){
+    const {submission_id}=await (await request('/api/task-submissions',{method:'POST'})).json();
+    const response=await request('/api/tasks',{method:'POST',body:JSON.stringify({
+      submission_id,type:'mock.unit',target_device_id,params:{value:'test'},
+    })});
+    assert.equal(response.status,201);
+    return (await response.json()).task_id;
+  }
+  const fixed=await create(deviceId),pool=await create('all'),elsewhere=await create(other);
+  const before=await runtime.taskInbox.tasks(null);
+  assert.equal(before.standalone,true);
+  assert.deepEqual(reads,['standalone']);
+  assert.deepEqual(new Set(before.tasks.map(task=>task.task_id)),new Set([fixed,pool]));
+  assert.ok(before.tasks.every(task=>task.can_claim));
+  legacy=true;
+  const older=await runtime.taskInbox.tasks();
+  assert.equal(older.standalone,false);
+  assert.deepEqual(older.tasks,before.tasks);
+  assert.deepEqual(reads,['standalone','standalone',null]);
+  legacy=false;
+  await runtime.pollOnce();
+  const remote=id=>request('/api/tasks/'+id).then(response=>response.json());
+  assert.equal((await Promise.all([fixed,pool].map(remote))).filter(task=>task.status==='COMPLETED').length,1);
+  await runtime.pollOnce();
+  for(const id of [fixed,pool]){
+    const task=await remote(id);
+    assert.equal(task.status,'COMPLETED');
+    assert.equal(task.target_device_id,deviceId);
+    assert.equal(runtime.executor.getTask(id).attempt_count,1);
+  }
+  assert.equal((await remote(elsewhere)).status,'PENDING');
+  assert.deepEqual((await runtime.taskInbox.tasks()).tasks,[]);
+  assert.deepEqual(runtime.taskInbox.local(),[]);
+});

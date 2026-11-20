@@ -5,7 +5,8 @@
   "-",
   {"label":"任务","items":[
     {"action":"today","label":"今日任务"},
-    {"action":"tasks","label":"接取任务与任务链"},
+    {"action":"tasks","label":"绯月任务管理"},
+    {"action":"restoreTerminal","label":"恢复本机任务终端 ID"},
     {"action":"retry","label":"中断任务与补传"},
     {"action":"pendingCheck","label":"提醒检查 · 待执行"},
     {"action":"review","label":"本地复盘"},

@@ -94,7 +94,7 @@ ipcMain.emit('desktop:sound-change',event,{enabled:true,volume:999});ipcMain.emi
 const labels=items=>items.filter(item=>item.type!=='separator').map(item=>item.label);
 assert.deepEqual(labels(tray.menu),['问绯月','三地天气','任务','桌宠动作','设置与维护','隐藏','退出']);
 win.webContents.emit('context-menu');assert.equal(tray.openedMenu,tray.menu,'角色右键与托盘使用同一菜单');
-assert.deepEqual(labels(tray.menu.find(item=>item.label==='任务').submenu),['今日任务','接取任务与任务链','中断任务与补传','本地复盘','任务日志']);
+assert.deepEqual(labels(tray.menu.find(item=>item.label==='任务').submenu),['今日任务','绯月任务管理','中断任务与补传','本地复盘','任务日志']);
 const settingsLabels=labels(tray.menu.find(item=>item.label==='设置与维护').submenu);
 if(process.platform==='win32'){
   assert.deepEqual(settingsLabels,['动画与声音','轮询设定','登录 Windows 后延迟 1 分钟启动','云端连接','重启绯月']);

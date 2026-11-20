@@ -148,8 +148,50 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
       try{result=await pending;if(result.paused)return result;executor.markUploaded(receipt.task.task_id);}finally{inFlight.delete(pending);}
       void reportFailure(result).catch(()=>{});return result;
     }});
-  const chainDialogs=createChainDialogs({dialog,client:chainClient,runTask,request,deviceId:identity.device_id,
+  const chainDialogs=createChainDialogs({dialog,client:chainClient,runTask,
     canShow:canStart,supports:task=>Object.hasOwn(threads.handlers,task.type)});
+  const taskInbox={
+    local:()=>executor.runningTasks(),
+    async tasks(offset){
+      if(!request)throw Error('未配置云端连接');
+      offset??=0;
+      if(!Number.isSafeInteger(offset)||offset<0)throw Error('任务分页无效');
+      const path=`/api/devices/${identity.device_id}/tasks?offset=${offset}`;
+      const options={method:'GET',cache:'no-store'};
+      let response=await request(path+'&scope=standalone',options),standalone=true;
+      if(response.status===400&&(await response.json().catch(()=>null))?.error?.code==='INVALID_OFFSET'){
+        standalone=false;
+        response=await request(path,options);
+      }
+      if(response.status===404)throw Error('本机还没有云端任务清单，请在首次获取任务后刷新。');
+      if(!response.ok)throw Error(`云端任务读取失败（HTTP ${response.status}）`);
+      const page=await response.json();
+      if(!Array.isArray(page?.tasks))throw Error('云端任务清单格式无效');
+      const tasks=page.tasks.filter(task=>['PENDING','RUNNING'].includes(task.status));
+      return {standalone,tasks:tasks.map(task=>({...task,can_claim:task.can_claim&&Object.hasOwn(threads.handlers,task.type)
+        &&!executor.isRecoveryReplacement(task.task_id)})),next_offset:tasks.length===page.tasks.length?page.next_offset:null};
+    },
+    async chains(after){
+      const page=await chainClient.list(after);
+      if(!Array.isArray(page?.chains))throw Error('云端任务链清单格式无效');
+      return {...page,chains:page.chains.filter(chain=>chain.status==='ACTIVE')};
+    },
+    async detail(id){
+      const chain=await chainClient.get(id);
+      return {name:chain.name,status:chain.status,nodes:chain.nodes.map(node=>{
+        const task=node.current_task;
+        return {node_id:node.node_id,depends_on:node.depends_on,task_id:task.task_id,
+          name:task.definition?.name||task.type,status:node.skipped?'SKIPPED':task.status,params:task.params,
+          progress:task.error||task.activity?.progress_message,
+          can_claim:node.eligibility?.claim&&Object.hasOwn(threads.handlers,task.type)
+            &&!executor.isRecoveryReplacement(task.task_id)};
+      })};
+    },
+    receipts:()=>chainClient.pending(),
+    claim:runTask,
+    inspect:chainDialogs.inspect,
+    resume:chainClient.resume,
+  };
   async function reportFailure(result){
     if(stopped||checking||result.archived||result.task?.status!=='FAILED')return;
     await tell('任务最终失败，本轮已结束',`${result.task.definition?.name||result.task.type}\n已执行两次。${result.task.error||''}`);
@@ -372,8 +414,12 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
   function activeCount(){return executor.activeCount()+inFlight.size+chainClient.activeCount()+registration.activeCount()+reminderReview.activeCount();}
   return {identity,executor,runTask,supportsTask:type=>Object.hasOwn(threads.handlers,type),decide,syncDecision,showPending,startup,registration,reminderReview,traffic,showCloudConnection,
     drainForRestart,cancelRestart(){draining=false;},
+    checkTerminalRestore(){
+      if(continuation.entries().some(([,entry])=>['task','claim'].includes(entry.kind)))
+        throw Error('仍有原终端的待恢复任务，请先在「中断任务与补传」处理。');
+    },
     weatherRequest: request,
-    chainClient,showTasks:()=>chainDialogs.show(),
+    chainClient,taskInbox,
     getAvailableTasks:()=>availableTasks.map(task=>({...task})),
     startPolling({managed=false}={}){if(!stopped){if(!managed)poller?.start();startHeartbeat();}},
     canPoll,

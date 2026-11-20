@@ -1,10 +1,10 @@
 import {createWorker} from '../worker.mjs';
 import {forwardRecordPhoto} from './record-photo.mjs';
+import {isTaskWorkspaceApi} from './task-workspace-routes.mjs';
 
 const prefix = '/api/companion';
 const fail = (status, code, message) => Response.json({error: {code, message}}, {status, headers: {'Cache-Control': 'no-store'}});
 export const isCompanionPath = path => path.startsWith(prefix + '/');
-const browserRoute = /^\/api\/(?:chains(?:\/[A-Za-z0-9_-]+(?:\/stop|\/nodes\/[A-Za-z0-9_-]+\/decision)?)?|tasks\/[A-Za-z0-9_-]+\/(?:receipt|execute))$/;
 
 async function writeRegistrationEntry({path, body, idempotencyKey, env}) {
   const result = await env.COMPANION_HOST.register({path, body, idempotencyKey});
@@ -32,7 +32,7 @@ export async function handleCompanion(request, env, actor, fromMain) {
     return fail(403, 'ORIGIN_DENIED', '仅允许同源操作');
   }
   url.pathname = '/api' + url.pathname.slice(prefix.length);
-  if (fromMain && !browserRoute.test(url.pathname)) return fail(404, 'NOT_FOUND', '接口不存在');
+  if (fromMain && !isTaskWorkspaceApi(url.pathname, request.method)) return fail(404, 'NOT_FOUND', '接口不存在');
   if (!env.COMPANION_DB || !env.COMPANION_HOST) return fail(503, 'COMPANION_NOT_CONFIGURED', '绯月服务尚未接入');
   if(url.pathname==='/api/records/photos')return forwardRecordPhoto(request,(bytes,type,name)=>env.COMPANION_HOST.uploadRecordPhoto(bytes,type,name));
   if (url.pathname === '/api/health' && request.method === 'GET') {
@@ -43,5 +43,5 @@ export async function handleCompanion(request, env, actor, fromMain) {
     } catch { return fail(503, 'COMPANION_NOT_CONFIGURED', '绯月服务尚未接入'); }
   }
   return worker.fetch(new Request(url, request), {...env, DB: env.COMPANION_DB,
-    REGISTRATION_AI: env.COMPANION_HOST, ownerId: 'companion-owner'});
+    REGISTRATION_AI: env.COMPANION_HOST, ownerId: 'companion-owner', companionBrowser: fromMain});
 }

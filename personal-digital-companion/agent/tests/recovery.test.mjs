@@ -185,6 +185,10 @@ test('L01：默认无业务注册；两个不同任务可同时执行，不受�
     const one=lifecycle.runTask(first.task_id).catch(error=>error),two=lifecycle.runTask(second.task_id).catch(error=>error);
     for(let i=0;i<150&&(!existsSync(join(profile,'one'))||!existsSync(join(profile,'two')));i++)await pause(10);
     assert.ok(existsSync(join(profile,'one'))&&existsSync(join(profile,'two')));assert.equal(lifecycle.executor.activeCount(),2);
+    const running=lifecycle.taskInbox.local();
+    assert.deepEqual(new Set(running.map(row=>row.task_id)),new Set([first.task_id,second.task_id]));
+    assert.ok(running.every(row=>row.name===first.definition.name&&row.attempt_count===1&&Number.isFinite(Date.parse(row.started_at))));
+    assert.ok(running.every(row=>!Object.hasOwn(row,'params')));
     await lifecycle.stop();lifecycle=null;await Promise.all([one,two]);
     const dbLocal=new DatabaseSync(join(profile,'tasks.sqlite'));assert.equal(dbLocal.prepare("SELECT count(*) n FROM local_tasks WHERE status='RUNNING' AND attempt_count=1").get().n,2);dbLocal.close();
   }finally{if(lifecycle)await lifecycle.stop();db?.close();rmSync(profile,{recursive:true});}

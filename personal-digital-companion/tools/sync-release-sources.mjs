@@ -32,8 +32,8 @@ for (const name of [
 for (const name of ['tasklist-hu-shi.sql','tasklist-registration.sql','tasklist-pc.sql']) {
   await copy(join(source,'agent/seeds',name), join(vendor,'agent/seeds',name));
 }
-for (const name of ['registration-ai.mjs','registration-data.mjs','record-photo.mjs','chain-page.mjs','reminder-edits.mjs','reminder-review.mjs']) {
+for (const name of ['registration-ai.mjs','registration-data.mjs','record-photo.mjs','chain-page.mjs','task-workspace-routes.mjs','reminder-edits.mjs','reminder-review.mjs']) {
   await copy(join(source,'agent/host',name), join(main,'src/features/companion/vendor',name));
 }
 for (const name of ['chains.js','chains.css']) await copy(join(source,'web',name), join(main,'src/client/companion',name));
-console.log('已同步绯月 Worker 源码与迁移、主站私有模块及任务链页面。');
+console.log('已同步绯月 Worker 源码与迁移、主站私有模块及任务管理页面。');

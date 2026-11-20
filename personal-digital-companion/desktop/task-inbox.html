@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'">
+<title>绯月任务管理</title>
+<link rel="stylesheet" href="task-inbox.css">
+<link rel="stylesheet" href="feiyue-surface.css">
+<header class="fy-titlebar"><div class="fy-caption"><h1>绯月任务管理</h1></div></header>
+<div class="toolbar">
+  <div role="tablist" aria-label="任务范围">
+    <button type="button" id="local-tab" role="tab" aria-selected="true" aria-controls="local">本机执行中任务</button>
+    <button type="button" id="cloud-tab" role="tab" aria-selected="false" aria-controls="cloud" tabindex="-1">云端未结束任务</button>
+  </div>
+  <button type="button" id="refresh" aria-label="刷新当前页" title="刷新当前页">↻</button>
+</div>
+<p id="notice" role="status" hidden></p>
+<main class="fy-scroll">
+  <section id="local" role="tabpanel" aria-labelledby="local-tab" tabindex="0">
+    <p class="hint" id="local-message">正在读取本机任务…</p>
+    <ul id="local-items"></ul>
+  </section>
+  <section id="cloud" role="tabpanel" aria-labelledby="cloud-tab" tabindex="0" hidden>
+    <section id="receipts" hidden>
+      <h2>待核对回执</h2>
+      <ul id="receipt-items"></ul>
+    </section>
+    <section>
+      <h2 id="tasks-title">单条任务</h2>
+      <p class="hint" id="tasks-scope">指定本机或派给任一电脑</p>
+      <p class="hint" id="tasks-message" role="status"></p>
+      <ul id="tasks-items"></ul>
+      <button type="button" id="tasks-more" hidden>加载更多任务</button>
+    </section>
+    <section>
+      <h2>任务链</h2>
+      <p class="hint" id="chains-message" role="status"></p>
+      <ul id="chains-items"></ul>
+      <button type="button" id="chains-more" hidden>加载更多任务链</button>
+    </section>
+  </section>
+</main>
+<script type="module" src="task-inbox-ui.mjs"></script>
+</html>

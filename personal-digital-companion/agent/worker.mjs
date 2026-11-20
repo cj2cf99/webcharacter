@@ -4,7 +4,7 @@ import { handleDeviceRequest, PC_ID_PATTERN } from './devices/api.mjs';
 import { handleTerminalRequest } from './terminals/api.mjs';
 import { validateParameters } from './tasks/parameters.mjs';
 import { handleTaskAction } from './tasks/actions.mjs';
-import { normalizeDeadline } from './tasks/deadline.mjs';
+import {normalizeDeadline} from './tasks/deadline.mjs';
 import { handleRecovery } from './tasks/recover.mjs';
 import {handleAssistantMessage} from './assistant/message.mjs';
 import {planRegistration} from './assistant/registration-plan.mjs';
@@ -22,6 +22,7 @@ import {authorizeDailyLogToken,handleDailyLogs} from './assistant/daily-logs.mjs
 import {handleReminderEdits} from './host/reminder-edits.mjs';
 import {handleReminderReview} from './host/reminder-review.mjs';
 import {executeCloudRegistration} from './tasks/hu-shi-execution.mjs';
+import {isWorkspaceTaskVisible,taskTemplateWorkspace,taskWorkspaceList} from './tasks/workspace.mjs';
 
 // 单用户开发 Bearer 边界。
 const json = (body, status = 200, headers = {}) => Response.json(body, {
@@ -110,7 +111,7 @@ async function readTask(DB, id) {
   return (await readTasks(DB, [id])).get(id) ?? null;
 }
 
-async function createTask(request, DB, ownerId) {
+async function createTask(request, DB, ownerId, fromBrowser) {
   let body;
   try { body = await request.json(); }
   catch { return error(400, 'INVALID_JSON', '请求必须是有效JSON'); }
@@ -142,6 +143,9 @@ async function createTask(request, DB, ownerId) {
   if (body.type === 'disk.query') return error(409, 'TYPE_PAUSED', '该具体任务已暂停');
   const definition = await DB.prepare('SELECT * FROM tasklist WHERE type = ?').bind(body.type).first();
   if (!definition) return error(404, 'TYPE_NOT_FOUND', '任务类型不存在');
+  if (fromBrowser && definition.executor !== 'pc') {
+    return error(409, 'EXECUTOR_UNAVAILABLE', '网页只能新建电脑任务');
+  }
   const checked = validateParameters(JSON.parse(definition.parameter_spec_json), body.params);
   if (checked.configuration) return error(500, 'TYPE_CONFIGURATION_ERROR', '任务类型参数定义无效');
   if (!checked.valid) return error(400, 'INVALID_PARAMS', '参数不符合该任务类型定义');
@@ -218,7 +222,7 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
         return value?json({...value,ai}):json({error:{code},ai},code==='CANCELLED'?408:503);
       }
       if(dailyLogs)return await handleDailyLogs(request,url,env,identity.ownerId);
-      const chainResponse=await handleChainRequest(request,env.DB,readTasks,identity.ownerId);if(chainResponse)return chainResponse;
+      const chainResponse=await handleChainRequest(request,env.DB,readTasks,identity.ownerId,{fromBrowser:env.companionBrowser===true});if(chainResponse)return chainResponse;
       if(path==='/api/assistant/recording-plan')return await planRegistration(request,env,identity.ownerId,createAiClient,loadRegistrationCategories);
       const terminalResponse = await handleTerminalRequest(request, env.DB);
       if (terminalResponse) return terminalResponse;
@@ -226,10 +230,20 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
       if(pendingResponse)return pendingResponse;
       const deviceResponse = await handleDeviceRequest(request, env.DB);
       if (deviceResponse) return deviceResponse;
+      if (path === '/api/task-overview' && env.companionBrowser) {
+        if (request.method !== 'GET') return error(405, 'METHOD_NOT_ALLOWED', '仅支持GET', { Allow: 'GET' });
+        return await taskWorkspaceList(request, env.DB, identity.ownerId);
+      }
+      if (path === '/api/task-template-overview' && env.companionBrowser && request.method === 'GET') {
+        return await taskTemplateWorkspace(request,env.DB,identity.ownerId);
+      }
       if (path === '/api/tasklist') {
         if (request.method !== 'GET') return error(405, 'METHOD_NOT_ALLOWED', '仅支持GET', { Allow: 'GET' });
         const { results } = await env.DB.prepare("SELECT * FROM tasklist WHERE type <> 'disk.query' ORDER BY type").all();
-        return json({ tasklist: results.map(typeView) });
+        return json({ tasklist: results.map(row => {
+          const definition = typeView(row);
+          return env.companionBrowser ? {...definition, standalone:row.executor==='pc'} : definition;
+        }) });
       }
       if (path === '/api/task-submissions') {
         if (request.method !== 'POST') return error(405, 'METHOD_NOT_ALLOWED', '仅支持POST', { Allow: 'POST' });
@@ -237,7 +251,7 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
       }
       if (path === '/api/tasks') {
         if (request.method !== 'POST') return error(405, 'METHOD_NOT_ALLOWED', '仅支持POST', { Allow: 'POST' });
-        return await createTask(request, env.DB, identity.ownerId);
+        return await createTask(request, env.DB, identity.ownerId, env.companionBrowser);
       }
       const actionMatch = /^\/api\/tasks\/([^/]+)\/(claim|result|progress|cancel|recover|execute|receipt|pc-exercise|pc-registration)$/.exec(path);
       if (actionMatch) {
@@ -264,7 +278,12 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
         if (actionMatch[2] === 'recover') return await handleRecovery(request, env.DB, id, readTask);
         if (actionMatch[2] === 'execute' || actionMatch[2] === 'receipt') {
           return await executeCloudRegistration({request,env,taskId:id,ownerId:identity.ownerId,readTask,
-            writeEntry:writeHuShiEntry,writeRegistrationEntry,readRegistrationReceipt,receiptOnly:actionMatch[2]==='receipt'});
+            writeEntry:writeHuShiEntry,writeRegistrationEntry,readRegistrationReceipt,receiptOnly:actionMatch[2]==='receipt',
+            chainOnly:env.companionBrowser===true});
+        }
+        if (env.companionBrowser && actionMatch[2] === 'cancel' &&
+            !await isWorkspaceTaskVisible(env.DB, identity.ownerId, id)) {
+          return error(404, 'TASK_NOT_FOUND', '任务不存在');
         }
         return await handleTaskAction(request, env.DB, id, actionMatch[2], readTask, async(task,result)=>{
           if(task.type!=='pc.exercise.create'){
@@ -273,13 +292,18 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
           }
           const found=await readRegistrationReceipt?.({path:exercisePath,idempotencyKey:await pcOperationKey(env.DB,task),env});
           return found?.id && found.id===result?.record_id && Number.isSafeInteger(found.created_at) && found.created_at===result.created_at;
-        });
+        }, {standaloneOnly:env.companionBrowser === true});
       }
       const taskMatch = /^\/api\/tasks\/([^/]+)$/.exec(path);
       if (taskMatch) {
         if (request.method !== 'GET') return error(405, 'METHOD_NOT_ALLOWED', '仅支持GET', { Allow: 'GET' });
-        const task = await readTask(env.DB, decodeURIComponent(taskMatch[1]));
-        return task ? json(task) : error(404, 'TASK_NOT_FOUND', '任务不存在');
+        const id = decodeURIComponent(taskMatch[1]);
+        if (env.companionBrowser && !await isWorkspaceTaskVisible(env.DB, identity.ownerId, id)) {
+          return error(404, 'TASK_NOT_FOUND', '任务不存在');
+        }
+        const task = await readTask(env.DB, id);
+        if (!task) return error(404, 'TASK_NOT_FOUND', '任务不存在');
+        return json(task);
       }
       return error(404, 'NOT_FOUND', '接口不存在');
     } catch {

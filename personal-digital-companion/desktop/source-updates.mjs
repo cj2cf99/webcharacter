@@ -12,6 +12,7 @@ export const pages = {
   'registration.html':['feiyue-surface.css','registration.css','registration-ui.mjs'],
   'registration-review.html':['feiyue-surface.css','registration.css','registration-review-ui.mjs','question-attachment.mjs'],
   'reminder-review.html':['feiyue-surface.css','reminder-review.css','reminder-review-ui.mjs'],
+  'task-inbox.html':['feiyue-surface.css','task-inbox.css','task-inbox-ui.mjs'],
   'sound-settings.html':['feiyue-surface.css','sound-settings.css','sound-settings.mjs','sound.mjs'],
   'conversation.html':['feiyue-surface.css','conversation-ui.mjs','conversation.css'],
   'screen-question.html':['feiyue-surface.css','screen-question.css','question-attachment.mjs','screen-question-ui.mjs'],

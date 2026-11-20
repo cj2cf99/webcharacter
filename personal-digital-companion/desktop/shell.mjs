@@ -7,6 +7,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
+import {readFile,stat} from 'node:fs/promises';
 import {createMessageBoxes} from './message-box.mjs';
 import {createPanelWindow} from './panel-window.mjs';
 import {attachSettings} from './settings-host.mjs';
@@ -16,6 +17,7 @@ import {pages,watchDesktopSources} from './source-updates.mjs';
 import {DEFAULT_SOUND,validSound,normalizeSound,SOUND_NODES} from './sound.mjs';
 import {createServerTaskCommand} from './server-task-command.mjs';
 import {createDesktopTasks} from './task-lifecycle.mjs';
+import {parseDeviceBinding,restoreDeviceIdentity} from '../agent/devices/identity.mjs';
 import {hasLocalImageBackend} from './image-tasks.mjs';
 import {createMemoryArchive} from './memory-archive.mjs';
 import {migrateMemory} from './migrate-memory.mjs';
@@ -25,6 +27,7 @@ import {attachWeather} from './weather-host.mjs';
 import {createReminderChecks,checkDueItems} from './reminder-checks.mjs';
 import {attachPollSettings} from './poll-settings-host.mjs';
 import {attachReminderReview} from './reminder-review-host.mjs';
+import {attachTaskInbox} from './task-inbox-host.mjs';
 import {createLocalModel,desktopModelPath} from './local-model.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
@@ -139,6 +142,7 @@ export async function startDesktop(electron,options={}){
     readTraffic:tasks.traffic?.readPage,client:options.screenQuestionClient,requestRestart,localModel,log:tasks.traffic?.write});
   const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark,recordCheck:checks.record,checks});
   const reminderReview=tasks.reminderReview?attachReminderReview(electron,{bundle,root,flow:tasks.reminderReview}):null;
+  const taskInbox=tasks.taskInbox?attachTaskInbox(electron,{bundle,root,flow:tasks.taskInbox}):null;
   attachment=new AttachmentController({
     areaFor:rect=>screen.getDisplayNearestPoint({x:Math.round(rect.x+rect.width/2),y:Math.round(rect.y+rect.height/2)}).workArea,
     onPlace:(p,state)=>{
@@ -270,7 +274,7 @@ export async function startDesktop(electron,options={}){
   }
   function idleActions(){
     const panelOpen=messages.active||screenQuestion.panel||pcSettings.panel?.isVisible()||weather.panel?.isVisible()||
-      screenQuestion.details?.isVisible()||reminderReview?.panel?.isVisible()||settingsWindow?.isVisible();
+      screenQuestion.details?.isVisible()||reminderReview?.panel?.isVisible()||taskInbox?.panel?.isVisible()||settingsWindow?.isVisible();
     if(menuOpen||panelOpen||drag||work||!ignored){
       resetIdle();
       return;
@@ -512,6 +516,34 @@ export async function startDesktop(electron,options={}){
     refreshLoginItem(item);
   }
   let layout=[{action:'restart',label:'重启绯月'},{action:'quit',label:'退出'}];
+  let restoringTerminal=false;
+  async function restoreLocalTerminal(){
+    if(restoringTerminal||quitPending||quitApproved)return;
+    restoringTerminal=true;
+    try {
+      const selected=await electron.dialog.showOpenDialog({
+        title:'选择绯月终端绑定文件',properties:['openFile'],filters:[{name:'终端绑定',extensions:['json']}],
+      });
+      if(selected.canceled||!selected.filePaths[0])return;
+      const file=selected.filePaths[0];
+      const size=await stat(file);
+      if(!size.isFile()||size.size>4096)throw Error('请选择从任务终端管理下载的绑定文件');
+      const id=parseDeviceBinding(await readFile(file,'utf8'));
+      if(tasks.identity?.device_id===id){
+        await messages.showMessageBox({type:'info',title:'任务终端绑定',message:'本机已绑定这台任务终端。'});
+        return;
+      }
+      const choice=await messages.showMessageBox({type:'question',title:'恢复本机任务终端 ID',
+        message:'采用所选终端 ID 并重启绯月？',detail:id,buttons:['取消','恢复并重启'],defaultId:0,cancelId:0});
+      if(choice.response!==1)return;
+      await requestRestart({fromMenu:true,beforeQuit:async()=>{
+        tasks.checkTerminalRestore?.();
+        await restoreDeviceIdentity(profile,id);
+      }});
+    } catch(error) {
+      await messages.showMessageBox({type:'error',title:'恢复任务终端',message:error.message});
+    } finally { restoringTerminal=false; }
+  }
   function menu(candidate=layout){
     const attachedCommand=click=>({enabled:windowsReady,click});
     const actions={
@@ -536,7 +568,8 @@ export async function startDesktop(electron,options={}){
         taskNotice(screenQuestion.open('registration'));
       }},
       today:reminderReview && {click:()=>taskNotice(reminderReview.open())},
-      tasks:{click:()=>{if(tasks.showTasks)taskNotice(tasks.showTasks());}},
+      tasks:taskInbox&&{click:()=>taskNotice(taskInbox.open())},
+      restoreTerminal:electron.dialog?.showOpenDialog&&{click:()=>taskNotice(restoreLocalTerminal())},
       review:{click:()=>taskNotice(screenQuestion.openReview())},
       notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
       pendingCheck:checks.pending&&{click:()=>taskNotice(pollSettings.open(true))},
@@ -627,6 +660,7 @@ export async function startDesktop(electron,options={}){
     if(files.includes('tray.png'))tray.setImage(nativeImage.createFromPath(resolve(bundle,'tray.png')));
     for(const [page,panel] of [['index.html',win],['settings.html',pcSettings.panel],['weather.html',weather.panel],
       ['conversation.html',screenQuestion.details],['reminder-review.html',reminderReview?.panel],['poll-settings.html',pollSettings.panel],
+      ['task-inbox.html',taskInbox?.panel],
       ['screen-question.html',screenQuestion.panel],['registration-review.html',screenQuestion.inquiryPanel],['sound-settings.html',settingsWindow],
       ...(messages.panels??[]).map(panel=>['message-box.html',panel])]){
       if(!panel||panel.isDestroyed())continue;
@@ -674,6 +708,7 @@ export async function startDesktop(electron,options={}){
     screenQuestion.close();
     localModel?.close();
     reminderReview?.close();
+    taskInbox?.close();
     weather.close();
     movement=null;ipcMain.removeListener('pc:runtime',onMovementRuntime);pcSettings.close();
     stopPoll();ipcMain.removeListener('desktop:sound-ready',soundReady);ipcMain.removeListener('desktop:sound-change',soundChange);ipcMain.removeListener('desktop:sound-preview',soundPreview);

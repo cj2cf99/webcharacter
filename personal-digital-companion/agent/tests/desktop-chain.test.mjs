@@ -28,7 +28,20 @@ test('DT01：真实桌面显式执行→另一终端强制重做→终端切换�
   const {request,runtimes:[first,second]}=await setup(t);
   const response=await request('/api/chains',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nodes:[{key:'a',type:'mock.unit',target_device_id:first.identity.device_id,params:{value:'x'}}]})});
   assert.equal(response.status,201);const created=await response.json(),old=created.nodes[0].current_task.task_id;
+  assert.deepEqual((await first.taskInbox.chains()).chains.map(chain=>chain.chain_id),[created.chain_id]);
+  const detail=await first.taskInbox.detail(created.chain_id);
+  assert.equal(detail.name,created.name);
+  assert.deepEqual(detail.nodes,[{node_id:created.nodes[0].node_id,depends_on:null,
+    task_id:old,name:created.nodes[0].current_task.definition.name,status:'PENDING',params:{value:'x'},
+    progress:undefined,can_claim:true}]);
+  const tasksPath='/api/devices/'+first.identity.device_id+'/tasks';
+  assert.ok((await (await request(tasksPath)).json()).tasks.some(task=>task.task_id===old));
+  const inbox=await first.taskInbox.tasks();
+  assert.equal(inbox.standalone,true);
+  assert.deepEqual(inbox.tasks,[]);
+  assert.ok((await (await request(tasksPath.replace(/\/tasks$/,'/pending'))).json()).tasks.some(task=>task.task_id===old));
   await first.runTask(old);
+  assert.deepEqual((await first.taskInbox.chains()).chains,[]);
   const before=await second.chainClient.get(created.chain_id);assert.equal(before.nodes[0].current_task.status,'COMPLETED');
   await second.chainClient.decide(created.chain_id,before.nodes[0],'force');
   const after=await second.chainClient.get(created.chain_id),fresh=after.nodes[0].current_task;
@@ -56,6 +69,7 @@ test('DT03：中断后显式放弃即跳过，后继可选但不自动执行，�
   const chain=await response.json(),id=chain.nodes[0].current_task.task_id;
   await assert.rejects(runtime.runTask(id));
   assert.equal(runtime.executor.getTask(id).status,'RUNNING');
+  assert.deepEqual(runtime.taskInbox.local(),[],'上次中断的任务需要核对，不表示本机仍在执行');
   await runtime.decide(id,'abandon');
   const after=await runtime.chainClient.get(chain.chain_id);
   assert.equal(after.nodes[0].current_task.status,'CANCELLED');assert.equal(after.nodes[0].skipped,true);
