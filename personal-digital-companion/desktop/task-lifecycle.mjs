@@ -32,7 +32,7 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
       const finish=(error,response)=>{clearTimeout(timeout);controller.signal.removeEventListener('abort',abort);if(error)reject(error);else resolve(response);};
       const abort=()=>{local.abort();finish(Object.assign(new Error('应用正在退出，记录保留'),{code:'CANCELLED'}));};
       if(controller.signal.aborted){abort();return;}
-      const wait=path==='/api/assistant/recording-plan'?120000:path.endsWith('/execute')||path.startsWith('/api/weather/')?15000:5000;
+      const wait=['/api/assistant/recording-plan','/api/assistant/heartbeat'].includes(path)?240000:path.endsWith('/execute')||path.startsWith('/api/weather/')?15000:5000;
       timeout=setTimeout(()=>{local.abort();finish(Object.assign(new Error('连接超时，记录仍保留'),{code:'TIMEOUT'}));},wait);
       controller.signal.addEventListener('abort',abort,{once:true});
       Promise.resolve().then(()=>{
@@ -49,6 +49,16 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
   }
   const threads=await createThreadHandlers(handlerModule?{module:handlerModule}:{});
   let checking=false,stopped=false,gate=null,release=null,showing=null;
+  let heartbeatTimer,heartbeatRequest;
+  function startHeartbeat(){
+    if(!request||heartbeatTimer)return;
+    heartbeatTimer=setInterval(()=>{
+      if(checking||stopped||heartbeatRequest)return;
+      heartbeatRequest=request('/api/assistant/heartbeat',{method:'POST',cache:'no-store'})
+        .catch(()=>{}).finally(()=>{heartbeatRequest=null;});
+    },30*60*1000);
+    heartbeatTimer.unref();
+  }
   const registration=createRegistrationFlow({profile,request,canStart:()=>!checking&&!stopped,log:traffic.write});
   const reminderReview=createReminderReviewFlow({request,canStart:()=>!checking&&!stopped,waitForStart:()=>gate});
   const inFlight=new Set();
@@ -216,15 +226,16 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     weatherRequest: request,
     chainClient,showTasks:()=>chainDialogs.show(),
     getAvailableTasks:()=>availableTasks.map(task=>({...task})),
-    startPolling(){if(!stopped)poller?.start();},
+    startPolling(){if(!stopped){poller?.start();startHeartbeat();}},
     activeCount:()=>executor.activeCount()+inFlight.size+chainClient.activeCount()+registration.activeCount()+reminderReview.activeCount(),
     beginQuitCheck(){checking=true;if(!gate)gate=new Promise(resolve=>{release=resolve;});},
     cancelQuitCheck(){checking=false;release?.();release=null;gate=null;poller?.kick();},
-    async stop(){stopped=true;poller?.stop();executor.interrupt();controller.abort();release?.();release=null;gate=null;
+    async stop(){stopped=true;clearInterval(heartbeatTimer);poller?.stop();executor.interrupt();controller.abort();release?.();release=null;gate=null;
       const closed=!inFlight.size&&!executor.activeCount();if(closed)executor.close();
       await threads.stop();
       await Promise.allSettled([...inFlight]);
       await reminderReview.waitForStop();
+      await heartbeatRequest;
       await traffic.flush();
       if(!closed&&!executor.activeCount())executor.close();},
     async retryPending(){await startup();},

@@ -14,6 +14,47 @@ import { createDesktopTasks } from '../../desktop/task-lifecycle.mjs';
 const device = 'pc-12345678-1234-4123-8123-123456789abc';
 const other = 'pc-22345678-1234-4123-8123-123456789abc';
 const tick = () => new Promise(setImmediate);
+test('桌面半小时心跳不重入，退出取消在途请求并清除定时器',{timeout:5000},async t => {
+  t.mock.timers.enable({apis:['setInterval']});
+  const profile=mkdtempSync(join(tmpdir(),'companion-heartbeat-'));
+  t.after(()=>rmSync(profile,{recursive:true,force:true}));
+  const beats=[];
+  const tasks=await createDesktopTasks({profile,dialog:{},request:async(path,options)=>{
+    if(path==='/api/assistant/heartbeat'){
+      const pending=Promise.withResolvers();
+      beats.push({options,pending});
+      return pending.promise;
+    }
+    return Response.json(options.method==='PUT'?{device:{device_id:path.split('/').at(-1)}}:{tasks:[],next_after:null});
+  }});
+  tasks.startPolling();
+  tasks.startPolling();
+  t.mock.timers.tick(1800000-1);
+  await tick();
+  assert.equal(beats.length,0);
+  t.mock.timers.tick(1);
+  await tick();
+  assert.equal(beats.length,1);
+  assert.equal(beats[0].options.method,'POST');
+  assert.equal(beats[0].options.body,undefined);
+  t.mock.timers.tick(1800000);
+  await tick();
+  assert.equal(beats.length,1);
+  beats[0].pending.resolve(Response.json({status:'healthy'}));
+  await tick();
+  t.mock.timers.tick(1800000);
+  await tick();
+  assert.equal(beats.length,2);
+  tasks.beginQuitCheck();
+  t.mock.timers.tick(1800000);
+  await tick();
+  assert.equal(beats.length,2);
+  await tasks.stop();
+  assert.ok(beats[1].options.signal.aborted);
+  t.mock.timers.tick(1800000);
+  await tick();
+  assert.equal(beats.length,2);
+});
 function fixture(t) {
   const db = openTestDatabase(); initializeDatabase(db.sqlite);
   seedMockTask(db.sqlite, { type: 'mock.unit', spec: { value: { type: 'string', required: true } } });

@@ -5,7 +5,7 @@ export function createRegistrationAiGateway(env, {
   const providers = [...new Set([...AI_PRIORITY, ...Object.keys(AI_MODELS)]), 'deepseek'];
   const routes = Object.fromEntries(providers.filter(provider => provider !== 'deepseek').map(provider =>
     ['registration.' + provider, {provider, maxOutputTokens: 2048}]));
-  const client = createAiClient({routes, timeoutMs, adapters: createAdapters({fetcher}),
+  const client = createAiClient({routes, timeoutMs, adapters: createAdapters({fetcher,cloudflareThinking:false}),
     resolveCredential: createEnvCredentialResolver(env)});
   return {
     providers: () => providers,

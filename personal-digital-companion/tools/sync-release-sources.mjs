@@ -27,7 +27,7 @@ for (const name of [
   '001-task-units.sql','002-executions.sql','003-task-activity.sql','004-task-deadline.sql',
   '005-task-recoveries.sql','006-chains.sql','007-task-submissions.sql','008-daily-logs.sql',
   '009-chain-submissions.sql','010-temporary-chain-positions.sql','011-temporary-registration.sql',
-  '012-registration-ai-preference.sql',
+  '012-registration-ai-preference.sql','013-ai-route-cooldown.sql',
 ]) await copy(join(source,'agent/migrations',name), join(vendor,'agent/migrations',name));
 for (const name of ['tasklist-hu-shi.sql','tasklist-registration.sql']) {
   await copy(join(source,'agent/seeds',name), join(vendor,'agent/seeds',name));

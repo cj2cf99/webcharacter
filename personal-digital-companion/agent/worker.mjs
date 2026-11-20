@@ -4,6 +4,7 @@ import { validateParameters } from './tasks/parameters.mjs';
 import { handleTaskAction } from './tasks/actions.mjs';
 import { normalizeDeadline } from './tasks/deadline.mjs';
 import { handleRecovery } from './tasks/recover.mjs';
+import {runProviderChain} from './assistant/provider-chain.mjs';
 import {handleAssistantMessage} from './assistant/message.mjs';
 import {planRegistration} from './assistant/registration-plan.mjs';
 import {handleWeather} from './weather/api.mjs';
@@ -196,9 +197,14 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
     try {
       if(path.startsWith('/api/weather/'))return await handleWeather(request,env,weatherOptions);
       if(!env.DB)return error(503,'DATABASE_NOT_CONFIGURED',dailyLogs?'日志数据库尚未配置':'任务数据库尚未配置');
+      if(path==='/api/assistant/heartbeat'){
+        if(request.method!=='POST')return error(405,'METHOD_NOT_ALLOWED','仅支持 POST',{Allow:'POST'});
+        const {value,code,ai}=await runProviderChain({env,ownerId:identity.ownerId,signal:request.signal,heartbeat:true});
+        return value?json({...value,ai}):json({error:{code},ai},code==='CANCELLED'?408:503);
+      }
       if(dailyLogs)return await handleDailyLogs(request,url,env,identity.ownerId);
       const chainResponse=await handleChainRequest(request,env.DB,readTasks,identity.ownerId);if(chainResponse)return chainResponse;
-      if(path==='/api/assistant/message')return await handleAssistantMessage(request,env.DB,createAiClient,env);
+      if(path==='/api/assistant/message')return await handleAssistantMessage(request,env.DB,createAiClient,env,identity.ownerId);
       if(path==='/api/assistant/recording-plan')return await planRegistration(request,env,identity.ownerId,createAiClient,loadRegistrationCategories);
       const terminalResponse = await handleTerminalRequest(request, env.DB);
       if (terminalResponse) return terminalResponse;

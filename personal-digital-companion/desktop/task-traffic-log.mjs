@@ -25,8 +25,9 @@ function responseSummary(body) {
     ai: Array.isArray(body?.ai?.attempts) ? {trace_id: id(body.ai.trace_id),
       preferred_provider: word(body.ai.preferred_provider),
       preference_saved: body.ai.preference_saved === false ? false : undefined,
-      attempts: body.ai.attempts.slice(0, 16).map(attempt => ({
+      attempts: body.ai.attempts.slice(0, 32).map(attempt => ({
         provider: word(attempt?.provider), model: word(attempt?.model), code: word(attempt?.code),
+        stage:word(attempt?.stage),at:Number.isSafeInteger(attempt?.at)?attempt.at:undefined,
         upstream_status: Number.isSafeInteger(attempt?.upstream_status) ? attempt.upstream_status : undefined,
         provider_code: Number.isSafeInteger(attempt?.provider_code) ? attempt.provider_code : undefined,
         duration_ms: Number.isSafeInteger(attempt?.duration_ms) ? attempt.duration_ms : undefined,
@@ -57,7 +58,7 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
       return async (path, options = {}) => {
         // The query can hold filters and headers carry credentials. Record identifiers and statuses only.
         const route = path.split('?')[0];
-        if (!/^\/api\/(?:tasks(?:\/|$)|devices(?:\/|$)|chains(?:\/|$)|task-submissions$|assistant\/recording-plan$|reminder-review(?:\/|$))/.test(route)) {
+        if (!/^\/api\/(?:tasks(?:\/|$)|devices(?:\/|$)|chains(?:\/|$)|task-submissions$|assistant\/(?:recording-plan|heartbeat)$|reminder-review(?:\/|$))/.test(route)) {
           return request(path, options);
         }
         const request_id = crypto.randomUUID();
@@ -76,6 +77,7 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
         const duration_ms = clock() - start;
         const summary = response.clone().json().catch(() => null).then(body => ({
           ...event, direction: 'receive', status: response.status, duration_ms, ...responseSummary(body),
+          ...(route==='/api/assistant/heartbeat'?{heartbeat:word(body?.status),provider:word(body?.provider)}:{}),
         }));
         void write(summary);
         return response;
