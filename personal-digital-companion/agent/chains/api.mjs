@@ -23,7 +23,7 @@ export async function readChain(DB,id,deviceId,readTasks){
       if(tasks.get(parent.current_task_id).status!=='COMPLETED'&&parent.skipped_task_id!==parent.current_task_id){ready=false;break;}
       parent=nodesById.get(parent.depends_on);
     }
-    for(const action of ['claim','force','continue','skip'])reasons[action]=await eligibility(DB,task,deviceId,action,{node:{...row,stopped_at:chain.stopped_at},held,deviceExists,ancestorsReady:ready});
+    for(const action of ['claim','force','continue','skip'])reasons[action]=await eligibility(DB,task,deviceId,action,{node:{...row,serial_pc:chain.serial_pc,stopped_at:chain.stopped_at},held,deviceExists,ancestorsReady:ready});
     nodes.push({node_id:row.node_id,key:row.node_key,depends_on:row.depends_on,current_task:task,
       skipped:row.skipped_task_id===row.current_task_id,eligibility:Object.fromEntries(Object.entries(reasons).map(([action,list])=>[action,!list.length])),reasons});
   }
@@ -31,17 +31,20 @@ export async function readChain(DB,id,deviceId,readTasks){
   const completed=nodes.every(n=>n.skipped||n.current_task.status==='COMPLETED');
   const blocked=nodes.some(n=>n.eligibility.claim)?[]:[...new Map(nodes.flatMap(n=>n.reasons.claim).map(reason=>[reason.code,reason])).values()];
   return {chain_id:chain.chain_id,name:chain.name,created_at:chain.created_at,status:chain.stopped_at?'STOPPED':completed?'COMPLETED':'ACTIVE',
+    ...(chain.serial_pc?{serial_pc:true}:{}),
     ...(chain.temporary_registration===1?{temporary_registration:true}:{}),
     held_count:held,nodes,history:history.map(publicOperation),blocked_reasons:blocked};
 }
 async function createChain(body,DB,readTasks,ownerId){
-  if(!fields(body,['nodes'],['name','submission_id','temporary_registration'])||!Array.isArray(body.nodes)||!body.nodes.length
+  if(!fields(body,['nodes'],['name','submission_id','temporary_registration','serial_pc'])||!Array.isArray(body.nodes)||!body.nodes.length
     ||(body.temporary_registration!==undefined&&typeof body.temporary_registration!=='boolean')
     ||(body.name!==undefined&&(typeof body.name!=='string'||!body.name.trim()||body.name.length>100)))return fail(400,'INVALID_CHAIN','任务链内容无效');
   const temporary=body.temporary_registration===true;
-  if(!temporary&&body.nodes.length>MAX_TEMPLATE_NODES)return fail(400,'INVALID_CHAIN','任务模板最多五个节点');
+  const serial=body.serial_pc===true;
+  if(body.serial_pc!==undefined&&(typeof body.serial_pc!=='boolean'||serial&&temporary))return fail(400,'INVALID_CHAIN','串行电脑任务链参数无效');
+  if(!temporary&&!serial&&body.nodes.length>MAX_TEMPLATE_NODES)return fail(400,'INVALID_CHAIN','任务模板最多五个节点');
   const submissionId=body.submission_id;
-  if((temporary||submissionId!==undefined)&&!isSubmissionId(submissionId))return fail(400,'INVALID_SUBMISSION_ID','请先获取有效的任务提交号');
+  if((temporary||serial||submissionId!==undefined)&&!isSubmissionId(submissionId))return fail(400,'INVALID_SUBMISSION_ID','请先获取有效的任务提交号');
   const keys=new Set(body.nodes.map(n=>n?.key));
   if(keys.size!==body.nodes.length)return fail(400,'INVALID_CHAIN','节点key必须唯一');
   const nodes=[];
@@ -49,14 +52,16 @@ async function createChain(body,DB,readTasks,ownerId){
     if(!fields(node,['key','type','target_device_id','params'],['depends_on','deadline_at'])||!validId(node.key)||typeof node.type!=='string'||!object(node.params)
       ||(node.depends_on!=null&&(!keys.has(node.depends_on)||node.depends_on===node.key)))return fail(400,'INVALID_CHAIN','节点或前置关系无效');
     let deadline;try{deadline=normalizeDeadline(node.deadline_at);}catch{return fail(400,'INVALID_DEADLINE','截止时间必须明确时区');}
-    nodes.push({...node,depends_on:node.depends_on??null,deadline_at:deadline});
+    const previous=nodes.at(-1)?.key??null;
+    if(serial&&Object.hasOwn(node,'depends_on')&&node.depends_on!==previous)return fail(400,'INVALID_CHAIN','串行节点必须依赖紧邻前项');
+    nodes.push({...node,depends_on:serial?previous:node.depends_on??null,deadline_at:deadline});
   }
   const name=body.name?.trim()||'任务组';
   const deviceId=nodes.find(node=>node.target_device_id)?.target_device_id;
   let fingerprint;
   if(submissionId!==undefined){
     let requestJson;
-    try{requestJson=encodeJson(temporary?{name,nodes,temporary_registration:true}:{name,nodes});}
+    try{requestJson=encodeJson(temporary?{name,nodes,temporary_registration:true}:serial?{name,nodes,serial_pc:true}:{name,nodes});}
     catch{return fail(400,'INVALID_PARAMS','参数必须为有效JSON');}
     const bytes=new TextEncoder().encode(requestJson);
     const digest=await crypto.subtle.digest('SHA-256',bytes);
@@ -92,9 +97,10 @@ async function createChain(body,DB,readTasks,ownerId){
     let checked;try{checked=validateParameters(JSON.parse(definition.parameter_spec_json),node.params);}catch{return fail(500,'TYPE_CONFIGURATION_ERROR','类型定义无效');}
     if(checked.configuration)return fail(500,'TYPE_CONFIGURATION_ERROR','类型定义无效');
     if(!checked.valid)return fail(400,'INVALID_PARAMS','参数不符合定义');
+    if(serial&&definition.executor!=='pc')return fail(400,'INVALID_TARGET','串行电脑任务链只接受电脑任务');
     if(temporary&&definition.executor!=='cloud')return fail(400,'INVALID_TARGET','临时登记只接受云端任务');
     if(definition.executor==='pc'){
-      if(!PC_ID_PATTERN.test(node.target_device_id??'')||!await DB.prepare('SELECT device_id FROM devices WHERE device_id=?').bind(node.target_device_id??'').first())return fail(400,'INVALID_TARGET','目标必须为已登记PC');
+      if(node.target_device_id!=='all'&&(!PC_ID_PATTERN.test(node.target_device_id??'')||!await DB.prepare('SELECT device_id FROM devices WHERE device_id=?').bind(node.target_device_id??'').first()))return fail(400,'INVALID_TARGET','目标必须为已登记PC');
     }else if(node.target_device_id!==null)return fail(400,'INVALID_TARGET','云任务目标必须为空');
     prepared.push({...node,node_id:crypto.randomUUID(),task_id:crypto.randomUUID()});
   }
@@ -112,12 +118,12 @@ async function createChain(body,DB,readTasks,ownerId){
   // 同一提交号即链主键。签发人与占用检查和节点创建同批提交。
   const insert=submissionId===undefined
     ? DB.prepare('INSERT INTO chains(chain_id,name,created_at) VALUES(?,?,?)').bind(id,name,at)
-    : DB.prepare(`INSERT INTO chains(chain_id,name,created_at,submission_fingerprint,temporary_registration)
+    : DB.prepare(`INSERT INTO chains(chain_id,name,created_at,submission_fingerprint,temporary_registration,serial_pc)
         VALUES ((SELECT s.submission_id FROM task_submissions s WHERE s.submission_id=? AND s.owner_id=?
-          AND NOT EXISTS (SELECT 1 FROM tasks WHERE submission_id=s.submission_id)),?,?,?,?)`)
-      .bind(id,ownerId,name,at,fingerprint,temporary?1:0);
+          AND NOT EXISTS (SELECT 1 FROM tasks WHERE submission_id=s.submission_id)),?,?,?,?,?)`)
+      .bind(id,ownerId,name,at,fingerprint,temporary?1:0,serial?1:0);
   const statements=[insert];
-  for(const node of prepared)statements.push(DB.prepare("INSERT INTO tasks(task_id,type,target_device_id,params_json,status,created_at,deadline_at) VALUES(?,?,?,?,'PENDING',?,?)").bind(node.task_id,node.type,node.target_device_id,encodeJson(node.params),at,node.deadline_at));
+  for(const node of prepared)statements.push(DB.prepare("INSERT INTO tasks(task_id,type,target_device_id,dispatch_all,params_json,status,created_at,deadline_at) VALUES(?,?,?,?,?,'PENDING',?,?)").bind(node.task_id,node.type,node.target_device_id==='all'?null:node.target_device_id,Number(node.target_device_id==='all'),encodeJson(node.params),at,node.deadline_at));
   for(const [i,node] of prepared.entries())statements.push(DB.prepare('INSERT INTO chain_nodes(node_id,chain_id,node_key,position,current_task_id) VALUES(?,?,?,?,?)').bind(node.node_id,id,node.key,i,node.task_id));
   for(const node of prepared){
     if(node.depends_on)statements.push(DB.prepare('UPDATE chain_nodes SET depends_on=? WHERE node_id=?').bind(nodesByKey.get(node.depends_on).node_id,node.node_id));
@@ -233,8 +239,8 @@ export async function handleChainRequest(request,DB,readTasks,ownerId){
       .bind(body.new_task_id,node.node_id,task.task_id,body.request_id));
   }else{
     const status=body.action==='continue'?"t.status='FAILED'":"t.status IN ('RUNNING','COMPLETED')";
-    statements.push(DB.prepare(`INSERT INTO tasks(task_id,type,target_device_id,params_json,status,created_at,deadline_at,chain_node_id,claim_request_id)
-      SELECT ?,t.type,?,t.params_json,'RUNNING',?,t.deadline_at,t.chain_node_id,? FROM tasks t
+    statements.push(DB.prepare(`INSERT INTO tasks(task_id,type,target_device_id,dispatch_all,params_json,status,created_at,deadline_at,chain_node_id,claim_request_id)
+      SELECT ?,t.type,?,t.dispatch_all,t.params_json,'RUNNING',?,t.deadline_at,t.chain_node_id,? FROM tasks t
       WHERE t.task_id=? AND ${status} AND ${gateSQL({replacement:true})}`)
       .bind(body.new_task_id,body.device_id,at,body.request_id,task.task_id,...gateBindings(body.device_id)));
     statements.push(operationInsert(`EXISTS(SELECT 1 FROM tasks fresh WHERE fresh.task_id=? AND fresh.claim_request_id=?)`,[body.new_task_id,body.request_id]));

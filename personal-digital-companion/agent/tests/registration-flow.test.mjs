@@ -74,6 +74,17 @@ async function fixture(t, { actions = all, register, fault, pending = [] } = {})
 
 const node = (key, type = 'hu-shi.event.create', params = {}) => ({ key, type, params, target_device_id: null });
 
+test('附件草案预览零业务写入，确认后复用原计划和提交号机制',async t=>{
+  const f=await fixture(t),flow=f.desktop();
+  const plan=await flow.preview('登记隔离用例');
+  assert.equal(f.writes.length,0);
+  assert.equal(f.calls.filter(x=>x.path==='/api/task-submissions').length,0);
+  const result=await flow.submitReviewed('登记隔离用例',plan);
+  assert.equal(result.status,'completed');
+  assert.equal(f.writes.length,plan.chain.nodes.length);
+  assert.equal(f.calls.filter(x=>x.path==='/api/assistant/recording-plan').length,1);
+});
+
 test('桌面提交一次后建一链，主动领取六类节点并等待显式前置', async t => {
   const f = await fixture(t);
   const desktop = f.desktop();

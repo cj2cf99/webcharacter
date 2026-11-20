@@ -1,0 +1,22 @@
+<!doctype html><html lang="zh-CN" class="fy-panel"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src data:">
+<title>绯月 · 询问与确认</title><link rel="stylesheet" href="registration.css"><link rel="stylesheet" href="feiyue-surface.css">
+</head><body><header class="fy-titlebar"><div class="fy-caption"><h1>绯月询问</h1></div></header>
+<main class="fy-scroll" aria-label="登记内容">
+  <h2 id="prompt"></h2>
+  <pre id="recordFields" tabindex="0" aria-label="将要登记的字段"></pre>
+  <details><summary>查看原文</summary><pre id="recordSource"></pre></details>
+  <section id="editor">
+    <div id="bulk"></div><ol id="missing"></ol>
+    <label for="answer">回复或补充内容</label><textarea id="answer" rows="3" maxlength="6000" placeholder="输入或粘贴文字，也可以粘贴图片"></textarea>
+    <input type="file" id="file" hidden accept="image/*,text/*,.md,.log,.csv,.json,.yaml,.yml">
+    <div class="actions"><button type="button" id="chooseFile">添加图片或文本文件</button><span id="filename"></span>
+      <button type="button" id="removeFile" hidden>移除</button></div><img id="thumb" alt="待发送图片预览" hidden>
+    <label id="photoLabel" hidden>图片用途<select id="photoTarget"></select></label>
+  </section>
+  <p id="recordStatus" role="status"></p>
+</main>
+<footer class="review-actions"><button id="discardRecord" disabled>取消</button>
+  <button id="sendInput" disabled>发送回答</button><button id="approveRecord" type="submit" disabled>确认登记</button><button id="closeReview" hidden>关闭</button></footer>
+<script type="module" src="registration-review-ui.mjs"></script></body></html>

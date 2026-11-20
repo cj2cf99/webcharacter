@@ -14,10 +14,10 @@ export async function claimTask(DB,task,body,readTask){
   const reasons=await eligibility(DB,task,body.device_id,'claim');if(reasons.length)return fail(409,reasons[0].code,reasons[0].message);
   const at=new Date().toISOString();
   try{await DB.batch([
-    DB.prepare(`UPDATE tasks AS t SET status='RUNNING',claim_request_id=? WHERE t.task_id=? AND t.target_device_id=? AND t.status='PENDING' AND ${gateSQL()}`)
-      .bind(requestId,task.task_id,body.device_id,...gateBindings(body.device_id)),
+    DB.prepare(`UPDATE tasks AS t SET status='RUNNING',claim_request_id=?,target_device_id=? WHERE t.task_id=? AND (t.target_device_id=? OR (t.target_device_id IS NULL AND t.dispatch_all=1)) AND t.status='PENDING' AND ${gateSQL()}`)
+      .bind(requestId,body.device_id,task.task_id,body.device_id,...gateBindings(body.device_id)),
     DB.prepare(`INSERT INTO task_operations(request_id,chain_id,action,old_task_id,from_device_id,to_device_id,created_at,request_json)
-      SELECT ?,n.chain_id,'claim',t.task_id,t.target_device_id,t.target_device_id,?,? FROM tasks t LEFT JOIN chain_nodes n ON n.node_id=t.chain_node_id
+      SELECT ?,n.chain_id,'claim',t.task_id,CASE WHEN t.dispatch_all=1 THEN NULL ELSE t.target_device_id END,t.target_device_id,?,? FROM tasks t LEFT JOIN chain_nodes n ON n.node_id=t.chain_node_id
       WHERE t.task_id=? AND t.status='RUNNING' AND t.claim_request_id=?`).bind(requestId,at,requestJson,task.task_id,requestId),
     DB.prepare(`INSERT INTO task_activity(task_id,updated_at,event,progress_message)
       SELECT task_id,?,'claim',NULL FROM tasks WHERE task_id=? AND claim_request_id=? AND status='RUNNING'

@@ -1,4 +1,5 @@
 import {createWorker} from '../worker.mjs';
+import {forwardRecordPhoto} from './record-photo.mjs';
 
 const prefix = '/api/companion';
 const fail = (status, code, message) => Response.json({error: {code, message}}, {status, headers: {'Cache-Control': 'no-store'}});
@@ -33,6 +34,7 @@ export async function handleCompanion(request, env, actor, fromMain) {
   url.pathname = '/api' + url.pathname.slice(prefix.length);
   if (fromMain && !browserRoute.test(url.pathname)) return fail(404, 'NOT_FOUND', '接口不存在');
   if (!env.COMPANION_DB || !env.COMPANION_HOST) return fail(503, 'COMPANION_NOT_CONFIGURED', '绯月服务尚未接入');
+  if(url.pathname==='/api/records/photos')return forwardRecordPhoto(request,(bytes,type,name)=>env.COMPANION_HOST.uploadRecordPhoto(bytes,type,name));
   if (url.pathname === '/api/health' && request.method === 'GET') {
     try {
       await Promise.all([env.COMPANION_DB.prepare('SELECT 1 FROM registration_ai_preference LIMIT 1').first(),

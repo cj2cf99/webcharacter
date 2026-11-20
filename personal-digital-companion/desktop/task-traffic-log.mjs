@@ -6,6 +6,7 @@ const timestamp = new Intl.DateTimeFormat('sv-SE', {timeZone: 'Asia/Tokyo', date
 const id = value => typeof value === 'string' && /^[a-z0-9_-]{1,128}$/i.test(value) ? value : undefined;
 const word = value => typeof value === 'string' && /^[a-z0-9_./@:-]{1,128}$/i.test(value) ? value : undefined;
 const peek = value => {
+  if(typeof value!=='string')return null;
   try { return JSON.parse(value); } catch { return null; }
 };
 function taskSummary(task) {

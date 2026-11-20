@@ -1,73 +1,46 @@
-import {readFileSync, writeFileSync, renameSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createPanelWindow} from './panel-window.mjs';
 import {createWeatherService, JMA_WARNING_PAGE, JMA_RADAR_PAGE} from './weather-service.mjs';
 import {JMA_TYPOON_PAGE, JMA_BULLETIN_PAGE} from './jma-typhoon.mjs';
 
+import {weatherBrief} from './weather-brief.mjs';
+
 const jmaPages = new Map([
   ['radar', JMA_RADAR_PAGE], ['warning', JMA_WARNING_PAGE],
   ['typhoon', JMA_TYPOON_PAGE], ['bulletin', JMA_BULLETIN_PAGE],
 ]);
 
-export function attachWeather(electron, {bundle, root, profile, service, request, background = true, visible = true}) {
-  const {ipcMain, Notification, shell} = electron;
-  const noticePath = resolve(profile, 'weather-notices.json');
-  let seen = {};
-  try {
-    const saved = JSON.parse(readFileSync(noticePath, 'utf8'));
-    if (saved && typeof saved === 'object' && !Array.isArray(saved)) seen = saved;
-  } catch {}
-  let panel = null;
-  let closed = false;
-  const timers = [];
-  const triggers = new Map();
-  function collectReminder(row, items, category = '官方预警') {
-    const reasons = triggers.get(row.id) ?? [];
-    reasons.push(...items.map(item => ({title: item.title, category})));
-    triggers.set(row.id, reasons);
+export function attachWeather(electron, {bundle, root, profile, service, request, background = true, visible = true, recordCheck=()=>{}, checks}) {
+  const {ipcMain, shell} = electron;
+  let seen=checks?.weatherState();
+  if(!seen){
+    seen={};
+    try{
+      const old=JSON.parse(readFileSync(resolve(profile,'weather-notices.json'),'utf8'));
+      if(old && typeof old==='object' && !Array.isArray(old))seen=old;
+    }catch{}
   }
-  function publish(data) {
-    if (panel && !panel.isDestroyed()) panel.webContents.send('weather:changed', data);
-    if (data.busy || !triggers.size) return;
-    const body = data.rows.map(row => {
-      const reasons = triggers.get(row.id) ?? [];
-      const weather = row.current.state === 'ready'
-        ? row.current.value.text + ' ' + row.current.value.temperature + '°C' : '实况未更新';
-      let warnings = '警报未更新';
-      if (row.alerts.state === 'ready') {
-        const titles = new Set([
-          ...reasons.filter(item => item.category === '官方预警').map(item => item.title),
-          ...row.alerts.value.values.map(item => item.title),
-        ]);
-        warnings = [...titles].join('、') || '暂无生效预警';
-      }
-      const extra = reasons.filter(item => item.category !== '官方预警').map(item => item.title);
-      return row.name + '：' + [weather, warnings, ...extra].join(' · ');
-    }).join('\n');
-    triggers.clear();
-    notify(body);
+  let panel=null,closed=false,collecting=false;
+  const triggers=new Map();
+  function collectReminder(row,items,category='官方预警'){
+    if(category==='低温提醒'){
+      const low=row.minimum.value,range=[low.temperature,low.maximum].join('/');
+      seen.lowRanges??={};
+      if(seen.lowRanges[row.id]===range)return;
+      seen.lowRanges[row.id]=range;
+    }
+    const reasons=triggers.get(row.id)??[];
+    for(const item of items){
+      const text=category==='低温提醒'?'低温，最低 '+row.minimum.value.temperature+'°C':
+        category==='气象通报'?item.type+'通报':item.shortTitle||item.title;
+      reasons.push(text);
+    }
+    triggers.set(row.id,reasons);
   }
-  function notify(body) {
-    const showPanel = () => void open(false).catch(() => {});
-    if (!Notification?.isSupported()) { showPanel(); return; }
-    const notice = new Notification({title: '绯月 · 三地天气与警报', body});
-    notice.on('click', () => void open().catch(() => {}));
-    notice.on('failed', showPanel);
-    try { notice.show(); } catch { showPanel(); }
-  }
-  const api = service ?? createWeatherService({
-    request,
-    important: collectReminder,
-    seen,
-    saveSeen: value => {
-      try {
-        writeFileSync(noticePath + '.tmp', JSON.stringify(value));
-        renameSync(noticePath + '.tmp', noticePath);
-      } catch {}
-    },
-    onChange: publish,
-  });
+  const api=service??createWeatherService({request,seen,remindersEnabled:()=>collecting,important:collectReminder,
+    onChange:data=>{if(panel&&!panel.isDestroyed())panel.webContents.send('weather:changed',data);}});
   function trusted(event) {
     return panel && !panel.isDestroyed() && event.sender === panel.webContents && event.senderFrame === panel.webContents.mainFrame;
   }
@@ -113,17 +86,57 @@ export function attachWeather(electron, {bundle, root, profile, service, request
       throw error;
     }
   }
-  async function start() {
-    if (!background || !process.versions.electron || service || closed || !request) return;
-    void api.refreshAll();
-    timers.push(setInterval(api.refreshAlerts, 10 * 60_000), setInterval(api.refreshCurrent, 30 * 60_000));
+  async function check(){
+    if(closed)return;
+    if(!request||service||!background)throw Object.assign(Error('天气连接未配置'),{code:'NO_CONNECTION'});
+    const at=Date.now(),before=structuredClone(seen);
+    try{
+      // 手动查询只更新面板，让自动轮询独立判定新预警。
+      await api.whenIdle();
+      if(closed)return;
+      collecting=true;
+      const {rows}=await api.refreshAll();
+      if(closed)return;
+      for(const row of rows)if(row.minimum.state==='ready'&&!row.minimum.value.below&&seen.lowRanges)delete seen.lowRanges[row.id];
+      const brief=weatherBrief(rows,triggers,seen.brief,at);
+      seen.brief=brief.state;seen.lastCheck=at;
+      checks.saveWeather(seen,brief,at);
+      for(const row of rows){
+        const results=[],failed=[];
+        function field(label,part,value){
+          if(part.state==='ready')results.push(value());
+          else failed.push(label);
+        }
+        field('预警',row.alerts,()=>row.alerts.value.values.length+' 个有效预警');
+        if(row.japan){
+          field('台风动态',row.japan.tracks,()=>row.japan.tracks.values.length+' 条台风动态');
+          field('通报',row.japan.bulletins,()=>row.japan.bulletins.values.length+' 条通报');
+        }
+        field('实况',row.current,()=>row.current.value.text+' '+row.current.value.temperature+'°C');
+        field('当日气温',row.minimum,()=>row.minimum.value.maximum===null?'最低 '+row.minimum.value.temperature+'°C':
+          '全天 '+row.minimum.value.temperature+'～'+row.minimum.value.maximum+'°C');
+        if(row.minimum.state==='ready'&&row.minimum.value.maximum===null)failed.push('最高温');
+        const status=failed.length?(results.length?'部分失败':'查询失败'):'已检查';
+        if(failed.length)results.push(failed.join('、')+'未取得');
+        results.push(brief.body?'本轮已发'+brief.title:'本轮无新简报');
+        recordCheck('天气 · '+row.name,status,results.join(' · '),at);
+      }
+      return brief.body?'已生成'+brief.title:'检查完成，未生成新简报';
+    }catch(error){
+      if(!closed){
+        for(const key of Object.keys(seen))delete seen[key];
+        Object.assign(seen,before);
+        throw error;
+      }
+    }finally{
+      collecting=false;triggers.clear();
+    }
   }
-  function close() {
-    closed = true;
-    for (const timer of timers) clearInterval(timer);
+  function close(){
+    closed=true;
     api.close();
     for (const channel of Object.keys(handlers)) ipcMain.removeHandler(channel);
     if (panel && !panel.isDestroyed()) panel.destroy();
   }
-  return {open, start, close, get panel() {return panel;}};
+  return {open, check, close, get panel() {return panel;}};
 }

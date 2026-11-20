@@ -1,0 +1,2752 @@
+{
+  "dateJst": "2026-11-20",
+  "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+  "mockScope": "临时资料、模型真实推理、业务/ComfyUI 执行回执模拟。模拟生成成功不代表真实图像质量。",
+  "scoringNote": "4-final 的换雨衣样例初始按操作和引用通过，人工复核发现漏掉“保留脸”，严格评分为失败；未改写初始记录。",
+  "finalRegression": {
+    "uniqueImageScenarios": 19,
+    "passed": 19,
+    "mockDesktop": 8,
+    "mockDesktopPassed": 8,
+    "agentPassed": 211,
+    "agentSkipped": 2,
+    "agentFailed": 0,
+    "pythonSkillTests": 4
+  },
+  "trials": {
+    "1": {
+      "round": 1,
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "rows": [
+        {
+          "text": "保留脸，换成图2的雨衣，最后高清放大",
+          "skill": "image-task-chain",
+          "version": "1.2",
+          "enabled": false,
+          "value": {
+            "steps": [],
+            "question": "请提供图片 2 的雨衣的链接或上传文件，以便我进行裁剪、调整比例并放大至高清效果。"
+          },
+          "passed": false
+        },
+        {
+          "text": "保留脸，换成图2的雨衣，最后高清放大",
+          "skill": "image-task-chain",
+          "version": "1.2",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "保留脸，换成图2的雨衣",
+                "refs": [
+                  2
+                ]
+              },
+              {
+                "op": "upscale",
+                "quote": "高清放大",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "把图1里的衬衣换成图3的外套",
+          "skill": "image-task-chain",
+          "version": "1.2",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "把蓝色外套换成图3的外套",
+                "refs": [
+                  2
+                ]
+              },
+              {
+                "op": "upscale",
+                "quote": "高清放大",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": false
+        },
+        {
+          "text": "把图1里的衬衣换成图3的外套",
+          "skill": "image-task-chain",
+          "version": "1.2",
+          "enabled": false,
+          "value": {
+            "error": "LOCAL_AI_TIMEOUT"
+          },
+          "passed": false
+        },
+        {
+          "text": "我刚才说的集合时间是几点？",
+          "skill": "personal-conversation",
+          "version": "1.2",
+          "enabled": false,
+          "value": {
+            "kind": "chat",
+            "reply": "好的，老公，七点半。"
+          },
+          "passed": true
+        },
+        {
+          "text": "我刚才说的集合时间是几点？",
+          "skill": "personal-conversation",
+          "version": "1.2",
+          "enabled": true,
+          "value": {
+            "kind": "chat",
+            "reply": "你刚才说：「我把集合时间定在七点半。」"
+          },
+          "passed": true
+        }
+      ]
+    },
+    "2": {
+      "round": 2,
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "rows": [
+        {
+          "text": "把图1里的衬衣换成图3的外套",
+          "skill": "image-task-chain",
+          "version": "1.3",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "保留脸，换成图3的外套",
+                "refs": [
+                  3
+                ]
+              }
+            ],
+            "question": "请执行换装操作，保留原脸，将上衣替换为图3的外套。"
+          },
+          "passed": false
+        },
+        {
+          "text": "把图1里的衬衣换成图3的外套",
+          "skill": "image-task-chain",
+          "version": "1.3",
+          "enabled": false,
+          "value": {
+            "error": "LOCAL_AI_TIMEOUT"
+          },
+          "passed": false
+        },
+        {
+          "text": "用图2的姿势修改图1，别放大",
+          "skill": "image-task-chain",
+          "version": "1.3",
+          "enabled": false,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "图 1",
+                "refs": [
+                  2
+                ]
+              },
+              {
+                "op": "edit",
+                "quote": "图 2",
+                "refs": [
+                  1
+                ]
+              }
+            ],
+            "question": "用图 2 的姿势修改图 1，别放大"
+          },
+          "passed": false
+        },
+        {
+          "text": "用图2的姿势修改图1，别放大",
+          "skill": "image-task-chain",
+          "version": "1.3",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "用图2的姿势修改图1",
+                "refs": [
+                  2
+                ]
+              }
+            ],
+            "question": "用图2的姿势修改图1，别放大"
+          },
+          "passed": false
+        },
+        {
+          "text": "把今天步行二十分钟登记为运动",
+          "skill": "record-submission",
+          "version": "1.1",
+          "enabled": true,
+          "value": {
+            "kind": "task",
+            "reply": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "把今天步行二十分钟登记为运动",
+          "skill": "record-submission",
+          "version": "1.1",
+          "enabled": false,
+          "value": {
+            "kind": "task",
+            "reply": ""
+          },
+          "passed": true
+        }
+      ]
+    },
+    "3": {
+      "round": 3,
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "rows": [
+        {
+          "text": "用图2的姿势修改图1，别放大",
+          "skill": "image-task-chain",
+          "version": "1.3",
+          "enabled": false,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "图 1",
+                "refs": [
+                  2
+                ]
+              },
+              {
+                "op": "edit",
+                "quote": "图 2",
+                "refs": [
+                  1
+                ]
+              }
+            ],
+            "question": ""
+          },
+          "passed": false
+        },
+        {
+          "text": "用图2的姿势修改图1，别放大",
+          "skill": "image-task-chain",
+          "version": "1.3",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "用图2的姿势修改图1",
+                "refs": [
+                  2
+                ]
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "给我画一幅雪地小屋，不要高清放大",
+          "skill": "image-task-chain",
+          "version": "1.3",
+          "enabled": true,
+          "value": {
+            "steps": [],
+            "question": "请生成一幅雪地小屋，不要高清放大。"
+          },
+          "passed": false
+        },
+        {
+          "text": "给我画一幅雪地小屋，不要高清放大",
+          "skill": "image-task-chain",
+          "version": "1.3",
+          "enabled": false,
+          "value": {
+            "steps": [
+              {
+                "op": "generate",
+                "quote": "雪地小屋",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "把刚才那张图的背景改成雨夜，然后放大",
+          "skill": "image-task-chain",
+          "version": "1.3",
+          "enabled": false,
+          "value": {
+            "error": "LOCAL_AI_TIMEOUT"
+          },
+          "passed": false
+        },
+        {
+          "text": "把刚才那张图的背景改成雨夜，然后放大",
+          "skill": "image-task-chain",
+          "version": "1.3",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "保留脸，换成图2的外套",
+                "refs": [
+                  2
+                ]
+              },
+              {
+                "op": "upscale",
+                "quote": "高清放大",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": false
+        },
+        {
+          "text": "我忙了一天，只想你陪我聊一会儿。",
+          "skill": "personal-conversation",
+          "version": "1.2",
+          "enabled": true,
+          "value": {
+            "kind": "chat",
+            "reply": "来，先抱抱你。你慢慢说，我听着呢。"
+          },
+          "passed": true
+        },
+        {
+          "text": "我忙了一天，只想你陪我聊一会儿。",
+          "skill": "personal-conversation",
+          "version": "1.2",
+          "enabled": false,
+          "value": {
+            "kind": "chat",
+            "reply": "来，先抱抱你。你慢慢说，我听着呢。"
+          },
+          "passed": true
+        }
+      ],
+      "desktop": [
+        {
+          "text": "本地复盘怎么打开",
+          "reply": "托盘右键绯月，选择「任务 → 本地复盘」。",
+          "state": "answer",
+          "calls": [],
+          "drafts": [
+            {
+              "hint": "auto",
+              "skill": "auto",
+              "loaded": true,
+              "value": {
+                "kind": "chat",
+                "reply": ""
+              }
+            }
+          ],
+          "passed": true
+        },
+        {
+          "text": "把图1的衣服换成图3的外套",
+          "reply": "本轮收到 2 张附件，找不到图3。请补图或说明要用哪一张。",
+          "state": "error",
+          "calls": [],
+          "drafts": [],
+          "passed": true
+        },
+        {
+          "text": "屏幕中是什么颜色？",
+          "reply": "模拟屏幕回执",
+          "state": "answer",
+          "calls": [
+            "截图"
+          ],
+          "drafts": [
+            {
+              "hint": "screen",
+              "skill": "screen",
+              "loaded": true,
+              "value": {
+                "kind": "external",
+                "reply": ""
+              }
+            }
+          ],
+          "passed": true
+        }
+      ]
+    },
+    "4": {
+      "round": 4,
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "rows": [
+        {
+          "text": "保留脸，换成图2的雨衣，最后高清放大",
+          "skill": "image-task-chain",
+          "version": "1.4",
+          "enabled": true,
+          "value": {
+            "error": "LOCAL_AI_TIMEOUT"
+          },
+          "passed": false
+        },
+        {
+          "text": "保留脸，换成图2的雨衣，最后高清放大",
+          "skill": "image-task-chain",
+          "version": "1.4",
+          "enabled": false,
+          "value": {
+            "steps": [],
+            "question": "请根据指令，将图片 1 替换为图 2 的雨衣，并放大至高清。"
+          },
+          "passed": false
+        },
+        {
+          "text": "把图1里的衬衣换成图3的外套",
+          "skill": "image-task-chain",
+          "version": "1.4",
+          "enabled": false,
+          "value": {
+            "steps": [
+              {
+                "op": "generate",
+                "quote": "把图 1 里的衬衣换成图 3 的外套",
+                "refs": [
+                  1,
+                  3
+                ]
+              }
+            ],
+            "question": ""
+          },
+          "passed": false
+        },
+        {
+          "text": "把图1里的衬衣换成图3的外套",
+          "skill": "image-task-chain",
+          "version": "1.4",
+          "enabled": true,
+          "value": {
+            "error": "LOCAL_AI_TIMEOUT"
+          },
+          "passed": false
+        },
+        {
+          "text": "把图1的上衣换成图2的夹克，保留脸和背景",
+          "skill": "image-task-chain",
+          "version": "1.4",
+          "enabled": true,
+          "value": {
+            "error": "LOCAL_AI_TIMEOUT"
+          },
+          "passed": false
+        },
+        {
+          "text": "把图1的上衣换成图2的夹克，保留脸和背景",
+          "skill": "image-task-chain",
+          "version": "1.4",
+          "enabled": false,
+          "value": {
+            "error": "LOCAL_AI_TIMEOUT"
+          },
+          "passed": false
+        },
+        {
+          "text": "给我画一幅雪地小屋，不要高清放大",
+          "skill": "image-task-chain",
+          "version": "1.4",
+          "enabled": false,
+          "value": {
+            "error": "LOCAL_AI_TIMEOUT"
+          },
+          "passed": false
+        },
+        {
+          "text": "给我画一幅雪地小屋，不要高清放大",
+          "skill": "image-task-chain",
+          "version": "1.4",
+          "enabled": true,
+          "value": {
+            "steps": [],
+            "question": "请帮我画一幅雪地小屋，不要高清放大。"
+          },
+          "passed": false
+        },
+        {
+          "text": "把刚才那张图的背景改成雨夜，然后放大",
+          "skill": "image-task-chain",
+          "version": "1.4",
+          "enabled": true,
+          "value": {
+            "steps": [],
+            "question": "请根据当前指令，将图片背景改为雨夜，然后放大。"
+          },
+          "passed": false
+        },
+        {
+          "text": "把刚才那张图的背景改成雨夜，然后放大",
+          "skill": "image-task-chain",
+          "version": "1.4",
+          "enabled": false,
+          "value": {
+            "error": "LOCAL_AI_TIMEOUT"
+          },
+          "passed": false
+        },
+        {
+          "text": "把这张照片重绘为铅笔素描",
+          "skill": "image-task-chain",
+          "version": "1.4",
+          "enabled": false,
+          "value": {
+            "error": "LOCAL_AI_TIMEOUT"
+          },
+          "passed": false
+        },
+        {
+          "text": "把这张照片重绘为铅笔素描",
+          "skill": "image-task-chain",
+          "version": "1.4",
+          "enabled": true,
+          "value": {
+            "steps": [],
+            "question": "请根据附件编号 1 和可用底图 '图 1'，将这张照片重绘为铅笔素描。"
+          },
+          "passed": false
+        },
+        {
+          "text": "我刚才定的是哪个时间？",
+          "skill": "personal-conversation",
+          "version": "1.2",
+          "enabled": true,
+          "value": {
+            "kind": "chat",
+            "reply": "你刚才说：「我把集合时间定在七点半。」"
+          },
+          "passed": true
+        },
+        {
+          "text": "我刚才定的是哪个时间？",
+          "skill": "personal-conversation",
+          "version": "1.2",
+          "enabled": false,
+          "value": {
+            "kind": "chat",
+            "reply": "七点半。"
+          },
+          "passed": true
+        },
+        {
+          "text": "查一下东京明天的天气",
+          "skill": "weather-lookup",
+          "version": "1.0",
+          "enabled": false,
+          "value": {
+            "kind": "external",
+            "reply": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "查一下东京明天的天气",
+          "skill": "weather-lookup",
+          "version": "1.0",
+          "enabled": true,
+          "value": {
+            "kind": "external",
+            "reply": ""
+          },
+          "passed": true
+        }
+      ],
+      "desktop": [
+        {
+          "text": "想看上次聊天",
+          "reply": "记忆查询暂未开放。",
+          "state": "error",
+          "calls": [],
+          "drafts": [],
+          "passed": true
+        },
+        {
+          "text": "罗马古建筑",
+          "reply": "网络查询暂时没有可用结果，可稍后重试。",
+          "state": "error",
+          "calls": [
+            "搜索"
+          ],
+          "drafts": [
+            {
+              "hint": "search",
+              "skill": "public-lookup",
+              "version": "1.0",
+              "loaded": true,
+              "value": {
+                "kind": "external",
+                "reply": ""
+              }
+            }
+          ],
+          "passed": true
+        },
+        {
+          "text": "这个文件说了什么？",
+          "reply": "模拟文字回执",
+          "state": "answer",
+          "calls": [
+            "文字"
+          ],
+          "drafts": [],
+          "passed": true
+        },
+        {
+          "text": "把图1的上衣换成图4的夹克",
+          "reply": "本轮收到 1 张附件，找不到图4。请补图或说明要用哪一张。",
+          "state": "error",
+          "calls": [],
+          "drafts": [],
+          "passed": true
+        },
+        {
+          "text": "接取任务与任务链怎么打开",
+          "reply": "托盘右键绯月，选择「任务 → 接取任务与任务链」。",
+          "state": "answer",
+          "calls": [],
+          "drafts": [
+            {
+              "hint": "auto",
+              "skill": "task-lifecycle",
+              "version": "1.0",
+              "loaded": true,
+              "value": {
+                "kind": "chat",
+                "reply": "绯月，请告诉我您想做什么？"
+              }
+            }
+          ],
+          "passed": true
+        },
+        {
+          "text": "动画与声音怎么打开",
+          "reply": "托盘右键绯月，选择「设置与维护 → 动画与声音」。",
+          "state": "answer",
+          "calls": [],
+          "drafts": [
+            {
+              "hint": "auto",
+              "skill": "desktop-controls",
+              "version": "1.1",
+              "loaded": true,
+              "value": {
+                "kind": "chat",
+                "reply": "动画与声音的菜单在「设置与维护」里，点击「桌面精灵」即可开启。"
+              }
+            }
+          ],
+          "passed": true
+        },
+        {
+          "text": "提醒检查 · 待执行怎么打开",
+          "reply": "有待执行的检查时，托盘右键绯月，选择「任务 → 提醒检查 · 待执行」。",
+          "state": "answer",
+          "calls": [],
+          "drafts": [
+            {
+              "hint": "auto",
+              "skill": "reminder-review",
+              "version": "1.1",
+              "loaded": true,
+              "value": {
+                "kind": "chat",
+                "reply": ""
+              }
+            }
+          ],
+          "passed": true
+        },
+        {
+          "text": "服务器任务：请原文回显「海风」",
+          "reply": "已取消服务器任务。",
+          "state": "answer",
+          "calls": [
+            "GET /api/tasklist",
+            "取消 海风"
+          ],
+          "drafts": [
+            {
+              "hint": "serverTask",
+              "skill": "server-pc-task",
+              "version": "1.1",
+              "loaded": true,
+              "value": {
+                "type": "mock.echo",
+                "params": {
+                  "value": "海风"
+                }
+              }
+            }
+          ],
+          "passed": true
+        }
+      ]
+    },
+    "4-final": {
+      "round": 4,
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "rows": [
+        {
+          "text": "保留脸，换成图2的雨衣，最后高清放大",
+          "skill": "image-task-chain",
+          "version": "1.5",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "换成图2的雨衣",
+                "refs": [
+                  2
+                ]
+              },
+              {
+                "op": "upscale",
+                "quote": "高清放大",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "保留脸，换成图2的雨衣，最后高清放大",
+          "skill": "image-task-chain",
+          "version": "1.5",
+          "enabled": false,
+          "value": {
+            "steps": [],
+            "question": "请提供图片 2 的雨衣的链接或上传文件，以便我进行裁剪、调整比例并放大至高清效果。"
+          },
+          "passed": false
+        },
+        {
+          "text": "把图1里的衬衣换成图3的外套",
+          "skill": "image-task-chain",
+          "version": "1.5",
+          "enabled": false,
+          "value": {
+            "error": "LOCAL_AI_INFERENCE_FAILED"
+          },
+          "passed": false
+        },
+        {
+          "text": "把图1里的衬衣换成图3的外套",
+          "skill": "image-task-chain",
+          "version": "1.5",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "换成图3的外套",
+                "refs": [
+                  2
+                ]
+              },
+              {
+                "op": "upscale",
+                "quote": "放大",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": false
+        },
+        {
+          "text": "把图1的上衣换成图2的夹克，保留脸和背景",
+          "skill": "image-task-chain",
+          "version": "1.5",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "把图1的上衣换成图2的夹克",
+                "refs": [
+                  2
+                ]
+              },
+              {
+                "op": "upscale",
+                "quote": "保留脸和背景",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": false
+        },
+        {
+          "text": "把图1的上衣换成图2的夹克，保留脸和背景",
+          "skill": "image-task-chain",
+          "version": "1.5",
+          "enabled": false,
+          "value": {
+            "steps": [],
+            "question": "请提供图1和图2的图像，以便我进行裁剪和替换操作。"
+          },
+          "passed": false
+        },
+        {
+          "text": "给我画一幅雪地小屋，不要高清放大",
+          "skill": "image-task-chain",
+          "version": "1.5",
+          "enabled": false,
+          "value": {
+            "steps": [
+              {
+                "op": "generate",
+                "quote": "雪地小屋",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": false
+        },
+        {
+          "text": "给我画一幅雪地小屋，不要高清放大",
+          "skill": "image-task-chain",
+          "version": "1.5",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "generate",
+                "quote": "画一幅雪地小屋，不要高清放大",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "把刚才那张图的背景改成雨夜，然后放大",
+          "skill": "image-task-chain",
+          "version": "1.5",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "把刚才那张图的背景改成雨夜",
+                "refs": [
+                  1
+                ]
+              },
+              {
+                "op": "upscale",
+                "quote": "放大",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": false
+        },
+        {
+          "text": "把刚才那张图的背景改成雨夜，然后放大",
+          "skill": "image-task-chain",
+          "version": "1.5",
+          "enabled": false,
+          "value": {
+            "error": "LOCAL_AI_INFERENCE_FAILED"
+          },
+          "passed": false
+        },
+        {
+          "text": "把这张照片重绘为铅笔素描",
+          "skill": "image-task-chain",
+          "version": "1.5",
+          "enabled": false,
+          "value": {
+            "error": "LOCAL_AI_INFERENCE_FAILED"
+          },
+          "passed": false
+        },
+        {
+          "text": "把这张照片重绘为铅笔素描",
+          "skill": "image-task-chain",
+          "version": "1.5",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "generate",
+                "quote": "把这张照片重绘为铅笔素描",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": false
+        },
+        {
+          "text": "我刚才定的是哪个时间？",
+          "skill": "personal-conversation",
+          "version": "1.2",
+          "enabled": true,
+          "value": {
+            "kind": "chat",
+            "reply": "你刚才说：「我把集合时间定在七点半。」"
+          },
+          "passed": true
+        },
+        {
+          "text": "我刚才定的是哪个时间？",
+          "skill": "personal-conversation",
+          "version": "1.2",
+          "enabled": false,
+          "value": {
+            "kind": "chat",
+            "reply": "七点半。"
+          },
+          "passed": true
+        },
+        {
+          "text": "查一下东京明天的天气",
+          "skill": "weather-lookup",
+          "version": "1.0",
+          "enabled": false,
+          "value": {
+            "kind": "external",
+            "reply": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "查一下东京明天的天气",
+          "skill": "weather-lookup",
+          "version": "1.0",
+          "enabled": true,
+          "value": {
+            "kind": "external",
+            "reply": ""
+          },
+          "passed": true
+        }
+      ],
+      "desktop": [
+        {
+          "text": "想看上次聊天",
+          "reply": "记忆查询暂未开放。",
+          "state": "error",
+          "calls": [],
+          "drafts": [],
+          "passed": true
+        },
+        {
+          "text": "罗马古建筑",
+          "reply": "网络查询暂时没有可用结果，可稍后重试。",
+          "state": "error",
+          "calls": [
+            "搜索"
+          ],
+          "drafts": [
+            {
+              "hint": "search",
+              "skill": "public-lookup",
+              "version": "1.0",
+              "loaded": true,
+              "value": {
+                "kind": "external",
+                "reply": ""
+              }
+            }
+          ],
+          "passed": true
+        },
+        {
+          "text": "这个文件说了什么？",
+          "reply": "模拟文字回执",
+          "state": "answer",
+          "calls": [
+            "文字"
+          ],
+          "drafts": [],
+          "passed": true
+        },
+        {
+          "text": "把图1的上衣换成图4的夹克",
+          "reply": "本轮收到 1 张附件，找不到图4。请补图或说明要用哪一张。",
+          "state": "error",
+          "calls": [],
+          "drafts": [],
+          "passed": true
+        },
+        {
+          "text": "接取任务与任务链怎么打开",
+          "reply": "托盘右键绯月，选择「任务 → 接取任务与任务链」。",
+          "state": "answer",
+          "calls": [],
+          "drafts": [
+            {
+              "hint": "auto",
+              "skill": "task-lifecycle",
+              "version": "1.0",
+              "loaded": true,
+              "value": {
+                "kind": "chat",
+                "reply": "绯月，请告诉我您想做什么？"
+              }
+            }
+          ],
+          "passed": true
+        },
+        {
+          "text": "动画与声音怎么打开",
+          "reply": "托盘右键绯月，选择「设置与维护 → 动画与声音」。",
+          "state": "answer",
+          "calls": [],
+          "drafts": [
+            {
+              "hint": "auto",
+              "skill": "desktop-controls",
+              "version": "1.1",
+              "loaded": true,
+              "value": {
+                "kind": "chat",
+                "reply": "动画与声音的菜单在「设置与维护」里，点击「桌面精灵」即可开启。"
+              }
+            }
+          ],
+          "passed": true
+        },
+        {
+          "text": "提醒检查 · 待执行怎么打开",
+          "reply": "有待执行的检查时，托盘右键绯月，选择「任务 → 提醒检查 · 待执行」。",
+          "state": "answer",
+          "calls": [],
+          "drafts": [
+            {
+              "hint": "auto",
+              "skill": "reminder-review",
+              "version": "1.1",
+              "loaded": true,
+              "value": {
+                "kind": "chat",
+                "reply": ""
+              }
+            }
+          ],
+          "passed": true
+        },
+        {
+          "text": "服务器任务：请原文回显「海风」",
+          "reply": "已取消服务器任务。",
+          "state": "answer",
+          "calls": [
+            "GET /api/tasklist",
+            "取消 海风"
+          ],
+          "drafts": [
+            {
+              "hint": "serverTask",
+              "skill": "server-pc-task",
+              "version": "1.1",
+              "loaded": true,
+              "value": {
+                "type": "mock.echo",
+                "params": {
+                  "value": "海风"
+                }
+              }
+            }
+          ],
+          "passed": true
+        }
+      ],
+      "imageChecks": [
+        {
+          "text": "保留脸，换成图2的雨衣，最后高清放大",
+          "route": true,
+          "via": "literalPlan",
+          "compiled": {
+            "version": "1.5",
+            "workflowVersion": "1.2",
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "保留脸，换成图2的雨衣",
+                "refs": [
+                  2
+                ],
+                "base": "attachment:1"
+              },
+              {
+                "op": "upscale",
+                "quote": "高清放大",
+                "refs": [],
+                "base": "previous"
+              }
+            ]
+          },
+          "passed": true
+        },
+        {
+          "text": "把图1的上衣换成图2的夹克，保留脸和背景",
+          "route": true,
+          "via": "literalPlan",
+          "compiled": {
+            "version": "1.5",
+            "workflowVersion": "1.2",
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "把图1的上衣换成图2的夹克，保留脸和背景",
+                "refs": [
+                  2
+                ],
+                "base": "attachment:1"
+              }
+            ]
+          },
+          "passed": true
+        },
+        {
+          "text": "给我画一幅雪地小屋，不要高清放大",
+          "route": true,
+          "via": "literalPlan",
+          "compiled": {
+            "version": "1.5",
+            "workflowVersion": "1.2",
+            "steps": [
+              {
+                "op": "generate",
+                "quote": "给我画一幅雪地小屋",
+                "refs": [],
+                "base": null
+              }
+            ]
+          },
+          "passed": true
+        },
+        {
+          "text": "把刚才那张图的背景改成雨夜，然后放大",
+          "route": true,
+          "via": "literalPlan",
+          "compiled": {
+            "version": "1.5",
+            "workflowVersion": "1.2",
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "把刚才那张图的背景改成雨夜",
+                "refs": [],
+                "base": "prior-result"
+              },
+              {
+                "op": "upscale",
+                "quote": "放大",
+                "refs": [],
+                "base": "previous"
+              }
+            ]
+          },
+          "passed": true
+        },
+        {
+          "text": "把这张照片重绘为铅笔素描",
+          "route": true,
+          "via": "literalPlan",
+          "compiled": {
+            "version": "1.5",
+            "workflowVersion": "1.2",
+            "steps": [
+              {
+                "op": "img2img",
+                "quote": "把这张照片重绘为铅笔素描",
+                "refs": [],
+                "base": "attachment:1"
+              }
+            ]
+          },
+          "passed": true
+        }
+      ]
+    },
+    "5": {
+      "round": 5,
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "rows": [
+        {
+          "text": "把这张照片改成水彩画风",
+          "expected": "排队并报告完成",
+          "modelCalls": [
+            {
+              "steps": [
+                {
+                  "op": "generate",
+                  "quote": "把这张照片改成水彩画风",
+                  "refs": []
+                }
+              ],
+              "question": ""
+            }
+          ],
+          "queues": 0,
+          "skillVersion": "1.5",
+          "reply": "步骤与原指令未能对应，请分句说明需要的图像操作。",
+          "outcome": "可执行任务被拦下",
+          "passed": false
+        },
+        {
+          "text": "保留脸，换成图2的雨衣并放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [
+            {
+              "steps": [
+                {
+                  "op": "edit",
+                  "quote": "换成图2的雨衣",
+                  "refs": [
+                    2
+                  ]
+                },
+                {
+                  "op": "upscale",
+                  "quote": "放大",
+                  "refs": []
+                }
+              ],
+              "question": ""
+            }
+          ],
+          "queues": 0,
+          "skillVersion": "1.5",
+          "reply": "编辑步骤漏掉了「保留脸」，请核对后重新描述。",
+          "outcome": "可执行任务被拦下",
+          "passed": false
+        },
+        {
+          "text": "用第二张图的围巾修改第一张图，保留表情",
+          "expected": "排队并报告完成",
+          "modelCalls": [
+            {
+              "steps": [
+                {
+                  "op": "edit",
+                  "quote": "用第二张图的围巾修改第一张图，保留表情",
+                  "refs": [
+                    2
+                  ]
+                },
+                {
+                  "op": "upscale",
+                  "quote": "放大",
+                  "refs": []
+                }
+              ],
+              "question": ""
+            }
+          ],
+          "queues": 0,
+          "skillVersion": "1.5",
+          "reply": "步骤与原指令未能对应，请分句说明需要的图像操作。",
+          "outcome": "可执行任务被拦下",
+          "passed": false
+        },
+        {
+          "text": "把图1的披风换成图4的披风",
+          "expected": "澄清",
+          "modelCalls": [],
+          "queues": 0,
+          "reply": "本轮收到 2 张附件，找不到图4。请补图或说明要用哪一张。",
+          "outcome": "澄清",
+          "passed": true
+        }
+      ]
+    },
+    "6": {
+      "round": 6,
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "rows": [
+        {
+          "text": "把这张照片改成水彩画风",
+          "expected": "排队并报告完成",
+          "modelCalls": [
+            {
+              "steps": [
+                {
+                  "op": "img2img",
+                  "quote": "把这张照片改成水彩画风",
+                  "refs": []
+                }
+              ],
+              "question": ""
+            }
+          ],
+          "queues": 1,
+          "skillVersion": "1.6",
+          "plan": [
+            {
+              "op": "img2img",
+              "quote": "把这张照片改成水彩画风",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 图生图",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "保留脸，换成图2的雨衣并放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.6",
+          "plan": [
+            {
+              "op": "edit",
+              "quote": "保留脸，换成图2的雨衣",
+              "refs": [
+                2
+              ],
+              "base": "attachment:1"
+            },
+            {
+              "op": "upscale",
+              "quote": "放大",
+              "refs": [],
+              "base": "previous"
+            }
+          ],
+          "reply": "已排队 · 定向编辑 → 高清放大",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "用第二张图的围巾修改第一张图，保留表情",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.6",
+          "plan": [
+            {
+              "op": "edit",
+              "quote": "用第二张图的围巾修改第一张图，保留表情",
+              "refs": [
+                2
+              ],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 定向编辑",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "把图1的披风换成图4的披风",
+          "expected": "澄清",
+          "modelCalls": [],
+          "queues": 0,
+          "reply": "本轮收到 2 张附件，找不到图4。请补图或说明要用哪一张。",
+          "outcome": "澄清",
+          "passed": true
+        },
+        {
+          "text": "请把这张照片改成素描风格，不用放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [
+            {
+              "steps": [
+                {
+                  "op": "img2img",
+                  "quote": "请把这张照片改成素描风格",
+                  "refs": []
+                }
+              ],
+              "question": ""
+            }
+          ],
+          "queues": 1,
+          "skillVersion": "1.6",
+          "plan": [
+            {
+              "op": "img2img",
+              "quote": "请把这张照片改成素描风格",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 图生图",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        }
+      ]
+    },
+    "7": {
+      "round": 7,
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "rows": [
+        {
+          "text": "画一只海豹，然后换上图1的蓝帽子，再换成图2的绿围巾，最后放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.6",
+          "plan": [
+            {
+              "op": "generate",
+              "quote": "画一只海豹",
+              "refs": [],
+              "base": null
+            },
+            {
+              "op": "edit",
+              "quote": "换上图1的蓝帽子",
+              "refs": [
+                1
+              ],
+              "base": "previous"
+            },
+            {
+              "op": "edit",
+              "quote": "换成图2的绿围巾",
+              "refs": [
+                2
+              ],
+              "base": "previous"
+            },
+            {
+              "op": "upscale",
+              "quote": "放大",
+              "refs": [],
+              "base": "previous"
+            }
+          ],
+          "reply": "已排队 · 文字生图 → 定向编辑 → 定向编辑 → 高清放大",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "保留表情，把图一的背景换成雪原并高清放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.6",
+          "plan": [
+            {
+              "op": "edit",
+              "quote": "保留表情，把图一的背景换成雪原",
+              "refs": [],
+              "base": "attachment:1"
+            },
+            {
+              "op": "upscale",
+              "quote": "高清放大",
+              "refs": [],
+              "base": "previous"
+            }
+          ],
+          "reply": "已排队 · 定向编辑 → 高清放大",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "把图1的衣服换成第三张图的风衣",
+          "expected": "澄清",
+          "modelCalls": [],
+          "queues": 0,
+          "reply": "本轮收到 2 张附件，找不到图3。请补图或说明要用哪一张。",
+          "outcome": "澄清",
+          "passed": true
+        },
+        {
+          "text": "图片怎么换背景再放大？",
+          "expected": "问答",
+          "modelCalls": [],
+          "queues": 0,
+          "outcome": "问答",
+          "passed": true
+        },
+        {
+          "text": "把图2的背景换成沙漠",
+          "expected": "澄清",
+          "modelCalls": [],
+          "queues": 0,
+          "reply": "本次的第一张图是底图。如果要修改图2，请将它作为第一张上传。",
+          "outcome": "澄清",
+          "passed": true
+        },
+        {
+          "text": "把这张照片改成油画风格",
+          "expected": "报告失败",
+          "modelCalls": [
+            {
+              "steps": [
+                {
+                  "op": "img2img",
+                  "quote": "把这张照片改成油画风格",
+                  "refs": []
+                }
+              ],
+              "question": ""
+            }
+          ],
+          "queues": 1,
+          "skillVersion": "1.6",
+          "plan": [
+            {
+              "op": "img2img",
+              "quote": "把这张照片改成油画风格",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 图生图",
+          "terminal": "第 1 步「图生图」失败：模拟显存不足",
+          "outcome": "报告失败",
+          "passed": true
+        }
+      ]
+    },
+    "8": {
+      "round": 8,
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "rows": [
+        {
+          "text": "把这张港口照改成铅笔素描风格",
+          "expected": "排队并报告完成",
+          "modelCalls": [
+            {
+              "steps": [
+                {
+                  "op": "img2img",
+                  "quote": "把这张港口照改成铅笔素描风格",
+                  "refs": []
+                }
+              ],
+              "question": ""
+            }
+          ],
+          "queues": 1,
+          "skillVersion": "1.6",
+          "withoutSkill": {
+            "steps": [
+              {
+                "op": "img2img",
+                "quote": "把这张港口照改成铅笔素描风格",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "plan": [
+            {
+              "op": "img2img",
+              "quote": "把这张港口照改成铅笔素描风格",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 图生图",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "把照片里雨伞的花纹改成水彩风格，只修改雨伞，其他部分保持原样",
+          "expected": "排队并报告完成",
+          "modelCalls": [
+            {
+              "steps": [
+                {
+                  "op": "img2img",
+                  "quote": "把照片里雨伞的花纹改成水彩风格，只修改雨伞，其他部分保持原样",
+                  "refs": []
+                }
+              ],
+              "question": ""
+            }
+          ],
+          "queues": 1,
+          "skillVersion": "1.6",
+          "withoutSkill": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "把照片里雨伞的花纹改成水彩风格，只修改雨伞，其他部分保持原样",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "plan": [
+            {
+              "op": "img2img",
+              "quote": "把照片里雨伞的花纹改成水彩风格，只修改雨伞，其他部分保持原样",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 图生图",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": false
+        },
+        {
+          "text": "照着图3的发型修改图1，保留眼镜；最后高清放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.6",
+          "plan": [
+            {
+              "op": "edit",
+              "quote": "照着图3的发型修改图1，保留眼镜",
+              "refs": [
+                3
+              ],
+              "base": "attachment:1"
+            },
+            {
+              "op": "upscale",
+              "quote": "高清放大",
+              "refs": [],
+              "base": "previous"
+            }
+          ],
+          "reply": "已排队 · 定向编辑 → 高清放大",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "换成参考图里的衣服",
+          "expected": "澄清",
+          "modelCalls": [],
+          "queues": 0,
+          "reply": "请说明底图和额外参考分别是第几张，用图号指定。",
+          "outcome": "澄清",
+          "passed": true
+        },
+        {
+          "text": "画一张古城夜景，不要放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.6",
+          "plan": [
+            {
+              "op": "generate",
+              "quote": "画一张古城夜景",
+              "refs": [],
+              "base": null
+            }
+          ],
+          "reply": "已排队 · 文字生图",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "不要生成海报，也别放大图片",
+          "expected": "问答",
+          "modelCalls": [],
+          "queues": 0,
+          "outcome": "问答",
+          "passed": true
+        }
+      ]
+    },
+    "8-final": {
+      "round": 8,
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "rows": [
+        {
+          "text": "把这张港口照改成铅笔素描风格",
+          "expected": "排队并报告完成",
+          "modelCalls": [
+            {
+              "steps": [
+                {
+                  "op": "img2img",
+                  "quote": "把这张港口照改成铅笔素描风格",
+                  "refs": []
+                }
+              ],
+              "question": ""
+            }
+          ],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "withoutSkill": {
+            "steps": [
+              {
+                "op": "img2img",
+                "quote": "把这张港口照改成铅笔素描风格",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "plan": [
+            {
+              "op": "img2img",
+              "quote": "把这张港口照改成铅笔素描风格",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 图生图",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "把照片里雨伞的花纹改成水彩风格，只修改雨伞，其他部分保持原样",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "edit",
+              "quote": "把照片里雨伞的花纹改成水彩风格，只修改雨伞，其他部分保持原样",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 定向编辑",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "照着图3的发型修改图1，保留眼镜；最后高清放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "edit",
+              "quote": "照着图3的发型修改图1，保留眼镜",
+              "refs": [
+                3
+              ],
+              "base": "attachment:1"
+            },
+            {
+              "op": "upscale",
+              "quote": "高清放大",
+              "refs": [],
+              "base": "previous"
+            }
+          ],
+          "reply": "已排队 · 定向编辑 → 高清放大",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "换成参考图里的衣服",
+          "expected": "澄清",
+          "modelCalls": [],
+          "queues": 0,
+          "reply": "请说明底图和额外参考分别是第几张，用图号指定。",
+          "outcome": "澄清",
+          "passed": true
+        },
+        {
+          "text": "画一张古城夜景，不要放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "generate",
+              "quote": "画一张古城夜景",
+              "refs": [],
+              "base": null
+            }
+          ],
+          "reply": "已排队 · 文字生图",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "不要生成海报，也别放大图片",
+          "expected": "问答",
+          "modelCalls": [],
+          "queues": 0,
+          "outcome": "问答",
+          "passed": true
+        },
+        {
+          "text": "把路灯的纹理改成版画风格，其余区域不动",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "edit",
+              "quote": "把路灯的纹理改成版画风格，其余区域不动",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 定向编辑",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "把图2高清放大",
+          "expected": "澄清",
+          "modelCalls": [],
+          "queues": 0,
+          "reply": "本次的第一张图是底图。如果要修改图2，请将它作为第一张上传。",
+          "outcome": "澄清",
+          "passed": true
+        }
+      ]
+    },
+    "regression": {
+      "round": "regression",
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "rows": [
+        {
+          "text": "把这张照片改成水彩画风",
+          "expected": "排队并报告完成",
+          "modelCalls": [
+            {
+              "steps": [
+                {
+                  "op": "img2img",
+                  "quote": "把这张照片改成水彩画风",
+                  "refs": []
+                }
+              ],
+              "question": ""
+            }
+          ],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "img2img",
+              "quote": "把这张照片改成水彩画风",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 图生图",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "保留脸，换成图2的雨衣并放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "edit",
+              "quote": "保留脸，换成图2的雨衣",
+              "refs": [
+                2
+              ],
+              "base": "attachment:1"
+            },
+            {
+              "op": "upscale",
+              "quote": "放大",
+              "refs": [],
+              "base": "previous"
+            }
+          ],
+          "reply": "已排队 · 定向编辑 → 高清放大",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "用第二张图的围巾修改第一张图，保留表情",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "edit",
+              "quote": "用第二张图的围巾修改第一张图，保留表情",
+              "refs": [
+                2
+              ],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 定向编辑",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "把图1的披风换成图4的披风",
+          "expected": "澄清",
+          "modelCalls": [],
+          "queues": 0,
+          "reply": "本轮收到 2 张附件，找不到图4。请补图或说明要用哪一张。",
+          "outcome": "澄清",
+          "passed": true
+        },
+        {
+          "text": "请把这张照片改成素描风格，不用放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [
+            {
+              "steps": [
+                {
+                  "op": "img2img",
+                  "quote": "请把这张照片改成素描风格",
+                  "refs": []
+                }
+              ],
+              "question": ""
+            }
+          ],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "img2img",
+              "quote": "请把这张照片改成素描风格",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 图生图",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "画一只海豹，然后换上图1的蓝帽子，再换成图2的绿围巾，最后放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "generate",
+              "quote": "画一只海豹",
+              "refs": [],
+              "base": null
+            },
+            {
+              "op": "edit",
+              "quote": "换上图1的蓝帽子",
+              "refs": [
+                1
+              ],
+              "base": "previous"
+            },
+            {
+              "op": "edit",
+              "quote": "换成图2的绿围巾",
+              "refs": [
+                2
+              ],
+              "base": "previous"
+            },
+            {
+              "op": "upscale",
+              "quote": "放大",
+              "refs": [],
+              "base": "previous"
+            }
+          ],
+          "reply": "已排队 · 文字生图 → 定向编辑 → 定向编辑 → 高清放大",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "保留表情，把图一的背景换成雪原并高清放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "edit",
+              "quote": "保留表情，把图一的背景换成雪原",
+              "refs": [],
+              "base": "attachment:1"
+            },
+            {
+              "op": "upscale",
+              "quote": "高清放大",
+              "refs": [],
+              "base": "previous"
+            }
+          ],
+          "reply": "已排队 · 定向编辑 → 高清放大",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "把图1的衣服换成第三张图的风衣",
+          "expected": "澄清",
+          "modelCalls": [],
+          "queues": 0,
+          "reply": "本轮收到 2 张附件，找不到图3。请补图或说明要用哪一张。",
+          "outcome": "澄清",
+          "passed": true
+        },
+        {
+          "text": "图片怎么换背景再放大？",
+          "expected": "问答",
+          "modelCalls": [],
+          "queues": 0,
+          "outcome": "问答",
+          "passed": true
+        },
+        {
+          "text": "把图2的背景换成沙漠",
+          "expected": "澄清",
+          "modelCalls": [],
+          "queues": 0,
+          "reply": "本次的第一张图是底图。如果要修改图2，请将它作为第一张上传。",
+          "outcome": "澄清",
+          "passed": true
+        },
+        {
+          "text": "把这张照片改成油画风格",
+          "expected": "报告失败",
+          "modelCalls": [
+            {
+              "steps": [
+                {
+                  "op": "img2img",
+                  "quote": "把这张照片改成油画风格",
+                  "refs": []
+                }
+              ],
+              "question": ""
+            }
+          ],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "img2img",
+              "quote": "把这张照片改成油画风格",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 图生图",
+          "terminal": "第 1 步「图生图」失败：模拟显存不足",
+          "outcome": "报告失败",
+          "passed": true
+        },
+        {
+          "text": "把这张港口照改成铅笔素描风格",
+          "expected": "排队并报告完成",
+          "modelCalls": [
+            {
+              "steps": [
+                {
+                  "op": "img2img",
+                  "quote": "把这张港口照改成铅笔素描风格",
+                  "refs": []
+                }
+              ],
+              "question": ""
+            }
+          ],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "withoutSkill": {
+            "steps": [
+              {
+                "op": "img2img",
+                "quote": "把这张港口照改成铅笔素描风格",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "plan": [
+            {
+              "op": "img2img",
+              "quote": "把这张港口照改成铅笔素描风格",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 图生图",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "把照片里雨伞的花纹改成水彩风格，只修改雨伞，其他部分保持原样",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "edit",
+              "quote": "把照片里雨伞的花纹改成水彩风格，只修改雨伞，其他部分保持原样",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 定向编辑",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "照着图3的发型修改图1，保留眼镜；最后高清放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "edit",
+              "quote": "照着图3的发型修改图1，保留眼镜",
+              "refs": [
+                3
+              ],
+              "base": "attachment:1"
+            },
+            {
+              "op": "upscale",
+              "quote": "高清放大",
+              "refs": [],
+              "base": "previous"
+            }
+          ],
+          "reply": "已排队 · 定向编辑 → 高清放大",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "换成参考图里的衣服",
+          "expected": "澄清",
+          "modelCalls": [],
+          "queues": 0,
+          "reply": "请说明底图和额外参考分别是第几张，用图号指定。",
+          "outcome": "澄清",
+          "passed": true
+        },
+        {
+          "text": "画一张古城夜景，不要放大",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "generate",
+              "quote": "画一张古城夜景",
+              "refs": [],
+              "base": null
+            }
+          ],
+          "reply": "已排队 · 文字生图",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "不要生成海报，也别放大图片",
+          "expected": "问答",
+          "modelCalls": [],
+          "queues": 0,
+          "outcome": "问答",
+          "passed": true
+        },
+        {
+          "text": "把路灯的纹理改成版画风格，其余区域不动",
+          "expected": "排队并报告完成",
+          "modelCalls": [],
+          "queues": 1,
+          "skillVersion": "1.7",
+          "plan": [
+            {
+              "op": "edit",
+              "quote": "把路灯的纹理改成版画风格，其余区域不动",
+              "refs": [],
+              "base": "attachment:1"
+            }
+          ],
+          "reply": "已排队 · 定向编辑",
+          "terminal": "已完成 512×512 图片。",
+          "outcome": "排队并报告完成",
+          "passed": true
+        },
+        {
+          "text": "把图2高清放大",
+          "expected": "澄清",
+          "modelCalls": [],
+          "queues": 0,
+          "reply": "本次的第一张图是底图。如果要修改图2，请将它作为第一张上传。",
+          "outcome": "澄清",
+          "passed": true
+        }
+      ]
+    },
+    "general-final": {
+      "round": 4,
+      "model": "Qwen3.5-0.8B-Q4_K_M.gguf",
+      "rows": [
+        {
+          "text": "保留脸，换成图2的雨衣，最后高清放大",
+          "skill": "image-task-chain",
+          "version": "1.7",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "保留脸，换成图2的雨衣",
+                "refs": [
+                  2
+                ]
+              },
+              {
+                "op": "upscale",
+                "quote": "高清放大",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "保留脸，换成图2的雨衣，最后高清放大",
+          "skill": "image-task-chain",
+          "version": "1.7",
+          "enabled": false,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "保留脸，换成图2的雨衣",
+                "refs": [
+                  2
+                ]
+              },
+              {
+                "op": "upscale",
+                "quote": "高清放大",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "把图1里的衬衣换成图3的外套",
+          "skill": "image-task-chain",
+          "version": "1.7",
+          "enabled": false,
+          "value": {
+            "steps": [],
+            "question": "本轮收到 2 张附件，找不到图3。请补图或说明要用哪一张。"
+          },
+          "passed": true
+        },
+        {
+          "text": "把图1里的衬衣换成图3的外套",
+          "skill": "image-task-chain",
+          "version": "1.7",
+          "enabled": true,
+          "value": {
+            "steps": [],
+            "question": "本轮收到 2 张附件，找不到图3。请补图或说明要用哪一张。"
+          },
+          "passed": true
+        },
+        {
+          "text": "把图1的上衣换成图2的夹克，保留脸和背景",
+          "skill": "image-task-chain",
+          "version": "1.7",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "把图1的上衣换成图2的夹克，保留脸和背景",
+                "refs": [
+                  2
+                ]
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "把图1的上衣换成图2的夹克，保留脸和背景",
+          "skill": "image-task-chain",
+          "version": "1.7",
+          "enabled": false,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "把图1的上衣换成图2的夹克，保留脸和背景",
+                "refs": [
+                  2
+                ]
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "给我画一幅雪地小屋，不要高清放大",
+          "skill": "image-task-chain",
+          "version": "1.7",
+          "enabled": false,
+          "value": {
+            "steps": [
+              {
+                "op": "generate",
+                "quote": "给我画一幅雪地小屋",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "给我画一幅雪地小屋，不要高清放大",
+          "skill": "image-task-chain",
+          "version": "1.7",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "generate",
+                "quote": "给我画一幅雪地小屋",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "把刚才那张图的背景改成雨夜，然后放大",
+          "skill": "image-task-chain",
+          "version": "1.7",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "把刚才那张图的背景改成雨夜",
+                "refs": []
+              },
+              {
+                "op": "upscale",
+                "quote": "放大",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "把刚才那张图的背景改成雨夜，然后放大",
+          "skill": "image-task-chain",
+          "version": "1.7",
+          "enabled": false,
+          "value": {
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "把刚才那张图的背景改成雨夜",
+                "refs": []
+              },
+              {
+                "op": "upscale",
+                "quote": "放大",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "把这张照片重绘为铅笔素描",
+          "skill": "image-task-chain",
+          "version": "1.7",
+          "enabled": false,
+          "value": {
+            "steps": [
+              {
+                "op": "img2img",
+                "quote": "把这张照片重绘为铅笔素描",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "把这张照片重绘为铅笔素描",
+          "skill": "image-task-chain",
+          "version": "1.7",
+          "enabled": true,
+          "value": {
+            "steps": [
+              {
+                "op": "img2img",
+                "quote": "把这张照片重绘为铅笔素描",
+                "refs": []
+              }
+            ],
+            "question": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "我刚才定的是哪个时间？",
+          "skill": "personal-conversation",
+          "version": "1.2",
+          "enabled": true,
+          "value": {
+            "kind": "chat",
+            "reply": "你刚才说：「我把集合时间定在七点半。」"
+          },
+          "passed": true
+        },
+        {
+          "text": "我刚才定的是哪个时间？",
+          "skill": "personal-conversation",
+          "version": "1.2",
+          "enabled": false,
+          "value": {
+            "kind": "chat",
+            "reply": "七点半。"
+          },
+          "passed": true
+        },
+        {
+          "text": "查一下东京明天的天气",
+          "skill": "weather-lookup",
+          "version": "1.0",
+          "enabled": false,
+          "value": {
+            "kind": "external",
+            "reply": ""
+          },
+          "passed": true
+        },
+        {
+          "text": "查一下东京明天的天气",
+          "skill": "weather-lookup",
+          "version": "1.0",
+          "enabled": true,
+          "value": {
+            "kind": "external",
+            "reply": ""
+          },
+          "passed": true
+        }
+      ],
+      "desktop": [
+        {
+          "text": "想看上次聊天",
+          "reply": "记忆查询暂未开放。",
+          "state": "error",
+          "calls": [],
+          "drafts": [],
+          "passed": true
+        },
+        {
+          "text": "罗马古建筑",
+          "reply": "网络查询暂时没有可用结果，可稍后重试。",
+          "state": "error",
+          "calls": [
+            "搜索"
+          ],
+          "drafts": [
+            {
+              "hint": "search",
+              "skill": "public-lookup",
+              "version": "1.0",
+              "loaded": true,
+              "value": {
+                "kind": "external",
+                "reply": ""
+              }
+            }
+          ],
+          "passed": true
+        },
+        {
+          "text": "这个文件说了什么？",
+          "reply": "模拟文字回执",
+          "state": "answer",
+          "calls": [
+            "文字"
+          ],
+          "drafts": [],
+          "passed": true
+        },
+        {
+          "text": "把图1的上衣换成图4的夹克",
+          "reply": "本轮收到 1 张附件，找不到图4。请补图或说明要用哪一张。",
+          "state": "error",
+          "calls": [],
+          "drafts": [],
+          "passed": true
+        },
+        {
+          "text": "接取任务与任务链怎么打开",
+          "reply": "托盘右键绯月，选择「任务 → 接取任务与任务链」。",
+          "state": "answer",
+          "calls": [],
+          "drafts": [
+            {
+              "hint": "auto",
+              "skill": "task-lifecycle",
+              "version": "1.1",
+              "loaded": true,
+              "value": {
+                "kind": "chat",
+                "reply": "老公，这个文件是关于您刚才提到的‘接取任务与任务链怎么打开’的说明。既然您想先了解具体内容，那我先帮您看看。不过，您刚才提到要‘接取任务’，我这边暂时还没收到具体的任务指令呢。您想"
+              }
+            }
+          ],
+          "passed": true
+        },
+        {
+          "text": "动画与声音怎么打开",
+          "reply": "托盘右键绯月，选择「设置与维护 → 动画与声音」。",
+          "state": "answer",
+          "calls": [],
+          "drafts": [
+            {
+              "hint": "auto",
+              "skill": "desktop-controls",
+              "version": "1.1",
+              "loaded": true,
+              "value": {
+                "kind": "chat",
+                "reply": "动画与声音功能在「设置与维护」中可开启，具体路径需查看「桌面精灵」的「声音与动画」选项。"
+              }
+            }
+          ],
+          "passed": true
+        },
+        {
+          "text": "提醒检查 · 待执行怎么打开",
+          "reply": "有待执行的检查时，托盘右键绯月，选择「任务 → 提醒检查 · 待执行」。",
+          "state": "answer",
+          "calls": [],
+          "drafts": [
+            {
+              "hint": "auto",
+              "skill": "reminder-review",
+              "version": "1.1",
+              "loaded": true,
+              "value": {
+                "kind": "chat",
+                "reply": ""
+              }
+            }
+          ],
+          "passed": true
+        },
+        {
+          "text": "服务器任务：请原文回显「海风」",
+          "reply": "已取消服务器任务。",
+          "state": "answer",
+          "calls": [
+            "GET /api/tasklist",
+            "取消 海风"
+          ],
+          "drafts": [
+            {
+              "hint": "serverTask",
+              "skill": "server-pc-task",
+              "version": "1.2",
+              "loaded": true,
+              "value": {
+                "type": "mock.echo",
+                "params": {
+                  "value": "海风"
+                }
+              }
+            }
+          ],
+          "passed": true
+        }
+      ],
+      "imageChecks": [
+        {
+          "text": "保留脸，换成图2的雨衣，最后高清放大",
+          "route": true,
+          "via": "literalPlan",
+          "compiled": {
+            "version": "1.7",
+            "workflowVersion": "1.2",
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "保留脸，换成图2的雨衣",
+                "refs": [
+                  2
+                ],
+                "base": "attachment:1"
+              },
+              {
+                "op": "upscale",
+                "quote": "高清放大",
+                "refs": [],
+                "base": "previous"
+              }
+            ]
+          },
+          "passed": true
+        },
+        {
+          "text": "把图1的上衣换成图2的夹克，保留脸和背景",
+          "route": true,
+          "via": "literalPlan",
+          "compiled": {
+            "version": "1.7",
+            "workflowVersion": "1.2",
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "把图1的上衣换成图2的夹克，保留脸和背景",
+                "refs": [
+                  2
+                ],
+                "base": "attachment:1"
+              }
+            ]
+          },
+          "passed": true
+        },
+        {
+          "text": "给我画一幅雪地小屋，不要高清放大",
+          "route": true,
+          "via": "literalPlan",
+          "compiled": {
+            "version": "1.7",
+            "workflowVersion": "1.2",
+            "steps": [
+              {
+                "op": "generate",
+                "quote": "给我画一幅雪地小屋",
+                "refs": [],
+                "base": null
+              }
+            ]
+          },
+          "passed": true
+        },
+        {
+          "text": "把刚才那张图的背景改成雨夜，然后放大",
+          "route": true,
+          "via": "literalPlan",
+          "compiled": {
+            "version": "1.7",
+            "workflowVersion": "1.2",
+            "steps": [
+              {
+                "op": "edit",
+                "quote": "把刚才那张图的背景改成雨夜",
+                "refs": [],
+                "base": "prior-result"
+              },
+              {
+                "op": "upscale",
+                "quote": "放大",
+                "refs": [],
+                "base": "previous"
+              }
+            ]
+          },
+          "passed": true
+        },
+        {
+          "text": "把这张照片重绘为铅笔素描",
+          "route": true,
+          "via": "literalPlan",
+          "compiled": {
+            "version": "1.7",
+            "workflowVersion": "1.2",
+            "steps": [
+              {
+                "op": "img2img",
+                "quote": "把这张照片重绘为铅笔素描",
+                "refs": [],
+                "base": "attachment:1"
+              }
+            ]
+          },
+          "passed": true
+        }
+      ]
+    }
+  }
+}

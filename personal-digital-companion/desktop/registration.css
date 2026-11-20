@@ -36,3 +36,12 @@ ul { margin: 4px 0; padding-inline-start: 22px; overflow-wrap: anywhere; }
 .receipt-title { margin: 4px 0 0; font-weight: 650; }
 .receipt-text { margin: 4px 0 0; }
 .receipt-meta { margin: 4px 0 0; color: light-dark(#4e5359, #b4bac1); font-size: .82rem; }
+#recordFields,#recordSource,#recordStatus { white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.6 }
+#recordFields { margin-top:0 }
+#recordStatus { font-weight:600 }
+.review-actions { flex:none;display:flex;gap:8px;justify-content:flex-end;padding:10px 16px;border-top:1px solid var(--fy-line) }
+#prompt{font-size:1.08rem;margin:0 0 8px}#recordFields:empty,#missing:empty,#bulk:empty{display:none}
+#editor{margin-top:14px}#editor label{font:inherit}#bulk label,#missing label{display:grid;grid-template-columns:minmax(8em,1fr) minmax(6em,1.2fr);align-items:center;gap:8px;margin:5px 0}
+#editor input:not([type=file]){font:inherit;width:100%;min-width:0;box-sizing:border-box;padding:4px}
+#missing{padding-inline-start:24px}#thumb{max-width:140px;max-height:96px;margin-top:6px}#filename{overflow-wrap:anywhere}
+.review-actions{flex-wrap:wrap}#recordSource,#filename{color:var(--fy-muted)}

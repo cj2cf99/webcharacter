@@ -1,12 +1,14 @@
 # 个人精灵任务API与本地执行
 
+2026-11-20 任务派发更新。空闲桌面每 15 分钟扫描并自动接取一项目标为本机或 `all` 的任务。运动登记由抢领成功的电脑发起，业务端生成记录时间和回执。详见 [任务获取交接](../docs/TASK_DISPATCH_HANDOFF.md)。
+
 每日日志使用 `POST /api/daily-logs` 生成、`GET /api/daily-logs` 按日期读取。接口契约、关键词查询预留、本地命令和配置见[每日日志 API](../docs/DAILY_LOG_API.md)。
 
 2026-11-18 截图问答接口与云端完成：`POST /api/assistant/screen-question`（主站候选`/api/companion/assistant/screen-question`）。传question及一张PNG/JPEG Base64；固定返回`{ok:true,answer}`或`{ok:false,error:{code,message,retryable}}`。只调用Cloudflare视觉能力，不读写D1/生成task。11项专项、全套119项通过，第2轮复核通过。字段、限额、错误表、认证、配置和PowerShell示例统一见 [SCREEN_QA_API.md](../docs/SCREEN_QA_API.md)。精灵端暂缓；无真实截图/模型/部署。现有wrangler.jsonc未开启远程AI binding，缺视觉能力返回503 AI_NOT_CONFIGURED。
 
 2026-11-18 链式增量：已实现最多5节点、显式领取、所有任务共用每终端2名额、全部祖先依赖、失败继续/停止/跳过、强制换终端新轮及旧结果归档。poller只读，不自动领取。用户确认当前中断节点“放弃”即跳过，已实现并经第2轮复核通过；主会话独立108项测试与三桌面回归通过。见 [设计](../docs/AGENT_CHAIN_DESIGN.md)、[接口](../docs/AGENT_CHAIN_API_HANDOFF.md)、[主复核](../docs/reviews/AGENT_CHAIN_MAIN_REVIEW_2026-11-18.md)。下方各组相反范围是历史。截图问答仅整理需求，尚未开发。
 
-第八九组扩展准备完成：`POST /api/assistant/message`仅产生Cloudflare文字/任务提案，显式确认后才创建；主站候选挂载`/api/companion/*`复用主站authorizer与共享AI并使用COMPANION_DB。PC待领取清单与桌面每15秒取任务已接线，复用原执行/回传；默认正式handlers仍为空。89项Agent测试、三项桌面回归通过，联合第3轮复核通过。[设计](../docs/AGENT_BATCH_08_09_DESIGN.md) / [任务获取交接](../docs/TASK_DISPATCH_HANDOFF.md) / [主审核](../docs/reviews/AGENT_BATCH_08_09_MAIN_REVIEW_2026-11-18.md)。主站真实集成、机器Access、真实AI及花园/随手记模板验证留第十组，未部署。
+第八九组扩展准备完成：`POST /api/assistant/message`仅产生Cloudflare文字/任务提案，显式确认后才创建；主站候选挂载`/api/companion/*`复用主站authorizer与共享AI并使用COMPANION_DB。PC待领取清单与桌面轮询已接线（现按 15 分钟间隔，仅空闲时查询），复用原执行/回传；默认正式handlers仍为空。89项Agent测试、三项桌面回归通过，联合第3轮复核通过。[设计](../docs/AGENT_BATCH_08_09_DESIGN.md) / [任务获取交接](../docs/TASK_DISPATCH_HANDOFF.md) / [主审核](../docs/reviews/AGENT_BATCH_08_09_MAIN_REVIEW_2026-11-18.md)。主站真实集成、机器Access、真实AI及花园/随手记模板验证留第十组，未部署。
 
 第七组完成桌面生命周期接线：复用身份/SQLite、执行中退出二次确认、中断任务放弃/重做/稍后，原记录保留；已完成只补传。主会话第2轮复核通过，72/72 Agent测试及三项桌面回归通过。[设计](../docs/AGENT_BATCH_07_DESIGN.md) / [主审核](../docs/reviews/AGENT_BATCH_07_MAIN_REVIEW_2026-11-18.md)。真实Windows弹框效果未验收，未启动服务或部署。
 

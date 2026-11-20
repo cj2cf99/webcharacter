@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {resolve} from 'node:path';
 import {mkdir} from 'node:fs/promises';
 import {attachWeather} from '../desktop/weather-host.mjs';
+import {createReminderChecks} from '../desktop/reminder-checks.mjs';
+import {tokyoDay} from '../desktop/conversation-history.mjs';
 import {loadWeatherAuth} from '../desktop/weather-credentials.mjs';
 import {loadCloudConnection} from '../desktop/cloud-connection.mjs';
 
@@ -25,7 +27,7 @@ async function run() {
         const zone = japan ? 'Asia/Tokyo' : 'Asia/Shanghai';
         const date = new Intl.DateTimeFormat('sv-SE',{timeZone:zone}).format(Date.now());
         const start = date + (japan ? 'T00:00+09:00' : 'T00:00+08:00');
-        return Response.json({days:[{forecastStartTime:start,forecastEndTime:new Date(Date.parse(start)+86400000).toISOString(),temperatureMin:{unit:'°C',value:2}}]});
+        return Response.json({days:[{forecastStartTime:start,forecastEndTime:new Date(Date.parse(start)+86400000).toISOString(),temperatureMin:{unit:'°C',value:2},temperatureMax:{unit:'°C',value:17}}]});
       }
       if (kind !== 'alerts') return Response.json([]);
       if (place === 'kokurakita') return Response.json([{warning:{class20Items:[{areaCode:'4010000',kinds:[{code:'03',status:'発表'}]}]}}]);
@@ -49,10 +51,14 @@ async function run() {
     on() {}
     show() { notifications.push(this.value); }
   }
+  const requestTimes=[],checks=createReminderChecks({profile,isBusy:()=>false,handlers:{weather:()=>host.check()}});
   const host = attachWeather({...electron, Notification: ObservedNotification},
-    {root, bundle: resolve(root, 'output/desktop-bundle'), profile, request, background: true, visible: false});
+    {root, bundle: resolve(root, 'output/desktop-bundle'), profile, background: true, visible: false,
+      checks,recordCheck:checks.record,request: (...args) => { requestTimes.push(Date.now()); return request(...args); }});
   try {
-    await host.start();
+    const startupTime=Date.now();
+    checks.start();
+    assert.equal(requestTimes.length,0,'启动不发自动天气请求');
     await host.open();
     const panel = host.panel;
     const dom = expression => panel.webContents.executeJavaScript(expression);
@@ -66,20 +72,33 @@ async function run() {
     };
     await until("document.querySelectorAll('article').length === 3 && document.querySelector('#places').ariaBusy === 'false'");
     const result = await dom('window.feiyueWeather.get()');
+    assert.equal(notifications.length,0,'首分钟手动查询可读，自动提醒仍在等待');
+    const manualRequests=requestTimes.length;
+    while(requestTimes.length===manualRequests && Date.now()-startupTime<75_000)
+      await new Promise(resolve=>setTimeout(resolve,100));
+    const firstCheckDelay=requestTimes[manualRequests]-startupTime;
+    assert.ok(firstCheckDelay>=60_000,'自动检查应在启动满一分钟后发起');
+    await until('window.feiyueWeather.get().then(data=>!data.busy)');
+    console.log('首次自动天气检查在启动后 '+(firstCheckDelay/1000).toFixed(1)+' 秒发起。');
     assert.deepEqual(result.rows.map(row => [row.current.state, row.alerts.state]), Array.from({length: 3}, () => ['ready', 'ready']));
     assert.ok(result.rows.every(row => row.minimum.state === 'ready'));
     assert.equal(result.rows[0].japan.tracks.state, 'ready');
     assert.equal(result.rows[0].japan.bulletins.state, 'ready');
     assert.ok(notifications.length <= 1);
     if (isolated) {
-      assert.equal(notifications.length,1);
-      assert.equal(notifications[0].title,'绯月 · 三地天气与警报');
-      const lines = notifications[0].body.split('\n');
+      const log=checks.read(tokyoDay(Date.now()));
+      const places=log.events.filter(row=>row.project.startsWith('天气 · '));
+      assert.equal(places.length,3,'首次自动检查为每个地点保留一条检查回执');
+      assert.ok(places.every(row=>row.status==='已检查'&&row.detail.includes('全天 2～17°C')));
+      assert.ok(Math.abs(log.nextWeatherAt-checks.weatherState().lastCheck-3600_000)<2000);
+      assert.equal(notifications.length,0,'不弹系统通知');
+      const notices=checks.notices();assert.equal(notices.unread,1);
+      const lines = notices.events[0].body.split('\n');
       assert.equal(lines.length,3);
       for (const [index, row] of result.rows.entries()) {
         assert.ok(lines[index].startsWith(row.name));
-        assert.match(lines[index], /小雨 12°C/);
-        assert.match(lines[index], index === 0 ? /大雨.*警報/ : /暂无生效预警/);
+        assert.doesNotMatch(lines[index], /小雨|暂无生效预警/);
+        if(index===0)assert.match(lines[index],/大雨.*警報/);
         assert.match(lines[index], /最低 2°C/);
       }
     }
@@ -106,6 +125,7 @@ async function run() {
     }))));
   } finally {
     host.close();
+    checks.close();
   }
 }
 run().then(() => electron.app.exit(0), error => {

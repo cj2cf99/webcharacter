@@ -55,6 +55,11 @@ export function initializeDatabase(sqlite) {
   if (!sqlite.prepare('PRAGMA table_info(chains)').all().some(column => column.name === 'submission_fingerprint')) {
     sqlite.exec(readFileSync(new URL('../migrations/009-chain-submissions.sql', import.meta.url), 'utf8'));
   }
+  if(!sqlite.prepare('PRAGMA table_info(tasks)').all().some(c=>c.name==='dispatch_all')){
+    sqlite.exec(readFileSync(new URL('../migrations/014-pc-dispatch.sql',import.meta.url),'utf8'));
+  }
+  if(!sqlite.prepare('PRAGMA table_info(chains)').all().some(c=>c.name==='serial_pc'))
+    sqlite.exec(readFileSync(new URL('../migrations/015-serial-pc.sql',import.meta.url),'utf8'));
   const chainSql = sqlite.prepare("SELECT sql FROM sqlite_schema WHERE name='chain_nodes'").get().sql;
   if (chainSql.includes('position BETWEEN 0 AND 4')) {
     const migration = readFileSync(new URL('../migrations/010-temporary-chain-positions.sql', import.meta.url), 'utf8');

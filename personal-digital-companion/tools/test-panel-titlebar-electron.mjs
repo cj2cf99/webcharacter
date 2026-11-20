@@ -8,14 +8,16 @@ import {createReminderReviewFlow} from '../desktop/reminder-review-flow.mjs';
 import {attachRegistration} from '../desktop/registration-host.mjs';
 import {attachWeather} from '../desktop/weather-host.mjs';
 import {attachConversationDetails} from '../desktop/conversation-details.mjs';
+import {createReminderChecks} from '../desktop/reminder-checks.mjs';
 import {attachSettings} from '../desktop/settings-host.mjs';
+import {attachPollSettings} from '../desktop/poll-settings-host.mjs';
 import {pages} from '../desktop/source-updates.mjs';
 
 const root=resolve(import.meta.dirname,'..'),profile=mkdtempSync(join(tmpdir(),'feiyue-titlebar-'));
 const out=join(root,'output/titlebar-qa');
 const fixture=join(profile,'desktop');
 mkdirSync(fixture);
-for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs']){
+for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs']){
   copyFileSync(join(root,'desktop',file),join(fixture,file));
 }
 const common={root:profile,profile,bundle:join(root,'output/desktop-bundle'),visible:false};
@@ -66,11 +68,20 @@ async function test(){
   const review=attachReminderReview(runtime,{...common,flow});
   const registration=attachRegistration(runtime,{...common,flow:{resume:async()=>({})}});
   const weather=attachWeather(runtime,{...common,service:{snapshot:()=>({rows:[]}),close(){}}});
-  const history=attachConversationDetails(runtime,{...common,visible:true,history:{read:async()=>[]},readTasks:()=>[],
+  let history,polls;
+  const checkStore=createReminderChecks({profile,isBusy:()=>false,handlers:{tasks:()=>{},due:()=>{},weather:()=>{}},
+    changed:()=>{history?.panel?.webContents.send('conversation:checks-changed');polls?.update();}});
+  polls=attachPollSettings(runtime,{...common,checks:checkStore});
+  checkStore.saveWeather({},{title:'天气提醒',body:'未央区：大风预警'},Date.now());
+  checkStore.saveWeather({},{title:'天气提醒',body:'小仓北区：大雨警报'},Date.now());
+  history=attachConversationDetails(runtime,{...common,visible:true,history:{read:async()=>[]},readTasks:()=>[],
+    checks:{notices:(...args)=>checkStore.notices(...args),markRead:id=>checkStore.markRead(id),
+      read:(_day,page)=>({nextAt:Date.now()+8*60_000,first:false,running:false,pending:true,page:page??0,pages:2,
+      events:[{at:Date.now(),due:Date.now(),project:'到期事项',status:'未执行',detail:page?'旧一页':'绯月忙 · 连续第 2 次'}]})},
     readTraffic:cursor=>({lines:[JSON.stringify({direction:'receive',method:'GET',route:cursor?'/api/older':'/api/tasks',status:200})],next:cursor?null:[1]})});
   const owner=new TestWindow({width:250,height:360});
   const settings=attachSettings(runtime,{...common,win:owner});
-  const hosts=[review,registration,weather,history,settings];
+  const hosts=[review,registration,weather,history,settings,polls];
   try{
     for(const host of hosts){
       await host.open();
@@ -147,6 +158,19 @@ async function test(){
       for(let attempt=0;attempt<100;attempt++){if(await testUi(host,code))return;await wait(25);}
       throw Error('没有出现预期画面 '+code);
     }
+    await until(polls,"document.querySelectorAll('form[data-poll]').length===3");
+    await testUi(polls,"{const f=document.querySelector('[data-poll=tasks]');f.elements.enabled.checked=false;f.elements.minutes.value=10;f.elements.maximum.value=0;f.requestSubmit()}");
+    await until(polls,"document.querySelector('#feedback').textContent.includes('已保存')");
+    const taskPoll=()=>checkStore.polls().find(row=>row.id==='tasks');
+    assert.deepEqual([taskPoll().enabled,taskPoll().minutes,taskPoll().maximum],[false,10,0]);
+    polls.panel.destroy();await polls.open(true);
+    await until(polls,"document.activeElement.id==='waiting' && document.querySelector('[data-poll=tasks] input[name=minutes]')?.value==='10'");
+    await testUi(polls,"{const f=document.querySelector('[data-poll=tasks]');f.elements.minutes.value=9;f.requestSubmit()}");
+    assert.equal(await testUi(polls,"document.querySelector('[data-poll=tasks] input[name=minutes]').validity.rangeUnderflow"),true);
+    assert.equal(taskPoll().minutes,10);
+    await testUi(polls,"{const f=document.querySelector('[data-poll=tasks]');f.elements.enabled.checked=true;f.elements.minutes.value=300;f.elements.maximum.value=100;f.requestSubmit()}");
+    await until(polls,"document.querySelector('#feedback').textContent.includes('已保存')");
+    assert.deepEqual([taskPoll().enabled,taskPoll().minutes,taskPoll().maximum],[true,300,100]);
     await testUi(review,"document.querySelector('#refresh').click()");
     await until(review,"Boolean(document.querySelector('[data-group=planner] input'))");
     assert.equal(await testUi(review,"document.querySelectorAll('[data-group=locked] input,[data-group=planner] button').length"),0);
@@ -162,6 +186,22 @@ async function test(){
     await testUi(review,"document.querySelector('#refresh').click()");
     await until(review,"!document.querySelector('#refresh').disabled && document.querySelector('[data-group=planner]')?.textContent.includes('主站已登记 1.5 小时')");
     writeFileSync(join(out,'planner-hours-saved.png'),(await review.panel.webContents.capturePage()).toPNG());
+    await history.open(null,'checks');
+    await until(history,"document.querySelector('#nextCheck').textContent.includes('下一轮事项轮询') && document.querySelector('#turns').textContent.includes('第 2 次')");
+    assert.match(await testUi(history,"document.querySelector('#remaining').textContent"),/8 分钟/);
+    assert.match(await testUi(history,"document.querySelector('#checkState').textContent"),/等待空闲/);
+    await testUi(history,"document.querySelector('#nextCheckPage').click()");
+    await until(history,"document.querySelector('#turns').textContent.includes('旧一页')");
+    assert.equal(await testUi(history,"document.documentElement.scrollWidth>innerWidth"),false);
+    await history.open(null,'notices');
+    await until(history,"document.querySelectorAll('#turns button').length===2");
+    assert.equal(await testUi(history,"document.querySelector('#noticeDetail').textContent"),'');
+    await testUi(history,"document.querySelector('#turns button').click()");
+    await until(history,"document.querySelectorAll('#turns button').length===1 && document.querySelector('#noticeDetail').textContent.includes('大雨警报')");
+    await testUi(history,"document.querySelector('#readAll').click()");
+    await until(history,"document.querySelector('#status').textContent.includes('没有未读')");
+    await testUi(history,"document.querySelector('[data-filter=read]').click()");
+    await until(history,"document.querySelectorAll('#turns button').length===2");
     await history.open(null,'log');
     await until(history,"document.querySelector('#turns').textContent.includes('/api/tasks')");
     assert.equal(await testUi(history,"document.querySelectorAll('#turns textarea,#turns input,#turns [contenteditable]').length"),0);
@@ -169,7 +209,7 @@ async function test(){
     await until(history,"document.querySelector('#turns').textContent.includes('/api/older')");
     assert.equal(await testUi(history,"document.querySelector('#older').hidden && document.querySelectorAll('#turns section').length===2"),true);
     console.log('PASS：今日工时行、零与小数、执行回执、只读任务日志及加载更早。');
-    console.log('PASS：全部弹窗共用标题，五个面板含本地复盘及设置通过深浅色、原生按钮避让、热加载及输入保留检查。');
-  }finally{for(const host of hosts)host.close();owner.destroy();}
+    console.log('PASS：六个面板通过深浅色、原生标题栏和热加载检查；轮询设定通过保存、重开、队列定位和数值边界检查。');
+  }finally{for(const host of hosts)host.close();checkStore.close();owner.destroy();}
 }
 test().then(()=>electron.app.exit(0),error=>{console.error(error);electron.app.exit(1);});

@@ -41,7 +41,7 @@ export function createAssistantClient(request,{prefix='/api'}={}) {
         }
         try {
           const result=await call('/tasks',{...proposal,submission_id:submissionId});
-          if(typeof result.task_id!=='string'||result.submission_id!==submissionId||result.type!==proposal.type||result.target_device_id!==proposal.target_device_id
+          if(typeof result.task_id!=='string'||result.submission_id!==submissionId||result.type!==proposal.type||(result.dispatch_target??result.target_device_id)!==proposal.target_device_id
             ||encodeJson(result.params)!==encodeJson(proposal.params)||(result.deadline_at??null)!==(proposal.deadline_at??null))throw new Error('任务创建回执不一致，结果未确认');
           submissionUnknown=false;confirmed=copyJson(result);return copyJson(result);
         }catch(error){

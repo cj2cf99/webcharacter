@@ -196,5 +196,5 @@ test('R01：001至003旧数据单次升级004，无截止NULL且重复初始化�
   assert.equal(row.deadline_at, null); assert.equal(row.status, 'PENDING');
   assert.throws(() => db.sqlite.exec(sql), /duplicate column/);
   initializeDatabase(db.sqlite);
-  assert.deepEqual({...db.sqlite.prepare("SELECT * FROM tasks WHERE task_id='old-task'").get()}, {...row,chain_node_id:null,superseded_by_task_id:null,claim_request_id:null,submission_id:null});
+  assert.deepEqual({...db.sqlite.prepare("SELECT * FROM tasks WHERE task_id='old-task'").get()}, {...row,chain_node_id:null,superseded_by_task_id:null,claim_request_id:null,submission_id:null,dispatch_all:0});
 });

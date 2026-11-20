@@ -1,3 +1,4 @@
+import {isPcRegistration,PC_IMAGE_GENERATE} from '../tasks/pc-types.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -12,8 +13,8 @@ export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canE
   if (typeof deviceId !== 'string' || !DEVICE_ID_PATTERN.test(deviceId)) throw new Error('必须指定本机固定PC标识');
   const registered = new Map();
   for (const [type, handler] of Object.entries(handlers)) {
-    if (!handler || handler.risk !== 'L1' || typeof handler.validate !== 'function' || typeof handler.execute !== 'function') {
-      throw new Error('处理函数必须静态声明L1风险、参数校验和执行方法');
+    if (!handler || (handler.risk !== 'L1' && !((isPcRegistration(type)||type===PC_IMAGE_GENERATE) && handler.risk==='L2')) || typeof handler.validate !== 'function' || typeof handler.execute !== 'function') {
+      throw new Error('处理函数必须静态声明允许的风险、参数校验和执行方法（L1 或已注册的业务登记、生图操作）');
     }
     registered.set(type, Object.freeze({ risk: handler.risk, validate: handler.validate, execute: handler.execute }));
   }
@@ -105,7 +106,7 @@ export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canE
         onReviewChanged?.(attempt.startedAt);
         let result = null;
         let failure = null;
-        try { result = copyJson(await registered.get(task.type).execute(copyJson(task.params))); }
+        try { result = copyJson(await registered.get(task.type).execute(copyJson(task.params), task.task_id)); }
         catch (error) {
           if (interrupted || error?.code === 'INTERRUPTED') throw Object.assign(new Error('任务已中断，结果未知'), {code:'INTERRUPTED'});
           failure = '任务执行失败';
@@ -145,7 +146,10 @@ export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canE
     return getRecovery(id);
   }
   return {
-    prepare, execute, getTask, getRecovery, decideRecovery, review,
+    prepare, validateTask, execute, getTask, getRecovery, decideRecovery, review,
+    isRecoveryReplacement(id){
+      return Boolean(db.prepare("SELECT 1 FROM local_recoveries WHERE json_extract(payload_json,'$.replacement_task_id')=? LIMIT 1").get(id));
+    },
     claimRequestId(id) {
       const row=db.prepare('SELECT claim_request_id FROM local_task_metadata WHERE task_id=?').get(id);
       if(!row)throw new Error('必须先保存本地任务再申请领取');
@@ -172,6 +176,14 @@ export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canE
     }); },
     discardRejectedRecovery(id) { db.prepare('DELETE FROM local_recoveries WHERE task_id=? AND acknowledged=0').run(id); },
     activeCount() { return active.size; },
+    hasUnsettledWork() {
+      // 未获领取回执的 PENDING 副本可能已被云端拒绝。待确认的领取由 chainClient 跟踪。
+      return Boolean(db.prepare(`SELECT 1 FROM local_tasks t
+        JOIN local_task_metadata m USING(task_id)
+        LEFT JOIN local_recoveries r USING(task_id)
+        WHERE (t.status='RUNNING' AND COALESCE(r.acknowledged,0)=0)
+           OR (t.status IN ('COMPLETED','FAILED') AND m.uploaded=0) LIMIT 1`).get());
+    },
     interrupt() { interrupted=true; },
     close() { if (active.size) throw new Error('执行尚未完成，不能关闭数据库'); db.close(); },
   };

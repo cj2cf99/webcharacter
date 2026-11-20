@@ -11,8 +11,9 @@ const replyBudgetMs = 12000;
 export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 15000}) {
   let status = {state: 'idle'};
   let child, loading, finishLoad, request, loadTimer;
-  const write = (stage, start, error) => {
-    void log?.({direction:'local',route:'本地 AI',stage,model:MODEL,duration_ms:Math.round(performance.now()-start),error});
+  const write = (stage, start, error, skill) => {
+    void log?.({direction:'local',route:'本地 AI',stage,model:MODEL,duration_ms:Math.round(performance.now()-start),error,
+      ...(skill?.name&&skill.version?{skill:skill.name,skill_version:skill.version}:{})});
   };
 
   function start() {
@@ -67,9 +68,9 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
     return loading;
   }
 
-  async function analyze(text, {hint, previous, signal, onProgress, imageSkill} = {}) {
+  async function analyze(text, {hint, previous, signal, onProgress, imageSkill,skillInstruction} = {}) {
     const started = performance.now();
-    const budgetMs = hint === 'image-plan' ? 16000 : hint === 'auto' ? replyBudgetMs : intentBudgetMs;
+    const budgetMs = ['image-plan','serverTask'].includes(hint) ? 16000 : hint === 'auto' ? replyBudgetMs : intentBudgetMs;
     const deadline = AbortSignal.timeout(budgetMs);
     const wait = signal ? AbortSignal.any([signal,deadline]) : deadline;
     signal?.throwIfAborted();
@@ -106,16 +107,16 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
       }};
       wait.addEventListener('abort',abort,{once:true});
       try {
-        worker.postMessage({type:'analyze',id,text,hint,previous,imageSkill,intentBudgetMs,remainingMs:Math.max(1, Math.floor(budgetMs-(performance.now()-started)))});
+        worker.postMessage({type:'analyze',id,text,hint,previous,imageSkill,skillInstruction,intentBudgetMs,remainingMs:Math.max(1, Math.floor(budgetMs-(performance.now()-started)))});
       } catch {
         finish({error:'LOCAL_AI_PROCESS_EXITED'});
       }
     });
     if (signal?.aborted) {
-      write('思索取消',started);
+      write('思索取消',started,undefined,skillInstruction);
       signal.throwIfAborted();
     }
-    write(result?.error ? '思索后继续处理' : '思索完成', started, result?.error);
+    write(result?.error ? '思索后继续处理' : '思索完成', started, result?.error,skillInstruction);
     return result ?? {error:'LOCAL_AI_RESULT_INVALID'};
   }
 

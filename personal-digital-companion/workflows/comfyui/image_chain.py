@@ -2,6 +2,7 @@
 import argparse
 from datetime import datetime, timezone
 import json
+import re
 from pathlib import Path
 import secrets
 import shutil
@@ -14,7 +15,20 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[2] / "tools"))
 import comfy_job as backend
 sys.path.insert(0, str(HERE.parents[1] / "skills"))
-from catalog import resolve_skill
+from catalog import resolve_skill, child_skill
+
+IMAGE_NUMBER = re.compile(r"图\s*(\d+|[零一二两三四五六七八九十]+)|第\s*(\d+|[零一二两三四五六七八九十]+)\s*张(?:图)?")
+
+
+def image_number(match):
+    label = (match[1] or match[2]).replace("两", "二")
+    if label.isdecimal():
+        return int(label)
+    digits = "零一二三四五六七八九"
+    if "十" not in label:
+        return digits.find(label)
+    first, last = label.split("十", 1)
+    return (digits.find(first) if first else 1) * 10 + (digits.find(last) if last else 0)
 
 
 def now():
@@ -45,6 +59,11 @@ def compile_plan(original, steps, count, has_base=False):
         if len(set(refs)) != len(refs) or (refs and op != "edit") or len(refs) > 15:
             raise ValueError("只有定向编辑可使用互不重复的额外参考图，最多 15 张")
         base = None if op == "generate" else "previous" if i else "prior-result" if has_base else "attachment:1"
+        if op == "edit":
+            mentioned = {image_number(m) for m in IMAGE_NUMBER.finditer(quote)}
+            expected = mentioned - {1} if base == "attachment:1" else mentioned
+            if mentioned and expected != set(refs):
+                raise ValueError("参考图编号与用户原文不一致，请核对")
         if base == "attachment:1" and (not count or 1 in refs):
             raise ValueError("首步需要底图，额外参考图应从图 2 开始")
         plan.append({"op": op, "quote": quote, "refs": refs, "base": base})
@@ -56,11 +75,20 @@ def make_graph(folder, step, seed, inputs):
     prompt = step["quote"]
     if step["op"] == "edit":
         labels = ["<image_1> 为待编辑底图"]
+        image_numbers = {1: 1} if step["base"] == "attachment:1" else {}
         for index, attachment in enumerate(step["refs"], 2):
             key = str(10 + index)
             graph[key] = {"class_type": "LoadImage", "inputs": {"image": inputs[index-1]}}
             graph["4"]["inputs"][f"images.image_{index}"] = [key, 0]
             labels.append(f"用户的图{attachment}为 <image_{index}>")
+            image_numbers[attachment] = index
+        guide_file = folder / "edit-guidance.json"
+        if guide_file.is_file():
+            prompt = IMAGE_NUMBER.sub(lambda match:
+                f"<image_{image_numbers[image_number(match)]}>"
+                if image_number(match) in image_numbers else match[0], prompt)
+            if step["refs"] and re.search("衣|服装|外套|穿搭|夹克|裙", prompt) and not re.search("换人|替换.{0,4}人物", prompt):
+                prompt = backend.read_json(guide_file)["garment"] + "\n" + prompt
         prompt = "；".join(labels) + "。" + prompt
     values = {"$prompt": prompt, "$seed": seed, "$base": inputs[0] if inputs else None}
     for node in graph.values():
@@ -79,7 +107,7 @@ def run(job):
         receipt.update(state=state, updated=now(), **fields)
         backend.write_json(job / "status.json", receipt)
     try:
-        _, folder = resolve_skill("comfy-image-workflows", spec["workflowVersion"])
+        _, folder = resolve_skill(spec.get("workflowSkill","comfy-image-workflows"), spec["workflowVersion"])
         with backend.gpu_slot(deadline):
             previous = None
             for index, step in enumerate(spec["steps"], 1):
@@ -112,8 +140,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("describe")
+    commands.add_parser("availability")
     for command in ("check", "submit"):
         sub = commands.add_parser(command)
+        if command == "submit":
+            sub.add_argument("--server-task-id", type=uuid.UUID)
         sub.add_argument("--version")
         sub.add_argument("--workflow-version")
         sub.add_argument("--image", action="append", type=Path, default=[])
@@ -121,9 +152,12 @@ def main():
     for command in ("status", "_run"):
         commands.add_parser(command).add_argument("job", type=uuid.UUID)
     args = parser.parse_args()
-    if args.command == "describe":
+    if args.command == "availability":
+        backend.installation()
+        row = {"available": True}
+    elif args.command == "describe":
         version, folder = resolve_skill("image-task-chain")
-        workflow_version, _ = resolve_skill("comfy-image-workflows")
+        _, workflow_version, _ = child_skill(folder, "execute")
         row = {"version": version, "workflowVersion": workflow_version, "instruction": (folder / "SKILL.md").read_text(encoding="utf-8")}
     elif args.command in ("status", "_run"):
         job = backend.ROOT / args.job.hex
@@ -132,8 +166,12 @@ def main():
         row = backend.status(job)
     else:
         deadline = time.monotonic() + backend.JOB_SECONDS
-        version, _ = resolve_skill("image-task-chain", args.version)
-        workflow_version, _ = resolve_skill("comfy-image-workflows", args.workflow_version)
+        version, parent = resolve_skill("image-task-chain", args.version)
+        if (parent / "children.json").exists():
+            workflow_skill, workflow_version, _ = child_skill(parent, "execute", args.workflow_version)
+        else:
+            workflow_skill = "comfy-image-workflows"
+            workflow_version, _ = resolve_skill(workflow_skill, args.workflow_version)
         data = json.loads(sys.stdin.buffer.read().decode("utf-8-sig"))
         if not isinstance(data, dict) or set(data) != {"original", "steps"}:
             raise ValueError("宿主须绑定用户原文，只接受 original 和 steps")
@@ -145,8 +183,20 @@ def main():
             row = {"version": version, "workflowVersion": workflow_version, "steps": plan}
         else:
             backend.installation()
-            job = backend.ROOT / uuid.uuid4().hex
-            job.mkdir(parents=True)
+            server_id = args.server_task_id
+            if server_id and (args.image or args.base or len(plan) != 1 or plan[0]["op"] != "generate"):
+                raise ValueError("服务器生图仅接收文字提示词")
+            job = backend.ROOT / (server_id or uuid.uuid4()).hex
+            try:
+                job.mkdir(parents=True)
+            except FileExistsError:
+                if not server_id:
+                    raise
+                saved = backend.read_json(job / "request.json")
+                if saved.get("serverTaskId") != str(server_id) or saved.get("original") != data["original"]:
+                    raise ValueError("服务器任务绑定不一致")
+                print(json.dumps(backend.status(job)))
+                return 0
             names = []
             base_file = None
             if args.base:
@@ -156,7 +206,7 @@ def main():
                 name = f"attachment-{i}{path.suffix.lower()}"
                 shutil.copyfile(path, job / name)
                 names.append(name)
-            backend.write_json(job / "request.json", dict(original=data["original"], version=version, workflowVersion=workflow_version, steps=plan,
+            backend.write_json(job / "request.json", dict(original=data["original"], serverTaskId=str(server_id) if server_id else None, version=version, workflowSkill=workflow_skill, workflowVersion=workflow_version, steps=plan,
                                attachments=names, baseFile=base_file, seed=secrets.randbits(62), deadline=deadline))
             row = dict(job=job.name, version=version, workflowVersion=workflow_version, state="queued", submitted=now(), completed=[])
             backend.write_json(job / "status.json", row)

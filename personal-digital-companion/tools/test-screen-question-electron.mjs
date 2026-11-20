@@ -39,8 +39,9 @@ async function run(){try{
     }
     assert.equal(input.messages.at(-1).content,'你好');
     return {provider:'cloudflare',model:CLOUDFLARE_MODEL,text:JSON.stringify({reply:'你好呀',proposal:null})};
-  }}),createVisionClient:()=>({async generate(){calls++;if(mode==='waiting')await new Promise(resolve=>release=resolve);if(mode==='error')throw Object.assign(new Error('mock'),{code:'TIMEOUT'});return {provider:'cloudflare',model:CLOUDFLARE_MODEL,finishReason:'stop',text:JSON.stringify({answer:mode==='long'?'<img src=x onerror=alert(1)>\n'+('从这张截图只能确定路径没有找到，先核对文件位置，不要急着删除配置。\n'.repeat(30)):'这个报错是说文件找不到。先检查路径是否拼错、文件有没有被移动；仅凭截图还不能确定具体原因。'})};}})});
-  const client=await createScreenQuestionClient({profile,screen:{getCursorScreenPoint:()=>({x:-100,y:50}),getDisplayNearestPoint:()=>({id:77,size:{width:64,height:64},scaleFactor:1})},
+  }}),createVisionClient:()=>{throw Error('图片查询禁止上云');}});
+  const vision=async()=>{calls++;if(mode==='waiting')await new Promise(resolve=>release=resolve);if(mode==='error')throw Object.assign(new Error('mock'),{code:'TIMEOUT'});return {text:mode==='long'?'<img src=x onerror=alert(1)>\n'+('从这张截图只能确定路径没有找到，先核对文件位置，不要急着删除配置。\n'.repeat(30)):'这个报错是说文件找不到。先检查路径是否拼错、文件有没有被移动；仅凭截图还不能确定具体原因。'};};
+  const client=await createScreenQuestionClient({profile,vision,screen:{getCursorScreenPoint:()=>({x:-100,y:50}),getDisplayNearestPoint:()=>({id:77,size:{width:64,height:64},scaleFactor:1})},
     desktopCapturer:{async getSources(){
       captures++;
       if(mode==='waitingCapture')await new Promise(resolve=>release=resolve);
@@ -55,6 +56,7 @@ async function run(){try{
   const registration={submit:async text=>{registered.push(text);return {status:'completed',chain:{status:'COMPLETED',nodes:[{current_task:{type:'records.create',status:'COMPLETED',params:{body:text}}}]}};}};
   const reminderWrites=[];
   const reminderRequest=async(path,options)=>{
+    if(path==='/api/records/photos')return Response.json({name:'fixture.png',url:'https://fixture.test/photos/fixture.png'},{status:201});
     if(path==='/api/reminder-edits')return Response.json({items:(JSON.parse(options.body).id?[1]:[1,2]).map(id=>({id,title:'周报'+id,content:'初稿',deadline:'2026-11-20',recurrence:null,version:'fixture'}))});
     reminderWrites.push([path,JSON.parse(options.body)]);return Response.json({accepted:true});
   };
@@ -65,7 +67,29 @@ async function run(){try{
   const snapshot=async name=>{await new Promise(resolve=>setTimeout(resolve,250));writeFileSync(join(output,name),(await panel.webContents.capturePage()).toPNG());};
   await wait(()=>js('Boolean(window.screenQuestion)'));
   assert.equal(await js("document.querySelector('#withScreen').checked"),false);
-  if(process.argv.includes('--attachments')){
+  if(process.argv.includes('--image-live')){
+    await js("document.querySelector('#question').value='画一张水彩猫咪';document.querySelector('#questionForm').requestSubmit()");
+    await wait(()=>js("document.querySelector('#answer').textContent.includes('已排队')"));
+    assert.equal(await js("document.querySelector('#question').disabled"),false);
+    host.hide();await host.open();
+    const until=Date.now()+605000;
+    while(Date.now()<until){
+      const rows=await host.panel.webContents.executeJavaScript('window.screenQuestion.imageList()');
+      if(rows[0]?.state==='failed')throw Error(rows[0].text);
+      if(rows[0]?.state==='done'){
+        assert.match(rows[0].preview,/^data:image\//);assert.ok(rows[0].canOpen);
+        await wait(()=>host.panel.webContents.executeJavaScript("document.querySelector('#imageResults img')?.naturalWidth>0"));
+        assert.equal(calls,0);assert.equal(captures,0);
+        console.log('PASS：中文指令异步提交、气泡关闭重开后收到真实 PNG 缩略图，任务号 '+rows[0].job);
+        return;
+      }
+      // 隐藏窗口会按普通空闲规则关闭。实际显示结果时重新打开。
+      await new Promise(resolve=>setTimeout(resolve,500));
+      if(!host.panel)await host.open();
+    }
+    throw Error('未收到图像任务结果');
+  }
+  if(process.argv.includes('--attachments')||process.argv.includes('--skill-review')){
     const source=bytes=>JSON.stringify([...bytes]);
     const put=async(event,name,type,bytes)=>js(`(() => {
       const target=document.querySelector('#question'), transfer=new DataTransfer();
@@ -75,6 +99,63 @@ async function run(){try{
     })()`);
     const fileName=()=>js("document.querySelector('#attachmentName').textContent");
     await wait(()=>js("document.readyState==='complete'"));
+    if(process.argv.includes('--skill-review')){
+      const plan={pending:[],chain:{nodes:[{key:'entry-1',type:'records.create',target_device_id:null,params:{body:'合成测试图片',category_id:1}}]}};
+      const popup=code=>host.inquiryPanel?.webContents.executeJavaScript(code).catch(()=>false);
+      const ready=()=>popup("!!document.querySelector('#approveRecord') && !document.querySelector('#approveRecord').disabled && !document.querySelector('#approveRecord').hidden");
+      registration.preview=async()=>plan;
+      registration.submitReviewed=async(_text,approved)=>{assert.equal(approved,plan);registered.push(approved);return {status:'completed',chain:{nodes:[]}};};
+      await put('drop','base.png','image/png',image.toPNG());
+      await wait(async()=>await fileName()==='base.png');
+      await put('paste','reference.png','image/png',image.toPNG());
+      await wait(async()=>(await fileName()).includes('图2 reference.png'));
+      await js("document.querySelector('#removeAttachment').click()");
+      await put('paste','source.png','image/png',image.toPNG());
+      await wait(async()=>await fileName()==='source.png');
+      await js("document.querySelector('#question').value='把图里内容记成随手记';document.querySelector('#questionForm').requestSubmit()");
+      await wait(ready);
+      assert.match(await popup("document.querySelector('#recordFields').textContent"),/合成测试图片/);
+      assert.equal(registered.length,0);
+      await popup("document.querySelector('#approveRecord').click()");
+      await wait(()=>registered.length===1);
+      assert.equal(captures,0);
+      await wait(()=>js("!document.querySelector('#question').value && !document.querySelector('#attachmentName').textContent.includes('source.png')"));
+      const reminderPlan={pending:[],chain:{nodes:[{type:'reminders.create',target_device_id:null,params:{title:'关注 Qwen4 2B、4B 量化模型'}}]}};
+      registration.preview=async()=>reminderPlan;
+      registration.submitReviewed=async(_text,approved)=>{
+        assert.equal(approved,reminderPlan);registered.push(approved);
+        return {chain:{nodes:[{current_task:{...approved.chain.nodes[0],status:'COMPLETED',result:{record_id:7}}}]}};
+      };
+      const askReminder=()=>js("document.querySelector('#question').value='加个没时间的提醒，关注Qwen4的2B、4B量化模型';document.querySelector('#questionForm').requestSubmit()");
+      await askReminder();await wait(ready);
+      assert.match(await popup("document.querySelector('#recordFields').textContent"),/不设日期/);
+      await popup("document.querySelector('#discardRecord').click()");
+      await wait(()=>js("document.querySelector('#answer').textContent.includes('已放弃')"));assert.equal(registered.length,1);
+      await askReminder();await wait(ready);
+      await popup("document.querySelector('#approveRecord').click()");
+      await wait(()=>js("document.querySelector('#answer').textContent.includes('已登记')"));assert.equal(registered.length,2);
+      const questions=['东京出差','大阪出差'].map(task=>({type:'reminders.create',task,field:'title',question:'标题？'}));
+      let revised='';
+      registration.preview=async input=>{
+        if(!input.includes('用户补充'))return {pending:questions,chain:null};
+        revised=input;
+        return reminderPlan;
+      };
+      await askReminder();await wait(()=>popup("document.querySelectorAll('#missing li input').length===2"));
+      assert.equal(await popup("document.querySelector('#approveRecord').hidden"),true);
+      assert.equal(host.inquiryPanel.isModal(),false);assert.equal(host.inquiryPanel.isAlwaysOnTop(),false);
+      assert.ok(host.inquiryPanel.getSize()[0]>=600);
+      await popup("const bulk=document.querySelector('#bulk input');bulk.value='统一标题';bulk.dispatchEvent(new Event('input',{bubbles:true}));const rows=document.querySelectorAll('#missing input');rows[1].value='单独标题';rows[1].dispatchEvent(new Event('input',{bubbles:true}))");
+      await popup("const t=new DataTransfer();t.items.add(new File(['补充资料'], '说明.txt',{type:'text/plain'}));document.dispatchEvent(new ClipboardEvent('paste',{clipboardData:t,bubbles:true,cancelable:true}))");
+      await wait(()=>popup("document.querySelector('#filename').textContent==='说明.txt'"));
+      await popup("document.querySelector('#sendInput').click()");
+      await wait(ready);assert.match(revised,/东京出差.*统一标题/);assert.match(revised,/大阪出差.*单独标题/);assert.match(revised,/补充资料/);
+      assert.equal(registered.length,2);host.inquiryPanel.close();await wait(()=>!host.inquiryPanel);
+      assert.equal(registered.length,2);
+      console.log('PASS：无日期文字提醒预览、取消零写入、确认一次写入与回执展示。');
+      console.log('PASS：拖入底图、粘贴图2、合成图识读、预览零提交、确认一次提交。');
+      return;
+    }
     for(const event of ['drop','paste']){
       const name=event+'.png';
       assert.ok(await put(event,name,'image/png',image.toPNG()));
@@ -194,9 +275,9 @@ async function run(){try{
   await wait(()=>js("document.querySelector('#reply').dataset.state==='answer'"));
   assert.equal(captures,1);assert.equal(calls,1);await snapshot('answer.png');
   mode='error';await js("document.querySelector('#question').value='这个报错是什么意思？';document.querySelector('#questionForm').requestSubmit()");await wait(()=>js("document.querySelector('#reply').dataset.state==='error'"));
-  assert.equal(captures,2);assert.equal(calls,3);assert.equal(await js("document.querySelector('#retry').hidden"),false);
+  assert.equal(captures,2);assert.equal(calls,2);assert.equal(await js("document.querySelector('#retry').hidden"),false);
   await snapshot('error.png');
-  mode='answer';await js("document.querySelector('#retry').click()");await wait(()=>js("document.querySelector('#reply').dataset.state==='answer'"));assert.equal(captures,2);assert.equal(calls,4);
+  mode='answer';await js("document.querySelector('#retry').click()");await wait(()=>js("document.querySelector('#reply').dataset.state==='answer'"));assert.equal(captures,2);assert.equal(calls,3);
   mode='long';await js("document.querySelector('#questionForm').requestSubmit()");await wait(()=>js("document.querySelector('#answer').textContent.startsWith('<img')"));
   assert.equal(await js("document.querySelectorAll('#reply img').length"),0);assert.equal(await js('document.documentElement.scrollWidth<=innerWidth'),true);
   assert.equal(await js("Array.from(new Intl.Segmenter().segment(document.querySelector('#answer').textContent)).length"),50);

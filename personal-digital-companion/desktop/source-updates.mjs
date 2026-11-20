@@ -5,10 +5,12 @@ import {watchChanges,warnLiveUpdate} from './live-files.mjs';
 
 // 构建与热加载使用同一份页面依赖。每次只更新受影响的窗口。
 export const pages = {
+  'poll-settings.html':['feiyue-surface.css','poll-settings.css','poll-settings-ui.mjs'],
   'index.html':['style.css','configured-renderer.mjs','renderer.mjs','companion-player.mjs','companion-state.mjs','behavior-controller.mjs','screen-posture.mjs','sound.mjs','window-nodes.mjs'],
   'settings.html':['feiyue-surface.css','settings.css','settings-ui.mjs','effect-preview.mjs','companion-player.mjs','behavior-controller.mjs','window-nodes.mjs'],
   'message-box.html':['feiyue-surface.css','message-box.css','message-box-ui.mjs'],
   'registration.html':['feiyue-surface.css','registration.css','registration-ui.mjs'],
+  'registration-review.html':['feiyue-surface.css','registration.css','registration-review-ui.mjs','question-attachment.mjs'],
   'reminder-review.html':['feiyue-surface.css','reminder-review.css','reminder-review-ui.mjs'],
   'sound-settings.html':['feiyue-surface.css','sound-settings.css','sound-settings.mjs','sound.mjs'],
   'conversation.html':['feiyue-surface.css','conversation-ui.mjs','conversation.css'],

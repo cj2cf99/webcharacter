@@ -1,0 +1,3 @@
+{
+  "garment": "Edit <image_1>. Keep the original person in <image_1>, including the same face, hairstyle, body, pose and background. The additional images supply clothing only. Transfer the requested clothing onto the person from <image_1>. Ignore the identity and face of the reference model."
+}

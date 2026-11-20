@@ -51,13 +51,22 @@ export function prepareMainSiteTask(task) {
   if (!validateParameters(task.definition.parameter_spec, task.params).valid) {
     throw new Error('任务参数不符合模板');
   }
-  return { path: operation.path, body: operation.body(task.params) };
+  return registrationOperation(task.type,task.params);
+}
+
+export function registrationOperation(type,params){
+  if(!isRegistrationTaskType(type))throw Error('登记类型无效');
+  return {path:operations[type].path,body:operations[type].body(params)};
+}
+
+export function registrationResult(type,response){
+  const recordId=operations[type].recordId(response);
+  if(recordId===null)throw Error('未取得有效业务回执');
+  return {record_id:recordId,...(isHuShiTaskType(type)?{created_at:response.created_at}:{})};
 }
 
 export async function executeMainSiteTask(task, writeEntry) {
   const operation = prepareMainSiteTask(task);
   const response = await writeEntry({ ...operation, idempotencyKey: task.chain?.node_id ?? task.task_id });
-  const recordId = operations[task.type].recordId(response);
-  if (recordId === null) throw new Error('未取得有效业务回执');
-  return { record_id: recordId, ...(isHuShiTaskType(task.type) ? { created_at: response.created_at } : {}) };
+  return registrationResult(task.type,response);
 }

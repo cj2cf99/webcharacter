@@ -18,6 +18,7 @@ const webMode=mode.querySelector('option[value="web"]');
 let busy=false,composing=false,idleTimer,draftReady=false;
 let attachment=null,reading=false,attachmentReady=false;
 let references=[];
+
 const resetIdle=()=>{
   clearTimeout(idleTimer);
   if(busy||composing||reading)return;
@@ -161,7 +162,7 @@ question.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey
 for(const event of ['keydown','input','pointerdown','change']){
   document.addEventListener(event,resetIdle,{capture:true,passive:true});
 }
-document.addEventListener('wheel',event=>event.preventDefault(),{capture:true,passive:false});
+document.addEventListener('wheel',event=>{if(!event.target.closest?.('#imageResults'))event.preventDefault();},{capture:true,passive:false});
 question.addEventListener('compositionstart',()=>{composing=true;resetIdle();});
 question.addEventListener('compositionend',()=>{composing=false;resetIdle();});
 retry.onclick=async()=>{const value=await invoke(()=>host.retry());if(attachment&&value?.state==='answer'){question.value='';showAttachment(null);attachmentError();}};

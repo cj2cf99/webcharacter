@@ -1,3 +1,4 @@
+import {isPcRegistration} from './pc-types.mjs';
 import { PC_ID_PATTERN } from '../devices/api.mjs';
 import { encodeJson } from '../execution/json.mjs';
 import { activityStatement } from './activity.mjs';
@@ -42,7 +43,7 @@ function receipt(value) {
 }
 
 // 归属校验仍在开发Bearer之后；device_id不是设备认证凭据。
-export async function handleTaskAction(request, DB, id, action, readTask) {
+export async function handleTaskAction(request, DB, id, action, readTask, verifyBusinessReceipt) {
   let body;
   try { body = await request.json(); } catch { return fail(400, 'INVALID_JSON', '请求必须是有效JSON'); }
   if (action === 'cancel') {
@@ -60,6 +61,9 @@ export async function handleTaskAction(request, DB, id, action, readTask) {
   }
   const task = await readTask(DB, id);
   if (!task) return fail(404, 'TASK_NOT_FOUND', '任务不存在');
+  if(action==='claim' && task.definition.executor==='pc' && task.target_device_id==='all'){
+    return claimTask(DB,task,body,readTask);
+  }
   if (task.definition.executor !== 'pc' || task.target_device_id !== body.device_id
     || !task.target_device?.device_id) return fail(409, 'TARGET_MISMATCH', '任务目标与执行设备不符');
   if (action === 'progress') {
@@ -80,6 +84,8 @@ export async function handleTaskAction(request, DB, id, action, readTask) {
   let valid;
   try { valid = reportValid(body, id); } catch { valid = false; }
   if (!valid) return fail(400, 'INVALID_RESULT', '结果、执行次数或尝试记录不符合任务规则');
+  if(isPcRegistration(task.type)&&body.status==='COMPLETED'&&!(await verifyBusinessReceipt(task,body.result)))
+    return fail(409,task.type==='pc.exercise.create'?'EXERCISE_RECEIPT_MISMATCH':'BUSINESS_RECEIPT_MISMATCH','业务回执尚未核实');
   if(task.superseded_by_task_id){
     if(final(task.status)&&receipt(task)!==receipt(body))return fail(409,'RESULT_CONFLICT','旧轮已有不同终态');
     const serialized=encodeJson(body);

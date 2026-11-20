@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('screenQuestion',{
   state:()=>ipcRenderer.invoke('screen-qa:state'),
   ask:(text,withScreen=false,mode='auto',attachment=null,references=[])=>ipcRenderer.invoke('screen-qa:ask',{text,withScreen:withScreen===true,mode,attachment,references}),
   imageList:()=>ipcRenderer.invoke('screen-qa:image-list'),
+  reviewAttachment:(id,approve)=>ipcRenderer.invoke('screen-qa:attachment-review',{id,approve}),
   openImage:job=>ipcRenderer.invoke('screen-qa:image-open',job),
   onImages:callback=>subscribe('screen-qa:images-changed',callback),
   attachmentInput:true,

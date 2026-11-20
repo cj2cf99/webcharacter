@@ -1,4 +1,4 @@
-import {mkdir,readFile,readdir,rename,writeFile,unlink} from 'node:fs/promises';
+import {copyFile,mkdir,readFile,readdir,rename,stat,writeFile,unlink} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -72,20 +72,81 @@ export function createMemoryArchive(root=memoryRoot){
     if(typeof id!=='string'||!idPattern.test(id))throw Error('图片编号无效');
     return join(folder(day),'图片',id+'.png');
   }
-  const readTasks=async day=>JSON.parse(await optional(readFile(join(folder(day),'任务','执行记录.json'),'utf8'))??'[]');
+  function outputName(job,step){
+    if(typeof job!=='string'||!/^[a-f0-9]{32}$/.test(job)||!Number.isSafeInteger(step)||step<1)throw Error('任务图片编号无效');
+    return '对话/图片/'+job+'/step-'+String(step).padStart(2,'0')+'.png';
+  }
+  const taskImage=(day,job,step)=>join(folder(day),outputName(job,step));
+  async function archiveImageTask(row){
+    const day=tokyoDay(row.at),steps=[],problems=[];
+    const outcomes=row.completed?.length?row.completed:row.output?[{step:1,output:row.output,width:row.width,height:row.height}]:[];
+    for(const item of outcomes){
+      const {step,operation,started,finished,width,height,seed}=item;
+      const entry={step,operation,started,finished,width,height,seed};
+      const dest=taskImage(day,row.job,step);
+      try{
+        if(!(await optional(stat(dest)))?.size){
+          await mkdir(dirname(dest),{recursive:true});
+          const tmp=dest+'.'+randomUUID()+'.tmp';
+          try{await copyFile(item.output,tmp);await rename(tmp,dest);}
+          finally{await optional(unlink(tmp));}
+        }
+        entry.image=outputName(row.job,step);
+      }catch{entry.error='原图未能归档';problems.push('第 '+step+' 步原图未能归档');}
+      steps.push(entry);
+    }
+    const report={job:row.job,...(row.serverTaskId?{serverTaskId:row.serverTaskId}:{}),version:row.version,workflowVersion:row.workflowVersion,steps,state:row.state,error:row.error};
+    const at=Date.parse(row.updated)||Date.parse(steps.at(-1)?.finished)||row.at;
+    const turn={id:row.job,at:row.at,answeredAt:at,question:row.original,state:row.state==='done'?'answer':'error',
+      text:[row.serverTaskId&&'服务器任务 '+row.serverTaskId,row.text,...problems].filter(Boolean).join('\n'),report};
+    await save(turn);
+    const last=steps.at(-1);
+    return {complete:!problems.length,output:last?.image?taskImage(day,row.job,last.step):undefined,turn};
+  }
+  const readEvents=async day=>JSON.parse(await optional(readFile(join(folder(day),'任务','执行记录.json'),'utf8'))??'[]');
+  const imageEvents=turns=>turns.filter(t=>t.report?.job===t.id).map(t=>({at:t.answeredAt??t.at,task_id:t.id,title:'ComfyUI 图像任务',
+    action:t.state==='answer'?'已完成':'执行失败',detail:t.question,report:true}));
+  async function readTasks(day){
+    const files=await optional(readdir(join(folder(day),'对话')))??[];
+    const jobs=files.filter(f=>/^[a-f0-9]{32}\.json$/.test(f));
+    const turns=await Promise.all(jobs.map(f=>readImageReport(day,f.slice(0,-5))));
+    return [...await readEvents(day),...imageEvents(turns.filter(Boolean))].sort((a,b)=>a.at-b.at);
+  }
+  async function readImageReport(day,job){
+    if(typeof job!=='string'||!/^[a-f0-9]{32}$/.test(job))return null;
+    const raw=await optional(readFile(join(folder(day),'对话',job+'.json'),'utf8'));
+    const turn=raw&&JSON.parse(raw);
+    return turn?.report?.job===job?turn:null;
+  }
+  async function taskHistory(taskId){
+    const dates=[];
+    for(const year of await optional(readdir(root))??[]){
+      if(!/^\d{4}$/.test(year))continue;
+      for(const month of await optional(readdir(join(root,year)))??[]){
+        if(!/^\d{4}-\d\d$/.test(month)||!month.startsWith(year+'-'))continue;
+        for(const day of await optional(readdir(join(root,year,month)))??[]){
+          if(dayPattern.test(day)&&day.startsWith(month+'-'))dates.push(day);
+        }
+      }
+    }
+    const rows=[];
+    for(const date of dates)rows.push(...(await readEvents(date)).filter(row=>row.task_id===taskId));
+    return rows.sort((a,b)=>a.at-b.at);
+  }
   const writing=new Map();
   function refreshIndex(day){
     // 同期回执可能同时落盘，最后一次重建总能看到已写完的记录。
     const work=(writing.get(day)??Promise.resolve()).catch(()=>{}).then(async()=>{
-      const base=folder(day),turns=await read(day),tasks=await readTasks(day);
+      const base=folder(day),turns=await read(day),tasks=[...await readEvents(day),...imageEvents(turns)].sort((a,b)=>a.at-b.at);
       const logs=(await optional(readdir(join(base,'日志')))??[]).filter(f=>['任务通信.jsonl','历史通信.jsonl'].includes(f));
       const entries=turns.map(t=>{
         const ref=imageRef(t);
         const photo=t.image?'<a href="'+ref.original+'"><img loading="lazy" alt="截图缩略图" src="'+ref.thumbnail+'"></a>':'';
-        return '<article><time>'+esc(t.time)+'</time><h3>'+esc(t.question)+'</h3>'+photo+'<p>'+esc(t.text)+'</p>'
+        const results=(t.report?.steps??[]).filter(s=>s.image).map(s=>'<a href="'+esc(s.image)+'"><img loading="lazy" alt="第 '+esc(s.step)+' 步结果" src="'+esc(s.image)+'"></a>').join('');
+        return '<article id="turn-'+esc(t.id)+'"><time>'+esc(t.time)+'</time><h3>'+esc(t.question)+'</h3>'+photo+results+'<p>'+esc(t.text)+'</p>'
           +(t.image?'<small>'+esc([t.image.route,t.image.reason].filter(Boolean).join(' · '))+'</small>':'')+'</article>';
       });
-      const events=tasks.map(t=>'<p>'+esc(new Date(t.at).toLocaleTimeString('zh-CN',{timeZone:'Asia/Tokyo',hour12:false}))+' · '+esc(t.title)+' · '+esc(t.action)+' '+esc(t.detail)+'</p>');
+      const events=tasks.map(t=>'<p>'+esc(new Date(t.at).toLocaleTimeString('zh-CN',{timeZone:'Asia/Tokyo',hour12:false}))+' · '+esc(t.title)+' · '+esc(t.action)+' '+esc(t.detail)+(t.report?' <a href="#turn-'+esc(t.task_id)+'">查看结果</a>':'')+'</p>');
       await atomicFile(join(base,'复盘.html'),'<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>'+day+' 绯月复盘</title>'
         +'<style>body{font:16px/1.55 system-ui;max-width:52rem;margin:2rem auto;padding:0 1rem}article{border-top:1px solid #aaa;padding:1rem 0}p{white-space:pre-wrap}img{max-width:240px;height:auto}time,small{color:#65545c}</style>'
         +'<h1>'+day+' · 绯月复盘</h1><small>东京时间 JST</small><p>'+logs.map(f=>'<a href="日志/'+f+'">'+f+'</a>').join(' · ')+'</p>'
@@ -94,8 +155,8 @@ export function createMemoryArchive(root=memoryRoot){
     writing.set(day,work);
     return work.finally(()=>{if(writing.get(day)===work)writing.delete(day);});
   }
-  return {root,folder,save,read,latest:async day=>(await read(day))[0],storeImage,thumbnail,original,
-    readTasks,refreshIndex,async saveTasks(day,rows,{index=true}={}){
+  return {root,folder,save,read,latest:async day=>(await read(day))[0],storeImage,thumbnail,original,archiveImageTask,readImageReport,taskImage,
+    readTasks,taskHistory,refreshIndex,async saveTasks(day,rows,{index=true}={}){
       await atomicFile(join(folder(day),'任务','执行记录.json'),JSON.stringify(rows,null,2)+'\n');
       if(index)await refreshIndex(day);
     }};
