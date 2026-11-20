@@ -1,5 +1,7 @@
 ## 2026-11-20 JST · 文字提醒登记确认
 
+2026-11-20：云端自动轮询恢复 Gemini，BigModel 中国站继续暂停。启用或更换 Gemini 密钥前，须确认它来自未关联 Cloud Billing 结算账号的免费项目。
+
 依据 REQUIREMENT_CHANGES.md 中的原句和确认要求，沿用 TASK_TEMPLATE_PREVIEW.md 的备忘录索引、全局 FRAMEWORK_PREFERENCES.md 和已有登记气泡。普通对话提到新提醒优先使用 record-submission，引用上一条用户原文准备业务字段。桌面先请求只读计划，展示日期或「不设日期」，用户确认后才按同一份计划提交。换题、取消及重复确认不会执行旧草案。文字和附件共用现有按钮、提交号及业务回执，无新增存储表。
 
 隔离验证包括两句原话、查询和用法分流、取消、重复确认以及无日期字段。执行 agent/tests/screen-question-host.test.mjs、unified-conversation.test.mjs、registration-flow.test.mjs，通过 20 项；另在隐藏 Electron 窗口运行 tools/test-screen-question-electron.mjs --skill-review 及 tools/test-panel-titlebar-electron.mjs，验证实际按钮、回执文字和布局。未向业务库补录截图事项。

@@ -2,7 +2,7 @@
 export function createRegistrationAiGateway(env, {
   AI_PRIORITY, AI_MODELS, createAiClient, createAdapters, createEnvCredentialResolver, runPaidProbe,
 }, {fetcher = fetch, timeoutMs = 10000} = {}) {
-  const providers = [...new Set([...AI_PRIORITY, ...Object.keys(AI_MODELS)]), 'deepseek'].filter(provider => provider !== 'bigmodel' && provider !== 'gemini');
+  const providers = [...new Set([...AI_PRIORITY, ...Object.keys(AI_MODELS)]), 'deepseek'].filter(provider => provider !== 'bigmodel');
   const routes = Object.fromEntries(providers.filter(provider => provider !== 'deepseek').map(provider =>
     ['registration.' + provider, {provider, maxOutputTokens: 2048}]));
   const client = createAiClient({routes, timeoutMs, adapters: createAdapters({fetcher,cloudflareThinking:false}),

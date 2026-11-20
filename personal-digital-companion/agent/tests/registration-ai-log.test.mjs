@@ -447,18 +447,18 @@ test('复用主站真实供应商客户端，顺序覆盖全部已定义接口�
   const gateway = createRegistrationAiGateway({deepseekLanguage: 'synthetic-only', BIGMODEL_API_KEY: 'fixture', GEMINI_API_KEY: 'fixture'}, {...shared, runPaidProbe}, {
     fetcher: async (url, options) => {
       const payload=JSON.parse(options.body);
+      if (url.includes('generativelanguage.googleapis.com')) return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:'ok'}]}}]});
       outbound.push([url, payload.model, payload.max_tokens]);
       return Response.json({choices: [{finish_reason: 'stop', message: {content: JSON.stringify({actions: [food], pending: []})}}]});
     },
   });
-  const expected = shared.AI_PRIORITY.filter(provider => provider !== 'bigmodel' && provider !== 'gemini');
+  const expected = shared.AI_PRIORITY.filter(provider => provider !== 'bigmodel');
   assert.deepEqual(gateway.providers().slice(0, expected.length), expected);
-  assert.ok(Object.keys(shared.AI_MODELS).every(provider => gateway.providers().includes(provider) === (provider !== 'bigmodel' && provider !== 'gemini')));
+  assert.ok(Object.keys(shared.AI_MODELS).every(provider => gateway.providers().includes(provider) === (provider !== 'bigmodel')));
   assert.equal(gateway.providers().at(-1), 'deepseek');
   const input = {version: 1, route: 'text', maxOutputTokens: 2048, messages: [{role: 'user', content: 'test'}]};
-  for (const provider of ['bigmodel', 'gemini']) {
-    assert.equal((await gateway.attempt(provider, input)).error, 'NOT_CONFIGURED');
-  }
+  assert.equal((await gateway.attempt('bigmodel', input)).error, 'NOT_CONFIGURED');
+  assert.equal((await gateway.attempt('gemini', input)).value.provider, 'gemini');
   assert.equal((await gateway.attempt('cloudflare', input)).error, 'NOT_CONFIGURED');
   assert.equal((await gateway.attempt('deepseek', input)).value.provider, 'deepseek');
   assert.deepEqual(outbound, [['https://api.deepseek.com/chat/completions', 'deepseek-flash', 2048]]);
