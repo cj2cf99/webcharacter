@@ -45,10 +45,7 @@ const targets={
   'hu-shi.event.create':/一键事件/u,'records.create':/随手记|笔记/u,'diaries.create':/日记/u,'reminders.create':/提醒|待办/u
 };
 export function attachmentRegistration(text){
-  if(!text||/^(?:请)?(?:不要|不用|先别|别)|(?:如何|怎么).{0,12}(?:登记|记录)|(?:是什么|什么意思)[？?]?$/u.test(text.trim()))return false;
-  if(/(?:记录|登记)(?:了|的)?(?:什么|哪些)|(?:有没有|是否已经)(?:记录|登记)/u.test(text))return false;
-  const explicit=/(?:登记|记录|记下|记一下|记一笔|记一条|提醒我|记入|记到|记成|写.{0,4}日记|新增|创建|添加|加个|提交为)/u.test(text);
-  return explicit&&conversationRoute(text).kind==='registration'||/(?:帮我|请|把|将|给我|根据|从).{0,100}(?:登记|记录|记成|记作|记入|记到|存为|创建.{0,5}提醒|设为.{0,3}提醒)/u.test(text);
+  return typeof text==='string'&&conversationRoute(text).kind==='registration';
 }
 export function validatePreview(planned,text){
   const nodes=planned?.chain?.nodes;

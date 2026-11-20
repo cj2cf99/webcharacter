@@ -451,3 +451,12 @@ Qwen 会话通过 local-model-process.mjs 中的 systemPrompt 加载绯月人设
 ## 绯月手记发布候选
 
 日记、悬念与念叨已接入隔离主站和 API。真实本地 4B、只读入口、消费和悬念回链通过。现有普通对话模型沿用桌宠发布分支的配置。当前处于部署前确认阶段。[本次发布记录](../RELEASE_REVIEW.md)
+
+## 2026-11-21 JST · 9B 关键词和回复修复正式安装结果
+
+用户指示「安装，本次不登记花园」。06:23:25 JST 完成本机安装，旧进程 27924 正常退出，新进程 16344 从原目录和原资料启动，v3 服务已就绪。候选 22 项 SHA-256 全部读回相符。原文件和新增文件清单备份在 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/skills-9b-before-aa4be2d7331245cbb44d4acc2fbb09f0。
+
+正式目录运行 node --test agent/tests/chat-registration-boundary.test.mjs，3/3 通过。隔离 Electron 使用正式页面核实直连开关和关闭后恢复普通模式。正式 Vulkan Aggressive 9B 的三次真实推理分别得到普通早餐登记 task、早餐分享 chat、直连同一登记原句 chat。三次均无截图中的重复尾串。直连可能用角色扮演文字描述“写在纸上”，实际不会调用登记。面板登记路径用隔离接口验收，未写入真实早餐。花园登记按本次指示跳过。无业务迁移、云端部署或远端推送。
+
+在独立本地 Git 分支 codex/feiyue-9b-skill-routing-20261121 保存本批次的实际旧值、发布文件及审核结果。模型权重、用户内容、资料目录、令牌和备份包未加入 Git。
+

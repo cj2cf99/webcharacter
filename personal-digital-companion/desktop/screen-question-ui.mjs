@@ -6,7 +6,8 @@ const mode=byId('mode'),withScreen=byId('withScreen'),send=byId('send'),retry=by
 const badge=byId('badge'),pending=byId('pending'),replyContent=byId('replyContent');
 const directChat=byId('directChat');
 directChat.checked=localStorage.getItem('feiyue.directChat')==='on';
-directChat.onchange=()=>localStorage.setItem('feiyue.directChat',directChat.checked?'on':'off');
+const directActive=()=>directChat.checked&&!directChat.disabled&&!byId('directOption').hidden;
+directChat.onchange=()=>{localStorage.setItem('feiyue.directChat',directChat.checked?'on':'off');updateMode();retry.hidden=true;decisions.hidden=directActive()||!decisions.childElementCount;};
 const segmenter=new Intl.Segmenter('zh',{granularity:'grapheme'});
 const labels={resume:'恢复原链',continue:'继续',skip:'跳过',stop:'停止后续',supplement:'补充登记'};
 const recordingInput=['输入登记内容，可按 Win + H 听写','登记 ↗'];
@@ -40,10 +41,10 @@ function updateMode(value){
   if(attachment)value='auto';
   if (value)mode.value=Object.hasOwn(modes,value)&&mode.querySelector('option[value="'+value+'"]')?value:'auto';
   const selected=mode.value;
-  directChat.disabled=selected!=='auto'||audit||Boolean(attachment)||withScreen.checked;
+  directChat.disabled=busy||reading||selected!=='auto'||audit||Boolean(attachment)||withScreen.checked;
   if(selected!=='auto'||audit)withScreen.checked=false;
-  withScreen.disabled=audit||busy||reading||Boolean(attachment)||selected!=='auto';
-  mode.disabled=audit||busy||reading||Boolean(attachment);
+  withScreen.disabled=directActive()||audit||busy||reading||Boolean(attachment)||selected!=='auto';
+  mode.disabled=directActive()||audit||busy||reading||Boolean(attachment);
   byId('removeAttachment').disabled=busy||reading;
   const [placeholder, label]=modes[selected]??modes.auto;
   question.placeholder=audit?'写下你对这件事的解释…':placeholder;
@@ -69,6 +70,7 @@ function attachmentError(message=''){
 async function attachFiles(files){
   if(busy||reading||audit)return;
   attachmentError();
+  if(directActive())return attachmentError('直连仅支持文字；关闭直连后可以添加附件。');
   if(!host.attachmentInput||!attachmentReady)return attachmentError('请重新启动绯月以启用附件。');
   if(!files.length||files.length+references.length+Number(Boolean(attachment))>16)return attachmentError('每次最多 16 张图片。');
   reading=true;updateMode();resetIdle();
@@ -151,7 +153,7 @@ function render(value){
   }
   const actions=[...(value.actions??[])];
   if(value.canSupplement)actions.push('supplement');
-  decisions.hidden=busy||!actions.length;
+  decisions.hidden=directActive()||busy||!actions.length;
   decisions.replaceChildren(...actions.map(action=>{
     const button=document.createElement('button');button.textContent=labels[action];
     button.onclick=()=>{
@@ -177,7 +179,7 @@ question.oninput=()=>{retry.hidden=true;};
 form.onsubmit=async event=>{
   event.preventDefault();
   const text=question.value;if((!text.trim()&&!attachment)||send.disabled)return;
-  const direct=directChat.checked&&!directChat.disabled&&!byId('directOption').hidden;
+  const direct=directActive();
   const value=await invoke(()=>host.ask(text,withScreen.checked,direct?'direct':mode.value,attachment,references));
   if(value?.state==='answer'&&!value.invalid){question.value='';showAttachment(null);attachmentError();updateMode('auto');question.focus();}
 };

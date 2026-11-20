@@ -222,3 +222,20 @@ node tools/personality-memory-preview.mjs --serve
 - 用户已确认生产部署、花园清单及两个数据库备份目的地。线上界面待用户截图确认。独立第三方审核未执行。本节记录本次实际结果；早前准备状态按时间保留。
 
 生产发布回执及相关源码已普通推送并于 2026-11-20 23:01:35 JST 独立读回核对。主站 main 对应 f0ad5b8dbd58928ac98379759083b84ad8925f85，API main 对应 f4807572a826728a5f1f9ae655e18f61d4cf8fa2，桌宠 codex/workspace-checkpoint-20261120 对应 eda318060bb90bed44f53688672510819b1211db。本次同步附记仅追加 Git 核验信息。
+
+## 2026-11-21 JST · Aggressive 9B 登记关键词、直连和异常尾串修复候选
+
+需求与原始场景：先保留 Qwen3.5 4B 时代的技能，Aggressive 9B 使用调试后的技能。普通模式以登记／记录的请求语义分流，直连只聊天。正式回合 06:05:37 的 operation 是文字问答，Aggressive 9B 本地完成耗时 7572 毫秒、云端 0 毫秒。用户要求提前登记早餐，旧版漏掉提前二字，回复声称记在小本本且末尾有十六个重复的右花括号和星号片段。验收要求同一句在普通模式进入待确认登记，直连输出纯文本对话，食物分享默认聊天；保留正常标点、代码和 Markdown。
+开发库 WebCharacter 3b55903、正式目录 .release-feiyue-handbook-desktop-20261120/personal-digital-companion 的 Git 39fd098 加实际在用工作树。原文件和两棵树所有旧技能已按存档 manifest 逐项解包验证 338 个文件。备份 G:/chat/2026-11-20/wo-z/outputs/绯月-Qwen3.5-4B-技能与关键词基线.zip，SHA-256 08423a3e400ba0f0845ccc25de1a291958446e8e9aa26bb5140981e97bdb4c74。以实际正式目录为底，只将与本次有关的开发差异合入候选 G:/chat/2026-11-20/wo-z/work/9b-skills-release。manifest.json 列明 22 个文件的逐项旧值及新值，用 git diff --no-index 或文件摘要核对。
+分流入口 conversation-routing、interaction-skills 与宿主/界面 screen-question-host、screen-question-ui（含打包副本）更新：明确的委托、别名及专门入口走既有流程；普通生活分享、引用、否定避免误登记。裸关键词澄清对象。直连优先，使用独立的本地纯文字分支，关闭后恢复普通分流。更新交互总控、角色聊天和登记技能的源码及版本；正式候选的三版本依次为 2.2、1.3、1.4。原技能版本保留。local-model-process 和新增 chat-output 模块按聊天输出处理符号循环和无业务回执的典型完成语句，调整采样；直连系统提示仍只有原先一句。细节与边界见 agent/tests/chat-registration-boundary.test.mjs。开发树的 unified-conversation.test.mjs 同步更新旧的隐式运动登记预期。业务库、模式权重、线上接口、数据迁移、历史回填及云端配置无变化。
+实际验证：node --test agent/tests/unified-conversation.test.mjs agent/tests/screen-question-host.test.mjs agent/tests/balanced-local-model.test.mjs 18/18；新增专项 3/3 在开发树与正式基线候选均通过；python -B tools/test-skills.py 6/6。开发树 Electron 七面板检查、候选隔离 Electron 直连开关及模式和截图禁用验证通过。实际 Vulkan 9B 候选三组输入：原始早餐请求为 registration/task；去掉委托词的同餐分享为 question/chat；原始早餐输入在直连为 direct/chat。隔离面板验证准确的待核对字段和无实际业务写入，真实旧回复通过尾串回放。真实模型输出有随机性，直连仍可能自行发挥角色细节。历史对话未修改，也未提交真实早餐。
+发布目标为现有 Windows 正式桌宠。安装前重新复核进程、资料目录、快捷方式、自启项和 manifest 旧值；备份运行文件、技能源码与指针。正式安装仅在本次获准后按清单替换并走受控重启，保留原资料。重启后核对新 PID、路径、摘要、实际对话入口和候选的同句三路验证。失败时恢复备份及旧 skill 指针，撤回本批新增且摘要仍匹配的文件后受控重启。本次仅开发与候选验证完成。正式安装、用户对正式版效果确认及第三方独立审核均未执行；本次部署授权及花园登记意愿待定，尚未提交或推送 Git。
+
+## 2026-11-21 JST · 9B 关键词和回复修复正式安装结果
+
+用户指示「安装，本次不登记花园」。06:23:25 JST 完成本机安装，旧进程 27924 正常退出，新进程 16344 从原目录和原资料启动，v3 服务已就绪。候选 22 项 SHA-256 全部读回相符。原文件和新增文件清单备份在 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/skills-9b-before-aa4be2d7331245cbb44d4acc2fbb09f0。
+
+正式目录运行 node --test agent/tests/chat-registration-boundary.test.mjs，3/3 通过。隔离 Electron 使用正式页面核实直连开关和关闭后恢复普通模式。正式 Vulkan Aggressive 9B 的三次真实推理分别得到普通早餐登记 task、早餐分享 chat、直连同一登记原句 chat。三次均无截图中的重复尾串。直连可能用角色扮演文字描述“写在纸上”，实际不会调用登记。面板登记路径用隔离接口验收，未写入真实早餐。花园登记按本次指示跳过。无业务迁移、云端部署或远端推送。
+
+在独立本地 Git 分支 codex/feiyue-9b-skill-routing-20261121 保存本批次的实际旧值、发布文件及审核结果。模型权重、用户内容、资料目录、令牌和备份包未加入 Git。
+

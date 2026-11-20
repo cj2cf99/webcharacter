@@ -150,6 +150,10 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const mode=inputModes.has(args?.mode)?args.mode:'auto';
     const text=typeof args?.text==='string'?args.text.trim():'';
     onForeground();
+    if(direct){
+      if(args?.withScreen||args?.attachment||args?.references?.length)return {state:'error',text:'直连仅支持文字对话。'};
+      return track(()=>perform(text,false,false,'direct'));
+    }
     if(nag?.audit&&(!text||mode!=='auto'||args?.withScreen||args?.attachment||args?.references?.length))return {state:'error',text:'请用文字回答这条质问。',audit:true,nag:true,nagReply:true};
     if(nag&&text&&mode==='auto'&&!args?.withScreen&&!args?.attachment){
       if(busy)return {state:'error',text:'正在听你刚才的解释。',nag:true,nagReply:true};
@@ -163,10 +167,6 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       finally{busy=false;}
     }
     if(nag)leaveNag('interrupted');
-    if(direct){
-      if(args?.withScreen||args?.attachment||args?.references?.length)return {state:'error',text:'直连仅支持文字对话。'};
-      return track(()=>perform(text,false,false,'direct'));
-    }
     if(!busy&&registrationDraft&&!args?.withScreen&&!args?.attachment&&!args?.references?.length){
       if(/^(?:确认登记|确认|同意登记|同意|登记吧|是的)[。！!]?$/u.test(text))return inquiry.respond(registrationDraft.id,{action:'confirm'});
       if(/^(?:取消登记|不同意|放弃登记|放弃|取消|不用了|不登记)[。！!]?$/u.test(text))return inquiry.respond(registrationDraft.id,{action:'cancel'});
@@ -319,6 +319,8 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         const response=await withinChat(localModel?.analyze(userText,{hint:'direct',previous,signal,onProgress:waiting,turnStart:timing.start}));
         timing.localMs=performance.now()-timing.start;
         result=response?.reply?.trim()?{state:'answer',text:response.reply}:response?.error==='LOCAL_CHAT_TIME_LIMIT'?timedReply:{state:'error',text:'本地直连暂未取得回复。',code:response?.error??'LOCAL_AI_NOT_READY'};
+      }else if(route.kind==='registration'&&/^(?:(?:请|帮我|替我|给我)\s*)*(?:登记|记录)(?:一下)?[。！!吧\s]*$/u.test(text)){
+        result={state:'answer',text:'你想记下什么事？可以直接说“记录”加上内容。'};
       }else{
         const snapshotRoute=retry?route.withScreen:withScreen;
         const weather=route.kind==='question'&&matchWeatherQuestion(String(userText??''));
