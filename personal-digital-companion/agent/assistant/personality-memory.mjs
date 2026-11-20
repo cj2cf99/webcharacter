@@ -68,19 +68,60 @@ async function updateThread(db,owner,day,part,no,input){
     .bind(field,owner,day,part).first();
   return existing?.value===1?json({ok:true}):fail(404,'悬念不存在');
 }
+function validAudit(n){
+  const canonicalPage=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}\.[1-9]\d{0,5}$/.test(s);
+  const keys=['source','source_id','id','created_at','revision','title','reason','refs','points','next','questions','interruptions','status','mood','talk','notBefore','afterEvaluation'];
+  return Object.keys(n).every(k=>keys.includes(k))&&canonicalPage(n.source_id)&&
+    Array.isArray(n.refs)&&n.refs.length>=1&&n.refs.length<=8&&n.refs[0]?.page===n.source_id&&
+    n.refs.every(r=>r&&Object.keys(r).length===2&&canonicalPage(r.page)&&string(r.quote,160)&&r.quote.trim())&&
+    Array.isArray(n.points)&&n.points.length>=1&&n.points.length<=12&&n.points.every(p=>string(p,160)&&p.trim())&&
+    Number.isInteger(n.questions)&&n.questions>=1&&n.questions<=3&&string(n.next,300)&&
+    (n.afterEvaluation===undefined||string(n.afterEvaluation,600))&&
+    (n.notBefore===undefined||Number.isSafeInteger(n.notBefore));
+}
 async function saveNag(db,owner,x){
-  if(!x||!key(x.id)||!Number.isSafeInteger(x.revision)||x.revision<1||!['paylog','diary'].includes(x.source)||
+  if(!x||!key(x.id)||!Number.isSafeInteger(x.revision)||x.revision<1||!['paylog','diary','audit'].includes(x.source)||x.source==='audit'&&!validAudit(x)||
      !string(x.source_id,150)||!x.source_id||!string(x.title,300)||!string(x.reason,400)||!string(x.mood,40)||
      x.source==='paylog'&&!date(x.source_day)||x.source==='diary'&&!/^\d{4}-\d{2}-\d{2}\.\d+\/[1-9]\d*$/.test(x.source_id)||
      typeof x.created_at!=='string'||x.created_at!==new Date(x.created_at).toJSON()||!['提问中','等待回应','意外中断','用户结束','已解释','回合结束'].includes(x.status)||
      !Array.isArray(x.talk)||!x.talk.length||x.talk.length>24||!x.talk.every(line=>line&&string(line.text,12000)&&typeof line.at==='string'&&line.at===new Date(line.at).toJSON()&&['绯月','你','结束记录'].includes(line.who)))return fail(400,'念叨记录无效');
   const payload=JSON.stringify(x);
-  const saved=await db.prepare(`INSERT INTO companion_nags(owner,id,revision,created_at,source,source_id,title,reason,status,mood,payload) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+  // Citation snapshots live inside the nag. Only source_id is a navigable primary object.
+  let guard='WHERE 1';
+  if(x.source==='audit'){
+    guard=`WHERE NOT EXISTS (
+      SELECT 1 FROM companion_nags n, json_each(?) incoming
+      WHERE n.owner=? AND n.id<>? AND (
+        (n.source='audit' AND EXISTS (
+          SELECT 1 FROM json_each(n.payload,'$.refs') old
+          WHERE json_extract(old.value,'$.page')=json_extract(incoming.value,'$.page')
+        )) OR (n.source='diary' AND printf('%s.%d',substr(n.source_id,1,10),cast(substr(n.source_id,12) as integer))=json_extract(incoming.value,'$.page'))
+      )
+    )`;
+  }else if(x.source==='diary'){
+    guard=`WHERE NOT EXISTS (
+      SELECT 1 FROM companion_nags n,json_each(n.payload,'$.refs') r
+      WHERE n.owner=? AND n.source='audit' AND json_extract(r.value,'$.page')=?
+    )`;
+  }
+  const args=x.source==='audit'?[JSON.stringify(x.refs),owner,x.id]:x.source==='diary'?[owner,x.source_id.split('/')[0].replace(/\.0+(?=\d)/u,'.')]:[];
+  if(x.source==='audit'&&x.revision>1){
+    const prior=await db.prepare('SELECT 1 FROM companion_nags WHERE owner=? AND id=?').bind(owner,x.id).first();
+    if(!prior)return fail(409,'请先登记这条质问和出处');
+  }
+  if(x.source==='audit'&&x.revision===1){
+    for(const r of x.refs){
+      const [day,part]=r.page.split('.');
+      const found=await db.prepare('SELECT 1 FROM companion_diary WHERE owner=? AND day=? AND part=? AND instr(body,?)>0').bind(owner,day,Number(part),r.quote).first();
+      if(!found)return fail(409,'引用的手记或原文无法核实');
+    }
+  }
+  const saved=await db.prepare(`INSERT INTO companion_nags(owner,id,revision,created_at,source,source_id,title,reason,status,mood,payload) SELECT ?,?,?,?,?,?,?,?,?,?,? ${guard}
     ON CONFLICT(owner,id) DO UPDATE SET revision=excluded.revision,status=excluded.status,mood=excluded.mood,payload=excluded.payload
     WHERE companion_nags.revision<excluded.revision AND companion_nags.source=excluded.source AND companion_nags.source_id=excluded.source_id
-      AND companion_nags.title=excluded.title AND companion_nags.reason=excluded.reason AND companion_nags.created_at=excluded.created_at AND companion_nags.status NOT IN ('用户结束','已解释','回合结束')
+      AND (excluded.source<>'audit' OR (json_extract(companion_nags.payload,'$.refs')=json_extract(excluded.payload,'$.refs') AND json_extract(companion_nags.payload,'$.points')=json_extract(excluded.payload,'$.points'))) AND companion_nags.title=excluded.title AND companion_nags.reason=excluded.reason AND companion_nags.created_at=excluded.created_at AND companion_nags.status NOT IN ('用户结束','已解释','回合结束')
     ON CONFLICT DO NOTHING`)
-    .bind(owner,x.id,x.revision,x.created_at,x.source,x.source_id,x.title,x.reason,x.status,x.mood,payload).run();
+    .bind(owner,x.id,x.revision,x.created_at,x.source,x.source_id,x.title,x.reason,x.status,x.mood,payload,...args).run();
   if(saved.meta.changes)return json({id:x.id,revision:x.revision});
   const prior=await db.prepare('SELECT payload FROM companion_nags WHERE owner=? AND id=?').bind(owner,x.id).first();
   return prior?.payload===payload?json({id:x.id,revision:x.revision}):fail(409,'来源已提问或记录版本冲突');

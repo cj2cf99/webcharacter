@@ -3,8 +3,9 @@ import {pathToFileURL} from 'node:url';
 import {readFile} from 'node:fs/promises';
 import {tokyoDay} from './conversation-history.mjs';
 import {createPanelWindow} from './panel-window.mjs';
+import {readTaskReviews} from './personality-diary.mjs';
 
-export function attachConversationDetails(electron,{root,bundle,history,memory,readTasks,readTraffic,checks,edits,visible,onReview}) {
+export function attachConversationDetails(electron,{root,profile,bundle,history,memory,readTasks,readTraffic,checks,edits,auditPending=()=>null,resumeAudit,visible,onReview}) {
   const {ipcMain,shell}=electron;
   let initialView='chat';
   let panel=null, selection=null, shownSources=new Set(), loading=null;
@@ -22,8 +23,7 @@ export function attachConversationDetails(electron,{root,bundle,history,memory,r
       catch{return {day,view,lines:[],next:null,warning:'日志已轮转或暂时无法读取，请刷新日志。'};}
     }
     if(view==='pending'){
-      if(!edits)throw Error('提醒确认未就绪。');
-      return {day,view,...await edits.view()};
+      return {day,view,choices:[],entries:[],...await edits?.view(),audit:auditPending()};
     }
     if(view==='tasks'){
       if(!readTasks)throw Error('任务记录未连接');
@@ -44,13 +44,21 @@ export function attachConversationDetails(electron,{root,bundle,history,memory,r
     reportDay=day;shownTasks=new Set(turns.filter(t=>t.report?.job===t.id).map(t=>t.id));
     return {day,view:'chat',turns,selectedId:selected?.id,warning};
   });
+  ipcMain.handle('conversation:resume-audit',(event,id)=>{
+    if(!trusted(event)||!id||auditPending()?.id!==id)throw Error('这条手记质问已经结束。');
+    return resumeAudit();
+  });
   ipcMain.handle('conversation:report',async(event,day,id)=>{
     if(!trusted(event)||day!==reportDay||!shownTasks.has(id))throw Error('请选择任务复盘中的记录');
     const turn=await memory?.readImageReport?.(day,id);
     let events=turn?[]:await memory?.taskHistory?.(id)??[];
     if(!turn&&!events.length)events=(await readTasks(day)).filter(e=>e.task_id===id);
     activeReport={day,id,steps:new Set(turn?.report?.steps.filter(s=>s.image).map(s=>s.step))};
-    return {turn,events};
+    try{
+      const reviewEvents=turn&&profile&&readTasks?(await readTasks(day)).filter(e=>e.task_id===id):events;
+      const reviews=profile?readTaskReviews(profile,id,reviewEvents,turn?day:undefined):[];
+      return {turn,events,reviews};
+    }catch{return {turn,events,reviews:[],reviewWarning:'评价暂时读取失败，可重新打开详情。'};}
   });
   ipcMain.handle('conversation:report-image',async(event,day,id,step,full)=>{
     if(!trusted(event)||activeReport?.day!==day||activeReport.id!==id||!activeReport.steps.has(step))throw Error('请先打开对应任务报告');
@@ -105,11 +113,16 @@ export function attachConversationDetails(electron,{root,bundle,history,memory,r
     await loading;
     if(panel!==current||current.isDestroyed())return;
     if(!opening)current.webContents.send('conversation:select');
-    if(visible){current.show();current.focus();}
+    if(visible){
+      current.show();
+      // Windows 隐藏启动时，第一次 show() 可能仍让窗口保持隐藏。
+      if(process.platform==='win32'&&!current.isVisible())current.show();
+      current.focus();
+    }
   }
   return {open,get panel(){return panel;},close(){
     ipcMain.removeHandler('conversation:read-notices');
-    for(const name of ['report','report-image','report-fullscreen'])ipcMain.removeHandler('conversation:'+name);
+    for(const name of ['report','report-image','report-fullscreen','resume-audit'])ipcMain.removeHandler('conversation:'+name);
     ipcMain.removeHandler('conversation:read');ipcMain.removeHandler('conversation:source');ipcMain.removeHandler('conversation:reminder-decision');ipcMain.removeHandler('conversation:image');
     ipcMain.removeListener('conversation:reviewed',reviewed);
     if(panel&&!panel.isDestroyed())panel.destroy();

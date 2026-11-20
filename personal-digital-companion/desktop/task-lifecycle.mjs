@@ -23,7 +23,7 @@ export function interruptionDetail(task) {
   const time=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',dateStyle:'medium',timeStyle:'medium'}).format(new Date(date));
   return `任务：${task.metadata?.name||task.type} (${task.task_id})\n参数：${JSON.stringify(task.params)}\n最后记录：${last?`第${last.attempt_no}次 ${last.status}`:task.status}，${time} JST\n结果未知，可能已产生部分操作。重做可能重复原操作。`;
 }
-export async function createDesktopTasks({profile,dialog,request,handlerModule,pollerOptions={},memory,generateImage,desktopBusy=()=>false}={}) {
+export async function createDesktopTasks({profile,dialog,request,handlerModule,pollerOptions={},memory,generateImage,openImage,desktopBusy=()=>false,onAutomaticProgress=()=>{}}={}) {
   const identity=await getDeviceIdentity(profile);
   let configurationError=null, connection;
   if(request===undefined)try {connection=await loadCloudConnection(profile); request=connection?.request;} catch(error){configurationError=error.message;request=null;}
@@ -40,7 +40,7 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
       const finish=(error,response)=>{clearTimeout(timeout);controller.signal.removeEventListener('abort',abort);if(error)reject(error);else resolve(response);};
       const abort=()=>{local.abort();finish(Object.assign(new Error('应用正在退出，记录保留'),{code:'CANCELLED'}));};
       if(controller.signal.aborted){abort();return;}
-      const wait=['/api/assistant/recording-plan','/api/assistant/heartbeat'].includes(path)?240000:path==='/api/records/photos'?60000:path.endsWith('/execute')||path.startsWith('/api/weather/')?15000:5000;
+      const wait=['/api/assistant/recording-plan','/api/assistant/heartbeat','/api/assistant/provider-test'].includes(path)?240000:path==='/api/records/photos'?60000:path.endsWith('/execute')||path.startsWith('/api/weather/')?15000:5000;
       timeout=setTimeout(()=>{local.abort();finish(Object.assign(new Error('连接超时，记录仍保留'),{code:'TIMEOUT'}));},wait);
       controller.signal.addEventListener('abort',abort,{once:true});
       Promise.resolve().then(()=>{
@@ -103,24 +103,35 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     heartbeatTimer.unref();
   }
   let archiveWrites=Promise.resolve();
+  let latestArchive;
+  function archiveDay(at){
+    const day=tokyoDay(new Date(at));
+    latestArchive=archiveWrites.then(()=>memory.saveTasks(day,executor.review.read(day)));
+    archiveWrites=latestArchive.catch(()=>traffic.write({direction:'local',route:'记忆归档',error:'TASK_ARCHIVE_FAILED'}));
+    return latestArchive;
+  }
   const executor=createTaskExecutor({databasePath:join(profile,'tasks.sqlite'),deviceId:identity.device_id,handlers:threads.handlers,
-    onReviewChanged:memory?at=>{
-      const day=tokyoDay(new Date(at));
-      archiveWrites=archiveWrites.then(()=>memory.saveTasks(day,executor.review.read(day))).catch(()=>traffic.write({direction:'local',route:'记忆归档',error:'TASK_ARCHIVE_FAILED'}));
-    }:undefined,
+    onReviewChanged:memory?archiveDay:undefined,
     canExecute:()=>!stopped,waitForExecution:async()=>{if(gate)await gate;}});
   const record=executor.review.record;
+  async function recordLocalBatch(event){
+    const previous=latestArchive;
+    record(event);
+    // 复盘已落盘但日记归档前进程退出时，补写同一天的快照。
+    if(memory)await (latestArchive===previous?archiveDay(event.at):latestArchive);
+  }
   const registration=createRegistrationFlow({profile,request,canEnter:canStart,canStart:()=>!checking&&!stopped,
     pauseChain:id=>defer('registration',id),log:traffic.write,record});
   const reminderReview=createReminderReviewFlow({request,canStart,waitForStart:()=>gate,
     pauseItem:item=>defer('reminder',item.id,item),record});
   const sync=request?createTaskSync({request,executor,deviceId:identity.device_id,pauseBeforeExecute:()=>draining}):null;
-  let availableTasks=[];
-  function canPoll(){
-    if(!canStart()||desktopBusy()||activeCount()||operations.size||outstanding||resuming)return false;
+  let availableTasks=[],automaticTask=null;
+  function tasksIdle(){
+    if(!canStart()||activeCount()||operations.size||outstanding||resuming)return false;
     if(continuation.entries().length||chainClient.pending().length||executor.hasUnsettledWork())return false;
     return !registration.hasSaved()&&!reminderReview.hasUnknown();
   }
+  const canPoll=()=>!desktopBusy()&&tasksIdle();
   const poller=sync?createTaskPoller({...pollerOptions,request,identity,
     canStart:canPoll,
     onTasks:async tasks=>{
@@ -128,24 +139,58 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
       for(const task of tasks){
         if(!canPoll())break;
         if(!Object.hasOwn(threads.handlers,task.type)||executor.isRecoveryReplacement(task.task_id))continue;
+        const title=task.name||task.metadata?.name||(task.type===PC_IMAGE_GENERATE?'生成图片':Object.hasOwn(pcRegistrations,task.type)?'执行登记':task.type);
+        automaticTask={id:task.task_id,title};
+        onAutomaticProgress({title,stage:'正在领取'});
         try{await runTask(task.task_id,true);break;}
         catch(error){
           if(error.status===404||error.status===409)continue;
           void traffic.write({direction:'local',route:'自动接取',task_id:task.task_id,error:error.message});
           break;
-        }
+        }finally{automaticTask=null;onAutomaticProgress(null);}
       }
     },
   }):null;
   const tell=(message,detail='')=>stopped?Promise.resolve():dialog.showMessageBox({type:'info',title:'任务记录',message,detail,buttons:['确定']});
+  async function reportCompletion(task,title,uploaded){
+    if(stopped)return;
+    const image=task.type===PC_IMAGE_GENERATE&&task.result?.archived?task.result:null;
+    const detail=[uploaded?'云端已确认收到结果。':'本机结果已保存，云端回执待确认。'];
+    if(image)detail.push('成图已归档 · '+image.width+' × '+image.height+' PNG');
+    detail.push('任务编号：'+task.task_id);
+    const canOpen=Boolean(image&&openImage);
+    const choice=await dialog.showMessageBox({type:'info',title:'绯月 · 自动任务汇报',
+      message:'我完成了「'+title+'」。',detail:detail.join('\n'),buttons:canOpen?['查看成图','知道了']:['知道了'],cancelId:canOpen?1:0});
+    if(canOpen&&choice.response===0&&!stopped){
+      try{await openImage(image.job_id);}catch(error){await tell('成图未能打开',error.message);}
+    }
+  }
   const chainClient=createChainClient({profile,request,deviceId:identity.device_id,executor,record,
     canStart,canFinishReceipt:()=>!checking&&!stopped,pauseClaim:id=>defer('claim',id),canAcquire:()=>inFlight.size<2,
     waitForStart:async()=>{if(gate)await gate;},
     executeClaimed:async receipt=>{
       if(checking||stopped||inFlight.size>=2)throw new Error('本机暂不能开始新任务，领取记录已保存');
+      const automatic=automaticTask?.id===receipt.task.task_id;
+      if(automatic)onAutomaticProgress({title:automaticTask.title,stage:receipt.task.type===PC_IMAGE_GENERATE?'等待生图结果':'正在本机执行'});
       const pending=sync.executeClaimed(receipt);inFlight.add(pending);
       let result;
-      try{result=await pending;if(result.paused)return result;executor.markUploaded(receipt.task.task_id);}finally{inFlight.delete(pending);}
+      let completed,uploaded=false;
+      try{
+        result=await pending;
+        if(result.paused)return result;
+        executor.markUploaded(receipt.task.task_id);
+        if(!result.archived&&result.acknowledged&&result.task.status==='COMPLETED'){completed=result.task;uploaded=true;}
+      }catch(error){
+        const local=executor.getTask(receipt.task.task_id);
+        if(local?.status==='COMPLETED')completed=local;
+        throw error;
+      }finally{
+        inFlight.delete(pending);
+        if(automatic&&completed){
+          const title=completed.definition?.name||automaticTask.title;
+          void reportCompletion(completed,title,uploaded).catch(()=>traffic.write({direction:'local',route:'自动任务完成汇报',error:'未能显示回执'}));
+        }
+      }
       void reportFailure(result).catch(()=>{});return result;
     }});
   const chainDialogs=createChainDialogs({dialog,client:chainClient,runTask,
@@ -342,7 +387,8 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     const reply = result?.kind === 'chat' && typeof result.reply === 'string' ? result.reply.trim() : '';
     const error = result?.error ?? (reply ? undefined : 'LOCAL_AI_NO_REPLY');
     const duration = Math.round(performance.now()-started);
-    await traffic.write({direction:'local',route:'本地 AI',stage:'连接测试',model:'Qwen3.5-0.8B',duration_ms:duration,error});
+    const model=localModel.snapshot?.().model??'Qwen3.5';
+    await traffic.write({direction:'local',route:'本地 AI',stage:'连接测试',model,duration_ms:duration,error});
     if (stopped) return;
     const reasons = {
       LOCAL_AI_BUSY:'本地 AI 正在处理请求，稍后可重试。',
@@ -353,20 +399,49 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     };
     await dialog.showMessageBox({title:'本地 AI 连接测试',type:error?'warning':'info',
       message:error?'本地 AI 测试未通过':'本地 AI 响应正常',
-      detail:['Qwen3.5 0.8B · '+duration+' 毫秒',error?(reasons[error]??'本地模型无法响应。')+'（'+error+'）':reply].join('\n'),
+      detail:[model+' · '+duration+' 毫秒',error?(reasons[error]??'本地模型无法响应。')+'（'+error+'）':reply].join('\n'),
       buttons:['确定']});
+  }
+  let activeProviderTest;
+  async function testCloudAi(){
+    const title='AI 轮询测试';
+    let message='未能取得完整的服务器测试结果',detail='',success=false,error;
+    try{
+      if(!request)throw Object.assign(Error(),{code:'NOT_CONFIGURED'});
+      const response=await request('/api/assistant/provider-test',{method:'POST',cache:'no-store'});
+      const result=await response.json().catch(()=>null);
+      const attempts=result?.ai?.attempts;
+      const valid=Array.isArray(attempts)&&attempts.length>0&&attempts.length<=16&&attempts.every(a=>
+        typeof a?.provider==='string'&&/^[a-z][a-z0-9-]{0,31}$/.test(a.provider)&&typeof a.code==='string'&&a.code.length>0);
+      const last=valid?attempts.at(-1):null;
+      if(response.ok&&result?.status==='success'&&last?.code==='OK'&&last.provider===result.provider&&last.model===result.model&&
+        typeof result.model==='string'&&/^[@a-z0-9_./:-]{1,96}$/i.test(result.model)){
+        success=true;message='成功 · '+result.provider;detail=result.model;
+        if(last.reply_check==='matched'&&typeof result.answer==='string'&&result.answer.length<=256)detail+='\n'+result.answer+'（东京时间）';
+      }else if(response.status===503&&result?.status==='all_failed'&&result.error?.code==='ALL_PROVIDERS_FAILED'&&valid&&attempts.every(a=>a.code!=='OK')){
+        message='已测试的 AI 接口全部失败';detail=attempts.map(a=>a.provider).join('、');error='ALL_PROVIDERS_FAILED';
+      }else error='INCOMPLETE_TEST_RECEIPT';
+    }catch(e){error=e?.code==='NOT_CONFIGURED'?'NOT_CONFIGURED':e?.code==='TIMEOUT'?'TIMEOUT':'CONNECTION_ERROR';}
+    await traffic.write({direction:'local',route:'AI 轮询测试',stage:'测试结束',result:success?'success':error==='ALL_PROVIDERS_FAILED'?'all_failed':'incomplete',error});
+    if(!stopped)await dialog.showMessageBox({title,type:success?'info':'warning',message,detail,buttons:['确定']});
   }
   async function showCloudConnection(localModel) {
     const buttons=[];
     if(request)buttons.push('测试云端连接');
     const localIndex=buttons.length;
     if(localModel)buttons.push('测试本地 AI');
+    const testIndex=buttons.length;
+    buttons.push('AI 轮询测试');
     const cancelId=buttons.length;
     buttons.push('关闭');
     const choice = await dialog.showMessageBox({title:'绯月连接测试',type:'info',
       message:connection ? connection.mode : configurationError || '等待发布配置',
       detail:connection?.origin ?? '',buttons,defaultId:0,cancelId});
     if(stopped)return;
+    if(choice.response===testIndex){
+      activeProviderTest??=testCloudAi().finally(()=>{activeProviderTest=undefined;});
+      return activeProviderTest;
+    }
     if(localModel && choice.response===localIndex)return testLocalAi(localModel);
     if(!request || choice.response!==0)return;
     try {
@@ -412,7 +487,7 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
       throw Error('仍有任务结果或回执未确认，请在任务菜单核对后再重启。');
   }
   function activeCount(){return executor.activeCount()+inFlight.size+chainClient.activeCount()+registration.activeCount()+reminderReview.activeCount();}
-  return {identity,executor,runTask,supportsTask:type=>Object.hasOwn(threads.handlers,type),decide,syncDecision,showPending,startup,registration,reminderReview,traffic,showCloudConnection,
+  return {identity,executor,recordLocalBatch,runTask,supportsTask:type=>Object.hasOwn(threads.handlers,type),decide,syncDecision,showPending,startup,registration,reminderReview,traffic,showCloudConnection,
     drainForRestart,cancelRestart(){draining=false;},
     checkTerminalRestore(){
       if(continuation.entries().some(([,entry])=>['task','claim'].includes(entry.kind)))
@@ -422,7 +497,7 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     chainClient,taskInbox,
     getAvailableTasks:()=>availableTasks.map(task=>({...task})),
     startPolling({managed=false}={}){if(!stopped){if(!managed)poller?.start();startHeartbeat();}},
-    canPoll,
+    canPoll,tasksIdle,
     pollOnce(){
       if(!poller)throw Object.assign(Error('云端连接未配置'),{code:'NO_CONNECTION'});
       return poller.scanOnce();

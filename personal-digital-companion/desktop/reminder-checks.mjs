@@ -4,7 +4,7 @@ import {tokyoDay} from './conversation-history.mjs';
 
 import {createPollScheduler} from './poll-scheduler.mjs';
 
-export async function checkDueItems(request,signal){
+export async function checkDueItems(request,signal,onStudyComplete){
   if(!request)throw Object.assign(Error('云端连接未配置'),{code:'NO_CONNECTION'});
   const response=await request('/api/reminder-review',{method:'GET',cache:'no-store',signal});
   if(!response.ok)throw Error('云端查询失败（HTTP '+response.status+'）');
@@ -14,6 +14,7 @@ export async function checkDueItems(request,signal){
   if(due.some(row=>typeof row.deadline!=='string'||typeof row.title!=='string'))throw Error('事项资料不完整');
   const overdue=due.filter(row=>row.deadline.slice(0,10)<data.today).length;
   const titles=due.slice(0,5).map(row=>row.title).join('、');
+  if(data.dailyStudyComplete===true)onStudyComplete?.(data.today);
   return due.length?'今日 '+(due.length-overdue)+' 项，逾期 '+overdue+' 项 · '+titles+(due.length>5?' 等':''):'没有到期未完成事项';
 }
 
@@ -69,6 +70,14 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,c
       changed();
     },
     record,
+    takeEveningPraise(day){
+      const at=now();
+      if(closed||day!==tokyoDay(at)||new Date(at+9*3600000).getUTCHours()<21)return false;
+      const project='晚间学习核对';
+      const result=db.prepare('INSERT INTO checks(day,at,due,project,status,detail) SELECT ?,?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM checks WHERE day=? AND project=?)')
+        .run(day,at,at,project,'已检查','多邻国和当天长期任务均已完成',day,project);
+      return result.changes===1;
+    },
     read(day,page=0){
       if(!/^\d{4}-\d\d-\d\d$/.test(day))throw Error('东京日期无效');
       const total=db.prepare('SELECT count(*) AS n FROM checks WHERE day=?').get(day).n;

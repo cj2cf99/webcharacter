@@ -48,6 +48,23 @@ class SkillTests(unittest.TestCase):
         for hint in json.loads((folder / "routes.json").read_bytes())["hints"]:
             self.assertIn(route_skill(hint)["skill"], {p.parent.name for p in (ROOT / "skills").glob("*/source")})
 
+    def test_diary_template(self):
+        selected = route_skill("diaryWriting")
+        self.assertEqual(selected["skill"], "diary-writing")
+        for action in ("writeDiary", "reviewLocalTasks"):
+            self.assertEqual(route_skill(action, "menu"), selected)
+        for section in ("你的日记", "花园部署", "当日消费", "基础情绪", "绯月私语"):
+            self.assertIn(section, selected["content"])
+        for stage in ("reviewAction", "reviewSource", "mood", "narrate", "summary", "follow"):
+            self.assertTrue(selected["localAi"][stage].strip())
+
+    def test_diary_audit(self):
+        selected = route_skill("diaryAudit")
+        self.assertEqual(selected["skill"], "diary-audit")
+        self.assertIn("线上唯一主对象", selected["content"])
+        for stage in ("extract", "compare", "verify", "keywords", "condense", "reply", "write"):
+            self.assertTrue(selected["localAi"][stage].strip())
+
     def test_image_steps(self):
         text = "生成女孩，再换上图1的风衣，最后放大"
         steps = [{"op": op, "quote": quote, "refs": refs} for op, quote, refs in

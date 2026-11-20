@@ -100,8 +100,8 @@ button { cursor: pointer; }
   padding: 2px;
 }
 #unsaved { color: var(--warning); font-size: 11px; }
-#decisions { display: flex; flex-wrap: wrap; gap: 4px; }
-#decisions button { border: 1px solid var(--edge); border-radius: 6px; background: var(--editor); font-size: 11px; }
+#decisions, #auditActions { display: flex; flex-wrap: wrap; gap: 4px; }
+#decisions button, #auditActions button { border: 1px solid var(--edge); border-radius: 6px; background: var(--editor); font-size: 11px; }
 .dots { display: none; gap: 3px; align-self: center; }
 #reply[data-state=waiting] .dots { display: flex; }
 .dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--rose); }

@@ -1,5 +1,6 @@
-import {createWorker} from '../worker.mjs';
 import {forwardRecordPhoto} from './record-photo.mjs';
+import {createWorker} from '../worker.mjs';
+import {handleReminderReview} from './reminder-review.mjs';
 import {isTaskWorkspaceApi} from './task-workspace-routes.mjs';
 
 const prefix = '/api/companion';
@@ -39,6 +40,8 @@ export async function handleCompanion(request, env, actor, fromMain) {
   if (fromMain && !memoryRead && !isTaskWorkspaceApi(url.pathname, request.method)) return fail(404, 'NOT_FOUND', '接口不存在');
   if (!env.COMPANION_DB || !env.COMPANION_HOST) return fail(503, 'COMPANION_NOT_CONFIGURED', '绯月服务尚未接入');
   if(url.pathname==='/api/records/photos')return forwardRecordPhoto(request,(bytes,type,name)=>env.COMPANION_HOST.uploadRecordPhoto(bytes,type,name));
+  const review = await handleReminderReview(request, env.COMPANION_HOST, url.pathname);
+  if (review) return review;
   if (url.pathname === '/api/health' && request.method === 'GET') {
     try {
       await Promise.all([env.COMPANION_DB.prepare('SELECT 1 FROM registration_ai_preference LIMIT 1').first(),

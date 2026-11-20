@@ -1,5 +1,4 @@
-import {memoryReader} from './memory-reader.mjs';
-export const memoryScript='('+memoryReader.toString()+')();';
+export {memoryScript} from './memory-reader.mjs';
 export const memoryHtml=`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>绯月手记</title><link rel="stylesheet" href="/assets/companion/memory.css"><script type="module" src="/assets/companion/memory.js"></script></head><body><header></header>  <main>
     <section class="cover" aria-labelledby="cover-title">
       <div class="cover-copy"><small>个人工作台　/　生活记录</small><h1 id="cover-title">绯月手记</h1><p id="archiveSummary"></p>

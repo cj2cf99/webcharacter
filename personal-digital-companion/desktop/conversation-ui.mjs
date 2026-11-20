@@ -4,6 +4,7 @@ let generation=0, view='chat';
 const older=document.getElementById('older'),refreshLog=document.getElementById('refreshLog');
 let nextLogPage=null;
 let deciding=false;
+let pendingReceipt='';
 const schedule=document.getElementById('schedule'),checkPages=document.getElementById('checkPages');
 let targetView,checkPage=0,nextAt=null,countdown,checksRefresh;
 const noticeControls=document.getElementById('noticeControls'),noticeDetail=document.getElementById('noticeDetail');
@@ -58,6 +59,8 @@ function renderChecks(data){
   pagination(data);
 }
 function element(tag,text){const node=document.createElement(tag);node.textContent=text;return node;}
+// 同一毫秒内按原时间线的逆序展示，最新回执保留详情入口。
+const newestFirst=events=>events.toReversed().sort((a,b)=>b.at-a.at);
 const report=document.getElementById('taskReport'),contents=document.getElementById('reportContents');
 const viewer=document.getElementById('pictureViewer'),original=document.getElementById('pictureOriginal');
 const phase={generate:'文字生图',img2img:'图生图',edit:'定向编辑',upscale:'高清放大'};
@@ -105,9 +108,18 @@ function reportButton(date,id,label='查看详情'){
     clearPictureObservers();
     contents.textContent='正在读取任务报告…';report.showModal();
     try{
-      const {turn,events}=await api.report(date,id);
+      const {turn,events,reviews,reviewWarning}=await api.report(date,id);
       if(!report.open||token!==reportToken)return;
       contents.replaceChildren();
+      if(reviews?.length){
+        const section=element('section','');section.className='event task-reviews';
+        section.append(element('h3','绯月的评价'));
+        for(const item of reviews){
+          if(reviews.length>1)section.append(element('time',stamp(item.at)));
+          section.append(element('p',item.review));
+        }
+        contents.append(section);
+      }
       if(turn){
         contents.append(element('h3',turn.question),element('p',turn.text),element('small','编号 '+id+' · '+stamp(turn.at)+' 提交'));
         if(turn.answeredAt)contents.append(element('p',stamp(turn.answeredAt)+' 结束'));
@@ -127,13 +139,14 @@ function reportButton(date,id,label='查看详情'){
         }
       }else{
         contents.append(element('h3',events.at(-1)?.title??'任务记录'),element('small','编号 '+id));
-        for(const e of events){
+        for(const e of newestFirst(events)){
           const section=element('section','');section.className='event';
           section.append(element('time',stamp(e.at)),element('h3',e.action));
           if(e.detail)section.append(element('p',e.detail));
           contents.append(section);
         }
       }
+      if(reviewWarning)contents.append(element('small',reviewWarning));
     }catch{if(token===reportToken)contents.textContent='报告读取失败，请返回后重试。';}
   };return button;
 }
@@ -161,7 +174,10 @@ async function decide(input){
   let receipt;
   try{receipt=await api.decide(input);}catch{receipt='连接中断，请重新查询事项核对结果。';}
   finally{deciding=false;list.inert=false;}
-  if(view==='pending'){await load(undefined,'pending');status.textContent=receipt;}
+  if(targetView==='pending'){
+    pendingReceipt=receipt;
+    await load(undefined,'pending');
+  }
 }
 function renderPending(data,explicit){
   const sections=[];
@@ -169,6 +185,15 @@ function renderPending(data,explicit){
   function section(title,expires){
     const s=element('section','');s.className='event';
     s.append(element('h2',title),element('time','有效至 '+clock.format(expires)+' JST'));sections.push(s);return s;
+  }
+  if(data.audit){
+    const s=element('section','');s.className='event';
+    const resume=button('继续回答',async()=>{
+      resume.disabled=true;
+      try{status.textContent=await api.resumeAudit(data.audit.id);}catch(error){status.textContent=error.message;}
+      finally{resume.disabled=false;}
+    });
+    s.append(element('h2','绯月的手记质问'),element('p',data.audit.title),element('small',data.audit.status+'　'),resume);sections.push(s);
   }
   for(const choice of data.choices){
     const s=section('要修改哪些事项？',choice.expires),selected=new Set();
@@ -190,7 +215,8 @@ function renderPending(data,explicit){
   }
   list.replaceChildren(...sections);
   if(explicit)api.reviewed?.(data.choices.length?'':data.token);
-  status.textContent=sections.length?'可以先关闭，稍后再决定。':'没有待确认的提醒修改。';
+  if(sections.length)pendingReceipt='';
+  status.textContent=pendingReceipt||(sections.length?'可以先关闭，稍后再决定。':'没有待确认的事项。');
 }
 function logRow(line){
   const row=element('section','');row.className='event';
@@ -213,6 +239,7 @@ function logRow(line){
 }
 async function load(date,requestedView,explicit=true,cursor=null) {
   const token=++generation;
+  if(requestedView!=='pending')pendingReceipt='';
   targetView=requestedView;
   if(requestedView!=='notices'||!cursor){noticeDetail.textContent='';noticeFilter='unread';}
   noticeControls.hidden=true;
@@ -242,13 +269,15 @@ async function load(date,requestedView,explicit=true,cursor=null) {
     }
     if(view==='pending'){renderPending(data,explicit);return;}
     if(view==='tasks'){
-      const last=new Map(data.events.map(e=>[e.task_id,e]));
-      list.replaceChildren(...data.events.map(event=>{
+      const shown=new Set();
+      list.replaceChildren(...newestFirst(data.events).map(event=>{
         const row=element('section','');row.className='event';
         row.append(element('time',clock.format(event.at)+' JST'),element('h2',event.title+' · '+event.action));
         if(event.detail)row.append(element('p',event.detail));
         row.append(element('small','编号 '+event.task_id));
-        if(event.task_id&&last.get(event.task_id)===event)row.append(reportButton(data.day,event.task_id));
+        if(event.task_id&&!shown.has(event.task_id)){
+          shown.add(event.task_id);row.append(reportButton(data.day,event.task_id));
+        }
         return row;
       }));
       status.textContent=data.events.length?'':'当天还没有任务操作记录。';

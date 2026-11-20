@@ -2,6 +2,7 @@ const types=[
   {id:'tasks',name:'任务轮询',minutes:15},
   {id:'due',name:'到期事项',minutes:20},
   {id:'weather',name:'三地天气',minutes:60},
+  {id:'diaryAudit',name:'手记质问',minutes:60},
   {id:'nag',name:'绯月念叨',minutes:120},
   {id:'diary',name:'写日记',minutes:720},
   {id:'review',name:'补行动评价',minutes:60},
@@ -49,7 +50,7 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
   function postpone(j,due,existing=null){
     if(j.queuedAt===null){
       j.misses++;
-      if(['diary','nag','review'].includes(j.id)||j.misses>=j.maximum)j.queuedAt=due;
+      if(['diary','nag','review','diaryAudit'].includes(j.id)||j.misses>=j.maximum)j.queuedAt=due;
       persist(j);
     }
     const queued=j.queuedAt!==null;
@@ -68,7 +69,7 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
       const result=await handlers[j.id](abort.signal);
       blocked=result?.deferred===true;
       detail=blocked?'执行前被本地任务占用':result?.detail??result;
-      if(!closed&&j.enabled&&!blocked&&['nag','diary'].includes(j.id)){
+      if(!closed&&j.enabled&&!blocked&&['nag','diary','diaryAudit'].includes(j.id)){
         const anchor=lastRun(j.id);
         const next=result?.nextAt??(anchor&&anchor+j.minutes*60000);
         if(next>now())arm(j,next);

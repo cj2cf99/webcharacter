@@ -7,6 +7,7 @@ import { validateParameters } from './tasks/parameters.mjs';
 import { handleTaskAction } from './tasks/actions.mjs';
 import {normalizeDeadline} from './tasks/deadline.mjs';
 import { handleRecovery } from './tasks/recover.mjs';
+import {testAiProviders} from './assistant/provider-test.mjs';
 import {handleAssistantMessage} from './assistant/message.mjs';
 import {planRegistration} from './assistant/registration-plan.mjs';
 import {runProviderChain} from './assistant/provider-chain.mjs';
@@ -215,8 +216,13 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
         if(review)return review;
       }
       if(path.startsWith('/api/weather/'))return await handleWeather(request,env,weatherOptions);
+      if(path==='/api/assistant/provider-test')return await testAiProviders(request,env,createAiClient);
       if(path==='/api/assistant/message')return await handleAssistantMessage(request,env.DB,createAiClient,env,weatherOptions,identity.ownerId);
       if(!env.DB)return error(503,'DATABASE_NOT_CONFIGURED',dailyLogs?'日志数据库尚未配置':'任务数据库尚未配置');
+      if(path==='/api/memory/sources'&&request.method==='GET'){
+        if(!env.COMPANION_HOST?.memorySources)return error(503,'MEMORY_SOURCES_UNAVAILABLE','手记来源未连接');
+        return json(await env.COMPANION_HOST.memorySources(Object.fromEntries(url.searchParams)));
+      }
       if(path==='/api/memory/expenses'&&request.method==='GET'){
         if(!env.COMPANION_HOST?.memoryExpenses)return error(503,'EXPENSES_UNAVAILABLE','消费来源未连接');
         return json(await env.COMPANION_HOST.memoryExpenses(Object.fromEntries(url.searchParams)));

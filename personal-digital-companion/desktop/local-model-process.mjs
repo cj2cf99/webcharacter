@@ -1,4 +1,5 @@
 import {performance} from 'node:perf_hooks';
+import {calendarContext,tokyoDate} from './calendar-date.mjs';
 import {imageSlots,resolveImageChoices} from './image-planning.mjs';
 import {conversationRoute,suppliedSummaryText} from './conversation-routing.mjs';
 
@@ -228,7 +229,7 @@ async function start() {
 
   async function pass(input, signal, systemPrompt, previous, outputGrammar=grammar, maxTokens=160) {
     const sequence = context.getSequence();
-    const session = new LlamaChatSession({contextSequence:sequence,chatWrapper:wrapper,systemPrompt});
+    const session = new LlamaChatSession({contextSequence:sequence,chatWrapper:wrapper,systemPrompt:[systemPrompt,active?.calendar].filter(Boolean).join('\n')});
     try {
       if (previous?.用户 && previous?.绯月) {
         const previousReply=outputGrammar===rewriteGrammar ? {reply:previous.绯月}
@@ -249,12 +250,12 @@ async function start() {
     }
   }
 
-  async function reviewAnswer(current,previous,reply,verifiedReply,signal,id,skill) {
+  async function reviewAnswer(current,previous,reply,verifiedReply,signal,id,skill,limit) {
     const auditPrompt=[reviewPrompt,skill?.review].filter(Boolean).join('\n');
     const focused = skill?.profile==='conversation' && straightforwardConversation(current) && conversationFocus(current,previous);
     const fallback = !focused ? null : asksForCompany.test(current) ? skill.companionshipReply
       : madeUserLaugh.test(current) ? skill.playfulReply : null;
-    for (let round=1; round<=3; round++) {
+    for (let round=1; round<=limit; round++) {
       signal.throwIfAborted();
       send({type:'answer-review',id,pass:round});
       const input = {上轮:previous,草稿:reply,本轮用户:current};
@@ -263,7 +264,7 @@ async function start() {
       if (fallback && reply===fallback && !issue) return {kind:'chat',reply};
       const feedback = issue || groundedFeedback(await pass(JSON.stringify(input),signal,auditPrompt,undefined,reviewGrammar),current,reply,previous);
       if (!feedback) return {kind:'chat',reply};
-      if (round===3) break;
+      if (round===limit) return {error:'LOCAL_AI_REPLY_REVIEW_REJECTED',revision:{draft:reply,feedback}};
       send({type:'answer-rewrite',id,pass:round});
       if (typeof fallback==='string' && !checkDraft(current,fallback,previous)) {
         reply=fallback;
@@ -320,7 +321,7 @@ async function start() {
     }
     const {id,text,hint,previous,intentBudgetMs=6500,remainingMs} = data;
     const controller = new AbortController();
-    active = {id,controller};
+    active = {id,controller,calendar:hint==='auto'?calendarContext(text,tokyoDate()):''};
     const signal = AbortSignal.any([controller.signal,AbortSignal.timeout(remainingMs)]);
     const draftMs = Math.min(remainingMs,intentBudgetMs);
     const draftSignal = AbortSignal.any([signal,AbortSignal.timeout(draftMs)]);
@@ -355,6 +356,10 @@ async function start() {
             const steps=resolveImageChoices(slots,choices);
             result=steps?{steps,question:''}:{steps:[],question:'请说明这一步要整体换画风，还是只编辑局部对象。'};
           }
+        } else if(data.revision && hint==='auto'){
+          const input=JSON.stringify({用户原话:current,上一模型草稿:data.revision.draft,审核意见:data.revision.feedback});
+          const answer=await pass(input,draftSignal,[persona,data.skillInstruction?.rewrite,'根据用户原话纠正草稿，直接给出完整答复。'].filter(Boolean).join('\n'),previous,rewriteGrammar,120);
+          result={kind:'chat',reply:answer.reply.trim()};
         } else if (verifiedReply) {
           const verifiedGrammar = await engine.createGrammarForJsonSchema({...schema,properties:{
             kind:{enum:['chat']},summary:{enum:['']},reply:{enum:[verifiedReply]},review:{enum:[false]}
@@ -366,7 +371,7 @@ async function start() {
         }
         activeSignal = signal;
         if (result.kind==='chat' && typeof result.reply==='string') {
-          result = await reviewAnswer(current.trim(),previous,result.reply,verifiedReply,signal,id,data.skillInstruction);
+          result = await reviewAnswer(current.trim(),previous,result.reply,verifiedReply,signal,id,data.skillInstruction,data.reviewLimit===2?2:3);
         } else if (result.kind) {
           result.reply = '';
         }

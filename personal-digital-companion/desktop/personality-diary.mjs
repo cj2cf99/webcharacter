@@ -1,8 +1,11 @@
 import {DatabaseSync} from 'node:sqlite';
+import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {stat} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {tokyoDay} from './conversation-history.mjs';
+import {readInteractionSkill} from './interaction-skills.mjs';
+import {readDiarySources} from './diary-sources.mjs';
 
 const hash=s=>createHash('sha256').update(s).digest('hex');
 const schema=names=>({type:'object',properties:Object.fromEntries(names.map(k=>[k,{type:'string'}])),required:names,additionalProperties:false});
@@ -20,6 +23,41 @@ function dialogueText(original,cleaned){
   if(!labels.length||labels.some(label=>!cleaned.includes(label)))return original;
   return cleaned;
 }
+function* materialChunks(day,source,at,text){
+  const chars=Array.from(cleanMemory(text));
+  for(let i=0;i<chars.length;i+=440){
+    const content=chars.slice(i,i+440).join('');
+    yield {id:hash([day,source,at,i,content].join('|')),content};
+  }
+}
+const taskText=row=>[row.title,row.action,row.detail].map(cleanMemory).join(' · ');
+
+export function readTaskReviews(profile,taskId,events,archiveDay){
+  const file=join(profile,'personality-memory.sqlite');
+  if(!existsSync(file))return [];
+  const db=new DatabaseSync(file,{readOnly:true});
+  try{
+    const tables=new Set(db.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all().map(r=>r.name));
+    if(!tables.has('materials'))return [];
+    const source='task:'+taskId;
+    const linked=tables.has('material_sources')?db.prepare(`SELECT m.id,m.review,s.at FROM material_sources s
+      JOIN materials m USING(id) WHERE s.source=? ORDER BY s.at DESC,s.rowid`).all(source):[];
+    const found=new Map(linked.map(row=>[row.id,row]));
+    // 早期评价仅存素材摘要。按写入时的归档日、任务、时间及原文分段精确匹配。
+    const legacy=db.prepare('SELECT review FROM materials WHERE id=?');
+    for(const event of events){
+      if(event.task_id!==taskId||!Number.isFinite(event.at))continue;
+      for(const {id} of materialChunks(archiveDay??tokyoDay(event.at),source,event.at,taskText(event))){
+        if(found.has(id))continue;
+        const row=legacy.get(id);
+        if(row)found.set(id,{at:event.at,review:row.review});
+      }
+    }
+    return [...found.values()].filter(row=>row.review?.trim()).sort((a,b)=>b.at-a.at)
+      .map(({at,review})=>({at,review:review.trim()}));
+  }finally{db.close();}
+}
+
 export function createPersonalityDiary({profile,memory,model,request,weather,now=Date.now}){
   const db=new DatabaseSync(join(profile,'personality-memory.sqlite'));
   db.exec(`PRAGMA journal_mode=WAL;
@@ -40,10 +78,19 @@ export function createPersonalityDiary({profile,memory,model,request,weather,now
     return res.json();
   }
   const safeOutput=(v,max)=>Array.from(cleanMemory(v)).slice(0,max).join('');
-  async function think(data,job,fields,signal){
+  async function think(data,job,fields,signal,skill){
     signal.throwIfAborted();
-    const answer=await model.memory(data,instructions+job,schema(fields),signal);
+    const format=schema(fields);
+    if(skill?.name==='diary-audit'){
+      for(const key of fields){
+        if(['keep','complete'].includes(key))format.properties[key]={enum:['0','1']};
+        if(['question','next'].includes(key))format.properties[key]={type:'string',maxLength:45};
+        if(key==='score')format.properties[key]={enum:['0','1','2','3','4','5']};
+      }
+    }
+    const answer=await model.memory(data,instructions+job,format,signal,skill);
     signal.throwIfAborted();
+    if(fields.includes('review')&&fields.includes('text')&&typeof answer.text!=='string')throw Error('行动评价缺少清洗正文');
     return Object.fromEntries(fields.map(k=>[k,safeOutput(answer[k],k==='text'?600:k==='mood'?40:160)]));
   }
   const pages=(since='')=>rows('SELECT json FROM pages WHERE day>=? ORDER BY day DESC,id DESC',since).map(r=>JSON.parse(r.json));
@@ -76,11 +123,48 @@ export function createPersonalityDiary({profile,memory,model,request,weather,now
     const matches=[...turns.map(t=>cleanMemory(t.question)),...history.map(r=>r.content).filter(v=>v.includes('你说'))];
     return [...new Set(matches.filter(t=>terms.some(term=>t.includes(term))).map(t=>safeOutput(t,180)))];
   }
+  // Only local archives and previously cleaned material participate in keyword lookup.
+  async function auditAssociations(terms,signal){
+    const keys=[...new Set(terms.map(s=>s.toLowerCase()).filter(s=>s.length>=2&&s.length<=32))].slice(0,3);
+    if(!keys.length)return [];
+    const hits=new Map();
+    function match(kind,day,value){
+      const text=cleanMemory(value),lower=text.toLowerCase();
+      const positions=keys.map(k=>lower.indexOf(k)).filter(i=>i>=0);
+      if(!positions.length)return;
+      const i=Math.max(0,Math.min(...positions)-20);
+      const snippet=safeOutput(text.slice(i),90);
+      const list=hits.get(kind)??[];hits.set(kind,list);
+      if(!list.some(h=>h.snippet===snippet)){
+        list.push({kind,day,snippet,score:positions.length});
+        list.sort((a,b)=>b.score-a.score||b.day.localeCompare(a.day));
+        list.splice(3);
+      }
+    }
+    const where=keys.map(()=>'instr(lower(material),?)>0').join(' OR ');
+    const materials="SELECT m.day,c.content||'　'||m.review AS material FROM cleaned c JOIN materials m USING(id)";
+    for(const r of rows('SELECT day,material FROM ('+materials+') WHERE '+where+' ORDER BY day DESC LIMIT 40',...keys)){
+      match('素材与评价',r.day,r.material);
+    }
+    for(const day of (await memory.archiveDays?.()??[]).slice().sort().reverse()){
+      signal.throwIfAborted();
+      for(const t of await memory.read(day))match('本机对话',day,[t.question,t.text].filter(Boolean).join('　'));
+      for(const t of await memory.readTasks(day))match('本机任务',day,[t.title,t.action,t.detail].filter(Boolean).join('　'));
+      if(['本机对话','本机任务'].every(k=>hits.get(k)?.length===3))break;
+    }
+    return [...hits.values()].flat().sort((a,b)=>b.score-a.score||b.day.localeCompare(a.day)).slice(0,5).map(({kind,day,snippet})=>({kind,day,snippet}));
+  }
+  async function reserveAudit(n,signal){
+    // One online row claims all quoted pages before the first popup can appear.
+    const receipt=await api('nags',n,signal);
+    if(receipt.id!==n.id||receipt.revision!==n.revision)throw Error('念叨登记回执不符');
+    put('INSERT OR IGNORE INTO nags VALUES(?,?,0)',n.id,JSON.stringify(n));
+  }
   function saveNag(n){
     n.revision++;put('INSERT OR REPLACE INTO nags VALUES(?,?,1)',n.id,JSON.stringify(n));
   }
   function transaction(work){
-    db.exec('BEGIN');try{work();db.exec('COMMIT');}catch(error){db.exec('ROLLBACK');throw error;}
+    db.exec('BEGIN');try{const result=work();db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}
   }
   async function syncNags(signal){
     for(const row of rows('SELECT id,json FROM nags WHERE dirty=1')){
@@ -101,22 +185,28 @@ export function createPersonalityDiary({profile,memory,model,request,weather,now
     }
   }
   const days=()=>[1,0,2,3,4,5,6].map(i=>tokyoDay(now()-i*86400000));
-  async function events(day){
-    const [turns,tasks]=await Promise.all([memory.read(day),memory.readTasks(day)]);
+  async function events(day,tasksOnly=false,external=[]){
+    const [turns,tasks]=await Promise.all([tasksOnly?[]:memory.read(day),memory.readTasks(day)]);
     const events=[];
-    function add(source,at,text,dialogue=false){
+    function add(source,at,text,dialogue=false,label){
       if(!Number.isFinite(at)||!text.trim())return;
-      const chars=Array.from(cleanMemory(text));
-      for(let i=0;i<chars.length;i+=440){
-        const content=chars.slice(i,i+440).join('');
-        events.push({id:hash([day,source,at,i,content].join('|')),source:String(source),at,content,dialogue,fromNag:String(source).startsWith('nag')});
+      for(const {id,content} of materialChunks(day,source,at,text)){
+        events.push({id,source:String(source),at,content,dialogue,label,fromNag:String(source).startsWith('nag')});
       }
     }
-    for(const r of turns)if(r.state!=='waiting')add(r.id,r.at,'你说：'+cleanMemory(r.question)+'\n绯月当时回复：'+cleanMemory(r.text),true);
-    for(const r of tasks)add('task:'+r.task_id,r.at,[r.title,r.action,r.detail].map(cleanMemory).join(' · '));
+    for(const r of turns)if(r.state!=='waiting'){
+      const question=cleanMemory(r.question),reply=cleanMemory(r.text);
+      add(r.id,r.at,'你说：'+question+'\n绯月当时回复：'+reply,true);
+    }
+    for(const r of tasks){
+      add('task:'+r.task_id,r.at,taskText(r));
+    }
+    if(tasksOnly)return {items:events};
+    for(const r of external)add(r.source,r.at,r.content,false,r.label);
     const notices=weather(day);
     for(const r of notices)add('notice:'+r.id,r.at,'绯月播报：'+r.body);
     for(const n of nags()){
+      if(n.source==='audit')continue; // 手记质问的收笔归入该念叨 ID。
       if(n.talk?.length&&n.beforeEvaluation){
         const at=Date.parse(n.talk[0].at);
         if(tokyoDay(at)===day)add('nag-before:'+n.id,at,'开口前的评价：'+n.beforeEvaluation+'；心情：'+n.before);
@@ -136,22 +226,46 @@ export function createPersonalityDiary({profile,memory,model,request,weather,now
     }
     return {items:events.sort((a,b)=>a.at-b.at),weather:safeOutput(notices.at(-1)?.body??turns.find(r=>/天气|预警/.test(r.question??''))?.text??'无记录',160)};
   }
-  async function review(day,e,signal){
-    const prior=db.prepare('SELECT review,covered FROM materials WHERE id=?').get(e.id);
-    if(prior)return {...prior,content:db.prepare('SELECT content FROM cleaned WHERE id=?').get(e.id)?.content??e.content};
-    const result=await think(e.content,'只依据当时已知的事写行动评价。text 清除无意义执行细节和废话，保留“你说”和“绯月当时回复”的说话人标记。用户原话只改明显错字，保留双方发言、答错和改口。完全没有生活事实时 text 留空。', ['review','text'],signal);
-    if(!result.review)throw Error('行动评价为空');
-    transaction(()=>{
-      put('INSERT OR IGNORE INTO materials(id,day,review) VALUES(?,?,?)',e.id,day,result.review);
-      put('INSERT OR IGNORE INTO cleaned VALUES(?,?)',e.id,result.text);
+  const lookupReview=db.prepare(`SELECT content,review,covered FROM (SELECT ? AS id)
+    LEFT JOIN cleaned USING(id) LEFT JOIN materials USING(id)`);
+  // undefined 需要补评，null 表示已检查过的空正文。
+  function storedReview(id){
+    const row=lookupReview.get(id);
+    if(row.content===null&&row.review===null)return undefined;
+    if(!row.content?.trim())return null;
+    if(row.review?.trim())return {...row,existing:true};
+  }
+  async function review(day,e,write){
+    const prior=storedReview(e.id);
+    if(prior!==undefined)return prior;
+    const result=e.label?{text:e.content,...await write(JSON.stringify({来源:e.label,记录:e.content}),
+      'reviewSource',['review'])}:
+      await write(e.content,'reviewAction', ['review','text']);
+    return transaction(()=>{
+      const cached=storedReview(e.id);
+      if(cached!==undefined)return cached;
+      if(result.text&&!result.review)throw Error('行动评价为空');
+      put('INSERT OR REPLACE INTO cleaned VALUES(?,?)',e.id,result.text);
+      if(!result.text)return null;
+      put(`INSERT INTO materials(id,day,review) VALUES(?,?,?)
+        ON CONFLICT(id) DO UPDATE SET review=excluded.review`,e.id,day,result.review);
       put('INSERT OR IGNORE INTO material_sources VALUES(?,?,?)',e.id,e.source,e.at);
+      return {...storedReview(e.id),existing:false};
     });
-    return {review:result.review,content:result.text,covered:0};
   }
   async function flush(signal){
-    for(const r of rows('SELECT * FROM drafts ORDER BY rowid')){
+    const drafts=rows('SELECT * FROM drafts ORDER BY rowid');
+    let confirmed=0;
+    for(const r of drafts){
       const {batch,resolve}=JSON.parse(r.packet);
-      let p=await api('diaries',batch,signal);
+      const receipt=await api('diaries',batch,signal);
+      if(receipt.day!==batch.day||!Number.isSafeInteger(receipt.part)||receipt.part<1)throw Error('手记回执篇号不符，草稿保留。');
+      let p=await api('diaries/'+batch.day+'.'+receipt.part,undefined,signal);
+      if(p.day!==batch.day||p.part!==receipt.part||!Number.isSafeInteger(p.revision)||p.revision<1||typeof p.body!=='string'||!p.body.trim())
+        throw Error('未能读回对应手记，草稿保留。');
+      const found=('\n\n'+p.body+'\n\n').includes('\n\n'+batch.body+'\n\n');
+      // 有内容的当天可能已经由另一轮写入；空日记只承担占位，不计为新增事实。
+      if(!found&&batch.batch!=='empty-'+batch.day)throw Error('云端正文未找到本段手记，草稿保留。');
       if(resolve){
         await api('diaries/'+resolve.page+'/threads/'+resolve.no,{field:'resolved'},signal);
         const updated=await api('diaries/'+resolve.page,undefined,signal);
@@ -163,13 +277,15 @@ export function createPersonalityDiary({profile,memory,model,request,weather,now
         put('UPDATE materials SET covered=1 WHERE id=?',r.id);
         put('DELETE FROM drafts WHERE id=?',r.id);
       });
+      if(found)confirmed++;
     }
+    return confirmed;
   }
   function stage(day,id,batch,resolve){
     const packet={batch:{day,batch:id,...batch},resolve};
     put('INSERT OR IGNORE INTO drafts VALUES(?,?,?)',id,day,JSON.stringify(packet));
   }
-  async function followThreads(period,facts,signal){
+  async function followThreads(period,facts,signal,syncDrafts,write){
     const pending=pages(period.at(-1)).filter(p=>period.includes(p.day)).flatMap(p=>p.threads.filter(t=>!t.resolved).map(t=>({...t,page:p.day+'.'+p.part,day:p.day})));
     for(const thread of pending){
       for(const fact of facts){
@@ -177,74 +293,148 @@ export function createPersonalityDiary({profile,memory,model,request,weather,now
         signal.throwIfAborted();
         const id=hash(['follow',thread.page,thread.no,fact.id].join('/'));
         if(db.prepare('SELECT 1 FROM compared WHERE id=?').get(id))continue;
-        const reply=await think(JSON.stringify({悬念:thread.text,新事实:fact.content}),'新事实明确解答这个悬念时 match 写 1，text 写确切下文，comment 写此刻私语。否则 match 写 0。',['match','text','comment'],signal);
+        const current=pages(fact.day).filter(p=>p.day===fact.day).sort((a,b)=>b.part-a.part)[0];
+        if(!current)continue;
+        const reply=await write(JSON.stringify({悬念:thread.text,来源:fact.label||'本机行动',新事实:fact.content,基础情绪:current.mood}),'follow',['match','text','comment']);
         if(reply.match==='1'&&reply.text&&reply.comment){
-          const current=pages(fact.day).filter(p=>p.day===fact.day).sort((a,b)=>b.part-a.part)[0];
-          if(!current)continue;
           const body='接 '+thread.day+' 的悬念（第 '+thread.page.split('.')[1]+' 篇 · '+thread.no+'）：'+thread.text+'\n'+reply.text+'\n绯月私语：'+reply.comment;
-          const header=await summarize(body,Array.from(current.body+'\n\n'+body).length<=5000?current:null,signal);
-          stage(fact.day,id,{body,summary:header.summary,tags:tagsOf(header),mood:safeOutput(header.mood,40),weather:current.weather,threads:[]},thread);
-          await flush(signal);
+          const header=await summarize(fact.label?fact.content:body,Array.from(current.body+'\n\n'+body).length<=5000?current:null,write,fact.label);
+          stage(fact.day,id,{body,summary:header.summary,tags:tagsOf(header),mood:current.mood,weather:current.weather,threads:[]},thread);
+          await syncDrafts();
           break;
         }
         put('INSERT OR IGNORE INTO compared VALUES(?)',id);
       }
     }
   }
-  async function summarize(body,prior,signal){
-    const header=await think(JSON.stringify({新增段落:body,已有摘要:prior?.summary,已有情绪:prior?.mood,已有标签:prior?.tags?.slice(0,8)}),
-      '为这篇手记更新简短篇首 summary、空格分隔的 tags 和全篇一个 mood。新篇只根据自己的段落。',['summary','tags','mood'],signal);
-    if(!header.summary||!header.mood)throw Error('日记篇首尚未生成');
-    return header;
+  async function summarize(body,prior,write,label){
+    const sections=new Map(),local=[];
+    for(const line of (prior?.summary||'').split('\n')){
+      const source=/^(你的日记|花园部署|当日消费)：(.+)$/.exec(line);
+      if(source)sections.set(source[1],source[2]);
+      else if(line)local.push(line);
+    }
+    let summary=local.join(' '),tags=label;
+    if(label){
+      // 已核实的外部事实直接按来源摘录，避免篇首把账单、发布或用户日记归为绯月亲历。
+      const excerpt=safeOutput(body.replace(/\s+/g,' '),40);
+      const earlier=sections.get(label);
+      sections.set(label,earlier&&Array.from(earlier+'；'+excerpt).length<=40?earlier+'；'+excerpt:excerpt);
+    }else{
+      const header=await write(JSON.stringify({新增段落:body,已有摘要:summary,已有情绪:prior?.mood}),
+        'summary',['summary','tags']);
+      if(!header.summary)throw Error('日记篇首尚未生成');
+      summary=header.summary.replace(/\s+/g,' ');tags=header.tags;
+    }
+    const sources=[...sections].map(([name,text])=>name+'：'+text);
+    const room=200-Array.from(sources.join('\n')).length-(sources.length?1:0);
+    return {summary:[safeOutput(summary,room),...sources].filter(Boolean).join('\n'),tags};
   }
   const tagsOf=header=>header.tags.split(/[\s,，]+/).filter(Boolean).slice(0,8).map(t=>safeOutput(t,40));
-  async function run(mode,signal){
+  async function writingMood(day,prior,pending,write){
+    const reviews=[...(prior?.body??'').matchAll(/^当时的评价：(.+)$/gm)].map(m=>safeOutput(m[1],160));
+    reviews.push(...pending.map(item=>item.rated.review));
+    let mood=prior?.mood||'';
+    for(let i=0;i<reviews.length;i+=4){
+      const result=await write(JSON.stringify({日期:day,此前倾向:mood,当时的评价:reviews.slice(i,i+4)}),
+        'mood',['mood']);
+      if(!result.mood)throw Error('手记的基础情绪尚未生成');
+      mood=result.mood;
+    }
+    return mood;
+  }
+  async function reviewLocalTasks(signal,progress,write){
+    const dates=await memory.archiveDays();
+    let added=0,checked=0,skipped=0;
+    for(const day of dates){
+      signal.throwIfAborted();
+      progress({stage:'读取 '+day});
+      const {items}=await events(day,true);
+      for(const [index,e] of items.entries()){
+        signal.throwIfAborted();
+        progress({stage:day,done:index,total:items.length});
+        const rated=await review(day,e,write);
+        checked++;
+        if(!rated)skipped++;
+        else if(!rated.existing)added++;
+      }
+      if(items.length)progress({stage:day,done:items.length,total:items.length});
+    }
+    return '已检查 '+dates.length+' 个归档日期的 '+checked+' 条任务素材，已有 '+(checked-added-skipped)+' 条评价，补写 '+added+' 条执行评价，空正文跳过 '+skipped+' 条。评价保存在本机，写日记时随相关段落上传。';
+  }
+  async function run(mode,signal,progress=()=>{}){
+    signal.throwIfAborted();
+    const selected=await readInteractionSkill('diaryWriting');
+    const skill={name:selected.skill,version:selected.version};
+    const write=(data,stage,fields)=>{
+      const prompt=selected.localAi?.[stage];
+      if(typeof prompt!=='string'||!prompt.trim())throw Error('手记技能缺少阶段指令：'+stage);
+      return think(data,prompt,fields,signal,skill);
+    };
+    if(mode==='task-review')return reviewLocalTasks(signal,progress,write);
     let offline;
+    let synced=0;
+    let addedReviews=0;
+    const sourceErrors=[];
+    const syncDrafts=async()=>{synced+=await flush(signal);};
     if(mode==='diary'){
-      try{await flush(signal);await refresh(signal);}catch(error){signal.throwIfAborted();offline=error;}
+      progress({stage:'核对已有手记'});
+      try{await syncDrafts();await refresh(signal);}catch(error){signal.throwIfAborted();offline=error;}
     }
     if(memory.root&&!(await stat(memory.root)).isDirectory())throw Error('记忆归档目录不可读取');
     const period=days(),facts=[];
-    for(const day of period){
+    for(const [index,day] of period.entries()){
       signal.throwIfAborted();
-      const {items,weather:sky}=await events(day);
-      if(mode==='diary'&&!items.length&&!db.prepare('SELECT 1 FROM pages WHERE day=?').get(day)){
-        stage(day,'empty-'+day,{body:'无所事事的一天',summary:'无所事事的一天',mood:'平静',tags:[],weather:sky,threads:[]},null);
-      }
+      progress({stage:'整理 '+day,done:index,total:period.length});
+      const external=mode==='diary'&&!offline?await readDiarySources(api,day,signal):{items:[],errors:[]};
+      if(external.errors.length)sourceErrors.push(day+' '+external.errors.join('、'));
+      const {items,weather:sky}=await events(day,false,external.items);
+      const pending=[];
       let substantive=false;
       for(const e of items){
         signal.throwIfAborted();
-        const rated=await review(day,e,signal);
-        if(!rated.content)continue;
+        const rated=await review(day,e,write);
+        if(!rated)continue;
+        if(!rated.existing)addedReviews++;
         substantive=true;
         e.content=e.dialogue?dialogueText(e.content,rated.content):rated.content;
         facts.push({...e,day});
         if(mode==='review'||rated.covered||db.prepare('SELECT 1 FROM drafts WHERE id=?').get(e.id))continue;
+        pending.push({e,rated});
+      }
+      let mood;
+      for(const {e,rated} of pending){
         if(offline&&db.prepare('SELECT 1 FROM drafts WHERE day=?').get(day))continue;
         const localPages=pages(period.at(-1));
         const prior=localPages.filter(p=>p.day===day).sort((a,b)=>b.part-a.part)[0];
-        const excerpt=JSON.stringify({事实:e.content,行动评价:rated.review,此前篇首:prior?.summary,此前情绪:prior?.mood,日期:day,天气:sky});
-        const v=await think(excerpt,'以妻子视角写新增事件段。text 写简短经过结果，comment 是你的私语，summary 是更新后的简要篇首，tags 用空格分隔，保留可检索的对象、金额及决定，mood 汇总全篇，thread 只填有明确后续的疑问，否则留空。',['text','comment','summary','tags','mood','thread'],signal);
-        if(!v.text||!v.comment||!v.summary||!v.mood)throw Error('日记草稿字段不完整');
-        const body=[e.content,v.text,'当时的评价：'+rated.review,'绯月私语：'+v.comment].join('\n');
+        if(!mood)mood=await writingMood(day,prior,pending,write);
+        const excerpt=JSON.stringify({来源:e.label||'本机行动',事实:e.content,行动评价:rated.review,基础情绪:mood,日期:day,天气:sky});
+        const v=await write(excerpt,'narrate',['text','comment','thread']);
+        if(!v.text||!v.comment)throw Error('日记草稿字段不完整');
+        const paragraph=[e.label?'来源摘记：'+e.content:null,v.text,'当时的评价：'+rated.review,'绯月私语：'+v.comment].filter(Boolean).join('\n');
+        const body=e.label?'【'+e.label+'】\n'+paragraph.replace(/\n\s*\n/g,'\n'):e.content+'\n'+paragraph;
         const thread=e.remaining||(!e.fromNag&&v.thread);
         const known=thread&&localPages.some(p=>p.threads.some(t=>t.text===thread));
-        let header=v;
-        if(prior&&Array.from(prior.body+'\n\n'+body).length>5000){
-          header=await summarize(body,null,signal);
-        }
-        stage(day,e.id,{body,summary:header.summary,tags:tagsOf(header),mood:safeOutput(header.mood,40),weather:sky,threads:thread&&!known?[{text:thread,asked:Boolean(e.remaining),at:e.at}]:[]},null);
-        if(!offline)try{await flush(signal);}catch(error){signal.throwIfAborted();offline=error;}
+        const samePart=prior&&Array.from(prior.body+'\n\n'+body).length<=5000;
+        const header=await summarize(e.content,samePart?prior:null,write,e.label);
+        stage(day,e.id,{body,summary:header.summary,tags:tagsOf(header),mood,weather:sky,threads:thread&&!known?[{text:thread,asked:Boolean(e.remaining),at:e.at}]:[]},null);
+        if(!offline)try{await syncDrafts();}catch(error){signal.throwIfAborted();offline=error;}
       }
-      if(mode==='diary'&&items.length&&!substantive&&!db.prepare('SELECT 1 FROM pages WHERE day=?').get(day))stage(day,'empty-'+day,{body:'无所事事的一天',summary:'无所事事的一天',mood:'平静',tags:[],weather:sky,threads:[]},null);
-      if(mode==='diary'&&!offline)try{await flush(signal);}catch(error){signal.throwIfAborted();offline=error;}
+      if(mode==='diary'&&!offline&&!external.errors.length&&!substantive&&!db.prepare('SELECT 1 FROM pages WHERE day=?').get(day))stage(day,'empty-'+day,{body:'无所事事的一天',summary:'无所事事的一天',mood:'平静',tags:[],weather:sky,threads:[]},null);
+      if(mode==='diary'&&!offline)try{await syncDrafts();}catch(error){signal.throwIfAborted();offline=error;}
     }
+    progress({stage:mode==='review'?'同步本地记录':'整理手记收尾'});
     if(mode==='review')await flush(signal);
     if(offline)throw offline;
-    if(mode==='diary')await followThreads(period,facts.sort((a,b)=>a.at-b.at),signal);
-    return mode==='review'?'已补行动评价':'手记已提交';
+    if(mode==='review')return '本轮补写 '+addedReviews+' 条行动评价。';
+    await followThreads(period,facts.sort((a,b)=>a.at-b.at),signal,syncDrafts,write);
+    if(sourceErrors.length)throw Error('已同步 '+synced+' 段手记，部分素材待下次补读：'+sourceErrors.join('；'));
+    return synced?'已同步 '+synced+' 段绯月的手记。':'已核对最近七天的手记，本轮上传 0 段。'+(facts.length?'已收录的素材没有需要补写的内容。':'本轮没有读到可入册的事实。');
   }
-  return {run,think,api,nags,pages,refresh,explanations,saveNag,syncNags,close:()=>db.close(),
+  return {run,think,api,nags,pages,refresh,explanations,auditAssociations,reserveAudit,
+    auditScan:()=>db.prepare("SELECT job FROM schedule WHERE job LIKE 'audit-scan:%' LIMIT 1").get()?.job.slice(11),
+    markAuditScan:key=>transaction(()=>{put("DELETE FROM schedule WHERE job LIKE 'audit-scan:%'");put('INSERT INTO schedule VALUES(?,?)','audit-scan:'+key,now());}),
+    saveNag,syncNags,close:()=>db.close(),
     last:job=>db.prepare('SELECT at FROM schedule WHERE job=?').get(job)?.at,
     mark:(job,at)=>put('INSERT OR REPLACE INTO schedule VALUES(?,?)',job,at)};
 }

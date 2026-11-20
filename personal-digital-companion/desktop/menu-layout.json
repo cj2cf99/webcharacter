@@ -3,6 +3,10 @@
   {"action":"continueNag","label":"接着解释上次的事"},
   {"action":"weather","label":"三地天气"},
   {"action":"notices"},
+  {"label":"特殊菜单","items":[
+    {"action":"writeDiary","label":"看绯月写日记"},
+    {"action":"reviewLocalTasks","label":"补写本机任务执行评价"}
+  ]},
   "-",
   {"label":"任务","items":[
     {"action":"today","label":"今日任务"},

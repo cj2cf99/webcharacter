@@ -23,7 +23,7 @@ const operations = {
   },
   'records.create': {
     path: '/api/records',
-    body: ({ body, category_id }) => ({ body: body.trim(), category_id, tag_ids: [], photos: [] }),
+    body: ({ body, category_id, photos = [] }) => ({ body: body.trim(), category_id, tag_ids: [], photos }),
     recordId: response => typeof response?.id === 'string' && response.id.trim() ? response.id : null,
   },
   'reminders.create': {
@@ -41,7 +41,7 @@ const operations = {
   },
   'diaries.create': {
     path: '/api/diaries',
-    body: ({ title, content }) => ({ title: title.trim(), content: content.trim() }),
+    body: ({ title, content }) => ({ title: title.trim(), content }),
     recordId: response => Number.isSafeInteger(response?.item?.seq) && response.item.seq > 0 ? response.item.seq : null,
   },
 };

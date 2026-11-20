@@ -30,12 +30,18 @@ export function createReminderReview({db, visible, getDates, present, memberDays
   async function list() {
     const {today, tomorrow} = getDates();
     const result = await visible(today).prepare(source + " WHERE (r.isFinished=0 AND r.deadline IS NOT NULL AND r.deadline<>'' AND substr(r.deadline,1,10)<=?)"
-      + " OR (r.isFinished=1 AND r.planner_dispatch_id IS NOT NULL AND substr(r.deadline,1,10)=?) ORDER BY substr(r.deadline,1,10), CASE r.level WHEN '高' THEN 0 WHEN '低' THEN 2 ELSE 1 END,"
+      + " OR (r.isFinished=1 AND substr(r.deadline,1,10)=? AND (r.planner_dispatch_id IS NOT NULL OR r.title LIKE '%多邻国%' OR r.title LIKE '%多鄰國%' OR r.title LIKE '%duolingo%')) ORDER BY substr(r.deadline,1,10), CASE r.level WHEN '高' THEN 0 WHEN '低' THEN 2 ELSE 1 END,"
       + ' r.deadline,r.seq').bind(today,today).all();
+    const language=result.results.filter(row=>day(row.deadline)===today&&!row.planner_dispatch_id&&/多邻国|多鄰國|duolingo/iu.test(row.title));
+    const dailyPlan=[];
     const rows = await Promise.all(result.results.map(async row => {
+      if(row.isFinished&&!row.planner_dispatch_id)return null;
       const locked = reason(row), shown = present(row, today);
       const entry = await plannerEntry(row, today);
       const fields=plannerFields(row,entry,today);
+      if(row.planner_dispatch_id&&day(row.deadline)===today&&(!entry||entry.kind==='task'&&entry.business_date===today)){
+        dailyPlan.push(Boolean(row.isFinished&&fields.plannerRecord));
+      }
       if(row.isFinished)return fields.plannerRecord && entry.business_date===today
         ? {id:row.seq,title:row.title,deadline:row.deadline,...fields}:null;
       return {id: row.seq, title: row.title, deadline: row.deadline, level: row.level, recurrence: shown.recurrenceText,
@@ -46,7 +52,8 @@ export function createReminderReview({db, visible, getDates, present, memberDays
     const items=rows.filter(row=>row&&!row.plannerRecord),recordedHours=rows.filter(row=>row?.plannerRecord);
     const readonly = await memberDays(today);
     items.push(...readonly.map(row => ({id: row.id, title: row.name, deadline: today, group: 'locked', reason: '超市会员日'})));
-    return {today, tomorrow, items,recordedHours};
+    const dailyStudyComplete=language.length>0&&language.every(row=>row.isFinished===1)&&dailyPlan.length>0&&dailyPlan.every(Boolean);
+    return {today, tomorrow, items,recordedHours,dailyStudyComplete};
   }
   async function status(seq) {
     const row = await get(seq);

@@ -17,11 +17,11 @@ const modes={
 const webMode=mode.querySelector('option[value="web"]');
 let busy=false,composing=false,idleTimer,draftReady=false;
 let attachment=null,reading=false,attachmentReady=false;
-let references=[];
+let references=[],audit=false;
 
 const resetIdle=()=>{
   clearTimeout(idleTimer);
-  if(busy||composing||reading)return;
+  if(busy||composing||reading||audit&&question.value.trim())return;
   idleTimer=setTimeout(()=>{
     if(draftReady&&host.idleClose){
       host.idleClose({text:question.value,mode:mode.value,withScreen:withScreen.checked,attachment,references});
@@ -36,12 +36,12 @@ function updateMode(value){
   if(attachment)value='auto';
   if (value)mode.value=Object.hasOwn(modes,value)&&mode.querySelector('option[value="'+value+'"]')?value:'auto';
   const selected=mode.value;
-  if(selected!=='auto')withScreen.checked=false;
-  withScreen.disabled=busy||reading||Boolean(attachment)||selected!=='auto';
-  mode.disabled=busy||reading||Boolean(attachment);
+  if(selected!=='auto'||audit)withScreen.checked=false;
+  withScreen.disabled=audit||busy||reading||Boolean(attachment)||selected!=='auto';
+  mode.disabled=audit||busy||reading||Boolean(attachment);
   byId('removeAttachment').disabled=busy||reading;
   const [placeholder, label]=modes[selected]??modes.auto;
-  question.placeholder=placeholder;
+  question.placeholder=audit?'写下你对这件事的解释…':placeholder;
   send.textContent=label;
   send.disabled=busy||reading||selected==='memory'||(selected==='web'&&webMode.disabled);
 }
@@ -62,7 +62,7 @@ function attachmentError(message=''){
   byId('attachmentError').hidden=!message;
 }
 async function attachFiles(files){
-  if(busy||reading)return;
+  if(busy||reading||audit)return;
   attachmentError();
   if(!host.attachmentInput||!attachmentReady)return attachmentError('请重新启动绯月以启用附件。');
   if(!files.length||files.length+references.length+Number(Boolean(attachment))>16)return attachmentError('每次最多 16 张图片。');
@@ -104,9 +104,11 @@ function render(value){
   const chars=[];
   for(const {segment} of segmenter.segment(full)){chars.push(segment);if(chars.length===51)break;}
   if(!waiting){
+    audit=Boolean(value.audit);byId('auditActions').hidden=!audit;
+    if(audit)mode.value='auto';
     reply.dataset.nag=String(Boolean(value.nagReply));
     const close=byId('close');close.dataset.nag=String(Boolean(value.nag));
-    close.textContent=value.nag?'结束追问':'×';close.setAttribute('aria-label',value.nag?'结束这次追问':'关闭问答');
+    close.textContent=value.nag&&!audit?'结束追问':'×';close.setAttribute('aria-label',value.nag&&!audit?'结束这次追问':'关闭问答');
   }
   answer.textContent=!value.nagReply&&chars.length>50?chars.slice(0,49).join('')+'…':full;
   byId('unsaved').hidden=!value.unsaved;
@@ -161,7 +163,7 @@ form.onsubmit=async event=>{
   event.preventDefault();
   const text=question.value;if((!text.trim()&&!attachment)||send.disabled)return;
   const value=await invoke(()=>host.ask(text,withScreen.checked,mode.value,attachment,references));
-  if(value?.state==='answer'){question.value='';showAttachment(null);attachmentError();updateMode('auto');question.focus();}
+  if(value?.state==='answer'&&!value.invalid){question.value='';showAttachment(null);attachmentError();updateMode('auto');question.focus();}
 };
 question.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();form.requestSubmit();}};
 for(const event of ['keydown','input','pointerdown','change']){
@@ -172,8 +174,9 @@ question.addEventListener('compositionstart',()=>{composing=true;resetIdle();});
 question.addEventListener('compositionend',()=>{composing=false;resetIdle();});
 retry.onclick=async()=>{const value=await invoke(()=>host.retry());if(attachment&&value?.state==='answer'){question.value='';showAttachment(null);attachmentError();}};
 for(const [id,full] of [['full',true],['history',false]])byId(id).onclick=()=>host.details(full).catch(()=>render({state:'error',text:'对话记录窗口未能打开。'}));
+for(const action of ['later','refuse'])byId(action).onclick=()=>host.close(action);
 byId('close').onclick=()=>host.close('button');
-pending.onclick=()=>host.pending().catch(()=>render({state:'error',text:'待确认窗口未能打开。'}));
+pending.onclick=()=>host.pending(!question.value&&!attachment&&!reading).catch(()=>render({state:'error',text:'待确认窗口未能打开。'}));
 document.onkeydown=event=>{if(event.key==='Escape')host.close();};
 window.addEventListener('companion-page-update',event=>{if(busy||reading||attachment||question.value||withScreen.checked||reply.dataset.state!=='idle')event.preventDefault();});
 const off=[host.onState(render),host.onMode?.(updateMode),host.onPending?.(updatePending),host.onLayout(value=>{

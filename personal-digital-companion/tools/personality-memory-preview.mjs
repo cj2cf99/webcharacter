@@ -15,11 +15,12 @@ for(const [path,file,mime] of [['/assets/styles/shell.css','src/client/styles/sh
 }
 const fixture={id:'P-BOOK',spendDate:'2026-11-20',amount:3500,merchant:'街角书店',category:'图书',description:'散文集'};
 const expenseModule=file=>JSON.stringify(join(main,'src/features/expenses',file).replaceAll('\\','/'));
-const bundle=await build({stdin:{resolveDir:root,contents:
+const bundle=await build({keepNames:true,stdin:{resolveDir:root,contents:
   "import {createMemoryPage} from './agent/host/memory-route.mjs';\n"+
   "import {handleCompanion} from './agent/host/subscriptions.mjs';\n"+
   "import {shell} from "+JSON.stringify(join(main,'src/pages/navigation.js').replaceAll('\\','/'))+";\n"+
   "import {memoryExpenses} from './agent/host/memory-expenses.mjs';\n"+
+  "import {memorySources} from './agent/host/memory-sources.mjs';\n"+
   "import {getExpenses} from "+expenseModule('routes.js')+";\n"+
   "import {configuredOwners} from "+expenseModule('identity.js')+";\n"+
   "import {createContext} from "+expenseModule('context.js')+";\n"+
@@ -27,7 +28,7 @@ const bundle=await build({stdin:{resolveDir:root,contents:
   "const bill="+JSON.stringify(fixture)+";\n"+
   `const route=createMemoryPage({shell,authorize:()=>({sub:'local-preview'})});
   export default {async fetch(request,bindings){
-    const env={...bindings,COMPANION_ENABLED:'true',ALLOWED_OWNER_SUBS:'local-preview',COMPANION_HOST:{memoryExpenses:q=>memoryExpenses(env,q,{createContext,configuredOwners,getExpenses})}};
+    const env={...bindings,COMPANION_ENABLED:'true',ALLOWED_OWNER_SUBS:'local-preview',COMPANION_HOST:{memorySources:q=>memorySources(env,q),memoryExpenses:q=>memoryExpenses(env,q,{createContext,configuredOwners,getExpenses})}};
     env.SUBSCRIPTIONS_API={fetchOwner:(r,owner)=>handleCompanion(r,env,owner,true)};
     const url=new URL(request.url);
     if(assets[url.pathname]){const [body,type]=assets[url.pathname];return new Response(body,{headers:{'Content-Type':type}});}
@@ -45,6 +46,17 @@ const runtime=new Miniflare(convertV4MiniflareOptions({host:'127.0.0.1',port:ser
 try{
   const db=await runtime.getD1Database('COMPANION_DB');
   const expenseDb=await runtime.getD1Database('mymaindb');
+  await expenseDb.batch([
+    'CREATE TABLE diaries(seq INTEGER PRIMARY KEY,regDatetime,title,content)',
+    "INSERT INTO diaries VALUES(1,'2026-11-19T15:00:00Z','我的日记','想读完这本书')",
+    'CREATE TABLE garden_project(id INTEGER PRIMARY KEY,name)',
+    'CREATE TABLE garden_deploy(id INTEGER PRIMARY KEY,deployed_at)',
+    'CREATE TABLE garden_deploy_item(id INTEGER PRIMARY KEY,deploy_id,project_id,flower_name,version_before,version_after,note)'
+  ].map(sql=>expenseDb.prepare(sql)));
+  for(const [kind,n] of [['journal',1],['deploy',0]]){
+    const response=await runtime.dispatchFetch('http://preview.test/api/companion/memory/sources?day=2026-11-20&kind='+kind,{headers:{'x-fixture':'1'}});
+    assert(response.ok);assert.equal((await response.json()).records.length,n);
+  }
   const owner='own_'+createHash('sha256').update('https://mock-team.cloudflareaccess.com|local-preview').digest('hex').slice(0,32);
   const schemas=(await Promise.all(['0005_expense_billing.sql','0006_expense_tags.sql'].map(file=>readFile(join(main,'migrations',file),'utf8')))).join('\n');
   for(const table of ['sync_runs','expense_snapshots','active_snapshots','expense_records','expense_tags','expense_tag_rules','expense_record_tags']){
@@ -67,16 +79,22 @@ try{
     assert.equal(r.status,200,await r.text());
   }
   await seed('diaries',{day:'2026-11-19',batch:'preview-one',summary:'等书店的消息',body:'老公要去书店。\n绯月私语：等他回来再问。',tags:['书店'],mood:'期待',weather:'无记录',threads:['买了哪本书？']});
-  await seed('diaries',{day:'2026-11-20',batch:'preview-two',summary:'记下书名',body:'接 2026-11-19 的悬念：买的是散文集。\n绯月私语：这个答案我记住了。',tags:['书店'],mood:'开心',weather:'无记录',threads:[]});
+  await seed('diaries',{day:'2026-11-20',batch:'preview-two',summary:'记下书名',body:'【你的日记】\n接 2026-11-19 的悬念：买的是散文集。\n绯月私语：这个答案我记住了。',tags:['书店'],mood:'开心',weather:'无记录',threads:[]});
   await seed('diaries/2026-11-19.1/threads/1',{field:'resolved'});
   for(const [i,source,source_id] of [[0,'diary','2026-11-19.1/1'],[1,'paylog','P-BOOK']]){
     await seed('nags',{id:'preview-'+i,revision:1,created_at:'2026-11-20T0'+i+':00:00.000Z',source,source_id,source_day:i?'2026-11-19':fixture.spendDate,
       reason:i?'大额消费':'未解的书名',title:i?'书店的消费':'想知道书名',mood:'释然',status:'已解释',before:'好奇',afterEvaluation:'听清楚啦。',
       talk:[{at:'2026-11-20T01:10:00.000Z',who:'你',text:'是一本散文集。'}]});
   }
+  await seed('diaries',{day:'2026-11-18',batch:'earlier',summary:'买的是游记',body:'买的是游记。',tags:[],mood:'好奇',weather:'晴',threads:[]});
+  const auditAt='2026-11-20T00:00:00.000Z';
+  await seed('nags',{id:'zz-preview-audit',source:'audit',source_id:'2026-11-20.1',revision:1,created_at:auditAt,
+    refs:[{page:'2026-11-20.1',quote:'买的是散文集。'},{page:'2026-11-18.1',quote:'买的是游记。'}],points:['两篇写了不同的书。'],
+    reason:'书名不一致',title:'当天买的是哪本？',next:'当天买的是哪本？',questions:1,interruptions:0,mood:'好奇',status:'等待回应',
+    talk:[{who:'绯月',at:auditAt,text:'当天买的是哪本？'}]});
   const url=new URL('/companion/memory/',await runtime.ready);
   const res=await fetch(url);assert.equal(res.status,200);assert((await res.text()).includes('绯月手记'));
-  assert.equal((await (await fetch(new URL('/api/companion/memory/diaries',url))).json()).total,2);
+  assert.equal((await (await fetch(new URL('/api/companion/memory/diaries',url))).json()).total,3);
   if(process.argv.includes('--visual')){
     const child=spawn(join(root,'desktop/node_modules/electron/dist/electron.exe'),[join(root,'tools/test-personality-reader-electron.mjs'),url.href],{windowsHide:true,stdio:'inherit'});
     const [code]=await once(child,'exit');assert.equal(code,0);

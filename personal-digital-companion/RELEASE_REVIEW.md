@@ -222,3 +222,65 @@ node tools/personality-memory-preview.mjs --serve
 - 用户已确认生产部署、花园清单及两个数据库备份目的地。线上界面待用户截图确认。独立第三方审核未执行。本节记录本次实际结果；早前准备状态按时间保留。
 
 生产发布回执及相关源码已普通推送并于 2026-11-20 23:01:35 JST 独立读回核对。主站 main 对应 f0ad5b8dbd58928ac98379759083b84ad8925f85，API main 对应 f4807572a826728a5f1f9ae655e18f61d4cf8fa2，桌宠 codex/workspace-checkpoint-20261120 对应 eda318060bb90bed44f53688672510819b1211db。本次同步附记仅追加 Git 核验信息。
+
+## 2026-11-21 JST · 绯月七项更新发布前审核
+
+### 原始要求、验收与授权
+
+用户要求把已开发的七项更新自审一轮，通过后准备部署，并将 DeepSeek 截断回复兼容问题排除在本次发布之外。晚间夸奖由桌宠播放本地动画，云端仅返回当日完成判定。此次授权为审核和候选准备。生产发布、Windows 正式安装、本次花园登记意愿及具体清单仍待确认。第三方独立审核未执行。
+
+| 更新 | 验收口径及实际候选 |
+|---|---|
+| 行动评价 | 正文为空跳过，读写和重试规则一致。历史有效行和来源关联保留。 |
+| 手记三类来源 | 按东京日取用户日记、花园部署、Paylog。缺项隐藏，部分失败后可补。主站提供来源，API 验证桌宠身份，桌宠合并取材。 |
+| 情绪转写 | 分段前先定基础情绪，按来源写正文，再作篇首。外部事实保留来源摘记。 |
+| 手记技能 | 随桌宠安装 diary-writing 1.0、diary-audit 1.4 和交互总控 2.1，宿主继续负责保存和去重。 |
+| 七天手记质问 | 一题可引多篇，唯一主篇，引用过的篇目互斥。文字答复可续办，稍后每小时最多一次提醒。最多再问两轮，忙时暂缓，按当时情绪收笔。 |
+| 晚间夸奖 | 东京 21:00 后现有检查仅在当天多邻国和当天长期任务均有完成证据时给出标记。正式桌宠已有闲置判断、去重及本地影片。 |
+| 随手记附图 | 仅确认的图片进入所属条目。正式图库接收、模板校验、记录保存及重试可回读，桌宠模板上限三张。 |
+
+### 发布目标、差异与资料
+
+准备目录为 G:/selftool/WebCharacter/work/feiyue-seven-20261121。Windows 实际应用在 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion，基线为应用 PID 25316 对应的安装树（Git 39fd098 加已安装修订）。源项目 G:/selftool/WebCharacter/personal-digital-companion。按 desktop-files.json 的 35 个路径逐项比较安装前/候选 SHA-256，含后台模块、技能及四个界面文件。发布时只覆盖该清单。保留原资料、安装入口、模型、动画和复盘首击修复。
+
+主站 myapp 生产基线 91284919-deb2-4df8-a1e9-6bb53c7e87ff（100%）。候选 myapp/ 从 61abf89:myapp 及此前已发布的手记阅读页修复组装，沿用发布工作树静态资源字节。在子项目已有模块基础上接入手记来源、主篇阅读、完成标记，以及使用 recordsEnvironment 的图库上传与登记。API subscriptions-api 生产基线 b6234253-8956-47ca-8ae2-6f354d2d7c69（100%）。候选 api-worker/ 以 09c1caf:api-worker 的既有手记代码为基础，保留线上已加的 kvforapi 绑定及原有模型逻辑。小时骰代码未纳入。worker-files.json 列出主站 7 个、API 9 个路径及相对 Git 基线的摘要、最终 bundle 摘要，包含正向及回退 SQL。各份清单及实际候选共同构成差异范围。
+
+### 数据、配置与恢复
+
+仅业务库 feiyue-companion 的 tasklist 表中 records.create 这一行变更。当前 parameter_spec_json 定义正文、分类，新值增添选填 photos（HTTPS 数组，最多 3 张）。原模板及其他列不动，无建表、历史回填或现有照片搬迁。精确 SQL 在 api-worker/database/changes/feiyue-seven-20261121/，正向和回退均校验完整旧值。执行前再读基线，执行后逐字段回读；影响行数为零时停止核实。该修改属于业务库，按既有生产库规则完成结构核对、加密备份、异地留存/恢复验证及准确 SQL 的 Git 留痕后再执行。花园登记元数据的备份豁免不适用于此操作。生产备份、SQL 提交和执行均未进行。
+
+生产配置新增 0，密钥新增 0。已核实图库 token 绑定存在，图库仓库和分支复用主站随手记的 recordsEnvironment。版本切换前复核两端现行绑定含 KV 目标、主站绑定和原变量。若数据旧值、生产流量或绑定有漂移，先重制候选。启动参数沿用原安装树。失败时先暂停新增提交，核实在途上传和登记回执；按影响恢复对应旧 Worker 和 Windows 单文件备份，确认待领取的带图任务已处理后才考虑执行守卫回退 SQL。回退不会自动删除已保存图片、旧记录、日记或回答，需另行核对在途结果。
+
+### 本轮审查与已执行验证
+
+- 子项目 node --test 的日记、质问、轮询、附图、提醒、登记八个专项共 69/69；python -B tools/test-skills.py 6/6。
+- 主站候选 npm.cmd test 843/843，API 候选 node --test 34/34。初次主站打包无法读取既有依赖，归档换行也导致独立静态资源摘要不匹配。已按原发布目录逐字节保留静态资源及相关 SQL，复测通过。见 main-tests-verified.log、api-tests.log。
+- 对两个候选执行 wrangler deploy --dry-run --outdir，均正常退出。见 dry-myapp-final.log 和 dry-api-worker.log。此命令未上传。
+- Windows 候选在新 Electron 进程及临时资料执行 tools/test-panel-titlebar-electron.mjs 和 tools/test-screen-question-electron.mjs --diary-audit。七面板、气泡稍后、恢复、文字回答、追问与结束通过。
+- 设置 FEIYUE_MAIN_DIR 为候选 myapp 后运行 node tools/personality-memory-preview.mjs --visual。本地 workerd/D1、两种屏宽及主题、手记三类来源、唯一主篇回链通过。用隔离夹具，不读取用户日记。
+- node verify-cross.mjs 从桌宠上传函数，经 API 鉴权后的图片路由、候选主站图库处理及实际登记网关，写入本地内存记录表并读回 3 张图，验证重试去重、第四张拦截、旧模板恢复及候选技能。网络传输替身只接受图库上传请求，不向外发送图片。初次联测显式填图库配置，未覆盖生产的配置注入方式；复核后已改接共享 recordsEnvironment，并以仅提供模拟 token 的环境复测。
+- 未进行生产照片上传、真实手记补写或晚间提醒，不代理登录 Access 页面。真实外观待用户截图。DeepSeek 既有失败已按用户决定排除，本次不作修复或上线承诺。
+
+### 本地验收与后续操作
+
+在 G:/selftool/WebCharacter/personal-digital-companion 中先将 PowerShell 的 FEIYUE_MAIN_DIR 环境变量设为 G:/selftool/WebCharacter/work/feiyue-seven-20261121/myapp，再运行 node tools/personality-memory-preview.mjs --serve。工具创建独立数据库和样例，端口 8796，入口 /companion/memory/。用户指定启动后再常驻，附图整链可在此次准备目录运行 node verify-cross.mjs。
+
+正式切换需本次明确确认。先核对生产基线、变更包、备份与 SQL 的 Git 记录，再执行模板更新和回读。发布主站候选，保留既有变量，核验 100% 流量和绑定；再用 API 原发布脚本及原 WEBSITE_ORIGIN、ACCESS_AUD 发布并复核。最后核对 desktop-files.json 的旧摘要、备份清单文件，经桌宠正常退出或受控重启安装，复核新 PID、正式目录、资料目录、绑定和 API /infoguide。确认旧数据可读、无重复任务、首击复盘仍可见。线上 UI 由用户截图验证。收尾追加实际版本、JST 时间、备份与 Git 状态。若登记花园，按真实结果制单、另行核准编号和版本，先提交精确 SQL，再通过重启后的本机 API 一批登记并读回。当前无本次生产版本、无登记批次、无部署提交或推送。
+
+### 七项候选最终 Windows 基线与回归（2026-11-21 JST）
+
+封包期间，独立的复盘倒排与详情评价更新于 03:59:08 JST 安装，正式 PID 从 25316 变成 33608。本次最终基线采用该次安装后的文件。核对复盘更新的六文件清单后，用包含双方改动的子项目源码重做五处重叠文件，覆盖手记生成、质问宿主、详情窗口、界面源码与其打包副本。第六个文件是复盘测试，仅用于验收。两个发布范围的登记决定各自独立。
+
+最终在同一候选树用临时资料运行 Electron 的 test-memory-electron.mjs --task-reports、test-screen-question-electron.mjs --diary-audit、test-panel-titlebar-electron.mjs 及 test-review-first-open-electron.mjs。复盘倒排和顶部评价、稍后续答及追问、七个面板、冷启动首次点击即显示复盘均通过。冷启动测试首次因精简候选缺少原有动画目录无法加载，随后在候选中引用安装版 assets，复测通过，动画未列入云端包。见准备目录下 rebased-*.log。已复核 desktop-files.json 的 35 个安装前与候选摘要、两端共 16 个候选文件及两个 Worker 包摘要，重跑 verify-cross.mjs 通过。以上均为发布前验证。
+2026-11-21 JST 用户明确批准七项部署、正式桌宠安装及发布后通过绯月登记花园（含桌宠）。具体花园清单待确认。业务库快照 d4008cd 已从远端恢复通过 18/18，精确 SQL 889cba4 已执行并回读，records.create 一行新增可选 photos，最多三张。
+
+
+### 2026-11-21 JST · 七项实际发布与绯月花园回执
+
+用户明确批准本次生产发布、正式安装和花园登记，并在查看具体清单后确认了发布 #55、明细 #125 和版本 5.2 → 6.0。业务库 feiyue-companion 已按 SQL 提交 889cba4 更新 records.create 一行并独立回读。执行前整库密文已单独推送至 db-snapshots/production（d4008cd），远端重新克隆解密后通过 18/18 张表、完整性与外键检查。
+
+主站 myapp 于 04:15:35 JST 切换 f610be27-3317-4638-9402-2e2d3263ddd6，100% 流量，42 个绑定一致。API subscriptions-api 于 04:16:22 切换 40242d1d-8094-4bee-a12f-135f0c29e8f6，100% 流量，14 个绑定一致。已发布 API 以 09c1caf 加生产 KV 为基线，单独保留精确发布分支 codex/feiyue-seven-production-20261121，API 的开发主分支继续保留原有小时骰源码。
+
+Windows 旧 PID 33608 经原生窗口正常退出，安装前备份清单到准备目录 desktop-previous，安装后 04:18:04 JST 核验新 PID 23400、35 个文件、原资料目录、快捷方式、登录启动项和 /infoguide。使用临时资料从正式目录复验冷启动复盘和任务详情，候选气泡复测通过。保留桌宠本机动画文件。Access 线上页面效果待用户截图确认。
+
+确认后的精确清单及 SQL 已提交 e27038c。重启后的绯月在 04:20:37 JST 接收唯一批次 feiyue-seven-20261121，04:23:58 核对步骤，04:24:03 回读结束，state=done、revision=106。花园将网页角色组件 #16 的绯月（桌面精灵）#61 从 5.2 升至 6.0，新增发布 #55 与明细 #125，收录七项桌宠及配套云端更新。机器回执位于主站 database/changes/feiyue-seven-20261121/release-receipt.json。
