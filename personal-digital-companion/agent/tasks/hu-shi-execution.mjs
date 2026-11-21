@@ -9,7 +9,7 @@ const fail = (status, code, message) => reply({ error: { code, message } }, stat
 const uncertain = '主站登记结果待核对，请查看对应分类的记录。';
 
 export async function executeCloudRegistration({ request, env, taskId, ownerId, readTask, writeEntry,
-  writeRegistrationEntry, readRegistrationReceipt, receiptOnly = false }) {
+  writeRegistrationEntry, readRegistrationReceipt, receiptOnly = false, chainOnly = false }) {
   let input;
   try { input = await request.json(); }
   catch { return fail(400, 'INVALID_JSON', '请求必须是 JSON 空对象'); }
@@ -26,6 +26,7 @@ export async function executeCloudRegistration({ request, env, taskId, ownerId, 
     WHERE t.task_id=? AND s.owner_id=?`).bind(taskId, ownerId).first();
   if (!owned) return fail(404, 'TASK_NOT_FOUND', '任务不存在');
   const temporary = owned.temporary_registration === 1;
+  if (chainOnly && !temporary) return fail(409,'EXECUTOR_UNAVAILABLE','网页只处理绯月已有登记链的执行回执');
   const task = await readTask(DB, taskId);
   const planner = task?.type === plannerHoursType;
   if (!task || task.definition.executor !== 'cloud' || task.target_device_id !== null

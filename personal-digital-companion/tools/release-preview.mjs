@@ -13,7 +13,11 @@ const {build} = require('esbuild');
 const {Miniflare, convertV4MiniflareOptions} = require('miniflare');
 const serve = process.argv.includes('--serve');
 const visual = process.argv.includes('--visual-check');
-const input = '隔离验收文字';
+const previewPort = Number(process.env.FEIYUE_PREVIEW_PORT || 8788);
+const resourceText = '登记一个资源：https://example.test/#portrait，这是个姿势与服装参考网站。';
+const input = '隔离验收文字。'+resourceText;
+const fixturePc = 'pc-10000000-0000-4000-8000-000000000001';
+const fixtureWeb = 'web-10000000-0000-4000-8000-000000000002';
 const actions = [
   {type:'hu-shi.food.create', params:{body:'午餐面条'}},
   {type:'hu-shi.exercise.create', params:{body:'散步半小时'}},
@@ -21,22 +25,25 @@ const actions = [
   {type:'diaries.create', params:{title:'验收日记',content:'整理资料'}},
   {type:'records.create', params:{body:'合成资源 https://example.test', category_id:'fixture-resource'}},
   {type:'reminders.create', params:{title:'检查资料',deadline:'tomorrow'}},
+  {type:'resources.create', params:{title:'姿势与服装参考网站',body:resourceText}},
 ];
 async function bundle(contents, resolveDir) {
   return (await build({stdin:{contents,resolveDir}, bundle:true,write:false,format:'esm',platform:'browser',
-    external:['cloudflare:workers']})).outputFiles[0].text;
+    loader:{'.html':'text'},external:['cloudflare:workers']})).outputFiles[0].text;
 }
 const client = await readFile(main + '/src/client/companion/chains.js','utf8');
 const style = await readFile(main + '/src/client/companion/chains.css','utf8');
 const shellAssets = Object.fromEntries(await Promise.all([
   ['styles/shell.css','text/css'], ['styles/theme.css','text/css'],
-  ['shell/theme.js','text/javascript'],['shell/navigation.js','text/javascript'],
+  ['shell/theme.js','text/javascript'],['shell/navigation.js','text/javascript'],['shell/workspace-layout.js','text/javascript'],
 ].map(async ([path,mime])=>['/assets/'+path,[mime,await readFile(main+'/src/client/'+path,'utf8')]])));
+shellAssets['/assets/icons/anim/feiyue.svg']=['image/svg+xml',await readFile(main+'/public/assets/icons/anim/feiyue.svg','utf8')];
 const mainScript = await bundle(`
 import {WorkerEntrypoint} from 'cloudflare:workers';
 import {companionGateway} from './src/features/companion/gateway.js';
 import {createChainPage} from './src/features/companion/vendor/chain-page.mjs';
 import {shell} from './src/pages/navigation.js';
+import {renderPage} from './src/pages/render.js';
 function gateway(env) {
   return companionGateway(env,{fetcher: async (url,options) => {
     if (url !== 'https://api.deepseek.com/chat/completions') return new Response(null,{status:503});
@@ -65,6 +72,7 @@ export default {async fetch(request,env) {
   const path=new URL(request.url).pathname;
   const asset=assets[path];
   if(asset)return new Response(asset[1],{headers:{'Content-Type':asset[0]}});
+  if(path==='/')return new Response(renderPage(path,env),{headers:{'Content-Type':'text/html; charset=utf-8'}});
   return await page(request,env) ?? new Response(null,{status:404});
 }};`, main);
 const apiScript = await bundle(`
@@ -76,7 +84,7 @@ export default {fetch(request,env) {
   }:undefined;
   return application.fetch(request,env,{access});
 }};`, api);
-const runtime = new Miniflare(convertV4MiniflareOptions({host:'127.0.0.1',port:serve?8788:0,cf:false,workers:[
+const runtime = new Miniflare(convertV4MiniflareOptions({host:'127.0.0.1',port:serve?previewPort:0,cf:false,workers:[
   {name:'main-isolated',modules:true,compatibilityDate:'2026-10-27',script:mainScript,
     d1Databases:{mymaindb:'isolated-main-paid-fallback'},d1Persist:false,
     bindings:{COMPANION_ENABLED:'true',deepseekLanguage:'fixture-no-real-key'},
@@ -104,7 +112,7 @@ try {
     assert.ok(sql, name);
     await apply(db,sql);
   }
-  for(const file of ['0020_records.sql','0022_records_parent.sql','0030_hu_shi.sql','0031_companion_registration_receipts.sql']) {
+  for(const file of ['0020_records.sql','0022_records_parent.sql','0029_resources.sql','0030_hu_shi.sql','0031_companion_registration_receipts.sql']) {
     await apply(db,await readFile(join(main,'migrations',file),'utf8'));
   }
   await db.prepare('INSERT INTO ra_categories(id,name) VALUES (?,?)').bind('fixture-resource','资源').run();
@@ -112,6 +120,10 @@ try {
   for(const file of ['tasklist-hu-shi.sql','tasklist-registration.sql','tasklist-pc.sql']) {
     await apply(taskDb,await readFile(join(api,'src/companion/agent/seeds',file),'utf8'));
   }
+  await taskDb.prepare('INSERT INTO devices(device_id,computer_name,alias,created_at) VALUES(?,?,?,?)')
+    .bind(fixturePc,'Feiyue preview','验收用电脑',new Date().toISOString()).run();
+  await taskDb.prepare('INSERT INTO devices(device_id,computer_name,alias,created_at) VALUES(?,?,?,?)')
+    .bind(fixtureWeb,'Local browser','验收用浏览器',new Date().toISOString()).run();
   const w=await runtime.getWorker('subscriptions-isolated');
   const call=(path,body,auth=true)=>w.fetch('http://127.0.0.1/api/companion'+path,{
     method:body===undefined?'GET':'POST',
@@ -123,7 +135,7 @@ try {
   const parsed=await call('/assistant/recording-plan',{text:input});
   const plan=await parsed.json();
   assert.equal(parsed.status,200,JSON.stringify(plan));
-  assert.equal(plan.chain.nodes.length,6);
+  assert.equal(plan.chain.nodes.length,actions.length);
   assert.ok(plan.ai.attempts.some(row=>row.provider==='deepseek'&&row.stage==='probe'&&row.code==='OK'));
   assert.ok(plan.ai.attempts.some(row=>row.provider==='deepseek'&&row.stage==='request'&&row.code==='OK'));
   const chat=await call('/assistant/message',{messages:[{role:'user',content:'介绍罗马'}]});
@@ -146,7 +158,9 @@ try {
     assert.equal(response.status,200,JSON.stringify(value));
     assert.equal(value.status,'COMPLETED',JSON.stringify(value));
   }
-  assert.equal((await db.prepare('SELECT count(*) AS n FROM companion_registration_receipts').first()).n,6);
+  assert.equal((await db.prepare('SELECT count(*) AS n FROM companion_registration_receipts').first()).n,actions.length);
+  const resource = await db.prepare('SELECT body,note,url,category_id FROM rl_resources').all();
+  assert.deepEqual(resource.results,[{body:'姿势与服装参考网站',note:resourceText,url:'https://example.test/#portrait',category_id:'other'}]);
   for(const [table,count] of [['ra_hushi_records',3],['ra_records',1],['diaries',1],['reminders',1]]) {
     assert.equal((await db.prepare('SELECT count(*) AS n FROM '+table).first()).n,count);
   }
@@ -158,20 +172,36 @@ try {
   assert.match(await page.text(),/unified-header/);
   const fromSite=await runtime.dispatchFetch('http://127.0.0.1/api/companion/chains/'+chain.chain_id,{headers:siteHeaders});
   assert.equal((await fromSite.json()).status,'COMPLETED');
+  const tasksPage=await runtime.dispatchFetch('http://127.0.0.1/companion/tasks',{headers:siteHeaders});
+  assert.match(await tasksPage.text(),/绯月任务管理[\s\S]+任务模板/);
+  const taskList=await runtime.dispatchFetch('http://127.0.0.1/api/companion/task-overview?status=COMPLETED',{headers:siteHeaders});
+  assert.equal(taskList.status,200);
+  assert.deepEqual((await taskList.json()).tasks,[]);
   assert.equal((await runtime.dispatchFetch('http://127.0.0.1/api/companion/chains/'+chain.chain_id+'/stop',{
     headers:{...siteHeaders,Origin:'https://cross.invalid'},method:'POST',body:'{}',
   })).status,403);
-  console.log('PASS: real Worker handlers, real business SQL, six receipts and recovery, same chain via private RPC.');
+  console.log('PASS: real Worker handlers, real business SQL, seven receipts including resource registration and recovery, same chain via private RPC.');
   if(visual) {
+    const extra = [];
+    for(let index=0;index<34;index++){
+      const suffix=String(index).padStart(2,'0');
+      extra.push(taskDb.prepare(`INSERT INTO tasklist(type,name,description,executor,parameter_spec_json,procedure,report_spec)
+        VALUES (?,?,'分页测试','pc','{}','','')`).bind('zz.preview.'+suffix,'合成模板 '+suffix));
+      extra.push(taskDb.prepare(`INSERT INTO tasks(task_id,type,params_json,status,created_at)
+        VALUES (?,?,'{}','COMPLETED','2000-01-01T00:00:00.000Z')`).bind('page-task-'+suffix,'zz.preview.'+suffix));
+      extra.push(taskDb.prepare(`INSERT INTO chains(chain_id,name,created_at)
+        VALUES (?,?,'2000-01-01T00:00:00.000Z')`).bind('page-chain-'+suffix,'合成任务链 '+suffix));
+    }
+    await taskDb.batch(extra);
     const page=new URL('/companion/chains/',await runtime.ready).href;
     assert.equal((await fetch(page)).status,200);
-    const proc=spawn(process.execPath,[resolve(import.meta.dirname,'check-release-browser.mjs'),page],{windowsHide:true,stdio:'inherit'});
-    const timeout=setTimeout(()=>proc.kill(),25000);
+    const proc=spawn(process.execPath,[resolve(import.meta.dirname,'check-release-browser.mjs'),page,String(actions.length)],{windowsHide:true,stdio:'inherit'});
+    const timeout=setTimeout(()=>proc.kill(),35000);
     try {const [code]=await once(proc,'exit');assert.equal(code,0);}
     finally {clearTimeout(timeout);}
   }
   if(serve) {
-    console.log('本地隔离验收：http://127.0.0.1:8788/companion/chains/');
+    console.log('本地隔离验收 ' + new URL('/companion/tasks',await runtime.ready).href);
     await once(process,'SIGINT');
   }
 } finally {await runtime.dispose();}

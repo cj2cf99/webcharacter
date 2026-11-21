@@ -47,3 +47,7 @@ node tools/personality-memory-preview.mjs --serve
 主站目录按相对路径复制 `agent/host/memory-{route,page,reader,expenses}.mjs` 到 `src/features/companion/vendor/`；在主站根使用 [主站接线补丁](../../agent/integration/personality-main.patch)。接线涉及私有消费 RPC、现有消费 GET 的导出、独立页面、导航和总览入口。源代码中现有主站任务管理与子项目旧版不同，整目录同步会覆盖该差异。
 
 API Worker 将 `agent/assistant/personality-memory.mjs` 和 `agent/migrations/016-personality-memory.sql` 分别复制到 `src/companion/agent/` 下对应目录；在 API Worker 根使用 [API 接线补丁](../../agent/integration/personality-api.patch)。合并后还需目标仓库回归。用户已同意准备[花园登记清单](FEIYUE_MEMORY_GARDEN_PLAN.md)，已用独立基线核实线上归属与版本，具体清单已获确认，原开发库已完成迁移、标准结构同步及独立读回验证。实际清单、生产备份、发布审核、部署许可及发布后验证按项目发布规则办理。
+
+## 生产结果
+
+花园已按确认清单登记一次。项目 #16、功能 #61，版本 2.0 → 3.0，发布 #52，明细 #122，已完成改善 #62。修订 100 → 101，种子变更 0。2026-11-20 22:59:08 JST 全库 117 张表与离线预期一致，完整性正常、外键违规 0。 主站、API 与 Windows 桌宠已发布。线上界面待用户截图确认。

@@ -41,7 +41,7 @@ const operations = {
   },
   'diaries.create': {
     path: '/api/diaries',
-    body: ({ title, content }) => ({ title: title.trim(), content: content.trim() }),
+    body: ({ title, content }) => ({ title: title.trim(), content }),
     recordId: response => Number.isSafeInteger(response?.item?.seq) && response.item.seq > 0 ? response.item.seq : null,
   },
 };

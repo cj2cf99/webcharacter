@@ -174,6 +174,7 @@ export function createServerTaskCommand({profile,tasks,localModel,dialog,readSki
         }
         if(plan.type==='pc.resources.create'&&plan.params)plan.params=resourceParams(command,plan.params,true);
         if(plan.type===PC_IMAGE_GENERATE)plan.params={prompt:command.trim()};
+        if(plan.type==='pc.resources.create'&&plan.params)plan.params=resourceParams(command,plan.params,true);
         const template=candidates.find(t=>t.type===plan.type);
         if(!template||!validateParameters(template.parameter_spec,plan.params).valid||(exercise&&plan.params.body!==exercise[1]))
           throw Error('任务方案与已有 PC 模板不匹配，请补充任务名称和所需参数。');

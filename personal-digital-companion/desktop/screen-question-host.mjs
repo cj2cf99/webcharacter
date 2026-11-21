@@ -335,13 +335,8 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       signal.throwIfAborted();
       waiting('正在根据搜索结果整理答案…');
       try{
-        const mayConsult=research!=='web'&&!page&&research!=='x'&&!process.env.TAVILY_API_KEY&&process.env.FEIYUE_DEEPSEEK_COMPLEX==='1'&&process.env.DEEPSEEK_API_KEY&&/综合比较|交叉验证|比较.{2,30}差异|复杂问题/u.test(query);
         const prompt=searchSummaryPrompt(route.purpose||query,found.sources);
         const answer=await localModel?.analyze(prompt,{signal,hint:'direct',onProgress:waiting});
-        if(mayConsult&&!answer?.reply?.trim()){
-          const external=await askDeepSeek(query,signal);
-          return {...external,sources:found.sources};
-        }
         if(answer?.reply?.trim())return {...found,text:answer.reply};
       }catch{signal.throwIfAborted();}
       return {...found,text:'AI 暂未整理，以下为搜索摘要。\n\n'+found.text};
@@ -726,6 +721,11 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     await open('auto',session);
     if(session.signal?.aborted||!panel?.isVisible()||!ready||busy)return false;
     nag=session;
+    session.deadline?.addEventListener('abort',()=>{
+      if(nag!==session)return;
+      nag=null;
+      publish({state:'answer',text:session.timeoutText,nagReply:true},generation);
+    },{once:true});
     publish({state:'answer',text:session.prompt,nag:true,nagReply:true,audit:Boolean(session.audit)},generation);
     session.visible();
     return true;

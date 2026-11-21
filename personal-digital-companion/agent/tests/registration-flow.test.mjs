@@ -131,7 +131,7 @@ test('桌面提交一次后建一链，主动领取六类节点并等待显式�
     '/api/diaries', '/api/records', '/api/reminders',
   ]);
   assert.equal(f.writes.at(-1).body.deadline, f.env.input.dates.tomorrow);
-  assert.equal(f.writes[4].body.body, all[5].params.body);
+  assert.equal(f.writes[4].body.body, all[5].params.body+'❤️'); // 生产版登记计划在正文末尾加红心
   assert.deepEqual(new Set(f.writes.map(write => write.idempotencyKey)),
     new Set(result.chain.nodes.map(entry => entry.node_id)));
   assert.ok(result.chain.nodes.every(entry => entry.current_task.result?.record_id));

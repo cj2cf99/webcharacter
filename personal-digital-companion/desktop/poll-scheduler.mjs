@@ -4,16 +4,18 @@ const pauseDetail='闲置整理已满 10 分钟，等下一轮轮询继续';
 const types=[
   {id:'tasks',name:'任务轮询',minutes:15},
   {id:'due',name:'到期事项',minutes:20},
-  {id:'weather',name:'三地天气',minutes:60},
   {id:'news',name:'关注新闻简报',minutes:720},
-  {id:'diaryAudit',name:'手记质问',minutes:60},
   {id:'curiosity',name:'此刻所想 · 允许自主看屏',minutes:60},
+  {id:'weather',name:'三地天气',minutes:60},
+  {id:'aiHeartbeat',name:'AI 接口心跳',minutes:180},
+  {id:'diaryAudit',name:'手记质问',minutes:60},
   {id:'nag',name:'绯月念叨',minutes:120},
   {id:'diary',name:'写日记',minutes:720},
   {id:'review',name:'补行动评价',minutes:60},
 ];
 
 const goals={tasks:'检查云端待办并处理可领取任务',due:'检查今日到期和逾期事项',weather:'核对三地天气变化与预警',
+  aiHeartbeat:'检查当前云端 AI 接口是否可用',
   diaryAudit:'核对手记并判断是否有待确认的疑点',curiosity:'按设置观察当前场景并判断是否分享',nag:'核对待续事项并决定本轮主动行动',
   news:'查阅关注主题的公开报道，有新消息时提醒',diary:'整理未入册的素材并跟进未解悬念',review:'核查待整理专题并补写缺失的行动评价'};
 
@@ -143,12 +145,19 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
     const interval=j.minutes*60_000;
     arm(j,due+(1+Math.max(0,Math.floor((now()-due)/interval)))*interval);
     if(j.running){add(j.name,'未执行','上轮仍在执行',now(),due);audit?.skip(j.name,goals[j.id],'上轮仍在执行',due);changed();return;}
+    // 心跳仍静默按固定周期检查，退出或重启时跳过，不补跑。
+    if(j.id==='aiHeartbeat'){
+      if(!isBusy(j.id))void execute(j,due);
+      else changed();
+      return;
+    }
     if(isBusy(j.id)){postpone(j,due);return;}
     if(j.queuedAt!==null){retryLater();changed();return;}
     if(drain()){postpone(j,due);return;}
     void execute(j,due);
   }
   function initial(j){
+    if(j.id==='aiHeartbeat')return now()+j.minutes*60_000;
     const last=j.id==='weather'?weatherLastAt():lastRun(j.id);
     const earliest=j.id==='tasks'?now():Math.max(now(),warmUntil);
     return last?Math.max(earliest,Math.min(now(),last)+j.minutes*60_000):earliest;
@@ -159,10 +168,11 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
   }
   function configure(id,input){
     const j=jobs.get(id);
+    const maximum=id==='aiHeartbeat'?j?.maximum:input?.maximum;
     if(!j||!input||typeof input.enabled!=='boolean'||!Number.isInteger(input.minutes)||input.minutes<10||input.minutes>(['diary','news'].includes(id)?720:300)||
-        !Number.isInteger(input.maximum)||input.maximum<0||input.maximum>100)throw Error('间隔须为 10–300 分钟，最大推延须为 0–100 次，均为整数。');
+        !Number.isInteger(maximum)||maximum<0||maximum>100)throw Error('间隔须为 10–300 分钟，最大推延须为 0–100 次，均为整数。');
     const enabledBefore=j.enabled,minutesBefore=j.minutes;
-    Object.assign(j,{enabled:input.enabled,minutes:input.minutes,maximum:input.maximum});
+    Object.assign(j,{enabled:input.enabled,minutes:input.minutes,maximum});
     if(!j.enabled){clearTimer(j.timer);j.timer=null;j.nextAt=null;j.queuedAt=null;j.misses=0;}
     else if(j.misses>0&&j.misses>=j.maximum&&j.queuedAt===null)j.queuedAt=now();
     persist(j);
@@ -174,7 +184,7 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
     retryLater();changed();return snapshot();
   }
   function enqueue(id){
-    const j=jobs.get(id);if(closed||!j?.enabled||j.resumeAt>now())return;
+    const j=jobs.get(id);if(closed||id==='aiHeartbeat'||!j?.enabled||j.resumeAt>now())return;
     j.queuedAt??=now();persist(j);retryLater();
   }
   return {snapshot,configure,enqueue,get pending(){return queue().length>0;},get(id){return jobs.get(id);},

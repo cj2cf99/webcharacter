@@ -17,7 +17,7 @@ const iso=at=>new Date(at).toISOString();
 export function createPersonalityNags({store,emotion,initiative,show,idle,canContinue=()=>true,onInterrupted=()=>{},changed=()=>{},now=Date.now,random=Math.random}){
   let active=null,syncJob=null,stopped=false;
   const lifetime=new AbortController();
-  const pending=()=>store.nags().find(n=>openStates.includes(n.status));
+  const pending=()=>store.nags().find(n=>openStates.includes(n.status)&&(n.source!=='audit'||audit.eligible(n)));
   for(const n of store.nags())if(n.status==='提问中'){
     n.status='意外中断';n.interruptions++;store.saveNag(n);
   }
@@ -29,7 +29,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     return syncJob;
   }
   function save(n){store.saveNag(n);changed();void sync();}
-  const audit=createDiaryAudit({emotion,store,show,idle,canContinue,save,changed,now,random});
+  const audit=createDiaryAudit({emotion,store,show,idle,canContinue,save,changed,onInterrupted:()=>onInterrupted('diaryAudit'),now,random});
   function talk(n,who,text){n.talk.push({who,text,at:iso(now())});}
   async function think(stage,data,fields,signal){
     const skill=await readInteractionSkill('basicNag');signal.throwIfAborted();
@@ -215,5 +215,5 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     await selection?.finish(true,'已展示：'+n.id);
     return '只问了这一件：'+n.title;
   }
-  return {assessPending,poll,pollAudit:audit.poll,pending,flush:sync,async close(){audit.close();stopped=true;lifetime.abort();active?.controller.abort();await syncJob;}};
+  return {assessPending,poll,pollAudit:audit.poll,recoverAudit:audit.recover,pending,flush:sync,async close(){audit.close();stopped=true;lifetime.abort();active?.controller.abort();await syncJob;}};
 }

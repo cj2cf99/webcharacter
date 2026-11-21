@@ -187,10 +187,11 @@ class SkillTests(unittest.TestCase):
             self.assertIn("2026-11-21 02:30 JST",news(reader,"Kyoto")[0]["snippet"])
             self.assertIn("news.google.com/rss",reader.get.call_args.args[0])
         with patch.dict(os.environ,{"BRAVE_SEARCH_API_KEY":"fixture"}):
-            reader.get.return_value=(200,{},b'{"results":[{"title":"News","url":"https://example.org/a","description":"item"}]}')
-            self.assertEqual(news(reader,"Kyoto")[0]["url"],"https://example.org/a")
-            self.assertIn("freshness=pd",reader.get.call_args.args[0])
-            self.assertNotIn("fixture",reader.get.call_args.args[0])
+            reader.reset_mock()
+            self.assertEqual(news(reader,"Kyoto")[0]["url"],"https://example.org/story")
+            reader.get.assert_called_once()
+            self.assertIn("news.google.com/rss",reader.get.call_args.args[0])
+            self.assertNotIn("fixture",str(reader.get.call_args))
 
     def test_publication(self):
         with tempfile.TemporaryDirectory() as tmp:
