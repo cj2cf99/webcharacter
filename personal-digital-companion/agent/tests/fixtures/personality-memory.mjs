@@ -95,7 +95,7 @@ function validAudit(n){
     (n.notBefore===undefined||Number.isSafeInteger(n.notBefore));
 }
 async function saveNag(db,owner,x,env){
-  if(!x||!key(x.id)||!Number.isSafeInteger(x.revision)||x.revision<1||!['paylog','diary','audit'].includes(x.source)||x.source==='audit'&&!validAudit(x)||
+  if(!x||!key(x.id)||!Number.isSafeInteger(x.revision)||x.revision<1||!['paylog','diary','audit','curiosity'].includes(x.source)||x.source==='audit'&&!validAudit(x)||
      !string(x.source_id,150)||!x.source_id||!string(x.title,300)||!string(x.reason,400)||!string(x.mood,40)||
      x.source==='paylog'&&!date(x.source_day)||x.source==='diary'&&!/^\d{4}-\d{2}-\d{2}\.\d+\/[1-9]\d*$/.test(x.source_id)||
      typeof x.created_at!=='string'||x.created_at!==new Date(x.created_at).toJSON()||!['提问中','等待回应','意外中断','用户结束','已解释','回合结束'].includes(x.status)||

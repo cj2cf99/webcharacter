@@ -70,7 +70,7 @@ button { cursor: pointer; }
 #reply {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: clip;
+  overflow-y: auto;
 }
 #replyContent {
   padding: 2px 3px;
@@ -88,7 +88,7 @@ button { cursor: pointer; }
 }
 .response { display: flex; align-items: baseline; gap: 7px; }
 #answer { min-width: 0; margin: 0; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap;
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  display: block; }
 #reply[data-state=error] .response { color: var(--warning); }
 #retry, #full {
   flex: none;

@@ -1,0 +1,42 @@
+diff --git a/src/companion/agent/host/subscriptions.mjs b/src/companion/agent/host/subscriptions.mjs
+index e186ba9..8e8dea5 100644
+--- a/src/companion/agent/host/subscriptions.mjs
++++ b/src/companion/agent/host/subscriptions.mjs
+@@ -32,7 +32,11 @@ export async function handleCompanion(request, env, actor, fromMain) {
+     return fail(403, 'ORIGIN_DENIED', '仅允许同源操作');
+   }
+   url.pathname = '/api' + url.pathname.slice(prefix.length);
+-  if (fromMain && !isTaskWorkspaceApi(url.pathname, request.method)) return fail(404, 'NOT_FOUND', '接口不存在');
++  if (url.pathname.startsWith('/api/memory/') && !fromMain && actor.role !== 'bot') {
++    return fail(403, 'ACCESS_DENIED', '桌宠接口仅供服务身份使用');
++  }
++  const memoryRead=request.method==='GET'&&/^\/api\/memory\/(?:diaries|nags)(?:\/[\w.-]+)?$/.test(url.pathname);
++  if (fromMain && !memoryRead && !isTaskWorkspaceApi(url.pathname, request.method)) return fail(404, 'NOT_FOUND', '接口不存在');
+   if (!env.COMPANION_DB || !env.COMPANION_HOST) return fail(503, 'COMPANION_NOT_CONFIGURED', '绯月服务尚未接入');
+   const review = await handleReminderReview(request, env.COMPANION_HOST, url.pathname);
+   if (review) return review;
+diff --git a/src/companion/agent/worker.mjs b/src/companion/agent/worker.mjs
+index 579d5f3..2f00262 100644
+--- a/src/companion/agent/worker.mjs
++++ b/src/companion/agent/worker.mjs
+@@ -1,3 +1,4 @@
++import {personalityMemory} from './assistant/personality-memory.mjs';
+ import {isPcRegistration} from './tasks/pc-types.mjs';
+ import {executePcRegistration,pcOperationKey,readPcResult} from './tasks/pc-registration.mjs';
+ import { handleDeviceRequest, PC_ID_PATTERN } from './devices/api.mjs';
+@@ -218,6 +219,15 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
+       if(path==='/api/assistant/provider-test')return await testAiProviders(request,env,createAiClient);
+       if(path==='/api/assistant/message')return await handleAssistantMessage(request,env.DB,createAiClient,env,weatherOptions,identity.ownerId);
+       if(!env.DB)return error(503,'DATABASE_NOT_CONFIGURED',dailyLogs?'日志数据库尚未配置':'任务数据库尚未配置');
++      if(path==='/api/memory/expenses'&&request.method==='GET'){
++        if(!env.COMPANION_HOST?.memoryExpenses)return error(503,'EXPENSES_UNAVAILABLE','消费来源未连接');
++        return json(await env.COMPANION_HOST.memoryExpenses(Object.fromEntries(url.searchParams)));
++      }
++      if(path==='/api/memory/sources'&&request.method==='GET'){
++        if(!env.COMPANION_HOST?.memorySources)return error(503,'MEMORY_SOURCES_UNAVAILABLE','手记来源未连接');
++        return json(await env.COMPANION_HOST.memorySources(Object.fromEntries(url.searchParams)));
++      }
++      if(path.startsWith('/api/memory/'))return await personalityMemory(request,env,identity.ownerId);
+       if(path==='/api/assistant/heartbeat'){
+         if(request.method!=='POST')return error(405,'METHOD_NOT_ALLOWED','仅支持 POST',{Allow:'POST'});
+         const {value,code,ai}=await runProviderChain({env,ownerId:identity.ownerId,signal:request.signal,heartbeat:true});

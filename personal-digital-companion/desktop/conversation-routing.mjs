@@ -1,6 +1,6 @@
 import {requestsResource} from '../agent/assistant/resource-registration.mjs';
 import {isReminderCommand} from './reminder-command.mjs';
-const recordCommand = /^(?:(?:请|绯月|帮我|给我|麻烦你|麻烦)[，,\s]*)*(?:(?:新增|添加|创建|写)(?:一[条篇个份])?(?:提醒|日记|随手记)|(?:记下|记一下|记录一下|登记一下|提醒我|记一笔|记一条)|(?:登记|记录|随手记|日记)[：:\s])/;
+const recordCommand = /^(?:(?:请|绯月|帮我|给我|麻烦你|麻烦)[，,\s]*)*(?:(?:新增|添加|创建)(?:一[条篇个份])?(?:提醒|日记|随手记)|写(?:一[条篇个份])?(?:提醒|随手记)|(?:记下|记一下|记录一下|登记一下|提醒我|记一笔|记一条)|(?:登记|记录|随手记|日记)[：:\s])/;
 const recordSuffix = /[，,。\s](?:帮我|请)?(?:记一下|记录一下|登记一下|记下来|登记|记录)[吧。！!]?$/;
 const searchCommand = /^(?:(?:绯月|请你?|可以|麻烦你?|能不能|能否|帮我|给我|替我)[，,\s]*)*(?:到网上|在网上|上网|联网|网上|网络|用搜索引擎)(?:帮我)?(?:搜索|搜寻|搜|查找|查询|查|寻找|找|看看|看)(?:一(?:下|查|搜|找)|找|查|搜)?[下：:，,\s]*/;
 const recordRequest = /^(?:(?:请|绯月|麻烦)[，,\s]*)?(?:帮我|给我|替我)(?:记录|登记|记住|记到|记入)|^(?:记录|登记)(?:一下|一条|今天|昨天|刚才|早餐|午餐|晚餐|吃喝|运动|提醒|日记|随手记)|^(?:明天|今天|后天|明早|明晚|每天|周[一二三四五六日天]).{0,14}提醒我/;
@@ -30,6 +30,19 @@ export function suppliedSummaryText(text) {
 function commandWords(text) {
   return text.trim().replace(/“[^”]*”|「[^」]*」|『[^』]*』|"[^"]*"/gu,'引文');
 }
+const diaryCommand=/^(?:(?:请你?|绯月|帮我|替我|给我|麻烦你?)[，,\s]*)*(?:登记|记录|新增|添加|创建)(?:一下|一篇|一条)?日记/u;
+const diaryOpening=new RegExp(diaryCommand.source+'[：:,，\\s]+','u');
+export const emptyDiaryRequest=text=>diaryCommand.test(text)&&/^[：:，,。！!吧\s]*$/u.test(text.replace(diaryCommand,''));
+const diaryWithdrawal=/(?:^|[。！？!?；;，,\n])\s*(?:算了[，,\s]*)?(?:这(?:篇|条)(?:日记)?[，,\s]*)?(?:先)?(?:别|不要|不用|不必|取消)(?:再|帮我)?(?:登记|记录|保存)(?:这(?:篇|条)(?:日记)?)?[了吧。！!\s]*$/u;
+// 冒号后的日记是正文。只有另一条独立的委托才能改变单篇登记的范围。
+export function singleDiaryRequest(text){
+  const words=commandWords(text);
+  const opening=diaryOpening.exec(words);
+  if(!opening)return false;
+  const body=words.slice(opening[0].length).trim();
+  const nextCommand=/(?:另外|顺便|同时|并且|然后|并|再|[。！？!?；;，,\n]\s*)(?:再|请你?|帮我|替我|给我|另外|也|顺便|同时)*(?:登记|记录|提醒我|添加|新增|创建|记一笔|设置提醒|加个提醒)/u;
+  return Boolean(body)&&!nextCommand.test(body)&&!diaryWithdrawal.test(body);
+}
 const addressed = /^(?:(?:绯月|老婆|请你?|麻烦你?|能不能|能否|可以|帮我|给我|替我|我要|我想要|我想|提前|顺手|顺便|现在|先|再|也)[，,、\s]*)*/u;
 function recordClause(clause) {
   const words=clause.trim().replace(addressed,'');
@@ -57,11 +70,25 @@ const newReminder=/(?:加|添加|建|创建|新增|设|设置)(?:[一1]?[个条�
 
 export function conversationRoute(text, mode = 'auto', withScreen = false) {
   if (mode === 'direct') return {kind:'direct'};
+  if(diaryOpening.test(text)&&diaryWithdrawal.test(commandWords(text).replace(diaryOpening,'')))return {kind:'question'};
   if (mode === 'registration' || mode === 'supplement') return {kind:'registration'};
   if (mode === 'memory') return {kind:'memory'};
+  if (/^(?:绯月[，,\s]*)?(?:看看?|查[看查]?|读|打开)?(?:我的|本期|最新)?(?:关注新闻|新闻简报)[。！!]?$/u.test(text.trim())) return {kind:'newsBriefing'};
+  const xSearch=/^(?:(?:绯月|请|帮我|替我)[，,\s]*)*(?:(?:查|搜|搜索)(?:一下)?\s*(?:X(?:\.com)?|推特|Twitter)(?=$|[\s：:，,上帖推])(?:上(?:的)?)?(?:帖子|贴子|推文)?|(?:在|去)\s*(?:X(?:\.com)?|推特|Twitter)\s*上?\s*(?:搜索|搜|查)(?:一下)?)[：:，,\s]*(.+)$/iu.exec(text.trim());
+  if(xSearch)return {kind:'search',query:xSearch[1].trim(),research:'x'};
+  const specialist=/^(?:(?:绯月|请|帮我|替我)[，,\s]*)*(?:问(?:问|一下)?|请教)\s*deepsee+k[\s：:，,]+(.+)$/iu.exec(text.trim());
+  if(specialist)return {kind:'search',query:specialist[1].trim(),research:'deepseek'};
+  const page=/^(?:(?:请|帮我|绯月)[，,\s]*)*(?:打开|阅读|读取|提取|抓取)(?:这个|该)?(?:网页|页面|链接)?[\s：:，,]*(https:\/\/[^\s，。]+)(?:[\s，,]+(.*))?$/iu.exec(text.trim());
+  if(page)return {kind:'search',query:page[1],page:page[1],purpose:page[2]?.trim(),images:/图片|照片|找图/u.test(page[2]??''),summarize:true};
+  const news=/^(?:(?:绯月|请|帮我|上网|谷歌|Google)[，,\s]*)*(?:查询|搜索|查|找|搜)(?:一下|一搜)?(?:(?:最新消息|新闻)[：:\s]*(.+)|(.+?)(?:的)?(?:最新消息|最新新闻|新闻))[。！!]?$/iu.exec(text.trim());
+  if(news)return {kind:'search',query:(news[1]??news[2]).trim(),research:'news'};
+  const imageQuery = /^(?:(?:绯月|请|帮我|给我|替我|上网|网上|去网上)[，,\s]*)*(?:搜图|找图|查图)[片像照]*[\s：:，,]*(.+?)\s*[。!！]?$/u.exec(text.trim())
+    ?? /^(?:(?:绯月|请|帮我|给我|替我|上网|网上|去网上)[，,\s]*)*(?:找|搜|搜索|查找)(?:一下|一些|几张|一张|找找)?\s*(.+?)(?:的)?(?:图片|照片|参考图)[。!！]?$/u.exec(text.trim());
+  if (imageQuery) return {kind:'search',query:imageQuery[1].trim(),images:true};
   if (mode === 'web') return {kind:'search',query:requestedSearch(text) ?? text.trim(),summarize:true};
   if (!withScreen && /^(?:(?:绯月|请你?|帮我|替我|麻烦你?)[，,\s]*)*(?:(?:提交|创建|新增|发起|建|生成)(?:一个|一条|个)?\s*)?(?:云端任务|服务器任务)(?=$|有哪些|[：:，,\s。！!])/u.test(text.trim())) return {kind:'serverTask'};
   if(isSelfRestart(text))return {kind:'restart'};
+  if(singleDiaryRequest(text))return {kind:'registration'};
   if (/(?:是什么意思|怎么(?:用|操作)|如何使用)[？?。]?$/.test(text) && !searchCommand.test(text) && !simpleSearch.test(text)) return {kind:'question'};
   if (suppliedSummaryText(text)) return {kind:'question'};
   if (mentionsReminder(text)&&(reminderOptOut.test(text)||reminderHelp.test(text)))return {kind:'question'};
@@ -70,6 +97,7 @@ export function conversationRoute(text, mode = 'auto', withScreen = false) {
   text=commandWords(raw);
   if (/(?:别|不用|不要|不必|无需|不想|不需要|先不|不准)(?:再|帮我|替我|给我|把[^，,。！？]{0,40})*(?:登记|记录|记下|记住|记一下|提醒)|(?:怎么|怎样|如何|为什么|是否|有没有|什么叫).{0,12}(?:记录|登记)|^(?:记录|登记).{0,15}(?:有何区别|有什么区别|有区别吗|有用吗|重要吗|了吗|过吗)[？?。]*$/u.test(text))return {kind:'question'};
   if (requestsResource(text)) return {kind:'registration'};
+  if(/(?:写|起草|草拟)(?:一篇)?日记.{0,30}(?:并|后|再)(?:帮我)?(?:登记|保存|存入)/u.test(text))return {kind:'registration'};
   if (requestsRegistration(text)) return {kind:'registration'};
   const query = requestedSearch(raw);
   if (query !== null) return {kind:'search',query};

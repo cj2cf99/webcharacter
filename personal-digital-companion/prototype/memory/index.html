@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="ink">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>绯月手记 · 个人工作台原型</title>
+  <link rel="stylesheet" href="assets/styles/shell.css"><link rel="stylesheet" href="assets/styles/theme.css">
+  <link rel="stylesheet" href="memory.css"><script src="assets/shell/theme.js"></script>
+  <script defer src="memory.js"></script>
+</head>
+<body data-shell-page="feiyue" data-shell-group="life">
+  <!-- 复用主站 navigation.js 的页头与菜单结构。原型只保留可访问的本地入口。 -->
+  <header class="unified-header">
+    <a class="brand" href="#overview"><span class="mark" aria-hidden="true">✓</span>个人工作台</a>
+    <div class="site-navigation"><nav aria-label="主导航">
+      <div class="nav-home"><div class="nav-entry" data-entry="home"><a href="#overview">总览</a></div></div>
+      <details class="nav-group" data-current="true"><summary>生活记录 <span aria-hidden="true">⌄</span></summary><div class="nav-dropdown"><div class="nav-entry memory-icon"><a href="#diary">绯月手记<small>日记与念叨</small></a></div></div></details>
+    </nav></div>
+    <button type="button" class="theme-toggle" aria-label="切换雅致或赛博主题" title="切换雅致 / 赛博"><i aria-hidden="true"></i></button>
+    <button type="button" class="site-menu-toggle" aria-label="打开导航菜单" aria-controls="site-drawer">导航菜单 ☰</button>
+  </header>
+  <dialog id="site-drawer"><div class="drawer-heading"><strong>工作区导航</strong><button data-dismiss aria-label="关闭导航">×</button></div><div class="drawer-body"><a href="#overview">总览</a><a href="#diary">绯月手记</a></div></dialog>
+  <main>
+    <section class="cover" aria-labelledby="cover-title">
+      <div class="cover-copy"><small>个人工作台　/　生活记录</small><h1 id="cover-title">绯月手记</h1><p id="archiveSummary"></p>
+      <span class="cover-note"><i></i>本地原型 · 模拟资料</span></div>
+      <div class="cover-art" aria-hidden="true"><i class="moon"></i><i class="orbit"></i><img src="../../assets/desktop-media/baseline.png" alt=""></div>
+    </section>
+    <section id="overview" hidden><h2>工作台总览</h2><a class="portal memory-icon" href="#diary"><strong>绯月手记</strong><span>阅读日记与念叨记录　→</span></a></section>
+    <div class="workspace" id="workspace">
+      <section class="collection" aria-label="记忆档案">
+        <div class="tabs" aria-label="档案类型"><a id="diaryTab" href="#diary">日记</a><a id="nagTab" href="#nag">念叨</a></div>
+        <div class="filters"><label class="search"><i aria-hidden="true"></i><input id="search" type="search" placeholder="搜索标题、关键词或标签" aria-label="搜索索引"></label><select id="filter" aria-label="筛选标签或来源"></select></div>
+        <label class="mobile-date">东京日期 <input type="date" id="mobileDate" min="2026-11-01" max="2026-11-30"></label>
+        <div class="list-head"><span id="listCaption"></span><span>东京时间 JST</span></div>
+        <div id="rows" aria-live="polite"></div>
+        <nav id="pages" aria-label="列表分页"><button id="prev">上一页</button><span id="pageInfo"></span><button id="next">下一页</button></nav>
+      </section>
+      <aside>
+        <section class="calendar sheet"><div class="section-head"><h2>翻到那一天</h2><span>2026 年</span></div>
+          <h3>十一月</h3><div class="week" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+          <div id="calendar"></div><div class="calendar-foot"><span><i></i>有记录</span><button id="clearDate" disabled>清除日期</button></div>
+        </section>
+        <section class="studio sheet"><small>桌宠交互原型</small><h2>试一轮念叨</h2><p>模拟回应、超时续问或主动结束。</p><button id="launch">打开气泡</button></section>
+      </aside>
+    </div>
+  </main>
+  <dialog id="reader" class="modal"><div class="modal-head"><span id="readerLabel"></span><button class="x" data-dismiss aria-label="关闭详情">×</button></div><article id="article" aria-live="polite"></article></dialog>
+  <dialog id="origin" class="modal" aria-labelledby="originLabel"><div class="modal-head"><span id="originLabel">原记录 · 模拟资料</span><button id="returnOrigin">返回</button></div><article id="originBody" aria-live="polite"></article></dialog>
+  <dialog id="lab" class="modal lab"><div class="modal-head"><span>桌宠气泡 · 模拟时钟</span><button class="x" data-dismiss aria-label="返回档案">×</button></div>
+    <div class="lab-stage"><div id="speech" class="speech" aria-live="polite"></div><img src="../../assets/desktop-media/baseline.png" alt="绯月"></div>
+    <div class="lab-controls"><p id="labState" role="status"></p><div id="labButtons"></div></div>
+  </dialog>
+</body></html>

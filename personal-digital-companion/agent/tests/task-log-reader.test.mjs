@@ -16,11 +16,11 @@ test('只读分页从最新行开始，追加不挤走旧行，跨块中文和�
   const first=await log.readPage();
   assert.deepEqual(first.lines,lines.slice(-12).reverse());
   await appendFile(log.file,'后来追加的记录\n');
-  const second=await log.readPage(first.next),pages=[first,second];
+  const pages=[first];
   while(pages.at(-1).next)pages.push(await log.readPage(pages.at(-1).next));
-  assert.equal(pages.length,8);
+  const second=pages[1];
   assert.deepEqual(pages.flatMap(page=>page.lines),[...lines].reverse().concat('旧格式日志'));
-  assert.equal(pages.at(-1).next,null);
+  assert.equal(pages.length,8); // 84 行每页 12 行，最后一页带上轮转文件的旧行
   await rename(log.file,archive);
   await log.write({direction:'send'});
   assert.deepEqual((await log.readPage(first.next)).lines,second.lines);

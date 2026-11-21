@@ -1,0 +1,103 @@
+{
+  "id": "feiyue-emotion-news-heartbeat-20261121",
+  "archiveSha256": "edf4de17bb06d747e27124fb26f229d1687d85b1fba091b0bf384dc1c6977b0d",
+  "workers": [
+    {
+      "target": "api",
+      "previous": "433cac21-d356-41f0-8fd2-f2264a37da29",
+      "version": "e506e723-b78e-41b8-96e8-9dd1ccb8ae2d",
+      "percentage": 100,
+      "created_on": "2026-11-21T07:36:31.347457Z",
+      "bindings": 14,
+      "binding_differences": 0
+    },
+    {
+      "target": "main",
+      "previous": "6c2f851f-4541-4695-86e4-5be83a680b71",
+      "version": "1993378e-42a8-43da-9f8c-c7d8d75d28ba",
+      "percentage": 100,
+      "created_on": "2026-11-21T07:36:43.15673Z",
+      "bindings": 42,
+      "binding_differences": 0
+    }
+  ],
+  "desktop": {
+    "id": "feiyue-emotion-news-heartbeat-20261121",
+    "previousPid": 4348,
+    "pid": 12220,
+    "startedAt": "2026-11-21T16:37:41.8890000+09:00",
+    "verifiedAt": "2026-11-21T16:37:42.9117084+09:00",
+    "files": 112,
+    "rest": 4,
+    "retainedBatches": 12,
+    "heartbeat": {
+      "id": "aiHeartbeat",
+      "enabled": 1,
+      "minutes": 180
+    },
+    "news": {
+      "id": "news",
+      "enabled": 1,
+      "minutes": 720
+    },
+    "curiosity": {
+      "id": "curiosity",
+      "enabled": 0,
+      "minutes": 60
+    },
+    "emotionDb": true
+  },
+  "tests": {
+    "rounds": 2,
+    "perRound": {
+      "desktop": 344,
+      "skills": 17,
+      "api": 41,
+      "site": 843
+    },
+    "installedIsolatedSmoke": [
+      "heartbeat-panel",
+      "news-panel",
+      "diary-write-reopen-api-read-site-list-detail"
+    ],
+    "pending": [
+      "Access 线上页面待用户截图确认",
+      "自然心跳和半日新闻触发待观察"
+    ]
+  },
+  "garden": {
+    "batch": "feiyue-emotion-news-heartbeat-20261121",
+    "confirmationHash": "9d7f34bbbac6e52d8db5881d81c37833b1a39d832fb8558be50a6db68f29d200",
+    "executorGit": "ab2237575bc270da5f96c03ac1b2336addc47e1b",
+    "finished": "2026-11-21T07:45:58.894Z",
+    "steps": [
+      {
+        "label": "登记已完成的情绪与记忆改善",
+        "state": "verified",
+        "at": "2026-11-21T07:45:34.27Z",
+        "revision": 136
+      },
+      {
+        "label": "登记三端实际发布",
+        "state": "verified",
+        "at": "2026-11-21T07:45:51.91Z",
+        "revision": 137
+      }
+    ],
+    "independentReadRevision": 137,
+    "project": 16,
+    "flower": 61,
+    "improvement": 77,
+    "deploy": 68,
+    "item": 142,
+    "version": "18.1",
+    "acknowledged": "2026-11-21T07:47:36.169Z"
+  },
+  "gitRemoteVerified": {
+    "desktopSource": "99e0219695fa85d9f3804fc7159acfc6c0ebcd14",
+    "localDesktopCandidate": "d7003833b1811b5cfbfe14b681c828a63d1b89b7",
+    "apiSource": "ab9e11aaf4443fe36d9b722e599da6eeb3ca78e1",
+    "siteSource": "7365d0c289fc89f6d953fde93efc6f55b5ff7f0f",
+    "siteWithGardenPackage": "9885d19762e6b3390e30ffd5e08d6baa61dbfbc9"
+  }
+}

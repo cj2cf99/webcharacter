@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src blob:; connect-src 'none'">
+<title>绯月 · 多项登记预览</title><link rel="stylesheet" href="../desktop/feiyue-surface.css"><link rel="stylesheet" href="registration-batch.css">
+<script defer src="registration-batch.js"></script></head><body>
+<header class="fy-titlebar"><div class="fy-caption"><h1>绯月 · 登记预览</h1></div></header>
+<main class="fy-scroll">
+  <div class="heading"><h2>核对登记</h2><span id="progress" role="status"></span></div>
+  <section aria-labelledby="noteHeading"><div class="group"><h3 id="noteHeading">随手记 <small>2</small></h3><label class="shared">统一分类 <select id="shared" aria-label="两条随手记的统一分类"></select></label></div><div id="notes"></div></section>
+  <section aria-labelledby="reminderHeading"><div class="group"><h3 id="reminderHeading">提醒 <small>1</small></h3></div><div id="reminders"></div></section>
+  <details id="source"><summary>查看委托原文</summary><p>帮我写两条随手记，一条记河边的晚霞，一条记新发现的咖啡店。明天再提醒我整理照片。</p></details>
+  <p id="message" role="status"></p>
+</main>
+<footer><span id="scope">本地模拟</span><button id="cancel">取消</button><button id="confirm" type="submit" disabled>确认登记 3 项</button></footer>
+<template id="row"><article>
+  <div class="line"><button class="title" aria-expanded="false"><span class="chevron" aria-hidden="true">›</span><span class="name"></span></button><button class="row-photos" hidden></button><div class="primary"></div></div>
+  <div class="sub" hidden><label class="text-label"></label><textarea rows="2"></textarea><div class="pictures"><div class="pic-title"><strong></strong><span></span></div><div class="slots"></div></div>
+  <button class="text-file">导入文本</button><input type="file" class="text-input" hidden accept="text/*,.md,.txt"><input class="pic-input" type="file" multiple accept="image/*" hidden></div>
+</article></template>
+</body></html>

@@ -2,6 +2,7 @@
 import argparse
 from datetime import datetime, timezone
 import json
+import os
 import re
 from pathlib import Path
 import secrets
@@ -10,6 +11,7 @@ import subprocess
 import sys
 import time
 import uuid
+import world_tour
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[2] / "tools"))
@@ -108,6 +110,12 @@ def run(job):
         backend.write_json(job / "status.json", receipt)
     try:
         _, folder = resolve_skill(spec.get("workflowSkill","comfy-image-workflows"), spec["workflowVersion"])
+        if "tourDestination" in spec:
+            update("starting", operation="tour", step=0)
+            steps, attachments, tour = world_tour.prepare(job, spec["tourDestination"], spec["seed"])
+            spec.update(steps=steps, attachments=attachments, tour=tour)
+            backend.write_json(job / "request.json", spec)
+            update("starting", tour=tour)
         with backend.gpu_slot(deadline):
             previous = None
             for index, step in enumerate(spec["steps"], 1):
@@ -117,14 +125,39 @@ def run(job):
                 inputs = []
                 if step["base"]:
                     inputs.append(previous if index > 1 else job / (spec.get("baseFile") or spec["attachments"][0]))
+                local_head = step.get("region") == "head"
+                if local_head:
+                    app, runtime, _ = backend.installation()
+                    def head_tool(mode):
+                        proc = subprocess.run([str(runtime), "-X", "utf8", "-B", str(HERE / "tour_head.py"), mode,
+                            str(previous), str(stage), str(app / "models/ultralytics/bbox/face_yolov8m.pt")],
+                            cwd=stage, env={**os.environ, "YOLO_AUTOINSTALL": "false", "YOLO_OFFLINE": "true"},
+                            capture_output=True, encoding="utf-8", errors="replace", timeout=backend.remaining(deadline),
+                            creationflags=subprocess.CREATE_NO_WINDOW)
+                        if proc.returncode:
+                            raise ValueError((proc.stderr.strip().splitlines() or ["主角面部局部处理失败"])[-1][-300:])
+                        return proc.stdout
+                    head_tool("crop")
+                    inputs[0] = stage / "context.png"
                 inputs.extend(job / spec["attachments"][n-1] for n in step["refs"])
+                if step.get("blocking"):
+                    _, runtime, _ = backend.installation()
+                    proc = subprocess.run([str(runtime), "-X", "utf8", "-B", str(HERE / "tour_block.py"),
+                        str(inputs[0]), str(inputs[2]), str(stage)], creationflags=subprocess.CREATE_NO_WINDOW,
+                        capture_output=True, encoding="utf-8", errors="replace", timeout=backend.remaining(deadline))
+                    if proc.returncode:
+                        raise ValueError((proc.stderr.strip().splitlines() or ["姿势分镜失败"])[-1][-300:])
+                    inputs[0],inputs[2] = stage / "blocking.png",stage / "pose-card.png"
                 sources = {f"input-{i}{path.suffix}": path for i, path in enumerate(inputs, 1)}
                 seed = spec["seed"] + index
                 graph = make_graph(folder, step, seed, list(sources))
                 target = stage / "result.png"
                 started = now()
                 update("starting", step=index, operation=step["op"], started=started, log=str(stage / "backend.log"))
-                result = backend.execute(stage, {"output": str(target)}, update, deadline, graph=graph, inputs=sources)
+                render_target = stage / "head-edit.png" if local_head else target
+                result = backend.execute(stage, {"output": str(render_target)}, update, deadline, graph=graph, inputs=sources)
+                if local_head:
+                    result.update(json.loads(head_tool("composite")), output=str(target))
                 completed.append(dict(step=index, operation=step["op"], started=started, finished=now(), seed=seed, **result))
                 previous = target
                 update("running")
@@ -145,6 +178,7 @@ def main():
         sub = commands.add_parser(command)
         if command == "submit":
             sub.add_argument("--server-task-id", type=uuid.UUID)
+            sub.add_argument("--tour", action="store_true")
         sub.add_argument("--version")
         sub.add_argument("--workflow-version")
         sub.add_argument("--image", action="append", type=Path, default=[])
@@ -173,9 +207,18 @@ def main():
             workflow_skill = "comfy-image-workflows"
             workflow_version, _ = resolve_skill(workflow_skill, args.workflow_version)
         data = json.loads(sys.stdin.buffer.read().decode("utf-8-sig"))
-        if not isinstance(data, dict) or set(data) != {"original", "steps"}:
-            raise ValueError("宿主须绑定用户原文，只接受 original 和 steps")
-        plan = compile_plan(data["original"], data["steps"], len(args.image), bool(args.base))
+        tour = getattr(args, "tour", False)
+        if tour:
+            if (not isinstance(data, dict) or set(data) != {"original", "destination"} or
+                    not isinstance(data["original"], str) or not data["original"].strip() or
+                    not isinstance(data["destination"], str) or len(data["destination"]) > 80 or
+                    args.image or args.base or args.server_task_id):
+                raise ValueError("环球之旅接受桌宠指令和一个目的地")
+            plan = []
+        else:
+            if not isinstance(data, dict) or set(data) != {"original", "steps"}:
+                raise ValueError("宿主须绑定用户原文，只接受 original 和 steps")
+            plan = compile_plan(data["original"], data["steps"], len(args.image), bool(args.base))
         for path in [*args.image, *([args.base] if args.base else [])]:
             if not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
                 raise ValueError("缺少可读取的本地 PNG、JPEG 或 WebP 附件")
@@ -207,7 +250,8 @@ def main():
                 shutil.copyfile(path, job / name)
                 names.append(name)
             backend.write_json(job / "request.json", dict(original=data["original"], serverTaskId=str(server_id) if server_id else None, version=version, workflowSkill=workflow_skill, workflowVersion=workflow_version, steps=plan,
-                               attachments=names, baseFile=base_file, seed=secrets.randbits(62), deadline=deadline))
+                               attachments=names, baseFile=base_file, seed=secrets.randbits(62), deadline=deadline,
+                               **({"tourDestination": data["destination"]} if tour else {})))
             row = dict(job=job.name, version=version, workflowVersion=workflow_version, state="queued", submitted=now(), completed=[])
             backend.write_json(job / "status.json", row)
             try:

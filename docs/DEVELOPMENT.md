@@ -1,5 +1,7 @@
 # WebCharacter 开发指南
 
+2026-11-21 JST，绯月桌宠的人格与记忆开发接入本机 Aggressive 9B。情绪和欲望的状态、专题文件及测试入口见[桌宠开发指南](../personal-digital-companion/docs/DEVELOPMENT.md#绯月人格与本机模型)。本条记录开发工作区的进度。
+
 2026-11-20 JST，本机 AI 代理可通过 `tools/comfy_job.py` 提交离线 ComfyUI 生图和图生图作业。已在 RTX 4060 Laptop 上用本地 SDXL Turbo 验证提交返回后后台继续、并发提交串行占用 GPU、512×512 PNG 交付、同名保护和后端退出。[命令与任务回执](COMFY_JOBS.md)
 
 2026-11-16 人鱼公主 3D 模型位于 `model/mermaid/`：按设定 V1.1 及用户参考图，在 Blender 5.2.4 中程序化建模（人体 + 鱼尾连续体素网格、独立交叠鳞片、三层尾鳍、半盘发、贝壳胸衣与全部饰品），加 38 根骨骼与 4 秒 `MM_Swim` 游动循环。重建：`& G:/blender/app/blender.exe --background --factory-startup --python-exit-code 1 --python model/mermaid/build_mermaid.py -- --anim`，产物在 `work/mermaid/`。用户参考图仅本地（已忽略）。自评综合还原约 75–78%（第 7 轮程序化调整后），脸与头发仍是主要差距，外观待用户确认。[说明](../model/mermaid/README.md) / [复核报告](reviews/MERMAID_3D_REVIEW_2026-11-16.md)。

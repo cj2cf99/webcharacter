@@ -10,7 +10,7 @@ import {createReminderChecks} from '../../desktop/reminder-checks.mjs';
 import {createAutonomousAudit} from '../../desktop/autonomous-audit.mjs';
 import {createTaskTrafficLog} from '../../desktop/task-traffic-log.mjs';
 import {openTestDatabase} from './sqlite-d1.mjs';
-import {personalityMemory} from './fixtures/personality-memory.mjs';
+import {personalityMemory} from '../assistant/personality-memory.mjs';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 
 test('跨日重启回读任务日志，已写入的回执不重复，未落盘的回执补写一次',async t=>{
@@ -45,7 +45,7 @@ test('跨日重启回读任务日志，已写入的回执不重复，未落盘�
 test('同一悬念遇到多条新事实只比对一次；下个东京日继续未比较的事实',async t=>{
   const profile=mkdtempSync(join(tmpdir(),'fy-follow-once-'));
   const {DB,sqlite,close}=openTestDatabase();
-  sqlite.exec(readFileSync(new URL('./fixtures/personality-memory.sql',import.meta.url),'utf8'));
+  sqlite.exec(readFileSync(new URL('../migrations/016-personality-memory.sql',import.meta.url),'utf8'));
   const request=(path,options)=>/\/(?:expenses|sources)\?/.test(path)?Response.json({records:[],complete:true}):
     personalityMemory(new Request('https://unit.test'+path,options),{DB},'me');
   await request('/api/memory/diaries',{method:'POST',body:JSON.stringify({day:'2026-11-19',batch:'first',body:'今天种下一颗种子。',summary:'种子',tags:[],mood:'平静',weather:'晴',threads:['发芽了吗？']})});

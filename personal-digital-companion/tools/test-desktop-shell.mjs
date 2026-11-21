@@ -118,6 +118,8 @@ const watchDiary=tray.menu.find(item=>item.label==='日记与评价').submenu.fi
 result.hide();
 const writing=watchDiary();
 assert.equal(win.visible,true);
+// 开发区写日记先等情绪服务暂停再显示进度，这里短暂等待首个进度。
+for(let i=0;i<100&&!win.sent.some(([channel,v])=>channel==='desktop:thought'&&v?.stage==='整理资料');i++)await new Promise(r=>setTimeout(r,10));
 assert.ok(win.sent.some(([channel,v])=>channel==='desktop:thought'&&v?.title==='闲时 · 写日记'&&v.stage==='整理资料'),'手动写日记立即显示进度');
 await watchDiary();
 await writing;
@@ -391,7 +393,7 @@ if(testGarden){
   const headers={Authorization:'Bearer '+readFileSync(join(profile,'local-api.token'),'utf8'),'Content-Type':'application/json'};
   const base=result.localAPIAddress;
   const guide=await (await fetch(base+'/infoguide')).json();
-  assert.equal(guide.instance.profile,profile);assert.match(guide.batch.steps,/checking/);
+  assert.equal(guide.instance.profile,profile);assert.match(guide.batch.steps,/checking/);assert.equal(guide.version,4);assert.match(guide.workStates.formal,/上限 20/);
   const beforeBatch=win.sent.length;
   const response=await fetch(base+'/v1/batches',{method:'POST',headers,body:JSON.stringify({id:gardenPlan.id,reviewHash:hash(canonical(gardenPlan)),commit:'1'.repeat(40),userConfirmed:true})});
   assert.equal(response.status,202);

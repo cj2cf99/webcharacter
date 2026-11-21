@@ -94,6 +94,9 @@ wrangler dev --local --ip 127.0.0.1 --port 8795 --persist-to .local/state
 | --- | --- |
 | GET /api/tasklist | 返回tasklist数组，参数定义/执行流程/报告说明来自D1 |
 | POST /api/assistant/message | `{messages:[{role:'user或assistant',content}],target_device_id?}`；最多20条，返回reply/proposal，不写tasks |
+| POST /api/assistant/message（候补） | `{work:{purpose,...}}`。`review` 接收 `content` 和 `count`，`image-plan` 接收 `slots` 和可选 `feedback`，`reminder-command` 接收 `content`。返回 `work`、`ai` 或错误，无任务写入。 |
+| GET /api/assistant/recording-plan | 返回 `catalog`、`categories`、`categoriesAvailable`。读取登记模板和分类，无正文、无模型调用。 |
+| POST /api/assistant/recording-plan | 云端登记候补，兼容 `{text}`，新版另可带 `submittedAt`（JST 日期计算的毫秒时刻）和 `reviewFeedback`。返回 `chain`、`pending`、`ai`，无业务写入。 |
 | GET /api/devices/:id/pending?after=cursor | 每页50条可新领取的task_id/type与next_after；不写活动记录 |
 | PUT /api/devices/:id | `{ "computer_name": "DESKTOP-EXAMPLE" }`；ID来自devices/identity.mjs的固定pc-UUID |
 | GET /api/devices | 返回设备清单及未标注ID/已标注通用名 |

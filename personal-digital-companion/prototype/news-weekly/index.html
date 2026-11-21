@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+  <title>绯月 · 七日新闻简报原型</title>
+  <link rel="stylesheet" href="../../desktop/feiyue-surface.css">
+  <link rel="stylesheet" href="../../desktop/news-panel.css">
+  <link rel="stylesheet" href="news-weekly.css">
+  <script src="prototype.js" defer></script>
+</head>
+<body>
+  <header class="fy-titlebar">
+    <div class="fy-caption"><h1>新闻简报</h1></div>
+    <button id="refresh" class="fy-icon" type="button" aria-label="刷新简报" title="刷新简报">↻</button>
+  </header>
+  <main class="fy-scroll">
+    <div class="page">
+      <header class="mast">
+        <div class="nameplate">
+          <h2>绯月<span>七日新闻</span></h2>
+          <p>11/15–11/21 · 2026 · JST</p>
+        </div>
+        <div class="engraving" aria-hidden="true"></div>
+      </header>
+      <div class="folio">
+        <nav id="filters" aria-label="新闻栏目">
+          <button type="button" aria-pressed="true">全部</button>
+          <button type="button" aria-pressed="false">社会</button>
+          <button type="button" aria-pressed="false">科技</button>
+          <button type="button" aria-pressed="false">市场</button>
+        </nav>
+        <div class="folio-actions">
+          <span class="demo" title="新闻和来源均为虚构样例">演示数据</span>
+          <button id="archive" type="button" class="paper-button">本地归档 ↗</button>
+        </div>
+      </div>
+      <div class="reader" id="reader">
+        <section class="overview" aria-label="七天事件">
+          <div class="list-heading">
+            <h3 id="overview-title" tabindex="-1">事件总览</h3>
+            <p id="count"></p>
+          </div>
+          <div id="status" class="notice" role="status" hidden></div>
+          <div id="event-list"></div>
+          <div class="back-top-slot">
+            <button id="overview-top" type="button" class="back-top" aria-label="回到总览顶部" hidden>↑ 回到顶部</button>
+          </div>
+        </section>
+        <div class="reader-backdrop" id="detail-backdrop" aria-hidden="true" hidden></div>
+        <aside class="event-detail" id="event-detail" aria-labelledby="detail-title" hidden>
+          <div class="detail-toolbar">
+            <span>事件详情</span>
+            <button id="close-detail" type="button" class="paper-button">收起详情 <span aria-hidden="true">×</span></button>
+          </div>
+          <div id="detail-content"></div>
+          <div class="back-top-slot">
+            <button id="detail-top" type="button" class="back-top" aria-label="回到详情顶部" hidden>↑ 回到顶部</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+  <dialog id="archive-panel" aria-labelledby="archive-heading">
+    <header class="dialog-head">
+      <h2 id="archive-heading">本地归档 · 样例</h2>
+      <form method="dialog"><button type="submit" aria-label="关闭归档">×</button></form>
+    </header>
+    <div class="archive-body">
+      <p class="archive-note">每个事件一个 Markdown 文件，按东京日期存放。</p>
+      <div id="archive-files"></div>
+    </div>
+  </dialog>
+  <dialog id="photo-panel" aria-labelledby="photo-heading">
+    <header class="dialog-head">
+      <h2 id="photo-heading">新闻配图</h2>
+      <form method="dialog"><button type="submit" aria-label="关闭大图">×</button></form>
+    </header>
+    <figure class="photo-preview">
+      <img id="photo-full" alt="" decoding="async">
+      <figcaption id="photo-credit"></figcaption>
+    </figure>
+  </dialog>
+</body>
+</html>

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getDeviceIdentity, DEVICE_ID_PATTERN } from '../devices/identity.mjs';
+import { getDeviceIdentity, DEVICE_ID_PATTERN, parseDeviceBinding, restoreDeviceIdentity } from '../devices/identity.mjs';
 import { handleDeviceRequest } from '../devices/api.mjs';
 import { openTestDatabase, initializeDatabase } from './sqlite-d1.mjs';
 
@@ -36,6 +36,27 @@ test('D01/D02：身份持久化，损坏不覆盖', async t => {
     await assert.rejects(getDeviceIdentity(directory), /身份文件/);
     assert.equal(await readFile(file, 'utf8'), corrupted);
   }
+});
+
+test('恢复网页导出的电脑 ID 后可读回原 ID，并可用上一个绑定文件恢复',async t=>{
+  const directory=await mkdtemp(join(tmpdir(),'feiyue-terminal-restore-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  const original=await getDeviceIdentity(directory);
+  const path=join(directory,'device-identity.json');
+  const backup=join(directory,'device-identity.previous.json');
+  const candidate=parseDeviceBinding('\uFEFF'+JSON.stringify({device_id:first}));
+  await assert.rejects(restoreDeviceIdentity(directory,'bad-id'),/ID 无效/);
+  for(const data of ['bad JSON',JSON.stringify({device_id:first,alias:'名称'}),JSON.stringify({device_id:first.replace('pc-','web-')})]){
+    assert.throws(()=>parseDeviceBinding(data),/绑定文件/);
+  }
+  assert.equal(JSON.parse(await readFile(path,'utf8')).device_id,original.device_id);
+  await restoreDeviceIdentity(directory,candidate);
+  assert.equal((await getDeviceIdentity(directory)).device_id,first);
+  assert.equal(parseDeviceBinding(await readFile(backup,'utf8')),original.device_id);
+  await restoreDeviceIdentity(directory,first);
+  assert.equal(parseDeviceBinding(await readFile(backup,'utf8')),original.device_id);
+  await restoreDeviceIdentity(directory,parseDeviceBinding(await readFile(backup,'utf8')));
+  assert.equal((await getDeviceIdentity(directory)).device_id,original.device_id);
 });
 
 test('D03/D04：登记、标注、系统名称更新、重复名与取消', async t => {

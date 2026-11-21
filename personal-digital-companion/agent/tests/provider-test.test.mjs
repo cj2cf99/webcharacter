@@ -3,11 +3,14 @@ import test from 'node:test';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {createRegistrationAiGateway} from '../host/registration-ai.mjs';
 import {handleCompanion} from '../host/subscriptions.mjs';
 import {createDesktopTasks} from '../../desktop/task-lifecycle.mjs';
 import {initializeDatabase, openTestDatabase} from './sqlite-d1.mjs';
 
 const path = '/api/assistant/provider-test';
+const mainSource=process.env.COMPANION_HU_SHI_MAIN_SOURCE;
 function gateway(t, providers, attempt) {
   const db = openTestDatabase();
   t.after(db.close);
@@ -102,4 +105,23 @@ test('接口目录不可读、无授权、跨站及旧版入口都不会冒报�
     assert.equal(box.message,'未能取得完整的服务器测试结果');
     assert.equal(log.at(-1).result,'incomplete');
   }
+});
+
+test('模拟 Groq 的 429 后切换，原始拒绝正文限长脱敏后随本地回执保存', {skip:!mainSource}, async t=>{
+  const dir=join(mainSource,'src/features/ai-check/ai');
+  const dependencies=await import(pathToFileURL(join(dir,'index.mjs')));
+  const key='private-fixture-credential';
+  const pool=createRegistrationAiGateway({GROQ_API_KEY:key,clouflareai:{run:async()=>({response:'模型正常回应'})}},dependencies,{
+    fetcher:async()=>Response.json({error:{message:'配额已用尽 '+key,token:'hidden-token',detail:'x'.repeat(10000)}},{status:429})
+  });
+  const request=gateway(t,()=>['groq','cloudflare'],(provider,input)=>pool.attempt(provider,input));
+  const {box,log}=await menu(t,request);
+  assert.equal(box.message,'成功 · cloudflare');
+  const [failure,success]=log[1].ai.attempts;
+  assert.equal(failure.code,'RATE_LIMITED');
+  assert.match(failure.refusal_response,/配额已用尽/);
+  assert.match(failure.refusal_response,/已截断/);
+  assert.doesNotMatch(JSON.stringify({box,log}),/private-fixture-credential|hidden-token/);
+  assert.equal(success.refusal_response,undefined);
+  assert.doesNotMatch(JSON.stringify(box),/配额已用尽/);
 });

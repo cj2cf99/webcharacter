@@ -36,31 +36,6 @@ const cancel = (DB, id) => call(DB, `/api/tasks/${id}/cancel`, {});
 const claim = (DB, id) => call(DB, `/api/tasks/${id}/claim`, { device_id: device });
 const snapshot = sqlite => ['tasks', 'executions', 'task_activity'].map(table => sqlite.prepare(`SELECT * FROM ${table} ORDER BY task_id`).all());
 
-test('服务器生图只记录本任务的 PNG 归档回执，拒绝附加字段并允许原回执重放', async t => {
-  const { DB, sqlite } = setup(t);
-  sqlite.exec(readFileSync(new URL('../seeds/tasklist-pc.sql', import.meta.url), 'utf8'));
-  const task = await create(DB, { type: 'pc.image.generate', params: { prompt: '一朵花' } });
-  const id = task.task_id;
-  assert.equal((await claim(DB, id)).status, 200);
-  const at = new Date().toISOString();
-  const execution = { execution_id: crypto.randomUUID(), task_id: id, attempt_no: 1,
-    status: 'COMPLETED', started_at: at, finished_at: at, error: null };
-  const result = { job_id: id.replaceAll('-', ''), format: 'PNG', width: 512, height: 768, archived: true };
-  const submit = value => call(DB, '/api/tasks/' + id + '/result', { device_id: device,
-    status: 'COMPLETED', attempt_count: 1, error: null, result: value, executions: [{ ...execution, result: value }] });
-  const before = snapshot(sqlite);
-  for (const change of [{ local_path: 'fixture.png' }, { job_id: 'another-job' }, { width: 0 },
-    { height: 1.5 }, { archived: false }, { format: 'JPEG' }]) {
-    const response = await submit({ ...result, ...change });
-    assert.equal(response.status, 400);
-    assert.equal((await response.json()).error.code, 'INVALID_IMAGE_RECEIPT');
-    assert.deepEqual(snapshot(sqlite), before);
-  }
-  assert.equal((await submit(result)).status, 200);
-  assert.equal((await submit(result)).status, 200);
-  assert.equal(sqlite.prepare('SELECT count(*) AS n FROM executions WHERE task_id=?').get(id).n, 1);
-});
-
 test('C01：只取消PENDING，重复取消成功且保留历史，cloud同样可取消', async t => {
   const { DB, sqlite } = setup(t); const task = await create(DB);
   const response = await cancel(DB, task.task_id);

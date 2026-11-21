@@ -3,6 +3,7 @@
   "main": "worker.mjs",
   "compatibility_date": "2026-11-18",
   "workers_dev": false,
+  "r2_buckets": [{"binding":"myMainStorage","bucket_name":"mystorage"}],
   "d1_databases": [{
     "binding": "DB",
     "database_name": "companion-agent-local",

@@ -175,32 +175,24 @@ test('L02：退出后启动/提示/重试不访问已关闭DB；未回传完成�
     await lifecycle.startup();await lifecycle.showPending();await lifecycle.retryPending();assert.equal(prompts.length,1);
   }finally{rmSync(profile,{recursive:true});}
 });
-test('L01：默认无业务注册；两个已领取任务依次执行',async()=>{
+test('L01：默认无业务注册；两个已接取任务按到达顺序逐个执行（正式工作队列）',async()=>{
   const profile=mkdtempSync(join(tmpdir(),'desktop-multi-'));let lifecycle,db;
   try{
     const {device_id}=await getDeviceIdentity(profile);db=setup(device_id);
-    const first=(await db.call('/api/tasks',{type:'mock.unit',target_device_id:device_id,params:{value:'one',marker:join(profile,'one')}})).body;
-    const second=(await db.call('/api/tasks',{type:'mock.unit',target_device_id:device_id,params:{value:'two',marker:join(profile,'two')}})).body;
-    const gate=Promise.withResolvers(),entered=Promise.withResolvers();
-    let starts=0;
-    lifecycle=await createDesktopTasks({profile,request:db.request,handlerModule:module,
-      dialog:{async showMessageBox(){return {response:0};}},
-      beforeExecute:async()=>{if(++starts===1){entered.resolve();await gate.promise;}}});
-    const one=lifecycle.runTask(first.task_id);
-    try{
-      await entered.promise;
-      const two=lifecycle.runTask(second.task_id);
-      try{
-        for(let i=0;i<150&&lifecycle.formalCount()!==2;i++)await pause(10);
-        assert.equal(lifecycle.formalCount(),2);
-        assert.equal(starts,1);
-        assert.equal(existsSync(join(profile,'two')),false);
-      }finally{gate.resolve();await Promise.all([one,two]);}
-      assert.equal(starts,2);
-      assert.ok(existsSync(join(profile,'one'))&&existsSync(join(profile,'two')));
-      assert.equal(lifecycle.executor.getTask(first.task_id).status,'COMPLETED');
-      assert.equal(lifecycle.executor.getTask(second.task_id).status,'COMPLETED');
-    }finally{gate.resolve();}
+    const first=(await db.call('/api/tasks',{type:'mock.unit',target_device_id:device_id,params:{value:'one',mode:'busy',marker:join(profile,'one')}})).body;
+    const second=(await db.call('/api/tasks',{type:'mock.unit',target_device_id:device_id,params:{value:'two',mode:'busy',marker:join(profile,'two')}})).body;
+    lifecycle=await createDesktopTasks({profile,request:db.request,handlerModule:module,dialog:{async showMessageBox(){return {response:0};}}});
+    const one=lifecycle.runTask(first.task_id).catch(error=>error),two=lifecycle.runTask(second.task_id).catch(error=>error);
+    for(let i=0;i<150&&!existsSync(join(profile,'one'));i++)await pause(10);
+    await pause(150);
+    assert.ok(existsSync(join(profile,'one'))&&!existsSync(join(profile,'two')),'第二个任务须等第一个结束');
+    assert.equal(lifecycle.executor.activeCount(),1);assert.equal(lifecycle.formalCount(),2);assert.equal(lifecycle.executingCount(),1);
+    const running=lifecycle.taskInbox.local();
+    assert.deepEqual(running.map(row=>row.task_id),[first.task_id]);
+    assert.ok(running.every(row=>row.name===first.definition.name&&row.attempt_count===1&&Number.isFinite(Date.parse(row.started_at))));
+    assert.ok(running.every(row=>!Object.hasOwn(row,'params')));
+    await lifecycle.stop();lifecycle=null;await Promise.all([one,two]);
+    const dbLocal=new DatabaseSync(join(profile,'tasks.sqlite'));assert.equal(dbLocal.prepare("SELECT count(*) n FROM local_tasks WHERE status='RUNNING' AND attempt_count=1").get().n,1);dbLocal.close();
   }finally{if(lifecycle)await lifecycle.stop();db?.close();rmSync(profile,{recursive:true});}
 });
 test('L01：已完成但回传断网，重开只补传，默认空handler亦可补传',async()=>{

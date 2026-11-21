@@ -24,10 +24,10 @@ test('SQ01：认证/同源/方法错误统一包络，认证先于读图/模型/
   const method=await send(w,body,{API_TOKEN:'test'},{method:'GET',body:undefined});errorIs(method,405,'METHOD_NOT_ALLOWED');assert.equal(method.response.headers.get('Allow'),'POST');
   assert.equal(calls,0);
 });
-test('SQ02：无DB成功，PNG/JPEG同一user消息，角色客观且固定模型/1024token',async()=>{
+test('SQ02：无DB成功，PNG/JPEG同一user消息，工具语体客观且固定模型/1024token',async()=>{
   let calls=0;const seen=[];const env={API_TOKEN:'test',get DB(){throw new Error('不得访问DB');},clouflareai:{async run(model,input){calls++;seen.push({model,input});return {choices:[{message:{content:'{"answer":"先检查路径，截图无法证明文件已删除。"}'},finish_reason:'stop'}]};}}};
   for(const image of [body.image,{mime_type:'image/jpeg',data_base64:jpeg}]){const r=await send(createWorker(),{...body,image},env);assert.deepEqual(r.body,{ok:true,answer:'先检查路径，截图无法证明文件已删除。'});assert.equal(r.response.headers.get('Cache-Control'),'no-store');}
-  assert.equal(calls,2);for(const {model,input} of seen){assert.equal(model,CLOUDFLARE_MODEL);assert.equal(input.max_completion_tokens,1024);assert.equal(input.stream,false);assert.equal(input.messages.length,2);assert.match(input.messages[0].content,/小女友/);assert.match(input.messages[0].content,/客观/);assert.match(input.messages[0].content,/不创建任务/);assert.equal(input.messages[1].content[0].text,body.question.trim());assert.match(input.messages[1].content[1].image_url.url,/^data:image\/(png|jpeg);base64,/);}
+  assert.equal(calls,2);for(const {model,input} of seen){assert.equal(model,CLOUDFLARE_MODEL);assert.equal(input.max_completion_tokens,1024);assert.equal(input.stream,false);assert.equal(input.messages.length,2);assert.doesNotMatch(input.messages[0].content,/妻子|小女友|第一人称/);assert.match(input.messages[0].content,/客观/);assert.match(input.messages[0].content,/不创建任务/);assert.equal(input.messages[1].content[0].text,body.question.trim());assert.match(input.messages[1].content[1].image_url.url,/^data:image\/(png|jpeg);base64,/);}
 });
 test('SQ03：严格字段、Unicode长度、媒体类型、JSON与图片编码头拒绝',async()=>{
   let calls=0;const w=createWorker({createVisionClient:()=>({generate(){calls++;return result();}})});

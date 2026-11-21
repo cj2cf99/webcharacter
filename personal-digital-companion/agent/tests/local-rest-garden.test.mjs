@@ -177,7 +177,7 @@ test('HTTP 确认、鉴权、固定 Git 清单、整批回读与一次复盘',as
   f.cleanup.push(async()=>{await api.close();await pool.close();});
   const headers={authorization:'Bearer '+readFileSync(join(f.dir,'local-api.token'),'utf8'),'content-type':'application/json'};
   const post=v=>fetch(api.address+'/v1/batches',{method:'POST',headers,body:JSON.stringify(v)});
-  const guide=await (await fetch(api.address+'/infoguide')).json();assert.equal(guide.baseURL,api.address);assert.equal(guide.routes.length,8);
+  const guide=await (await fetch(api.address+'/infoguide')).json();assert.equal(guide.baseURL,api.address);assert.equal(guide.routes.length,8);assert.equal(guide.version,4);
   assert.deepEqual(await (await fetch(api.address)).json(),guide);
   assert.equal((await fetch(api.address+'/v1/batches')).status,401);
   assert.equal((await fetch(api.address+'/v1/batches',{headers:{...headers,Origin:'https://other.invalid'}})).status,403);
@@ -305,4 +305,57 @@ test('制单复用花园真实模型，桌宠归属及部署明细版本可核�
     await assert.rejects(preparePlan({...request,release:'failed'},source),/失败发布/);
     db.exec("UPDATE garden_flower SET name='其他功能'");await assert.rejects(preparePlan(request,source),/既有绯月功能/);
   }finally{db.close();}
+});
+
+
+// 正式工作队列（docs/FORMAL_WORK_QUEUE.md）
+const variant=(plan,id)=>{const p={...plan,id};return {plan:p,digest:hash(canonical(p))};};
+test('本地待处理满员拒收新批次，重交原批次不受影响；排队位置计入已接取的本机任务',async t=>{
+  const f=fixture(t);
+  let pool;
+  pool=createLocalTaskPool({...f.poolOpts,canWork:()=>false,hasRoom:()=>pool.unfinished()<2,
+    queueInfo:()=>({used:pool.unfinished()+1,limit:2,running:'本机任务',tasks:1})});
+  f.cleanup.push(()=>pool.close());
+  const a=variant(f.plan,'queue-a'),b=variant(f.plan,'queue-b'),c=variant(f.plan,'queue-c');
+  const first=pool.submit(a.plan,sha,a.digest);
+  assert.deepEqual(first.batch.queue,{position:2,used:2,limit:2,running:'本机任务'});
+  assert.equal(pool.submit(b.plan,sha,b.digest).batch.queue.position,3);
+  assert.throws(()=>pool.submit(c.plan,sha,c.digest),e=>e.status===429&&/已满/.test(e.message));
+  assert.equal(pool.submit(a.plan,sha,a.digest).existing,true);
+  assert.equal(pool.unfinished(),2);
+});
+test('旧库补列后历史批次视为已取回；新完成的批次进入待回执，HTTP ack 后移出',async t=>{
+  const f=fixture(t);
+  const legacy=new DatabaseSync(f.file);
+  legacy.exec("CREATE TABLE batches(id TEXT PRIMARY KEY,digest TEXT NOT NULL,source_commit TEXT NOT NULL,title TEXT NOT NULL,created TEXT NOT NULL,state TEXT NOT NULL,payload TEXT,steps TEXT NOT NULL,error TEXT,finished TEXT)");
+  legacy.prepare("INSERT INTO batches VALUES('old-done','d','c','旧批次','2026-11-20T00:00:00Z','done',NULL,'[]',NULL,'2026-11-20T01:00:00Z')").run();
+  legacy.close();
+  const pool=createLocalTaskPool(f.poolOpts);
+  const api=await openLocalREST({profile:f.dir,pool,listenPort:0});
+  f.cleanup.push(async()=>{await api.close();await pool.close();});
+  assert.equal(pool.get('old-done').acknowledged,'2026-11-20T01:00:00Z');
+  assert.deepEqual(pool.unacknowledged(),[]);
+  pool.submit(f.plan,sha,f.digest);
+  assert.throws(()=>pool.ack(f.plan.id),/已完成/);
+  assert.equal((await settled(pool,f.plan.id)).state,'done');
+  const headers={authorization:'Bearer '+readFileSync(join(f.dir,'local-api.token'),'utf8')};
+  const pending=await (await fetch(api.address+'/v1/batches?unacknowledged=1',{headers})).json();
+  assert.deepEqual(pending.batches.map(b=>b.id),[f.plan.id]);
+  const acked=await fetch(api.address+'/v1/batches/'+f.plan.id+'/ack',{method:'POST',headers});
+  assert.equal(acked.status,200);
+  const receipt=await acked.json();assert.ok(Date.parse(receipt.acknowledged));
+  const again=await (await fetch(api.address+'/v1/batches/'+f.plan.id+'/ack',{method:'POST',headers})).json();
+  assert.equal(again.acknowledged,receipt.acknowledged);
+  assert.deepEqual((await (await fetch(api.address+'/v1/batches?unacknowledged=1',{headers})).json()).batches,[]);
+  assert.equal((await fetch(api.address+'/v1/batches/old-done/ack',{method:'POST',headers})).status,200);
+});
+test('批次真正开工时才让闲时工作暂停；空队列与等待本机任务时不打扰',async t=>{
+  const f=fixture(t);let starts=0,taskRunning=true;
+  const pool=createLocalTaskPool({...f.poolOpts,canWork:()=>!taskRunning,onStart:()=>starts++});
+  f.cleanup.push(()=>pool.close());
+  await pool.tick();assert.equal(starts,0,'空队列不调用');
+  pool.submit(f.plan,sha,f.digest);await pool.tick();
+  assert.equal(starts,0,'本机任务执行中，批次等待且不打断');assert.equal(pool.get(f.plan.id).state,'queued');
+  taskRunning=false;
+  assert.equal((await settled(pool,f.plan.id)).state,'done');assert.equal(starts,1);
 });

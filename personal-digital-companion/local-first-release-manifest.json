@@ -1,0 +1,395 @@
+{
+  "desktop": [
+    {
+      "path": "desktop/interaction-work.mjs",
+      "before": null,
+      "after": "29a3275dbc1ada4e017a5c7dd9aedf54a19a69ecf7dde7defa57ecd408fc253c"
+    },
+    {
+      "path": "desktop/registration-draft.mjs",
+      "before": null,
+      "after": "5ccd86dfd2e3a81efcd918a28a4b5d752d70ebe0f0e3c9cdc52be4819b31ec79"
+    },
+    {
+      "path": "desktop/balanced-local-model.mjs",
+      "before": "05012448b3a5f3604297c6e5955497063d335ae260d606820955e6b47d566845",
+      "after": "67fb756132fd1274b957cf95594547a28c585ca614168c433bc6d40e9b64758d"
+    },
+    {
+      "path": "desktop/local-model.mjs",
+      "before": "926815d50765ccd2c584c24838f5e5ec7456569f025571a18d1b671aa12ee83a",
+      "after": "a754aedd46da874af65f417ddc25c25f7b1e956d4d6d50c7d0a4354e2a32c70b"
+    },
+    {
+      "path": "desktop/local-model-process.mjs",
+      "before": "7091a563e7bb6244c5f01d648ea1cf1d4218595993c4a3ecec65d6bfe2929816",
+      "after": "5430646a905fde0949461ff69d98a14473da6d719ce602ee3319f0c8acfbf8ba"
+    },
+    {
+      "path": "desktop/conversation-routing.mjs",
+      "before": "0e316542c115f5743cee0dbe5f4a0b4b1a1aa7fcef0bbae3d27d9b62ea880e2e",
+      "after": "1b224e44a345dfdcdb483264baf11a7648f9f14c0247e899290c25b808170f8c"
+    },
+    {
+      "path": "desktop/image-tasks.mjs",
+      "before": "43a16b9d6c22261a227d54e0c27cb8fa431440aad912833c4eadc25de35b1ca0",
+      "after": "acadb5fc0790489964b09e4735a88b4f7ebcc262c0b99892b9e683927303bb25"
+    },
+    {
+      "path": "desktop/interaction-skills.mjs",
+      "before": "260dedfbefbe747cff8441893f96c1d614703414b0246d1926475f8872d1fcdc",
+      "after": "253b268ab353b2401e4a661d568ed23742e8f89b6c948c44926f2e968fdcb6ca"
+    },
+    {
+      "path": "desktop/local-vision.mjs",
+      "before": "04e5827c7882a333bd32459b9feafe0bf048b2c4802273acada3c01b20554154",
+      "after": "d4f5743d851a5ff0516f78773c53a4f54b5829b6bf0cab542c59cbd98f3ae3cd"
+    },
+    {
+      "path": "desktop/registration-flow.mjs",
+      "before": "e1f59e3126dc77a16feb50a609257b97c3b251c74f292f32f8cc6d31c7fea086",
+      "after": "d4f4aa0269da2f241c40f14fe7190a6ebb1420718480e80bbb21d14f5756d909"
+    },
+    {
+      "path": "desktop/reminder-approvals.mjs",
+      "before": "353b59f657743d4b96f6dca501fbdcc6cc1bc1677d38c96e958ed45318ef2c0a",
+      "after": "c88dda6d41b651f176ca87eff75671f9b72703fd6d6b7f617be5b4eec4279673"
+    },
+    {
+      "path": "desktop/screen-question-client.mjs",
+      "before": "b3a0cc223935e70e59350a746e44fbcd1424deee04b090d74a282b69cff063bf",
+      "after": "0770b627fee6fbcb2ca27ae408f84bcd85eb196e3fe88277bccae8c8770c2e4c"
+    },
+    {
+      "path": "desktop/screen-question-host.mjs",
+      "before": "3127f449f8aff70d81ba3217ad091edc36dacf6ed8f8d00f0960857525da4381",
+      "after": "fe633dbc71824534a3dd4aedf031f147da19d6c8002a189fbfe80a2a93a46db2"
+    },
+    {
+      "path": "desktop/server-task-command.mjs",
+      "before": "7eb76dfcf01ccb5755ad4c07d416d0b2a65c9f28ffb50fb4d90955970d36cb7d",
+      "after": "033196171701594b8555d02877429bbcbedb8bccd95250ba31234301d3642773"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "before": "3d0fb6e267d782b0354ba8f0be3ba16396b434bdbaa034e332e3db7fbb2cec7d",
+      "after": "1c7fedb81f1ac9660ed28eaed3e129a9814c0fa26146a296b5447ee8627fbf0b"
+    },
+    {
+      "path": "desktop/task-lifecycle.mjs",
+      "before": "a475735c1d90073206ccca790269647c511b0ac2a39b4edbc309fe722b016532",
+      "after": "60b1a99225ce0480e541e551f29bf62c92c129c1866d3c0043b95f9a19e803e3"
+    },
+    {
+      "path": "agent/assistant/message.mjs",
+      "before": "4947d4c2d4b0fb47d144721cdd4d6818a2f8867cfd3039155f781157eb3d00ae",
+      "after": "f35678dfef690f0ac475e19a36404994d31a5dbb4bdb4b81aba6bb20dc08312c"
+    },
+    {
+      "path": "agent/assistant/registration-plan.mjs",
+      "before": "894814c54c3c66dad47ca66d18c95b2de75ca6df1e6ec88f9c22a0fee5f4814a",
+      "after": "0eeb1affa8526d37a4c484ef8456f07ee3c5c95cd13e9885ac866538fb3b8c0d"
+    },
+    {
+      "path": "agent/assistant/provider-chain.mjs",
+      "before": "f358b78df042a230ed7b6f6b7bff1e6ff899d5c9ba527de67efda3d45724ac08",
+      "after": "54f11e779e950c8ebb762e1bde025a2f25f08b8af14b65778eb9f9487ef0663a"
+    },
+    {
+      "path": "skills/catalog.py",
+      "before": "4e9dec5f3dab745f714225d45c440abf21254324baa46727b861dab111a9aced",
+      "after": "299a45d5f26e40ca1a14eaf417ab8be587df40523b0ca0cd18f33ade581d34c3"
+    },
+    {
+      "path": "skills/feiyue-interaction/latest.json",
+      "before": "bd09344094aa1f73a6d15da29abdb1cc2b7fb916fc4db9961ce09c401912faf4",
+      "after": "5c036ea8d906f7f69c9bfb853b18a1f21acfea7df69ce640c7c9f68f7cebb59c"
+    },
+    {
+      "path": "skills/feiyue-interaction/source/routes.json",
+      "before": "471e357894eacc00c2ad10383e2384f71b3e6766bdfe31480ddf9ef5548972ee",
+      "after": "9e78d6d4fb450f03e1288ffb82731f8d2db5a7ae19f0d84cb734723425af44bd"
+    },
+    {
+      "path": "skills/feiyue-interaction/source/SKILL.md",
+      "before": "5563e190ca0563ae8e180a902a658840099dcd5e3d4fe400c9c5fa11c2544b36",
+      "after": "34370184d916aada9ff9d8e9299138cf976c2f2337330048b2ec0b3f2d6f7efd"
+    },
+    {
+      "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-8/routes.json",
+      "before": null,
+      "after": "9e78d6d4fb450f03e1288ffb82731f8d2db5a7ae19f0d84cb734723425af44bd"
+    },
+    {
+      "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-8/SKILL.md",
+      "before": null,
+      "after": "40a10724e25ff8786187e132480e06c1e51283fdf084608c5766513814f732ef"
+    },
+    {
+      "path": "skills/record-submission/latest.json",
+      "before": "37b944f3297b7a56549a3be98ab320c3da2929f5bb190eec0e407c4de3323744",
+      "after": "daa0652f4d8d246919abf5021d9d9cc7d748b8ae4a6e38f30e4e8e12d6f969ce"
+    },
+    {
+      "path": "skills/record-submission/source/local-ai.json",
+      "before": "70d881797b03b04b23ce589f331a78e75f00b073042bbebe9926721514fce214",
+      "after": "4721f1308ba9da5cd194d450f1a54d3a57556b4da43cb4ae94acbe268b3e325a"
+    },
+    {
+      "path": "skills/record-submission/source/SKILL.md",
+      "before": "47ae571b0fc8fc06cf9b122ea2727a1468b8587980ac37dee0032ebc5fb4258e",
+      "after": "44e56e732d564a595046fb9bda7bd8911da15309445b0216175d921d16725683"
+    },
+    {
+      "path": "skills/record-submission/versions/record-submission-v1-5/local-ai.json",
+      "before": null,
+      "after": "4721f1308ba9da5cd194d450f1a54d3a57556b4da43cb4ae94acbe268b3e325a"
+    },
+    {
+      "path": "skills/record-submission/versions/record-submission-v1-5/SKILL.md",
+      "before": null,
+      "after": "d96809d1bf874a33e2f05978c3c9fa88831cf80b4e1b556490f364820846bb7f"
+    },
+    {
+      "path": "skills/record-submission/versions/record-submission-v1-6/local-ai.json",
+      "before": null,
+      "after": "4721f1308ba9da5cd194d450f1a54d3a57556b4da43cb4ae94acbe268b3e325a"
+    },
+    {
+      "path": "skills/record-submission/versions/record-submission-v1-6/SKILL.md",
+      "before": null,
+      "after": "587fb7711e74891e9a4df818ad04bb6f69f1acb758a079f7aea13a315340a09a"
+    },
+    {
+      "path": "skills/record-submission/versions/record-submission-v1-7/local-ai.json",
+      "before": null,
+      "after": "4721f1308ba9da5cd194d450f1a54d3a57556b4da43cb4ae94acbe268b3e325a"
+    },
+    {
+      "path": "skills/record-submission/versions/record-submission-v1-7/SKILL.md",
+      "before": null,
+      "after": "22c830e1835d7952404503bb7ba553968ae7cca01ad7f47bae200f8105aa6156"
+    },
+    {
+      "path": "skills/resource-registration/latest.json",
+      "before": "d24a86a033e901431769f75f318042f98410224fcfd474dcba80d46d502b6935",
+      "after": "2a173ddb55d435e5919eeb6adbe62d08d12c2cf9fddf5dc2d095e70bd10b5d45"
+    },
+    {
+      "path": "skills/resource-registration/source/local-ai.json",
+      "before": "6753f34bba49c5f8c5c60ffb1ac9bc8deee6597be0369749b59acd8695bc99bc",
+      "after": "41fef5b76555b949165f375917c3db4adeeaed39e97b7a7af3134c45c917c69a"
+    },
+    {
+      "path": "skills/resource-registration/source/SKILL.md",
+      "before": "0d7d7b6b5e380e0cd8aa442431005c62121d00ecde353eb71437085177e40692",
+      "after": "963180514a329c781a9e69325c1ddf5989882d200f7617c538a2fffa70f17f2f"
+    },
+    {
+      "path": "skills/resource-registration/versions/resource-registration-v1-1/local-ai.json",
+      "before": null,
+      "after": "41fef5b76555b949165f375917c3db4adeeaed39e97b7a7af3134c45c917c69a"
+    },
+    {
+      "path": "skills/resource-registration/versions/resource-registration-v1-1/SKILL.md",
+      "before": null,
+      "after": "18e697448b607c54351e95794c4ecffeeaf200f1c7aa52c6b05a02a435e82e2d"
+    },
+    {
+      "path": "skills/reminder-review/latest.json",
+      "before": "1e800025f29f9c3a46ef8c521d3412bbf8aa1080dc24fc3384a5efe1726b0573",
+      "after": "11e259ac5876f049458f49edc4bf66e6a07c05aeb03a9248b4853904de313427"
+    },
+    {
+      "path": "skills/reminder-review/source/SKILL.md",
+      "before": "3189490381d0debcc20963369774416d27c5373e19c136d01747e57790bfcc5b",
+      "after": "63ab161ede6039465d9a1180aeb3844d4b23543ae561ffb7a9debe674f58f3f3"
+    },
+    {
+      "path": "skills/reminder-review/versions/reminder-review-v1-2/SKILL.md",
+      "before": null,
+      "after": "4a8ef7747ec997bcd9d38aff7efcec7f57cde2576d0c35fdd32012d5430fed32"
+    },
+    {
+      "path": "skills/server-pc-task/latest.json",
+      "before": "545d67211fc29ee877587d648f46a132645f1df446f72567503f534d253ec322",
+      "after": "737ef00ea6e5cea45a3880981a5c53b960bf25bbcdc900addcf879517498024c"
+    },
+    {
+      "path": "skills/server-pc-task/source/SKILL.md",
+      "before": "0f15f2ac561b6c7ce168127ff1aa7e18ace1c2f4452dd77a854daf85f1c206a2",
+      "after": "cdb2cd19e1aba93ed18b1ae3865375c710b9b71e59f2291a58baf90809919b12"
+    },
+    {
+      "path": "skills/server-pc-task/versions/server-pc-task-v1-6/SKILL.md",
+      "before": null,
+      "after": "ac746dbb1b11d34d60cd765e65b19c1be41d10afe17794f0933d4fa6a538f921"
+    },
+    {
+      "path": "skills/server-pc-task/versions/server-pc-task-v1-7/SKILL.md",
+      "before": null,
+      "after": "636d3e4e9a54c280932cfbbaa5a7086a737e8581e53fe13a50e217ec4e68ca9b"
+    },
+    {
+      "path": "skills/tool-response/latest.json",
+      "before": "f4e01ae9f5b3c5fe5ea20e664fa187b7620d6d12dea0d9b6ab9e12cb088df80f",
+      "after": "80fc72e48f36f21d63ed7c2240a8d5db4e26734ca6cada4517e8e91a164fb859"
+    },
+    {
+      "path": "skills/tool-response/source/SKILL.md",
+      "before": "02574aab9796c73bea9bdd44bcdd4486a131450ecf0bdffa1ce492540cd6daae",
+      "after": "f0d7cd3ca274b2766ccaca7e698ad292810ed14c81aecf48ce2f3f1579eac50c"
+    },
+    {
+      "path": "skills/tool-response/versions/tool-response-v1-1/local-ai.json",
+      "before": null,
+      "after": "ddfcc199c691b96629ffca9aac007df65a368396c6a3d4022410ecaccf7754bd"
+    },
+    {
+      "path": "skills/tool-response/versions/tool-response-v1-1/SKILL.md",
+      "before": null,
+      "after": "bc1fc6018c0d7baa7df5a68b7aa46adaef9e23e7d6a0a3ede279ffc5180acf5d"
+    },
+    {
+      "path": "skills/evidence-reading/latest.json",
+      "before": "d48d57f830f1cfd00d49aef324380cee3d711538c8f85d5e1f01f7de5ce0d985",
+      "after": "571d00e2c4ce7e933b4d88125865cb61196fbecc180614a475ec80ce9674f900"
+    },
+    {
+      "path": "skills/evidence-reading/source/SKILL.md",
+      "before": "a80c3646e6ba3c964a33f5982cab4424bd5584c3c28f2f987265b58e3ea541ce",
+      "after": "c2f6adfb71bb1b5bce3fffc69ae87eb20cb7ef1d141817911083a12463c82b72"
+    },
+    {
+      "path": "skills/evidence-reading/versions/evidence-reading-v1-3/children.json",
+      "before": null,
+      "after": "d2263331aff025b733f5adaceb02690b26a1278cd67c5e02f6852bde66264474"
+    },
+    {
+      "path": "skills/evidence-reading/versions/evidence-reading-v1-3/SKILL.md",
+      "before": null,
+      "after": "b5835e291c211444eb6662b4b16460ccaa343b0cb34452b6370e2ac43ccb976b"
+    },
+    {
+      "path": "skills/public-lookup/latest.json",
+      "before": "2ab75e0cf0069cde8ebe69ab1b1ef6ab36b788cdbabaa04b5544907f5cfad561",
+      "after": "f2692b2051ad299abc1119e7361b38ff140fd621ee6a65a35febe5e37894df67"
+    },
+    {
+      "path": "skills/public-lookup/source/SKILL.md",
+      "before": "e7fea9fad9045cf3e48cd69676c2e7903ba04f4eab7fc44e84ffd23a10d81dcc",
+      "after": "9e93dfdc915573afa990c920e1b81539b4e009d264c8376173e53191df9cae06"
+    },
+    {
+      "path": "skills/public-lookup/versions/public-lookup-v1-1/SKILL.md",
+      "before": null,
+      "after": "6dc6eab9235fdf36b8f14104b4ed07213c5d84e7a5f7940a2e7ab8a305718502"
+    },
+    {
+      "path": "skills/diary-writing/latest.json",
+      "before": "a7456dff7fc66d6ec56323ec4cb7687bbf56006efa28baee0b9b493182437529",
+      "after": "6a1e2c7a10faa69bc77f400999fecd4de7c6a71816ccb826007ad6a0ab3f07f6"
+    },
+    {
+      "path": "skills/diary-writing/source/SKILL.md",
+      "before": "ad6e3c826ec40f65e26ebdc5b31f244113bbc57b66a7647a01dd288277af4845",
+      "after": "7c8cc816f2981775b829911fbc7e14636f77e732537cd0a85570e8dce2cfd042"
+    },
+    {
+      "path": "skills/diary-writing/versions/diary-writing-v1-3/local-ai.json",
+      "before": null,
+      "after": "6344de9a2ab72f973668b361d29cd0c6f25ae63bfb24f1de79db102b381cf92e"
+    },
+    {
+      "path": "skills/diary-writing/versions/diary-writing-v1-3/SKILL.md",
+      "before": null,
+      "after": "fdc2e5747bfc7f9dc78ab2b0f5bc734762b57869e0e71431976c7a1009b22fad"
+    },
+    {
+      "path": "skills/personal-conversation/latest.json",
+      "before": "5d789f7205a5d6d24ae49131a0cc58a7ec5e46a44622e05672144145a8801894",
+      "after": "a2318c7a36268b1ef58d758d7759ec2ae38e8672f2c14aec4d846ed5cd5555f8"
+    },
+    {
+      "path": "skills/personal-conversation/source/SKILL.md",
+      "before": "236aba24e32224b552df2099f55af092c1c2da0a9873bbf174dbe597e0fbe5b8",
+      "after": "fbe13836d05edcdd5e1044ae415531731cde85042cbf53b6cb565718258e4d6e"
+    },
+    {
+      "path": "skills/personal-conversation/versions/personal-conversation-v1-6/local-ai.json",
+      "before": null,
+      "after": "44d3030c5273e4d90bdd6a9f46ecbd01ed4c7902ca3216b36022cedc6e653a06"
+    },
+    {
+      "path": "skills/personal-conversation/versions/personal-conversation-v1-6/SKILL.md",
+      "before": null,
+      "after": "09b41450ed991b47c82de09a1a94fd202ef1fd4633b8cf527249db7701e48bf7"
+    },
+    {
+      "path": "skills/emotion-appraisal/latest.json",
+      "before": "62edf0e72d85c605a04309583600575000fb2e12e4cd0e4bf13f8f48c6c97791",
+      "after": "90b63990c55ed02c0b4224ac936eb798eeffe2605c84620b61346c28e781ed66"
+    },
+    {
+      "path": "skills/emotion-appraisal/source/SKILL.md",
+      "before": "7521b4faef75f57aa709439f81b2c35b6da85bb8ae62c42d572411cf7bc85bf4",
+      "after": "1e3576f57ab939c5653ac4550a30a2f2f0e62cbaa60aea87529fe31aa409b7b8"
+    },
+    {
+      "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-6/local-ai.json",
+      "before": null,
+      "after": "ceb6faca41d796e7c7c4b33033186e19c617e2d773ad3e7bda433d4bc6c397c7"
+    },
+    {
+      "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-6/SKILL.md",
+      "before": null,
+      "after": "f6e0c06c9db1cc858fd0c86e5beb438a6db8a49558265329a8e0982e67da44be"
+    },
+    {
+      "path": "skills/image-task-chain/latest.json",
+      "before": "e480e2ed96b05dc28def3e1d53990eeba7798a6bd9a2f7c44d0e978b030c549c",
+      "after": "7a65011f76dfc242066af78c14774cd61a094791570319cecfa4742d97114334"
+    },
+    {
+      "path": "skills/image-task-chain/source/SKILL.md",
+      "before": "901737123d1cdc0588b2e46301853fc8e02814af324617574fbc23b4828d1d67",
+      "after": "8020779a8bf117fa0c3873e26141b9f792a1411a59f20a94ff288cf30aa320f0"
+    },
+    {
+      "path": "skills/image-task-chain/versions/image-task-chain-v1-8/children.json",
+      "before": null,
+      "after": "cc6a996a1170ad35344e57355bb0724eae657b17354dca42dd135b85706a1c54"
+    },
+    {
+      "path": "skills/image-task-chain/versions/image-task-chain-v1-8/SKILL.md",
+      "before": null,
+      "after": "9ee55ac11920fccb6d2475d2906ae7ff78e7c1d795db4aa36a4ad97d793a0444"
+    },
+    {
+      "path": "agent/assistant/probe-reply.mjs",
+      "before": null,
+      "after": "d4ce43b3c3a7abba3ea900368806239cdbd24931389b42169ded39cc5750d285"
+    }
+  ],
+  "api": [
+    {
+      "path": "src/companion/agent/assistant/message.mjs",
+      "before": "8aab043a5eb207b953d090f037fe6a13c9a5a80e3949b1c728ab50e73bf930d1",
+      "after": "f35678dfef690f0ac475e19a36404994d31a5dbb4bdb4b81aba6bb20dc08312c"
+    },
+    {
+      "path": "src/companion/agent/assistant/provider-chain.mjs",
+      "before": "2b05ed140d41025d08c5eef7a854f13e4f6f13b3ddf8caf2f2d2e2b3a22d74ce",
+      "after": "54f11e779e950c8ebb762e1bde025a2f25f08b8af14b65778eb9f9487ef0663a"
+    },
+    {
+      "path": "src/companion/agent/assistant/registration-plan.mjs",
+      "before": "1f0e1e51bd3141335fd8b700e0259c9c99443ef2f214443c24e03785bfc82068",
+      "after": "0eeb1affa8526d37a4c484ef8456f07ee3c5c95cd13e9885ac866538fb3b8c0d"
+    }
+  ],
+  "version": "417c7b9f-504c-4772-8bd7-a99fe583bb00",
+  "desktopCommit": "8912cca0320e3034e78436e4eb59ef36b7370965",
+  "apiCommit": "c683e93027947298e1d1ce3e746ca7fb063d269e",
+  "liveReviewBefore": "92de8be321e8bd7aa272e312b5ae4eb7b3fcef150d80cadba6e70c96cc92d52f"
+}

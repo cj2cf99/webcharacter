@@ -19,10 +19,16 @@
     "memory": "activity-review",
     "diaryAudit": "diary-audit",
     "diaryWriting": "diary-writing",
+    "emotionAppraisal": "emotion-appraisal",
+    "loveAndReason": "love-and-reason",
+    "initiativeDecision": "initiative-decision",
+    "topicMemory": "topic-memory",
+    "basicNag": "personal-conversation",
     "restart": "desktop-controls",
     "image": "image-task-chain"
   },
   "menu": {
+    "news": "public-lookup",
     "question": "personal-conversation",
     "continueNag": "personal-conversation",
     "registration": "record-submission",
@@ -55,5 +61,24 @@
     "restart": "desktop-controls",
     "visibility": "desktop-controls",
     "quit": "desktop-controls"
+  },
+  "replyModes": {
+    "speech": "personal-conversation",
+    "writing": "diary-writing",
+    "judgment": "emotion-appraisal",
+    "tool": "tool-response"
+  },
+  "workRedrafts": {
+    "personal-conversation": 2,
+    "diary-writing": 2,
+    "emotion-appraisal": 2,
+    "tool-response": 2,
+    "evidence-reading": 1,
+    "record-submission": 1,
+    "resource-registration": 1,
+    "reminder-review": 1,
+    "server-pc-task": 1,
+    "public-lookup": 1,
+    "image-task-chain": 1
   }
 }

@@ -7,9 +7,14 @@ const patterns = {
 const inquiry = /(?:怎么|如何|教程|为什么|是否支持|支持.{0,8}吗|有(?:什么|哪些)区别|什么意思|有哪些(?:功能|模型)|(?:是什么|有什么用)[？?]?$)/u;
 export const previousImage = /(?:刚才|上次|上一张|刚生成|刚画|刚做|刚改|前一张)/u;
 const imageContext = /(?:图|照片|海报|头像|壁纸|插画|画面|画作|封面|背景|换装|姿势|换人)/u;
+export function tourDestination(text){
+  const match=/^(?:(?:请)?(?:开启|开始|启动)\s*)?绯月环球之旅(?:[：:，,\s]+(?:目的地[：:]?|去)?\s*(.+?))?[。！!]?$/u.exec(text.trim());
+  if(!match||inquiry.test(text)||/[？?]/u.test(text))return null;
+  return (match[1]??'').trim();
+}
 export function imageRequest(text,count=0){
   if(!text||inquiry.test(text)||/^(?:请|帮我|请帮我)?(?:解释|介绍|分析|讨论|翻译|总结|记下|提醒我)|(?:生成|写).{0,5}(?:生图)?(?:提示词|教程|说明文档)|^(?:你|绯月)?(?:能|可以|会)(?:生图|画图|修图|放大图片)吗[？?。]?$/u.test(text.trim()))return false;
-  return activeClauses(text).some(part=>patterns.generate.test(part)||patterns.img2img.test(part)||
+  return tourDestination(text)!==null||activeClauses(text).some(part=>patterns.generate.test(part)||patterns.img2img.test(part)||
     ((count>0||imageContext.test(text)||previousImage.test(text))&&(patterns.edit.test(part)||patterns.upscale.test(part))));
 }
 function activeClauses(text){

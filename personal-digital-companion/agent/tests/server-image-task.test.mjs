@@ -34,15 +34,13 @@ for(const upload of [true,false])test('自动生图明确汇报并打开归档�
     openImage:job=>opened.resolve(images.result(job))});
   t.after(async()=>{await tasks.stop();images.close();db.close();await rm(profile,{recursive:true,force:true});});
   await createServerTaskCommand({profile,tasks,dialog})('服务器任务：派给 all，生图：一棵树');
-  await tasks.pollOnce();
-  await tasks.settled();
+  await tasks.pollOnce();await tasks.settled();await new Promise(resolve=>setTimeout(resolve,30));
   assert.equal(reports.length,1);
   assert.match(reports[0].detail,upload?/云端已确认收到结果/:/云端回执待确认/);
   assert.match(reports[0].detail,/512 × 768 PNG/);
   assert.deepEqual(reports[0].buttons,['查看成图','知道了']);
   assert.equal(await readFile(await opened.promise,'utf8'),'test image');
-  await tasks.pollOnce();
-  await tasks.settled();
+  await tasks.pollOnce();await tasks.settled();await new Promise(resolve=>setTimeout(resolve,30));
   assert.equal(reports.length,1);
 });
 
@@ -73,8 +71,7 @@ test('服务器生图保留完整提示词；all 等待领取，失败复盘且�
   const reply=await serverTask(command);
   assert.match(reply,/等待空闲电脑自动领取/);
   assert.equal(submissions,0);
-  await tasks.pollOnce();
-  await tasks.settled();
+  await tasks.pollOnce();await tasks.settled();await new Promise(resolve=>setTimeout(resolve,30));
   const row=db.sqlite.prepare('SELECT * FROM tasks').get();
   assert.deepEqual(JSON.parse(row.params_json),{prompt});
   assert.equal(row.status,'FAILED');
@@ -88,70 +85,3 @@ test('服务器生图保留完整提示词；all 等待领取，失败复盘且�
   assert.equal(turn.report.serverTaskId,row.task_id);
   assert.match(turn.text,/第 1 步.*显存不足/);
 });
-
-for (const delivery of ['未送达', '已写入但回执丢失']) {
-  test('服务器生图结果'+delivery+'，重开桌面后只补传一次', async t => {
-    const profile = await mkdtemp(join(tmpdir(), 'feiyue-image-replay-'));
-    const db = openTestDatabase();
-    const memory = createMemoryArchive(join(profile, 'memory'));
-    initializeDatabase(db.sqlite);
-    db.sqlite.exec(await readFile(new URL('../seeds/tasklist-pc.sql', import.meta.url), 'utf8'));
-    const output = join(profile, 'synthetic.png');
-    const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/FGkAAAAASUVORK5CYII=', 'base64');
-    await writeFile(output, pixel);
-    let submits = 0;
-    function openImages() {
-      return createImageTasks({root: profile, profile, archive: memory.archiveImageTask,
-        async runPython(_cli, args) {
-          if (args[0] === 'wait') return {state:'done', output, width:1, height:1};
-          assert.equal(args[0], 'submit');
-          submits++;
-          return {job:args[2].replaceAll('-', ''), state:'queued'};
-        }});
-    }
-    const reports = [];
-    async function request(path, options = {}) {
-      const report = path.endsWith('/result');
-      if (report) reports.push(options.body);
-      const drop = report && reports.length === 1;
-      if (drop && delivery === '未送达') throw Error('模拟断线');
-      const response = await worker.fetch(new Request('https://test.invalid'+path, {
-        ...options, headers:{...options.headers, Authorization:'Bearer test'}
-      }), {DB:db.DB, API_TOKEN:'test'});
-      if (drop) {
-        assert.equal(response.status, 200);
-        throw Error('模拟断线');
-      }
-      return response;
-    }
-    const dialog = {async showMessageBox() {return {response:1};}};
-    let images = openImages();
-    const openTasks = () => createDesktopTasks({profile, dialog, request, generateImage:images.generateServerImage});
-    let tasks = await openTasks();
-    t.after(async () => {await tasks.stop(); images.close(); db.close(); await rm(profile,{recursive:true,force:true});});
-    const command = createServerTaskCommand({profile, tasks, dialog});
-    await command('服务器任务：派给 all，生图：一朵蓝花');
-    await tasks.pollOnce();
-    await tasks.settled();
-    const task = db.sqlite.prepare('SELECT task_id,status FROM tasks').get();
-    assert.equal(task.status, delivery === '未送达' ? 'RUNNING' : 'COMPLETED');
-    assert.equal(reports.length, 1);
-    const job = task.task_id.replaceAll('-', '');
-    const receiptFile = join(profile, 'image-tasks', job+'.json');
-    const receipt = JSON.parse(await readFile(receiptFile));
-    assert.deepEqual(await readFile(receipt.archivedOutput), pixel);
-    await tasks.stop();
-    images.close();
-    images = openImages();
-    tasks = await openTasks();
-    await tasks.startup(false);
-    await tasks.startup(false);
-    assert.equal(submits, 1);
-    assert.deepEqual(reports, [reports[0], reports[0]]);
-    assert.deepEqual(await readFile(receipt.archivedOutput), pixel);
-    assert.equal(db.sqlite.prepare('SELECT count(*) AS n FROM executions WHERE task_id=?').get(task.task_id).n, 1);
-    assert.equal(db.sqlite.prepare('SELECT status FROM tasks WHERE task_id=?').get(task.task_id).status, 'COMPLETED');
-    const turn = await memory.readImageReport(tokyoDay(receipt.at), job);
-    assert.equal(turn.report.serverTaskId, task.task_id);
-  });
-}

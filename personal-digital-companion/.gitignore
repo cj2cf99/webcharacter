@@ -1,5 +1,6 @@
 /.local-tools.json
 /output/
+/agent/output/
 /tmp/
 /playback-test*.html
 /绯月播放测试_直接打开.html

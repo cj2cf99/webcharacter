@@ -1,5 +1,166 @@
 ## TXT 附件正式发布与登记回执 · 2026-11-21 JST
 
+## 2026-11-21 JST · TXT 附件查看与选择器
+
+绯月日记、唠叨详情只显示已附文件的文件名和正文中的原文链接，空记录直接显示正文。列表保持按需打开详情，附件内容点击后读取。上传和关联继续走绯月现有服务身份接口。需要手动附加时沿用单独的附件编辑页。主站候选将同样的只读规则应用到随手记和鱼与熊掌，并为各处的图片、TXT 文件选择器复用站点主题。
+
+## 2026-11-21 JST · AI 接口心跳轮询设定（开发完成，未安装）
+
+桌面「设置与维护 → 轮询设定」新增 AI 接口心跳。默认启用、间隔 180 分钟，可保存 10–300 分钟及启停状态。复用桌面轮询调度和 `local_polls`，到点上一轮在途则跳过，结果进入原有轮询记录和任务通信日志。需求与验证见 [复核记录](reviews/AI_HEARTBEAT_POLL_REVIEW_2026-11-21.md)。
+
+## 2026-11-21 JST · 正式工作队列（开发完成，未安装）
+
+需求与设计见 [FORMAL_WORK_QUEUE.md](FORMAL_WORK_QUEUE.md)，用户已确认；三轮自审见 [reviews/FORMAL_QUEUE_DESIGN_REVIEW_2026-11-21.md](reviews/FORMAL_QUEUE_DESIGN_REVIEW_2026-11-21.md)。
+
+### 行为
+
+- **正式工作**包括花园登记批次、用户的登记、云端派给本机的任务，开始后不打断。
+- **名额**：本地待处理合计 20 项，执行中的和暂停的批次都占名额。服务器每台电脑最多 2 个已接取任务，这条规则不变。
+- **执行顺序**：按到达顺序逐个执行。正式工作开工时，正在进行的闲时整理会暂停，并回到轮询待处理队列，之后续做。
+- **不再阻挡的事**：问答、生图、各路轮询、开始工作模式，都不再挡住正式工作。
+- **任务轮询**：有名额就接，领取确认后立即返回，执行在本机串行进行。任务轮询本身不再因正式工作而顺延。
+- **结果未知时**：仍不接新任务。
+
+### 改动
+
+- `desktop/local-task-pool.mjs`：
+  - 新增 `hasRoom`、`queueInfo`、`onStart` 三个参数；
+  - 满员时返回 429；
+  - 未完成批次附带 `queue`；
+  - 新增 `acknowledged` 列，补列时历史批次视为已取回；
+  - 新增 `unfinished`、`unacknowledged`、`ack`。
+- `desktop/local-rest.mjs` 与 `garden-guide.mjs`：
+  - infoguide 升为 v4，新增 `workStates`；
+  - `GET ?unacknowledged=1`、`POST /v1/batches/:id/ack`；
+  - 调用流程改为入队后不必等待，下次开工时读回结果再 ack。
+- `desktop/task-lifecycle.mjs`：
+  - 新的 `canPoll` 判断与自动接取方式；
+  - 已接取任务串行执行；
+  - 新增 `hasRoom`、`beforeExecute` 参数；
+  - 新增 `formalCount`、`executingCount`、`settled` 三个导出。
+- `desktop/shell.mjs`：
+  - 正式工作计数与 20 项上限；
+  - 登记批次开工条件改为只等正在执行的本机任务；
+  - 任务轮询的忙碌判断改为只看 `canPoll`；
+  - 思考云标题加「正式 ·」「闲时 ·」。
+- `desktop/task-inbox-ui.mjs`：排队中的批次显示「排队 #n」。
+- `docs/LOCAL_GARDEN_API.md`：新增 v4 一节。
+
+### 测试
+
+- 新增和更新的测试：满员 429、排队位置、旧库补列、待回执与 HTTP ack、批次开工才让闲时工作暂停、两个已接取任务串行执行（原测试断言“可同时执行”，已按新需求改写）。
+- 一轮轮询接下两个任务的用例，以及自动生图汇报用例，改为等待执行结束后再核对。
+- `tools/test-desktop-shell.mjs` 原先在「手动写日记立即显示进度」失败。原因是开发区写日记会先等情绪服务暂停，改为短暂等待首个进度后，全套通过，`--garden-api` 模式也已核对 queue 与「正式 ·」标题。
+
+### 实测结果
+
+- `node --test "agent/tests/*.test.mjs"`：327 项通过。
+- `tools/test-desktop-shell.mjs` 与 `--garden-api`：通过。
+- Electron 测试 test-panel-titlebar、test-menu-shell、test-review-first-open：通过。
+- test-screen-question-electron 失败，断言的是气泡用途清单里的「绯月环球之旅」。这是另一会话在 12:44 改入开发区的在制功能，与本次无关。
+
+### 发布状态
+
+2026-11-21 13:43 JST 已安装到正式桌宠（PID 36344，infoguide v4），过程见 RELEASE_REVIEW.md。安装时按 AGENTS.md 以安装版为基线组装候选：本次涉及的 task 链文件与安装版一致，`shell.mjs` 只打入本次改动；审核、确认后受控重启，再按清单确认后经本机 REST 登记花园。
+
+## 2026-11-21 JST · 绯月的妻子身份
+
+用户补充“是我心爱的妻子，贤内助，可爱的心尖肉肉”。普通对话、自我介绍、手记、服务端文字回复和[情绪评价 1.4](../skills/emotion-appraisal/versions/emotion-appraisal-v1-4/local-ai.json)采用这份关系设定。直连模式沿用用户单独指定的单句。技能和关联测试共 59 项通过，隔离 Electron 七面板通过。
+
+绯月在日常对话、自我介绍、手记、情绪评价和服务端文字回复中统一以用户的妻子身份表达。开发版修正了情绪评价技能源稿与实际送给模型的 assess 提示，当次快照为 [emotion-appraisal 1.3](../skills/emotion-appraisal/versions/emotion-appraisal-v1-3/local-ai.json)。该修正只替换身份句，工作、情绪和欲求规则沿用原实现。
+
+新增回归通过桌宠技能路由读取说明和模型指令。用旧版重现残留身份，更新后技能测试 7 项、关联 Node 测试 66 项通过。隔离 Electron 七面板通过，日志有标题栏配置警告。以上记录针对开发工作区。正式安装目录附带的服务端源码及线上 Worker 发布状态分别管理。
+
+## 2026-11-21 JST · 菜单与弹窗统一整理
+
+用户要求整理桌宠菜单及弹出窗口，做到风格统一、美观、查看方便、加载压力小。用户平时基本只看最新几条记录。节点动画设置窗口（`desktop/settings.html`）尚未定型，本次未改动。后续界面开发以 [桌宠界面开发说明](DESKTOP_UI_GUIDE.md) 为准。
+
+- **菜单**：今日任务、三地天气、本地复盘提到第一层。「特殊菜单」改名「日记与评价」。「任务」子菜单保留提醒检查 · 待执行、任务管理、中断补传、任务日志，恢复终端 ID 排在分隔线后。「提醒检查 · 待执行」留在「任务」下，以免改动带版本管理的技能文本。
+- **共用组件**：`desktop/feiyue-surface.css` 新增状态色令牌和 `.fy-panel` 组件，包括工具条、胶囊页签、图标按钮、色条卡片、徽标、分页、空状态和提示条。本地复盘、任务管理、今日任务、三地天气、轮询设定、随口登记及询问确认改用这些组件，不再使用系统色 `Canvas` 和 `AccentColor`。动效始终开启；消息框入场动画只改透明度。
+- **记录分页**：所有记录由新到旧。对话和任务复盘每页 6 条，前端只为当前页建立 DOM；提醒检查和提醒每页 8 条（原为 20 条）；任务日志每页 12 条（原为 40 条）。翻页替换内容，原来的「加载更早的日志」改为 ‹ › 翻页。
+
+实测结果：
+
+- `node --test "agent/tests/*.test.mjs"`：308 项通过。
+- `node tools/test-reminder-checks.mjs`：通过。
+- 隔离 Electron 的 `tools/test-panel-titlebar-electron.mjs`、`tools/test-screen-question-electron.mjs`：通过。
+- `tools/test-message-box-electron.mjs`：连续 3 次通过。
+
+以下两项失败，用改动前的菜单复测结果相同，与本次改动无关：
+
+- `node tools/test-desktop-shell.mjs`：在「手动写日记立即显示进度」失败。
+- `tools/test-live-updates-electron.mjs`：在「循环边界未解码替换动画」失败。
+
+浅色和深色截图由新增的 `tools/capture-menu-panels-electron.mjs` 生成，输出到 `output/menu-qa/`，整理前的截图在 `output/menu-qa/before/`。
+
+2026-11-21 JST 修正菜单截图巡检的主进程错误弹窗。原登记样例把三行文字直接写在双引号字符串中，Electron 解析模块时失败。现在将样例文字序列化后传入页面，原截图命令通过独立入口加载巡检代码。浅色、深色截图均成功，场景预览三种宽度通过。使用故意损坏的嵌套依赖验证，Electron 自动以退出码 1 结束，日志定位到具体文件和行号。此次只更新开发巡检工具。
+
+同日追加：
+
+- **右键菜单改为自绘窗口。** 新增 `desktop/menu-popup.mjs`、`menu.html`、`menu.css`、`menu-ui.mjs` 和 `menu-preload.cjs`。条目、勾选和点击仍来自原生 Menu；`main.mjs` 传 `htmlMenu:true` 启用，打不开时退回原生菜单。`menu-layout.json` 增加 `icon` 和 `tone` 字段。
+- **其他窗口。** 问绯月气泡改用统一令牌，标题栏工具加图标，等待点和入场改为始终开启的透明度动画。此刻所想重写为念头卡片，原来引用了不存在的变量，实际落回系统色。询问与确认的登记字段改成卡片，原文可折叠。
+- **测试。** 新增 `tools/test-menu-popup-electron.mjs`（连续 3 次通过）和 `tools/test-menu-shell-electron.mjs`（等待启动显示后连续 4 次通过）。测试中修正了一个真实问题：隐藏菜单后迟到的 `blur` 会取消下一次打开。`test-panel-titlebar-electron.mjs` 豁免 `menu.html`；`test-review-first-open-electron.mjs` 改为从第一层打开本地复盘。全量 Node 回归 313 项通过；标题栏、问答、消息框、首次打开复盘、情境动作等 Electron 测试通过。
+
+2026-11-21 12:53 JST 已安装到正式桌宠（新 PID 17472）。安装件以安装版为基线组装，只含本次界面改动，此刻所想不在本次发布范围；过程和验收见 RELEASE_REVIEW.md。花园登记草案 feiyue-ui-20261121 待用户确认清单。
+
+## 此刻所想与长回复气泡
+
+2026-11-21 JST，开发版已接入自主观察、哲学思考、图文提问和画作分享。浏览器验收加载桌宠实际页面，真实 Electron 和本机模型另行验证。运行命令、范围和测试结果见[此刻所想](SCENE_CURIOSITY.md)。
+
+## 绯月人格与本机模型
+
+2026-11-21 JST。用户指定过去由 Qwen3.5 4B 承担的桌宠语言推理全面改用 `Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf`。情绪评估、闲时欲望选择与决定、专题归纳、手记写作与补评共用 balanced-local-model.memory。显存不足时用同一模型在 CPU 运行。历史验收中的模型名保留当时实测值。普通轻量路由和 ComfyUI 图像节点另有用途。
+
+完整交流先存原话与回应，再结算。任务按最终回执去重。当前情绪、维持次数、周骰、欲望池和已处理事实存于运行实例的 `profile/emotions.sqlite`；正式念叨通过公开字段清单同步。每个主动轮次在记忆根目录的「决策复盘」留下证据、选择及结果，专题正文和可重建目录在「专题记忆」。应用启动后从真实业务归档补读，启用前的旧记录用于历史参考。
+
+在本子项目执行 `node --test agent/tests/emotion-core.test.mjs agent/tests/emotion-initiative.test.mjs` 核对结算、周界、去重、选一、门槛和专题重开。使用现有 Electron 运行 `tools/test-personality-model-electron.mjs --emotion` 可用虚构资料验证实际模型名、情绪升档、专题核查和主动决定。正式安装验收另行记录。
+
+本次复核涵盖事件重放与晚到奖励、同系列欲望满 100 件及其他系列向上取整清半、前台抢占、只读联想、旧稿同步的公开字段和最终回读。保留一个两小时主动名额，候选按优先次序返回，一轮只推进首项或等待。模型可引用的来源编号和可执行动作由宿主在本轮限定。篇首摘要和标签分别限制输出长度，避免长生成打断手记保存。
+
+2026-11-21 JST 开发区实测：全量 Node 回归 285 项，282 通过、0 失败、3 项可选外部契约跳过。实际 Electron 在 CPU 加载 Aggressive 9B，关心对话使情绪由正 1 升至正 2；专题从五条隔离任务记录形成摘要；最终主动样例选择等候。隔离展示测试另行验证选定一项并留下回执。写手记实测使用 diary-writing 1.1，共 13 次推理，从隔离数据库读回正文、篇首、情绪及三类来源。七个面板的标题栏回归通过。正式安装实例和生产主站未参与这些验证。
+
+## 2026-11-20 JST · 绯月手记 HTML 原型
+
+[静态入口](../prototype/memory/index.html)可在本机浏览器直接打开。按[需求定稿](FEIYUE_PERSONALITY_MEMORY.md)展示主站只读日记与念叨，临时采用「生活记录」分组和笔形图标。使用本地副本的主站页头样式、主题脚本、绯月角色素材及模拟资料。气泡试演仅使用当前页面内存及模拟时钟，实际模型、业务服务、桌宠进程和生产数据未接入。
+
+Chrome 以 1280 和 390 像素宽度检查雅致、赛博主题，以及翻页、搜索、空日记、按需打开详情和加载失败重试。气泡验证回应、超时后继续同一件事、意外中断、点气泡关闭后留指定原句。用户视觉确认待进行。
+
+## 绯月任务双页签
+
+托盘和角色右键的「任务 → 绯月任务管理」打开双页签。本机页自动刷新实际正在本进程执行的任务，云端页按需读取未结束清单。运行主进程更新后加载，复用原终端身份、任务 SQLite 和云端连接。需求与验收记录见 [桌面任务生命周期交接](DESKTOP_TASK_LIFECYCLE_HANDOFF.md#绯月任务窗口)。
+
+云端页将单条任务和任务链分开显示。任务链可原地展开，逐条显示云端名称、状态、前置和提交内容。现有设备任务接口支持可选的独立任务筛选。使用旧 Worker 时客户端保留旧清单，并显示兼容提示。
+
+## AI 轮询的成功条件
+
+2026-11-20：云端自动轮询恢复 Gemini，BigModel 中国站继续暂停。启用或更换 Gemini 密钥前，须确认它来自未关联 Cloud Billing 结算账号的免费项目。
+
+菜单、普通问答和登记切换线路时的探针，以及后台心跳，均以收到有效非空模型文本为接通。回执的 `reply_check` 仅用于本地诊断。业务请求另行检验问答或登记格式，格式错误会继续向其他候选请求。失败只影响本次请求。下次在原有一小时有效期内优先使用同账户上次可用的 API，首选失败后继续换线。路由不读写历史冷却表。
+
+2026-11-20 JST 已单独清除生产绯月账户的旧冷却。写入前查得 10 条，精确 SQL 提交 `ec82acd`，加密快照提交 `a74dac4` 从远端恢复通过（16/16 表）。执行后独立查询剩余 0 条。这是早先 30 分钟候选版本的记录。按随后取消冷却的决定，已再次清理旧 Worker 新写入的 3 条记录（SQL 提交 `a6ac100`，远端加密备份 `c81a6d6`），生产回读为 0。
+
+2026-11-21 18:08:14 JST，取消五小时接口故障冷却的订阅 API 版本 `417c7b9f-504c-4772-8bd7-a99fe583bb00` 已上线，主站版本 `07dc0532-6937-48d1-8521-305a50899d77` 提供脱敏拒绝摘要。绯月问答、随口登记与心跳共用现行路由，保留一小时内的成功首选。花园部署 #69、明细 #146 已回读并签收，修订 138。受 Access 保护的线上效果待用户截图确认。
+
+## 2026-11-20 JST · 提醒相对日期
+
+桌面聊天、提醒日期筛选与改期、PC 任务的提醒日期共用 `desktop/calendar-date.mjs`。以东京当地日期为基准，周一为一周起点；星期日当天说「这周日」就是当天。日期在准备提醒草稿时确定，确认沿用原草稿。原句回归覆盖日期、标题、完整条件、确认前零写入与跨周确认。
+
+## 2026-11-20 JST · 本地对话模型调度
+
+桌面使用 `desktop/balanced-local-model.mjs`。普通文字对话按负载使用主模型或轻量 2B／0.8B，纠错沿用改进档。原记忆 4B 路径统一使用 Aggressive 9B，计算利用率低于 80% 且显存满足 6656 MiB 门槛或主模型已驻留时尝试 GPU，其他情况使用该权重的 CPU 版本。旧工作进程退出后才会换档。
+
+普通文字对话的选档、加载、生成、审核共用一段 15 秒，改进模型另有最多 15 秒。普通模型三轮审核仍未通过时，把原问题、先前对话、草稿和审核意见交给改进模型；普通阶段先超时也会尝试升级。用户明确纠正时直接使用改进档，最多审核两轮。提前通过即回复，两段均未通过则展示本轮状态。截图、业务指令、人工核对沿用各自的执行时限。
+
+设计沿用 `docs/TASK_TEMPLATE_PREVIEW.md` 的备忘录索引、`docs/SCREEN_QA_DESKTOP_DESIGN.md` 的请求取消与记录规则，以及 `G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md` 中的按需加载约定。GPU 监测仅在启动与推理前读取。分档和交接回归用 `node --test agent/tests/balanced-local-model.test.mjs`。
+
+## 2026-11-20 JST · 登记确认与附图
+
+登记草案和缺项使用独立的非模态询问窗口。来源图片通过本地视觉识读，失败时可改填文字。图片留在桌面草案，选择具体的新增随手记并确认附图后才经受鉴权的绯月连接调用原随手记图库。图库生成文件名和 URL，随手记登记提交该 URL。存量模板通过重复执行 tasklist-registration.sql 补上可选 photos 字段。
+
+桌面确认窗口固定展示三个图片位，共用一个登记确认按钮。单条随手记自动关联，多条随手记显示归属选择。图片保留槽位顺序，每次询问最多三张，IPC 再校验数量、类型与归属。图库仅在确认时调用；同一草案内重试复用已取得的上传回执。
+
+## 2026-11-20 JST · 文字提醒登记确认
+
 三个目标均发布成功。用户明确许可本次备份、迁移、两个 Worker 部署及七文件本机安装，并选择跳过本地手动验收。最终花园修订 130 的实际编号和版本已经再次明确确认。
 
 - stockanalysis 加密备份 d124f926cfba223a6ba89b113e3ae11b46971f3b，独立远端恢复 117/117，integrity ok，外键异常 0。仅应用 0033_txt_record_files.sql，生产后检确认六列、一条迁移账本项。历史待迁移项 0021、0028 与本次无关，未执行。
@@ -277,7 +438,7 @@
 本机隔离验证通过 180 项 Agent 测试、实际 Electron 的气泡交互、浅深色 300/360 像素布局及共享标题栏。公开样例搜索取得三个来源。AI 整理及提醒流程使用隔离替身。
 ## 2026-11-20 JST · 普通文字问答及随口登记共用模型池
 
-桌面使用的 API Worker 在两个入口调用 `agent/assistant/provider-chain.mjs`，由主站既有模型网关执行请求。切换时按下游顺序以三条为一批并发探测，只向通过问候校验的候选顺序发送业务提示。探测与业务调用分别留痕。既有一小时首选和五小时断路冷却按账户跨入口共享。主动探针超时、被限流或未完整回复「你好，我在」，都会写入线路暂不可用标记。五小时从最后一次确认故障起算；到期后再次使用前必须复探，复探失败再冷却五小时。用户取消提问会停止后续调用；已发出的独立探针若返回明确故障，仍记录该故障。截图视觉入口维持独立处理。
+以下为取消冷却之前的历史实现。桌面使用的 API Worker 在两个入口调用 `agent/assistant/provider-chain.mjs`，由主站既有模型网关执行请求。切换时按下游顺序以三条为一批并发探测，只向通过问候校验的候选顺序发送业务提示。探测与业务调用分别留痕。既有一小时首选和五小时断路冷却按账户跨入口共享。主动探针超时、被限流或未完整回复「你好，我在」，都会写入线路暂不可用标记。五小时从最后一次确认故障起算；到期后再次使用前必须复探，复探失败再冷却五小时。用户取消提问会停止后续调用；已发出的独立探针若返回明确故障，仍记录该故障。截图视觉入口维持独立处理。
 
 需先对绯月任务 D1 应用 `agent/migrations/013-ai-route-cooldown.sql`，不需回填。主站与 subscriptions-api 的本地源码已接线。单测覆盖候选并发、应答校验、跨入口冷却、五小时边界和账户隔离。双 Worker 与临时 D1 的 `node tools/release-preview.mjs` 使用模拟供应商检查登记和普通问答，无真实付费调用。
 
@@ -285,7 +446,7 @@
 
 ### 2026-11-20 JST · 运行中的模型心跳
 
-桌面主进程随任务轮询启动半小时定时器，首次在运行满 30 分钟时调用受认证的 `POST /api/assistant/heartbeat`。请求没有正文，退出时停止。服务端按账户读取上次选中的模型供应商，首次取链首。当前为 Sakura、OpenAI 或 DeepSeek 时跳过，即使一小时业务首选已过期，也等真实提问重新选线。当前为免费线路时仅发送固定问候；失效后按原顺序分组，先免费后收费，每批最多三条。全部失败时结束本轮，后续心跳遵守各条线路的五小时冷却。成功选中的线路供普通问答和随口登记复用，同时发起的真实提问若已选中另一条线路，在途心跳不会覆盖该选择。
+桌面主进程随任务轮询启动半小时定时器，首次在运行满 30 分钟时调用受认证的 `POST /api/assistant/heartbeat`。请求没有正文，退出时停止。服务端按账户读取上次选中的模型供应商，首次取链首。当前为 Sakura、OpenAI 或 DeepSeek 时跳过，即使一小时业务首选已过期，也等真实提问重新选线。当前为免费线路时仅发送固定问候；失效后按原顺序分组，先免费后收费，每批最多三条。全部失败时结束本轮，下一次心跳重新探测。成功选中的线路供普通问答和随口登记复用，同时发起的真实提问若已选中另一条线路，在途心跳不会覆盖该选择。
 
 设计沿用本节的既有路由、全局 FRAMEWORK_PREFERENCES.md 的单人低负载约定和 TASK_TEMPLATE_PREVIEW.md 的备忘录索引。复用已有首选和冷却表，无新增迁移、依赖或云端定时任务。任务通信日志记录心跳结果、候选、错误和耗时；心跳不产生对话或业务任务。隔离时钟、SQLite 与模拟供应商覆盖半小时边界、进程退出、收费跳过、故障切换、冷却及并发选线。Agent 回归 198 项通过，桌面构建、桌面壳及隐藏 Electron 标题栏回归通过。仅在子项目开发和验证。
 
@@ -446,6 +607,8 @@ Qwen 会话通过 local-model-process.mjs 中的 systemPrompt 加载绯月人设
 
 联调命令为 `node personal-digital-companion/tools/test-server-image-live.mjs --live`（从工作区根目录运行）。使用隔离的 Worker 数据库、模拟桌面 IPC 和真实本机 ComfyUI，输出及测试归档在 work/server-image-qa。两次独立建单均实际生成并归档 512×512 PNG，最终测试任务 734bd5bc-d212-4bd7-8d90-cccce2fff7c8 收到 COMPLETED。单测 server-image-task.test.mjs 另验证派给 all、无模板、空提示词、注入失败和同一任务不会重复生图。线上发布与当前桌宠进程加载另行进行。
 
+资源登记采用 resources.create 和 pc.resources.create，使用 resource-registration 技能。业务接口 POST /api/resources 接收 body（标题）、note（完整正文）、url 和 category_id。模板来源是 agent/seeds/tasklist-registration.sql 与 tasklist-pc.sql。
+
 ## 2026-11-21 JST · 正式 Windows 安装源码合入主线
 
 本次以 GitHub 主线 `cbc6dea` 为基线，合入 `59b3e43` 记录的 14:10 JST 正式安装版。沿用安装版的桌面模块、菜单与气泡、动作资源、版本化技能及本机花园 REST 和工作队列。终端绑定与本机运行任务查询等共享模块随桌面依赖同步。保留主线的工时接口、日记原文、生图结果恢复，以及云端配置和迁移。没有引入开发区的情绪、此刻所想、环球之旅或 Tavily 功能。
@@ -453,6 +616,161 @@ Qwen 会话通过 local-model-process.mjs 中的 systemPrompt 加载绯月人设
 按用户确认补齐三处接口兼容。随手记只提交用户确认的图库回执，模型提供的图片地址留在草稿之外。任务模板种子对旧定义只补缺少的可选 `photos` 字段，可重复加载。鱼与熊掌复用原文、标题、分类和网址的登记规则与固定业务回执。设备任务清单可选 `scope=standalone`，过滤逻辑发生在分页之前，省略参数时沿用原清单。Electron 巡检使用任务日志的前后翻页控件。四个技能的源文件与已发布快照一致，修正摘要后保留原版本号。
 
 本次为 Git 源码整合。Windows 安装版和 Cloudflare 服务不随这次 Git 同步更新。
+
+2026-11-20 JST，鱼骨图 A10「陪伴记忆」中的绯月日记、悬念和念叨进入子项目验收。已跑通本机 4B 写作、追加与断线恢复、按回合续问，以及只读网页和原记录回链。主站接入和部署待后续确认。[代码范围、检测和本地 Worker 启动命令](reviews/FEIYUE_MEMORY_IMPLEMENTATION_2026-11-20.md)。
+## 2026-11-20 JST · 绯月手记四轮自审
+
+手记专项 13/13，本机 4B 及隔离 Worker 回链回归通过。对话清洗、段末评价、缺失归档、旧念叨补传和服务身份检查已修正。全量启用主站契约时，DeepSeek 截断回复测试仍有一项失败。主站尚待接入。[四轮审查与复测记录](reviews/FEIYUE_MEMORY_FOUR_ROUND_AUDIT_2026-11-20.md)
+
+## 2026-11-20 JST · 情境动画
+
+七段透明视频已进入正式资源目录和本地桌宠构建。复用已有播放器、角色输入优先级、未读计数、日记及评价作业和气泡登记路由。退出或重启等待本次退场视频的结束回执，播放故障会取消退出。依据为[原始需求及追加决定](REQUIREMENT_CHANGES.md)、[动作与素材约定](MEDIA_TOOLS.md)、[动画设置设计](ANIMATION_SETTINGS_DESIGN.md)及全局 `G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md` 的最简与按需加载原则。项目备忘录检索情况见 `MEDIA_TOOLS.md`。
+
+晚间学习判断复用到期事项轮询。子项目的 `GET /api/reminder-review` 增加布尔字段 `dailyStudyComplete`，按当天标题含“多邻国”“多鄰國”或“Duolingo”的提醒及当天长期计划的实际登记记录核对。两类均须有完成证据。桌面沿用检查日志按东京日期去重，旧服务缺字段时跳过。未变更生产数据库，本次未合并或部署主站。
+
+复核发现原有依附动作会遮住本地任务，已在任务开始时解除依附并验证工作切换。七段各 145 帧，源片边界情况见[资源说明](../assets/desktop-media/README.md)。`node tools/build-desktop.mjs`、`node tools/test-desktop-shell.mjs`、`node tools/test-pc-settings.mjs` 及提醒、计划工时和手记隔离测试通过。真实 Electron 隔离窗口验证入场首播、两种随机结果、夸奖遇工作让位、登记路由、隐藏后退出及重复退出，最后一轮退场用时 6075 毫秒。标题栏和受控重启回归通过。完整气泡回归曾在两条提醒已经写入后等待状态文字超时，原样重跑通过。桌面动作验收用隔离任务和写作状态，用户实际资料及晚间线上结果未验证。播放规则见[桌宠使用说明](../desktop/README.md)。
+## 2026-11-20 JST · 手动看绯月写日记
+
+桌宠右键或托盘的「特殊菜单 → 看绯月写日记」会显示桌宠并启动她自己的手记流程。手动触发跳过本周期的时间判断，沿用原有取材、写作动作、草稿和提交逻辑。正在写时重复点击可继续观看；忙碌时通过通知提醒稍后再试。已有桌宠进程重启后加载菜单动作。
+
+本地验证运行 `node tools/test-desktop-shell.mjs`、`node --test agent/tests/personality-memory.test.mjs`，以及隔离 Electron 的 `tools/test-context-actions-electron.mjs` 和 `tools/test-panel-titlebar-electron.mjs`。菜单用例使用模拟模型和隔离资料，核实本周期已写、隐藏后通过菜单显示、重复点击、忙碌和离线草稿；写作动作由 Electron 播放器验证。
+
+
+## 本机安装更新与验收
+
+每次更新本机桌宠功能，先核对桌面快捷方式的应用参数、登录启动项及运行进程所加载的应用目录，记录当前安装基线。在该基线上准备候选，按实际需求合并和验证，保留本机资料与项目既有功能。先在实际安装项目根目录追加发布审核记录，按用户授权更新此目录，使用受控重启等待回执。更新后核实快捷方式、登录目标、新进程与正常功能入口，把结果、待核对项和恢复基线写入开发及部署纪要。
+
+本次开发目录和正式安装目录不同。已确认的菜单、情境动作、本地模型负载分档与纠正时限、登记确认及三图位、东京相对日期、提醒意图和连接诊断均在正式安装基线上合并。业务原型、云端供应商策略和 Worker 发布另行管理。安装结果以项目根目录 RELEASE_REVIEW.md 的本次回执为准。
+
+**2026-11-21 JST 流程修订。** 本机功能更新按正式安装版受控重启、实际入口验证、交付已确认的登记清单执行。调用方可提前保存草案；提交前必须按现行花园登记口径将完整清单给用户过目，取得明确确认，再按重启后实例的 `GET /infoguide` 将该清单作为一批交付。登记内容和字段沿用现行规则，实际结果或拟写内容变化时展示差异并重新确认。发布纪要分别记录安装结果、批次编号及最终登记结果。接口未就绪时保留待交付状态。本条记录项目规范；接口的正式地址和可用版本以其上线验收为准。操作步骤见[项目约定](../AGENTS.md#本机桌宠功能更新)。
+
+## 2026-11-20 JST · 重新置顶、奶油联想云与本机补评
+
+显示桌宠后立即用 Electron 的 pop-up-menu 层级恢复原生置顶，继续使用非激活显示。Windows 隔离实例的原生标记在首次显示和两次外部取消置顶后重新显示时均为真，焦点保持在原窗口。
+
+奶油色联想云由现有任务、记忆和轮询流程推送状态，跟随人物窗口，支持阶段、真实计数、等待与收起。特殊菜单「补写本机任务执行评价」逐日读取归档中的任务记录与生图报告，沿用原评价的稳定编号和逐条事务，处理完的条目在重复运行或中断恢复时跳过。测试资料包含七天以前的任务和同日非任务对话。
+
+设计参考项目规则、开发纪要及 G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md 的紧凑反馈与最简实现约定。在项目索引和全局规则中未定位到另列的专用开发设计备忘录。本机快捷方式、登录启动项和运行进程都指向 .release-feiyue-handbook-desktop-20261120 安装树；实际部署结果见其根目录 RELEASE_REVIEW.md。
+
+
+## 特殊菜单手动写日记的进度和回执
+
+用户反馈「看绯月写日记无效」。旧菜单手动调用绕过时间门槛，正常结束时丢弃返回值。现在点选立即显示绯月的写作进度，同一任务重复点击重显进度。同步回执按已确认并从本地草稿队列移除的段数统计，包含本轮补传；无需补写、中途暂停、失败有各自回执。已覆盖的材料仍使用原编号避免重复入册。安装候选的菜单测试、日记数据测试和全量 251 项通过。
+
+
+## 2026-11-21 JST 本机任务评价已有、日记未入册
+
+本机执行记录可包含多次操作及传输回执。模型清洗返回空文本时，保留每次已知业务结果和当天有意义的任务进展，避免只有回执却没有实际结果。保留双方有内容的对话。对既有空缓存沿用相同素材编号及评价，已提交的旧段落保持原样。补评窗口反馈扫描、已有和新增的数量；日记反馈本轮上传段数。纯网络回执仍可过滤。核验为隔离资料，见 agent/tests/personality-memory.test.mjs 的旧缓存、再次运行及模拟服务端回读用例。
+
+
+## 2026-11-21 JST · 自动领取任务完成汇报
+
+用户反馈自动领取的任务完成后缺少明确汇报，例子是只做生图。原流程在完成时清除进度，生图只在提问面板关闭且系统支持时尝试发送系统通知。现在自动领取流程收到最终完成回执后，绯月用本机消息框汇报任务名称、编号和回传状态；本机已完成且回传抛错时说明云端回执待确认。已归档的生图显示尺寸，点击「查看成图」可打开本机 PNG。查看或关闭汇报独立于回传流程。成功、回传断线、下一次轮询不重复报告及非生图任务已用隔离资料验证。
+
+
+## 2026-11-21 JST · 读者脚本与上传结果
+
+页面必须用与正式打包相同的脚本在浏览器验收列表和实际打开的正文。桌宠独立读回已提交段落后再删除对应草稿。验证及本次部署状态见项目根目录 RELEASE_REVIEW.md。
+
+
+2026-11-21 00:14:06 JST 本机发布完成。按用户明确指令安装自动任务汇报，六项文件摘要全部匹配。备份目录为开发树 personal-digital-companion/output/automatic-report-twnv0i81/preinstall-6dmi0lur。核对三条任务均完成且无待处理图像作业后，通过 Windows 正常关闭主窗口，等待应用完成退出处理，再按原参数启动。原 PID 14728 退出，00:13:46 JST 新主进程 PID 8908 加载正式安装目录，主窗口响应正常，桌面快捷方式与登录入口均匹配。安装后从正式目录运行 node --test agent/tests/server-image-task.test.mjs agent/tests/pending-poller.test.mjs，14/14 通过；真实新任务的弹窗待自然触发。本次仅本机更新，花园未登记，未提交或推送 Git。
+
+## 2026-11-21 JST · 绯月手记按日取材和写前定情绪
+
+本次开发依据 [用户原话、东京日期口径及空来源行为](FEIYUE_PERSONALITY_MEMORY.md)。沿用已有独立主站日记、花园部署明细、Paylog 查询和桌宠服务身份，按日期分页只读。个人日记以登记日归属，部署以实际部署时刻归属，账单以消费日归属。当天缺哪一类就省去哪一个小节。部分读取失败可以继续写已取得的事实，后续恢复按素材标识补入。无数据库迁移。已接入工作区内现有手记发布工作树的主站和 API；运行中的桌宠、线上服务及历史手记没有更新。
+
+在写新段前，先汇总已有评价与待写素材形成基础情绪，再分开生成各段和篇首。写段落时只给本条事实、归属及基础情绪；篇首另行汇总。新来源段落有来源摘记，便于和绯月的主观感受对照。沿用《FRAMEWORK_PREFERENCES.md》的最简设计和东京时间约定，使用已有服务和数据库；未找到另设的项目设计备忘录。
+
+本机验收在 personal-digital-companion 目录运行 `node tools/personality-memory-preview.mjs --serve`。预览使用隔离测试数据并自动初始化，无需配置真实账号。自动验证命令为 `node --test agent/tests/personality-memory.test.mjs`、`node tools/test-desktop-shell.mjs` 和 `node tools/personality-memory-preview.mjs --visual`。手记测试 19 项、八种来源组合、失败恢复、桌宠壳、七个面板和桌面/手机阅读页通过。集成工作树主站 843/843、API 34/34。子项目全量 260 项有 1 项供应商兼容性测试失败：当前主站 DeepSeek 客户端拒绝截断响应，另一个开发中用例预期保留部分文本。该用例独立复现，未改动其实现。
+真实本机 4B 隔离回归中，三类样本共同形成基础情绪「欣慰」。部署段经过断言未混入散步、银杏、书名或账单金额；篇首先独立概括本机互动，再按来源逐项留下书店 380 日元、看银杏、绘图支持导出 PNG 三个样本事实。正式用户资料与已登记两篇手记未用于写入测试。
+
+## 2026-11-21 JST · 手记范本技能化
+
+用户指出新版手记范本也需同步到绯月自己的技能。新增 diary-writing 1.0，版本化保存成篇范例与六个模型阶段的短指令；每轮写手记或补评只解析一次。宿主继续负责三类来源、空块隐藏、东京日期、脱敏、保存与幂等。模型收到本轮指定阶段的提示和结构化字段，既有推理日志带技能名及版本。
+
+总控 feiyue-interaction 2.0 指向该技能。菜单检查另补齐“接着解释上次的事”和“恢复本机任务终端 ID”到现有技能的映射。验证包括 python -B tools/test-skills.py（5 项）、node --test agent/tests/personality-memory.test.mjs（19 项）、node tools/test-desktop-shell.mjs、桌面构建及 Electron 七面板。此项为开发树更新。
+
+## 2026-11-21 JST · 绯月本机 REST、花园登记和批次恢复
+
+原始要求和确认顺序见 [需求变更](REQUIREMENT_CHANGES.md)。设计参考根目录 CLAUDE.md、开发指南、`G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md`、花园子项目 `docs/DETAILED_DESIGN.md` 及集成项目的实际花园模型、迁移和已提交登记包。独立全局及项目设计备忘录的检索情况延续既有设计记录。采用原生 HTTP、SQLite、现行花园模型、既有 Wrangler 和桌宠工作节点。确认摘要及每步 SQL 随本机批次入库，精确 SQL 的 Git 提交先于执行。
+
+已实现调用方只读制单、用户确认后入队、串行执行、逐步落盘、原编号重试和重新确认后的续办、全批独立读回、归档后清理。一次批次产生一份复盘和手记素材。正式地址、AI 调用、暂存文件及发布后切换条款见 [本机花园登记接口](LOCAL_GARDEN_API.md)。
+
+隔离验证包括真实回环 HTTP、临时 Git 包、独立 SQLite、写后强制退出、回执丢失、基线改变、最终校验失败、按原编号续办及归档失败。`agent/tests/local-rest-garden.test.mjs` 七项通过。`node tools/test-desktop-shell.mjs --garden-api` 从桌宠壳启动测试实例，验证工作节点、奶油云、完成通知和记忆目录中的一条任务。桌面构建、常规桌宠壳及隐藏 Electron 七面板通过。启用 `COMPANION_HU_SHI_MAIN_SOURCE=G:/cloudflare/myapp` 的全量 Node 回归 262 项，261 通过。既有 DeepSeek 截断响应契约用例在 `registration-ai-log.test.mjs` 第 477 行单独运行亦失败。
+
+对照需求复核时，补齐了已确认余项沿用原批次、最终回读时间持久化、日记归档失败后的恢复和 AI 可查的花园字段。正式安装版、正式端口和生产 D1 的写入验收留待实际发布。全局条款暂存于调用手册，正式安装和受控重启验收是自动审批要求的切换前提。
+
+## 七天手记质问（2026-11-21 JST）
+
+依据 [原始需求及单一主对象口径](FEIYUE_PERSONALITY_MEMORY.md)，沿用 `docs/TASK_TEMPLATE_PREVIEW.md` 中的备忘录查阅记录和 `G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md` 对最简实现、按需加载、东京时间的约定。手记质问技能走现有版本目录与 4B 调用。桌面复用念叨缓存、问答气泡、复盘及轮询器。首次提问先核实云端逐字引文并登记主篇，断网时新题等待后续轮询；已经开始的问答可在本地续办，上传复用同一 ID。服务端沿用现有表和单个待处理事项的唯一索引，无迁移或历史回填。
+
+用两篇虚构的花园部署手记验证本机 4B 能指出周四与周五的正式发布时间冲突，得到测试环境的解释后直接收笔。专项用例见 `agent/tests/diary-audit.test.mjs`，覆盖单一主篇、跨篇去重、原文留机、重启续答、忙时暂停、长回答中段、拒答、两轮上限及气泡入口。隔离 Worker 和隐藏 Electron 覆盖桌面与窄屏阅读页的多篇引文、唯一主篇入口。实际入口为「轮询设定 → 手记质问」及「本地复盘 → 待确认」。开发工作区和主站/API 集成工作树已更新，正式环境待发布。
+
+2026-11-21 JST，四轮自测补齐篇号别名去重、重复追问的结束状态和收笔情绪归属。真实 4B 与离屏气泡均已复测。[四轮结果、命令和验证边界](reviews/FEIYUE_DIARY_AUDIT_2026-11-21.md)
+
+## 2026-11-21 JST · 绯月本机花园 API 四轮自测与合规检查
+
+按用户本次指定的四轮执行。核对依据为本项目需求变更、AGENTS.md 的提交前确认与本机升级规范，以及 docs/LOCAL_GARDEN_API.md 的六个端点与恢复约定。测试使用临时 Git 仓库、回环随机端口、SQLite 和隔离桌宠资料。
+
+| 轮次 | 实际检查 | 结果和修正 |
+| --- | --- | --- |
+| 1 | 确认声明、摘要、Git 精确 SQL、并发重复 POST、花园模型字段 | 加入 Windows 多行字段后复现有效请求返回 409。含 CR 的字段改为按 UTF-8 字节生成 SQLite 文本表达式，避免 Git 换行转换影响登记原文。原样回读和篡改拒收均通过。 |
+| 2 | FIFO、逐步状态、整批校验、受控暂停 | 在读取基线时暂停，原实现仍写入一次。现先持久化 running/checking，读完在写入前复查可执行状态。暂停期间零写入，恢复后按原顺序完成。 |
+| 3 | 子进程强制退出、远端已写但丢回执、基线变化后续办 | 复现无关修订使已到位的步骤无法续办。自动重试保留原检查，经重新确认的续办用新确认基线核对目标终值及归属，记录实际核对修订。过期确认被拒绝，续办后原任务只有一条复盘。 |
+| 4 | 桌宠壳端到端、隐藏 Electron 任务管理及其他六个面板 | 经桌宠壳的真实 REST 接单，单独断言本批次进入工作、结束工作、完成后收云、桌面汇报及一份日记素材。Electron 验证 0/1 核对基线及 1/2 核对写入结果。桌面构建与七面板通过。 |
+
+合规检查的全类型用例通过主项目实际花园模型在隔离数据库制单，涵盖接口列出的 12 类登记。14 步串行执行，核实两个项目的部署明细及对应版本、种子落地、数据源关联增减、外键完整性和单份归档。HTTP 用例覆盖说明、分页、详情、提交、重试及重新确认后的续办。用户的明确确认由调用方取得并留存，接口校验其声明、清单摘要及已提交 SQL。最终复核或归档失败保留临时资料，成功后清理。步骤状态和恢复行为已同步到 infoguide v2 及调用手册。
+
+实际执行：前三轮以 node --test --test-name-pattern 按场景运行 agent/tests/local-rest-garden.test.mjs。第四轮使用 node tools/build-desktop.mjs、node tools/test-desktop-shell.mjs --garden-api，以及隔离 Electron 运行 tools/test-panel-titlebar-electron.mjs。最终以 COMPANION_HU_SHI_MAIN_SOURCE=G:/cloudflare/myapp 运行 node --test --test-reporter=spec 'agent/tests/*.test.mjs'。本功能专项 11/11，全量 273/274，跳过 0。剩余为既有 registration-ai-log.test.mjs:477 的 DeepSeek 截断响应断言，独立运行同样失败。日志在 output/feiyue-garden-four-round-full.log。
+
+本轮停在开发验证。正式安装、受控重启、真实生产花园登记及全局说明切换待相应发布与验收。本次没有生产写入。
+
+### 本机花园 REST API v2 实际安装与验收
+
+2026-11-21 02:12:37 JST，按用户本次“安装并重启，验收后给我看登记清单”完成 Windows 本机花园 REST API v2 更新。实际安装基线 Git 39fd098e40eb（独立工作树并含此前本机改动）；16 个审核文件全部核对 SHA-256，9 个原文件已备份至 G:/selftool/WebCharacter/personal-digital-companion/output/garden-local-install-1r6alefu/before 。旧进程 22068 正常退出；新进程 19548 使用原安装目录和资料目录，响应正常。127.0.0.1:8765/infoguide 返回 v2、6 条路由；未带令牌查询返回 401，认证只读列表成功且为空。测试候选的 11 项专项、桌宠壳及 Electron 七面板通过。正式环境只读验收，真实写入及用户界面目视反馈待后续。已同步 Codex/Claude 全局花园入口。
+
+调用方完成 db:sync-schema（新增对象 0），核对花园修订 101，归属项目 #16 / 功能 #61。待确认清单 G:/selftool/WebCharacter/personal-digital-companion/output/garden-local-install-1r6alefu/reviewed-plan/registration.json ，摘要 74657155f82c5c6fdb9b8e03cae0af236f0c3fa16b6974637bb11592fe6cfe30，拟新增改善 #63、部署 #53 和明细 #123。预留批次 feiyue-local-garden-api-20261121。登记前值均为空；先建已完成改善，部署明细由现行模型算出 3.1 → 4.1。暂无入队或最终回执，待用户确认完整清单后再提交准确 SQL 至 Git、经本机 API 入队及核验。当前本次本机安装未提交或推送 Git；没有发布云端代码。
+
+### 2026-11-21 JST · 花园 REST v3 首次调用
+
+用户要求首次接触也能取得完整有效的登记信息。按项目既有备忘记录和 FRAMEWORK_PREFERENCES.md 的最简原则，复用官方花园模型、只读目录和既有队列。根地址及 /infoguide 给出本实例的工具、仓库、字段、筛选方法、确认和恢复顺序。调用方保存目录修订与结构摘要，基线改变须重新核对。开发测试使用两个项目下的同名功能、随机回环端口、临时 Git 和 SQLite，验收范围为隔离调用；正式环境仍按安装、受控重启、验收、展示清单并取得确认后交付的顺序更新。
+
+### 2026-11-21 JST · 花园 REST v3 正式安装、两轮复测与登记草案
+
+按用户“安装并重启 v3，验收后给我看登记清单”执行。已复核候选清单全部 9 项 SHA-256。第一轮在候选目录运行 node --test agent/tests/garden-first-use.test.mjs，1/1 通过；第二轮 node --test agent/tests/local-rest-garden.test.mjs，11/11 通过，并执行 node tools/test-desktop-shell.mjs --garden-api，桌宠工作进度、完成汇报及单次归档通过。实际日志见 G:/selftool/WebCharacter/personal-digital-companion/output/garden-first-use-v3-6fe00aba 的 recheck-first-call.log、recheck-api.log、recheck-shell.log。
+
+版本 v2 的本机队列为空。备份既有清单文件至同目录 pre-v3-backup，经正常关闭请求等待 PID 19548 退场退出后按清单安装。正式 v3 新 PID 27900，监听于 02:43:13 JST 启动，02:43:38 JST 验收完成。九项安装文件摘要匹配，正式应用目录与原资料目录、桌面快捷方式和登录项均已核对。根路径与 /infoguide 返回相同的 v3 说明及七条路由，实际制单工具和主项目路径正确；无令牌列表查询 401，有令牌只读查询 200。验收文件为同目录 v3-acceptance.json。两份纪要的本次安装后追加另行留痕。部署范围为本机 Windows，云端代码、生产数据迁移及配置变更均无。
+
+按正式指引在主项目执行 npm.cmd run db:sync-schema，新增结构对象 0。用正式安装版只读 inspect 和 prepare 按花园修订 101 核对项目 #16、功能 #61，并准备 v3 草案 feiyue-garden-first-use-v3-20261121，完整文件在同目录 v3-reviewed-plan/registration.json。拟新增改善 #63、成功部署 #53 和明细 #123；当前功能 3.0，先确认改善再登记部署，明细版本为 3.1 → 4.1。确认摘要 a6525b674b77f1c2d4a523f2ff06d42d670da8de5e392de9fa619af1beaf0266。原 v2 草案尚未执行，两份草案用到相同预计编号，先登记任一份后须重生成并重新确认另一份。正式实例 GET 本批编号返回 404，尚未入队、无最终回读回执，待用户确认这份具体清单。安装文件及草案本轮未提交或推送 Git；准确登记包仅在具体清单确认并复核基线后提交。
+
+### Git 子目录读取修正实际安装、首批入队与暂停
+
+用户明确开始安装，只执行原四步，路径修正不另登记。2026-11-21 JST 从原 PID 7016 正常退出并启动 PID 4548，两个清单文件 SHA-256 符合审核，旧文件备份在 G:\selftool\WebCharacter\personal-digital-companion\output\garden-git-read-bb6cb91e\backup-cb767f2a。桌面快捷方式、登录项、8765 监听、原资料目录、v3 七路由、未鉴权 401 及正式安装代码读取 Git 的五个文件均已核对。原批次 feiyue-local-garden-v2-v3-20261121 的准确清单及四份 SQL 已在主仓库提交 9717e13f774f7266c13aec1f8e0dbe15c150c5e7，独立远端分支 codex/feiyue-local-garden-v2-v3-20261121 已核实同 SHA。本机补丁代码本轮未提交或推送。
+
+提交前结构同步新增 0 对象，修订 101、六个前值及归属匹配。API 接受一次，HTTP 202；批次持久化后在第一步 checking 暂停，0/4，尚未发出花园写入。初次回执在 G:/selftool/WebCharacter/personal-digital-companion/output/garden-git-read-bb6cb91e/enqueue.json，暂停回执在 G:/selftool/WebCharacter/personal-digital-companion/output/garden-git-read-bb6cb91e/batch-receipt.json。使用正式 Electron 对比系统 Node 定位到 Wrangler 命令解析，须按原编号续办，保留这一条任务记录。
+
+### 2026-11-21 JST · Wrangler 运行时修正与原批次最终回执
+
+用户许可安装并续办，本修正不另登记。单文件备份 G:\selftool\WebCharacter\personal-digital-companion\output\garden-wrangler-node-b173a2a3\garden-backend-before-daa2f83a.mjs，原进程 4548 正常退出，新进程 2448 沿用原目录启动，安装摘要匹配，原暂停批次仍可读取。按原编号和摘要续办成功进入 applying。随后发现 Wrangler 文件导入返回成功但同时在 stdout 输出进度，旧解析器在每步把成功误判为暂停。每次只读确认对应数据库终值、归属及预期修订后，按原编号恢复，保留前步回执。四步分别在花园修订 102、103、104、105 核对成功。
+
+2026-11-21 03:09:59 JST，feiyue-local-garden-v2-v3-20261121 整批完成。已单独核实六个线上终值、本机一条复盘、一条手记素材、临时 payload 已清理。最终回执 G:/selftool/WebCharacter/personal-digital-companion/output/garden-wrangler-node-b173a2a3/batch-receipt.json；独立核对 G:/selftool/WebCharacter/personal-digital-companion/output/garden-wrangler-node-b173a2a3/verification.json。改善 #63、#64；部署 #53、#54；明细 #123、#124。登记包 Git 提交 9717e13f774f7266c13aec1f8e0dbe15c150c5e7，对应独立远端分支已核对同 SHA。Windows 实际收到几次可见通知由系统通知设置决定；应用层多次发出暂停提示的原因已复现。两个本机修正均按用户决定不另外登记，运行时修正源码尚未提交或推送。
+
+### 2026-11-21 JST · 成功回执解析修正实际安装验收
+
+依照用户“安装并重启，本修正不另登记”，已核对并备份两个审核文件至 G:\selftool\WebCharacter\personal-digital-companion\output\garden-import-receipt-2e4493ea\backup-6ee3456b，PID 2448 经正常退出后由新 PID 7612 沿用正式应用和资料目录运行。2026-11-21 03:14:03 JST，安装摘要、8765 端口、v3 七条路由、鉴权、桌面快捷方式和登录项通过。真实 Electron 与 Wrangler 使用回环模拟服务，实际加载正式安装目录模块并成功解析夹带上传进度的导入回执。隔离回归 13/13，其中四步正常执行只产生一次完成通知，异常回执仍暂停。日志在 G:/selftool/WebCharacter/personal-digital-companion/output/garden-import-receipt-2e4493ea/regression.log 和 installed-probe.log。验收未重放生产登记，原四步批次在新进程仍为 done，修订回执依次为 102、103、104、105。其六项终值、一条复盘及一条手记素材已独立核验。原登记包 Git 提交 9717e13f774f7266c13aec1f8e0dbe15c150c5e7；本机成功回执修正源码本次未提交或推送，未另作花园登记，无云端应用部署。
+
+### 2026-11-21 JST · 任务复盘倒排与详情评价
+
+用户要求“按发生时间倒排”，“如果绯月有评价的话，详情页最上方加载绯月的评价，没有就自动隐藏对应展示区域”。同一东京日期按事件时间从新到旧排列，同一毫秒倒转原时间线；每个任务最新一行保留详情入口。普通报告的事件也按新到旧排列，图片报告按工作流步骤展示。详情按需只读打开本机评价库，按任务编号取回已有评价，早期资料可用同一素材摘要精确匹配；打开详情不生成评价。多条评价在顶部按时间排列，无有效文本时不创建该区域。设计沿用项目开发指南、TASK_TEMPLATE_PREVIEW.md 的备忘录记录和 G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md 关于按需加载、紧凑布局及东京时间的约定。安装候选用真实隔离 Electron 面板验证排序、同毫秒、详情入口、旧新评价和无评价的图片报告；发布范围见实际安装目录 RELEASE_REVIEW.md。
+
+### 2026-11-21 JST · 任务复盘倒排与详情评价正式安装验收
+
+用户明确“安装并重启，本次不登记花园”。六个审核文件均以旧值核对并备份至 G:\selftool\WebCharacter\personal-digital-companion\output\review-order-69x6zdpc\backup-316db6e4，正常退出进程 25316，以原目录和资料启动新进程 33608。2026-11-21 03:59:08 JST 核实监听进程、桌面快捷方式、登录启动项及所有安装文件摘要。随后直接在正式安装目录用临时资料运行 Electron tools/test-memory-electron.mjs --task-reports，通过倒排、同一毫秒事件顺序、详情入口、顶部多条评价、早期素材摘要匹配、空评价隐藏、图像报告及返回。日志 G:/selftool/WebCharacter/personal-digital-companion/output/review-order-69x6zdpc/installed-ui.log。用户实际业务资料未用作测试。此次仅本机安装，按决定不生成花园批次，无云端部署；本次应用改动未提交或推送 Git。
+
+### 2026-11-21 JST · 七项更新发布前自审
+
+候选、逐文件摘要、数据库单行更新及回滚、复测日志见 G:/selftool/WebCharacter/work/feiyue-seven-20261121/RELEASE_REVIEW.md。主站 843 项、API 34 项、子项目专项 69 项、技能 6 项通过。已对齐正式图库配置与线上 KV 绑定，并以 03:59 安装后的复盘为桌宠基线完成 Electron 回归。当前为候选准备阶段，生产切换及本次花园意愿待确认。
+## 绯月任务管理页面
 
 隔离验证通过桌面资源构建、Node 全量回归 264 通过和 2 项可选外部契约跳过、六项技能测试、普通及模拟花园 API 桌宠壳测试、Electron 七面板及本轮生图卡和自主行动日志巡检，并通过网页角色的骨骼、动作和资源检查。验证使用临时数据和本机回环服务。
 
@@ -469,3 +787,194 @@ Qwen 会话通过 local-model-process.mjs 中的 systemPrompt 加载绯月人设
 按用户要求，以 15:02 JST 启动的 Windows 正式版为准。核对安装版的 `agent/host/reminder-review.mjs` 和 `agent/tests/reminder-review-history.test.mjs` 与 `4922336` 一致，将这两处同步到主线基线 `2a80c9b`。提醒列表返回 `dailyStudyComplete`，同一东京日的多邻国提醒和长期任务均有完成证据时，现有桌面轮询会按原规则触发晚间夸奖。
 
 隔离验证的提醒及工时接口专项 14/14，全量 Agent 回归 284 通过、0 失败、2 项可选外部契约跳过。单独扩展执行的轮询脚本在基线和候选上均有同一条间隔断言失败。本次仅同步 Git 源码。
+
+用户明确批准本次生产发布、正式安装和花园登记，并在查看具体清单后确认了发布 #55、明细 #125 和版本 5.2 → 6.0。业务库 feiyue-companion 已按 SQL 提交 889cba4 更新 records.create 一行并独立回读。执行前整库密文已单独推送至 db-snapshots/production（d4008cd），远端重新克隆解密后通过 18/18 张表、完整性与外键检查。
+
+主站 myapp 于 04:15:35 JST 切换 f610be27-3317-4638-9402-2e2d3263ddd6，100% 流量，42 个绑定一致。API subscriptions-api 于 04:16:22 切换 40242d1d-8094-4bee-a12f-135f0c29e8f6，100% 流量，14 个绑定一致。已发布 API 以 09c1caf 加生产 KV 为基线，单独保留精确发布分支 codex/feiyue-seven-production-20261121，API 的开发主分支继续保留原有小时骰源码。
+
+Windows 旧 PID 33608 经原生窗口正常退出，安装前备份清单到准备目录 desktop-previous，安装后 04:18:04 JST 核验新 PID 23400、35 个文件、原资料目录、快捷方式、登录启动项和 /infoguide。使用临时资料从正式目录复验冷启动复盘和任务详情，候选气泡复测通过。保留桌宠本机动画文件。Access 线上页面效果待用户截图确认。
+
+确认后的精确清单及 SQL 已提交 e27038c。重启后的绯月在 04:20:37 JST 接收唯一批次 feiyue-seven-20261121，04:23:58 核对步骤，04:24:03 回读结束，state=done、revision=106。花园将网页角色组件 #16 的绯月（桌面精灵）#61 从 5.2 升至 6.0，新增发布 #55 与明细 #125，收录七项桌宠及配套云端更新。机器回执位于主站 database/changes/feiyue-seven-20261121/release-receipt.json。
+
+
+## 2026-11-21 JST · 问绯月的单回合图片卡
+
+旧气泡在打开及图像回执变化时取最近八条任务。本次将图片卡关联到当前提问的作业编号，切换回合即清空卡片并使在途缩略图失效。冷启动恢复当天最近一次用户对话时跳过独立服务器生图。沿用现有本机归档、对话状态与缩略图读取接口。依据为 SCREEN_QA_REQUIREMENTS.md 的用户反馈、TASK_TEMPLATE_PREVIEW.md 的备忘录索引及全局 FRAMEWORK_PREFERENCES.md 的紧凑和按需加载约定。正式安装基线上的候选通过问答与服务器生图 25 项测试、真实 Electron 单回合气泡专项及七面板回归。使用合成 PNG 和临时资料。候选清单和日志在 output/bubble-turn-l9an2toc。当前等待本次安装许可。
+
+
+2026-11-21 04:37:10 JST 已按用户确认安装并重启，本次不登记花园。首次关闭请求未退出宿主，核对桌宠主窗口后重试并正常退出 PID 23400。备份见 output/bubble-turn-l9an2toc/before-6cd8266c，六项安装摘要与 manifest.json 相符。新 PID 16092 使用原安装及资料目录，监听 8765，/infoguide 可读。已核实桌面快捷方式及登录项指向正式安装树。从安装目录用临时资料运行 tools/test-bubble-image-turn-electron.mjs，通过双生图、重开、文字清卡、旧缩略图与作业晚到、冷启动及归档原图回读。详细日志在 output/bubble-turn-l9an2toc/installed-ui.log，实例回执在 installed.json。无生产 SQL 或云端部署，无花园批次。
+
+本次功能、专项测试及发布和验收记录已保存在本机 Git 分支 codex/feiyue-bubble-single-turn-20261121，提交 c574843faa82。本次仅在 Windows 本机发布，未推送远端。
+
+2026-11-21 JST 本机发布及验收。05:46:52 受控关闭旧进程 3240 并从现有入口启动 27924，资料目录及 v3 服务一致，九项 SHA-256 通过。正式模块隔离测试记录 Vulkan 上的 HauhauCS Aggressive 9B 回答「你叫什么名字」，关闭直连后进入自动路由并完成普通回复。全 CPU 手记完整生成及纠正回合时限仍为已知限制。05:51:47 纯 CSS 布局修复经运行中正式实例热加载；正式打包页在深浅色、不同宽度及 100%／125%／150% 页面缩放的 42 组测量均通过，七面板回归通过。备份、模型安装及样式回执见 G:/chat/2026-11-20/wo-z/work/direct-install-receipt.json 和 footer-installed.json。已准备花园全量漏项批次 feiyue-desktop-catchup-direct-20261121，基线 106，拟新增改善 #65、发布 #56、明细 #126，清单摘要 39b783c7b5f6273ea84a68a011d3758e5a2098272bf2dd1b5950f2f9c91775b1。用户同意登记，具体清单待核准，尚无入队或生产回执。云端发布、Git 提交及远端推送无。
+
+2026-11-21 06:02:59 JST · 绯月桌宠 12 组更新花园登记完成。用户查看全清单后明确回复「登记」。清单摘要 39b783c7b5f6273ea84a68a011d3758e5a2098272bf2dd1b5950f2f9c91775b1。登记前结构同步新增 0 个对象，线上基线 106。先提交准确 SQL 和清单 7eb187286b52f4bbd0f02df5683abe89d4e251a6，再向已核实的正式实例 PID 27924 提交一次。批次 feiyue-desktop-catchup-direct-20261121 在 06:02:07 JST 入队，改善 #65 于 06:02:34 JST 读回为已完成（修订 107），发布 #56 和明细 #126 于 06:02:52 JST 读回（修订 108），06:02:59 JST 整批 done。独立线上 inspect 核实项目 #16、功能 #61，实际版本 7.1，12 组明细与批准清单逐字段相同，仅存在一个带该标记的发布。精确回执位于主项目 database/changes/feiyue-desktop-catchup-direct-20261121/receipt.json，提交 7f7cd87e7b69aa8352bc63c98c5bfed1a37e73f8 已推送到 origin/codex/feiyue-desktop-catchup-direct-20261121，远端 SHA 已回读核对。
+
+2026-11-21 JST · 4B 技能与关键词已归档，Aggressive 9B 调试了普通登记和直连分流、误报完成和符号循环。实际截图回合来自本地文字问答。开发及候选测试通过；正式结果、恢复和已知限制见本机正式安装树 RELEASE_REVIEW.md 的「Aggressive 9B 登记关键词、直连和异常尾串修复候选」。本次控制面仍待安装授权。
+
+2026-11-21 JST · 绯月情绪续审第 4 至第 6 轮。开发区修正了手记评价误归因、历史心情的东京日期、专题按实际展示版本登记，以及空闲核查三次后挂起。主站本地同步了 LanguageStudy 已验证的 DeepSeek 截断回执支持。桌宠全量 296/296、主站全量 840/840，均零跳过；本次尚未安装或发布。[续审记录](reviews/FEIYUE_EMOTION_IMPLEMENTATION_REVIEW_2026-11-21.md)
+
+
+## 2026-11-21 JST · 9B 关键词和回复修复正式安装结果
+
+用户指示「安装，本次不登记花园」。06:23:25 JST 完成本机安装，旧进程 27924 正常退出，新进程 16344 从原目录和原资料启动，v3 服务已就绪。候选 22 项 SHA-256 全部读回相符。原文件和新增文件清单备份在 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/skills-9b-before-aa4be2d7331245cbb44d4acc2fbb09f0。
+
+正式目录运行 node --test agent/tests/chat-registration-boundary.test.mjs，3/3 通过。隔离 Electron 使用正式页面核实直连开关和关闭后恢复普通模式。正式 Vulkan Aggressive 9B 的三次真实推理分别得到普通早餐登记 task、早餐分享 chat、直连同一登记原句 chat。三次均无截图中的重复尾串。直连可能用角色扮演文字描述“写在纸上”，实际不会调用登记。面板登记路径用隔离接口验收，未写入真实早餐。花园登记按本次指示跳过。无业务迁移、云端部署或远端推送。
+
+在独立本地 Git 分支 codex/feiyue-9b-skill-routing-20261121 保存本批次的实际旧值、发布文件及审核结果。模型权重、用户内容、资料目录、令牌和备份包未加入 Git。
+本地发布提交 4ee4a1ea8f9e8fbd4bd1a678469c18f1167ea91e。
+
+2026-11-21 JST · 正式绯月 06:27 手记故障经只读回放定位为篇首字段没有生成长度约束，导致 JSON 未闭合。复用开发版已有 summary/tags 限制组成一文件 Windows 安装候选；同样本真实 9B 复测、隔离 D1 完整写入后重跑及开发回归 20/20 通过。正式安装尚待授权，见正式安装树 RELEASE_REVIEW.md 本次手记篇首修复条目。
+
+
+## 2026-11-21 JST · 手记篇首修复本机安装与回读
+
+用户批准本机安装并选择本次不登记花园。东京时间 2026-11-21T06:43:00.6370153+09:00 完成，原进程 16344 正常退出，新进程 23352 从原安装和资料目录运行。仅替换 desktop/personality-diary.mjs，原文件备份在 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/diary-summary-before-cde5ac2e4d0a4cc89c57294b9312400a，前后 SHA-256 与审核清单相符。本机服务已就绪。
+验收直接加载正式安装版代码及 Aggressive 9B Vulkan 权重。用只读数据库副本离线回放，原故障篇首 summary/tags 生成成功。使用隔离资料生成完整测试手记，独立读回正文、摘要、修订并比对；相同输入重跑后一篇、内容和修订均相同。真实手记未提交或改写。本次未登记花园，无数据库迁移、云端部署或远端推送。本地发布分支 codex/feiyue-diary-summary-fix-20261121。
+本地发布提交 709c849eefe18d1bfc439864f3608c16a3482107。
+
+
+## 2026-11-21 JST · 手记私语修复安装回执
+
+本机安装已获确认，本次不登记花园。2026-11-21T11:19:13.9868721+09:00 完成单文件备份和安装。旧进程 23352 正常退出，新进程 28952 从原安装目录启动，桌面快捷方式、登录启动项、实际资料目录及本机接口 /infoguide 核对通过。安装备份为 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/diary-narration-before-239b08df7c604a9e9149cc6a23cec80b。
+
+正式安装文件 SHA256 为 DB1AC778BCD53E5E9761364264FD9A459EE0F1CEADBB993B92D2EA51641AE95E。直接从安装路径加载 Aggressive 9B Vulkan，以两条真实故障相关素材执行 node work/replay-next-diary-material.mjs --installed。两段都有带文字的私语，隔离库独立读回两条来源摘记及一篇正文，重复运行正文和修订号一致。正式安装版的 tools/test-desktop-shell.mjs 通过。正式用户资料的七天全轮与文笔验收仍待实用确认。无数据库迁移、云端部署或花园登记。Git 仅本地留存。
+本地发布提交 b7b8097d7f8c929e23a4461eb9ca5666e681e83b。
+
+2026-11-21 JST · 绯月情绪第 7 至第 11 轮续审修正了公开查询失败后无法续办、专题误报已入队、并发重复展示、强制欲望选择不可执行对象，以及结束念叨后欲望未释放的问题。最终连续两轮复核无新增修正点，启用本地主站契约的桌宠测试 301/301 通过。本次为开发区修正。[审核及验证记录](reviews/FEIYUE_EMOTION_IMPLEMENTATION_REVIEW_2026-11-21.md)
+
+2026-11-21 JST · 开发版按“具体欲望优先于闲时整理倾向”派发行动。专题 Markdown 支持三份本地备份、损坏恢复、全损重建与绯月询问线索。用户答复经实际 Electron 询问窗口验证，重启后可从原专题读回。全量桌宠测试 307/307，未安装或部署。[实现与两轮复核](reviews/FEIYUE_EMOTION_IMPLEMENTATION_REVIEW_2026-11-21.md#具体行动优先与专题文件恢复)
+## 绯月环球之旅（2026-11-21 JST，开发版）
+
+用户希望绯月自己找衣服和拍照姿势，以固定的绯月形象和目的地场景，在本机合成一张动作合理的真人抓拍风格旅行照。在「问绯月」的输入用途里选「绯月环球之旅」，填写地名或留空，点「出发」。普通对话也能输入“绯月环球之旅：京都”。留空从九站中选择，指定目的地可自由输入。
+
+人物来自本机 `G:/selftool/feiyue/refer/绯月_角色视觉设定基准_V2.2.md` 和同目录的 `chatpgt3.png`。用 FIBO 2 Edit Turbo 从设定图的面部裁片生成并选定[旅行定妆照](../workflows/comfyui/world-tour-feiyue.jpg)，各站复用同一张。Sketchfab 公开模型搜索分别提供服装和姿势预览，主机只发送通用英文取材词。可选服装方向是牛仔夹克、风衣、皮夹克，可选姿态方向是走路和站立，各自的具体参考来自搜索结果。无法取得两类参考时会报告失败。
+
+SDXL Turbo 先生成竖幅目的地街景，FIBO 再按街景、定妆照、服装和姿势四张图进行合成。任务报告显示地点、服装与姿势作者，归档记录保留模型页链接和分步 PNG。街景、动作与光影属于生成式创作。程序没有地标真实性、面部相似度或人体骨骼的自动验收。
+
+沿用现有图像任务队列、GPU 锁、气泡和按日复盘。隔离验收时，京都成片与重开后补归档的 PNG 逐字节一致；里斯本通过真实 Electron 下拉入口提交、关闭重开气泡后读回了缩略图。验收工具可用 `tools/test-screen-question-electron.mjs --tour-live` 从留空选站走完整流程。取材和合成见[工作流](../workflows/comfyui/world_tour.py)，出处接口见 [Sketchfab Data API](https://docs.sketchfab.com/data-api/v3/index.html)。
+
+留空实测选中伊斯坦布尔，黑色风衣、行走姿态、渡轮码头背景合成 704 × 976 PNG，气泡重新打开后取得该轮结果缩略图。三张样片人工查看，人物动作和脸部细节仍由生成模型决定。8 项 Python 技能测试和 22 项 Node 关联测试通过。七面板及浅深色截图检查已执行，标题栏热加载检查有既有配置警告。本次仅更新开发版。
+
+
+## 2026-11-21 JST · 闲置轮询与「绯月自主行动」任务日志
+每个悬念按篇号与序号在调用推理前领取当日名额，未匹配、被打断和重启均保留记录。日记优先比对最近一条尚未比较的新事实。闲置日记、念叨、手记核对、行动评价及其中的专题整理共用十分钟，超时撤下待执行项并持久保存下一次允许启动的轮询时间。任务日志按行动编号记录开始、目标、结束、耗时与实际结果，悬念与专题子动作引用所属轮询。异常退出后缺少回执的行动在恢复时标记中断。沿用项目手记设计、TASK_TEMPLATE_PREVIEW.md 的备忘录索引及全局 FRAMEWORK_PREFERENCES.md 的本地存储、东京时间和按需展示约定。
+开发专项 56/56，安装基线候选四项新专项、日志实际面板和当前七面板检查通过。候选清单在 output/idle-memory-7adc0mxo/manifest.json。正式基线没有开发版独立专题模块；本次候选覆盖已有日记、念叨和本地补评，专题的同类接线已在开发工作区验证。安装前证据及既有测试情况见正式根目录发布审核记录。
+
+2026-11-21 JST 两轮复验发现并修正了完成后立即退出时的重复回执。恢复仅补写缺少的行动结束记录；跨东京日期和分页均已验证。开发 57/57，安装候选专项 5/5，真实任务日志与七面板通过。最终回归、历史夹具限制及候选备份见正式目录 RELEASE_REVIEW.md 的两轮检测记录和 output/idle-memory-7adc0mxo。本次为部署准备。
+
+
+2026-11-21 13:25:58 JST 本次 Windows 本机安装完成。用户批准安装，并要求验收后先查看花园登记清单。正常关闭 PID 17472，按已审核的十二项摘要安装，从原目录启动 PID 35452。新进程使用原资料目录，8765 的 /infoguide 返回 v3。从正式目录用临时资料重跑 agent/tests/autonomous-idle.test.mjs，5/5 通过；实际 Electron tools/test-autonomous-log-electron.mjs 从任务日志回读自主行动的目标、时间、耗时及父子结果。安装回执及日志在 G:/selftool/WebCharacter/personal-digital-companion/output/idle-memory-7adc0mxo 的 installed.json、installed-acceptance.log、installed-panel.log。恢复用 pre-install-backup 和 manifest.json。花园登记待具体清单确认。
+
+本次正式版文件与验收记录已在本机 Git 留存，分支 codex/feiyue-autonomous-idle-installed-20261121，安装基线 e940d065aab2，安装提交 ed6e8473b15c。本次未推送远端，未提交花园批次。
+## 2026-11-21 JST · 旅行摄影、公开网页取材与近期新闻（开发区）
+
+用户指出旧旅行照存在头身比例、转身和承重不协调的问题。用户要求头部身份取自定妆照，身材按设定描述，镜头、服装和姿势各用参考，目的地按次上网找实景。取材站可以更换，候选可以来自陌生杂志、时装周的单人照片。新闻需要近期报道，其余素材容许较早内容。公开网页的文字和图像交由本机加工，复杂公开问题可单独询问 DeepSeek。
+
+**旅行工作流。** 对话入口沿用“绯月环球之旅”。一个任务保存目的地、服装、姿势和镜头四类原始素材、用过的查询、作者、来源页和可得授权说明。默认先查 Google；没有密钥或来源没有可用图片时，旅行任务按本机配置的公开目录回退，并登记实际来源。普通对话的 Google 全网搜索在缺少凭据时返回手动入口。来源顺序、取材词和目录字段映射见 [world-tour-sources.json](../workflows/comfyui/world-tour-sources.json)。复制到 `%LOCALAPPDATA%/Feiyue/world-tour-sources.json` 后可覆盖。每类用途独立选 google、editorials（搜索并打开文章）、commons、openverse 或 sketchfab；兼容 JSON API 的其他站点可配置 endpoint、apiHosts、queryParameter、results、fields、pageHosts、imageHosts。图片站和原文页可以属于不同域名。对未知授权的原图保留来源，标为“授权见原页”。
+
+本机用 MediaPipe Pose Landmarker Lite 提取关节，用承重腿、脚、肩胯等关节构成分镜，抓取的姿势照片留作取材证据。模型看到的是关节图和实景上的位置参考，服装单独输入。可配置的网站人像照片会做单人及可见腿脚检查。第二遍只编辑头部：用已有的 face_yolov8m 定位原脸与新脸，缩放对齐后按原人物分割轮廓写回。检测失败留存先前阶段并报错。姿态模型取自 [Google 官方模型说明](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker)，本地文件 pose_landmarker_lite.task 的 SHA-256 为 59929E1D1EE95287735DDD833B19CF4AC46D29BC7AFDDBBF6753C459690D574A。仍需目视确认画面的地标还原、手脚细节与头发边缘。
+
+**公开材料。** “打开网页 https://… 提炼要点”读取正文；“打开网页 https://… 找图”读取可访问的文章照片；“找图：关键词”搜索图片。常规浏览使用只读 HTTPS，无 Cookie，按目标与跳转逐次检查 DNS 地址并固定连接地址，遵循原站抓取许可，限制请求、时间、字节和跳转次数。页面仅作为资料，不执行网页代码。可复用的图片、解码后的小预览、出处或摘录存入 `%LOCALAPPDATA%/Feiyue/PublicResearch/<编号>/`，按日聊天复盘保留回复与来源。RSS 标题、摘录和图像均来自公开服务。网站如限制抓取，相关材料可能缺失。Google 网页/图片官方旧接口需要有效的 GOOGLE_CSE_ID 和 GOOGLE_CSE_API_KEY；新账号的 Vertex/Agent Search 或全网企业方案尚未接入。Google 新闻 RSS 无需密钥；配置 BRAVE_SEARCH_API_KEY 后，新闻入口用 Brave 的专用 JSON 接口筛选最近一天发现的报道。两者的覆盖及收录时间取决于提供方。
+
+**核验。** 伊斯坦布尔同素材对照中，原来参照图的蓝衬衣串入画面；改用骨架后，黑色风衣、长裤和两只鞋可见。局部编辑一度产生重影；对齐新脸与原脸后再按轮廓写回。对照成片 928×736，与换脸前的像素差异完全落在 (442,20)–(554,155) 的头部区域；该数值仅针对这张样片。公开秀场页面实际返回正文，其图片 CDN 限制抓取；NASA 公开图实测解码、生成缩略图并存档。Google 新闻 RSS 实测返回 3 条带来源和日期的结果，Brave 只做了模拟响应核验。付费 DeepSeek 和 Google 搜索接口没有作真实付费调用。
+
+Python 技能检查 10/10，对话路由、问答宿主、归档 Node 检查 19/19，七面板 Electron 深浅色及热加载检查通过，仍出现标题栏配置警告。另跑的服务器自动生图回执 3 项未通过：当前工作区的 pollOnce 在任务被领取后即可返回，测试紧接着断言任务已完成或已失败。该处属于并行开发中的任务轮询。尚未安装或部署本次取材与摄影改动。
+
+最终从工作流入口无替身执行了一次伊斯坦布尔旅行。姿势候选在本机检查单人和腿脚可见性后入选，目的地来自 Openverse，衣服及姿势来自 Sketchfab，镜头来自 Wikimedia Commons。产物为 928×736 PNG。两张样片回放了脸部对齐、轮廓限制及暗发亮边处理；最终皮夹克照片的差异像素落在 (455,12)–(561,152)。正式安装版没有更新。
+
+2026-11-21 13:37:01 JST，本机闲置处理与自主行动日志的花园登记已完成。用户指定本次跳过结构同步；只读制单核对修订 117，逐字段清单获确认后向重启后的正式绯月提交单一批次 feiyue-idle-audit-20261121。改善 #70 和部署 #60（明细 #131）串行完成并回读，修订分别为 118 和 119，部署明细版本 9.2 → 10.1。终态 done，2/2 verified。回执见 G:/selftool/WebCharacter/personal-digital-companion/output/idle-memory-7adc0mxo/garden-idle-final-receipt.json。登记包提交 2ed3d7c914557e4d576b362cd8e6fede2b6d04b7 已同步并核对私有仓库 cj2cf99/cloudflaremyapp 的 codex/feiyue-idle-audit-20261121 分支。
+### 2026-11-21 JST · 主动提问的回答被打断
+
+正式安装版中，手记质问在回答落盘后随即上传该条念叨，再检查任务是否空闲。在途上传本身会触发暂停。开发版把回答时的判断改为检查业务任务、恢复和退出状态，允许普通网络请求继续。同时，念叨气泡收到闲置关闭事件时，若还有回答文字，则保留当前回合。普通念叨与手记质问的轮询周期沿用原设置。以隔离资料和延迟的念叨上传复现，验证在上传完成前同一条回答能够收笔；另验证普通念叨和手记质问在输入中停顿仍可提交。此次修正尚待安装。
+
+### 2026-11-21 JST · 自动手记质问五小时上限
+
+根据[用户追加要求](FEIYUE_PERSONALITY_MEMORY.md#七天手记质问2026-11-21-jst)，自动手记质问从开始时计五小时。正式版只读记录显示，同一待办在 14:18:49、14:20:04、14:20:34 JST 三次启动。旧处理耗时结束后返回推延会重新入队；现在复用本机 `idle_poll_resume` 保存下一次允许启动的时间，旧轮询设定以只读 300 分钟显示，待确认仍支持手动续答。查阅 [TASK_TEMPLATE_PREVIEW.md](TASK_TEMPLATE_PREVIEW.md) 的备忘录索引及 [全局框架偏好](G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md) 的最简、紧凑和 JST 约定，沿用现有调度、资料库和面板。
+
+快速通道两轮自检通过。开发树 53 项 Node 回归、桌面构建及七面板 Electron 巡检通过。正式安装基线 5/8，新增的三项限制测试按预期失败；保持正式版其余代码的候选 8/8，并通过实际 Electron 轮询设定检查。该全局限制候选随后被用户纠正，已撤回且从未安装。历史发布审核保留原证据。
+
+### 2026-11-21 JST · 手记质问按对象计时
+
+按[用户纠正](FEIYUE_PERSONALITY_MEMORY.md#七天手记质问2026-11-21-jst)，撤掉整个轮询的五小时限制，恢复原轮询间隔设置。核查按稳定篇号记开始时刻，五小时内同篇不得启动新一轮。查询和质询共用从首次启动起的连续三分钟。中断跨重启时可复用已完成的本机比对，到期取消生成与追问，关闭此轮质询，保留已保存的回答。依据 [TASK_TEMPLATE_PREVIEW.md](TASK_TEMPLATE_PREVIEW.md) 的备忘录索引和 [全局框架偏好](G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md) 的最简约定，使用现有桌面轮询及资料库，并在本机自动建立一张单行状态表。未找到独立的全局或本项目设计备忘录。
+
+两轮快速自检通过。开发树 Node 54/54，隔离正式安装候选专项 7/7，Electron 质询气泡截止检查通过。用户授权后，Windows 正式版于 2026-11-21 14:52:21 JST 从原入口启动，14:52:22 JST 核对新进程、五个文件摘要、本机状态表及原有 10 个花园批次。隔离 Electron 直接加载已安装文件复测超时气泡通过。[安装验收](../RELEASE_REVIEW.md#2026-11-21-jst--手记质问按对象计时安装验收)
+
+用户确认后，花园批次 `feiyue-diary-audit-object-20261121` 于 15:02:01 JST 登记完成，独立回读缺陷 #27、部署 #66、明细 #137 及版本 16.1 均相符，15:07:07 JST 核实回执已取回。随后 TXT 附件更新沿用本次代码和原资料目录。用当前安装文件重跑四项对象计时专项和两项 Electron 复测均通过，首次真实自然质问待观察。[登记回执](../RELEASE_REVIEW.md#2026-11-21-jst--手记质问按对象计时花园登记完成)
+
+## 2026-11-21 JST · 情绪联动联合候选
+
+候选完成两轮隔离自测。Windows、API 和主站的发布边界、实际回读、隐私和额度检查见 [联合发布审核](releases/emotion-news-20261121/REVIEW.md) 与同目录逐文件清单。正式安装、Worker 发布及花园写入待后续确认。
+
+## 2026-11-21 JST · 气泡时限与按场景回复
+
+问绯月气泡无操作 90 秒隐藏。自动和直连的本地文字思索使用同一个 60 秒截止时间，准备、生成、复核、改写共享预算。交谈、写作、判断、工具分别加载 personal-conversation 1.5、diary-writing 1.2、emotion-appraisal 1.5、tool-response 1.0，既有登记、回执及资料边界沿用。
+
+隔离构建、74 项测试、Electron 气泡与标题栏回归、90 秒隐藏和草稿恢复实测通过。真实 9B CPU 合成样例复核了四个语体；判断样例由首次超时改善到 34.05 秒。完整依据、复核和验证边界见 [本轮复核](reviews/LOCAL_DIALOGUE_STYLE_REVIEW_2026-11-21.md)。当前变更在开发工作区。
+
+## 2026-11-21 JST · 自主查阅四类公开资料（开发区）
+
+闲时的傲慢周公开查证可以选择 X 帖子、新闻社论、图片和一般资料。沿用本机任务日志与专题摘记，摘要和搜图候选只交本机模型。本机提供 `WEIR_API_KEY` 时，X 路径先核实可用余额全为免费积分且至少有一页所需的 9 分，再按时间取 X 原帖。未配置 Weir 时沿用 Tavily 的 X 限域查询。一般资料使用 `TAVILY_API_KEY`，与 Tavily 的 X 路径共用经核实的免费额度。新闻社论用 Google 新闻 RSS，搜图使用免费的 `SERPAPI_API_KEY` 或 Wikimedia Commons。摘记中的图片保留原页和图片链接，查询阶段不下载图片文件。
+
+四类决策、任务日志、重启回读和额度边界已做隔离回归，新闻 RSS 与 Commons 用免密钥公开样例实测。Weir 在确认全为免费积分后查询一次，返回三条 X 原帖。Arctic Shift、Weir 与 Bright Data 的在线核验及热榜能力另见 [本轮复核](reviews/AUTONOMOUS_PUBLIC_LOOKUP_REVIEW_2026-11-21.md)。
+
+
+## 2026-11-21 16:37 JST · 三端实际发布与花园最终回执
+
+三端已发布，桌宠覆盖 112 个文件并重启；花园回读确认绯月 18.1。详见 [发布回执](releases/emotion-news-20261121/release-receipt.json) 和项目根目录 RELEASE_REVIEW.md。
+
+## 2026-11-21 JST · 自主查阅额度分配（开发区）
+
+X 和一般搜索优先使用进程中的 `LANGSEARCH_API_KEY`。按 LangSearch 发布的 UTC 00:00 口径刷新日额度，即东京 09:00。X 只保留最近七天能从帖号核对日期的 X 原帖。该日源不足时，X 按 Weir、Tavily 的顺序核验免费月额度，一般搜索用 Tavily。搜图先查 Commons，再用 SerpApi 免费月额度。新闻社论继续查 Google 新闻 RSS。
+
+Weir、Tavily 和 SerpApi 使用本机原额度库作原子预占，保留月额度的至少 20%，同时约束当天和剩余天数的用量。一轮最多使用一次月额内容查询，已发出的请求即使无结果或者超时也不追加另一家月额。没有配置 LangSearch 的本机流程沿用各免费候选，本次配置和额度行为以模拟回包及隔离 SQLite 验收。见 [额度分配复核](reviews/AUTONOMOUS_SEARCH_BUDGET_REVIEW_2026-11-21.md)。
+
+## 2026-11-21 JST · 手记首问准备时限与失败回执
+
+按[用户最新要求](FEIYUE_PERSONALITY_MEMORY.md#七天手记质问2026-11-21-jst)，三分钟只约束分析并验证第一问。完成后沿用现有登记，保留等待回答的窗口及待确认记录。准备失败按现有自主行动日志和轮询历史记录对象篇号、拟问、阶段及原因。尚无拟问时记「尚未生成」。连续十分钟闲置整理、同对象五小时去重和正常后续作答沿用现有规则。旧版已结束的质询未自动重开。
+
+对照原需求、七天手记设计及最新澄清复核。沿用 [任务模板设计](TASK_TEMPLATE_PREVIEW.md) 的项目与全局设计备忘录索引，未找到独立备忘录。按 `G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md` 的最简原则复用现有本机状态及任务日志，未增加依赖或数据库结构迁移。本次为开发区修正，尚未安装到正式版。
+
+隔离回归验证了恰满三分钟停止准备、生成前和验证中的失败日志、重启后的失败回执、等待超过十一分钟仍能提交、后续作答独立于首问倒计时，以及连续十分钟的闲置整理回归。执行 `node --test --test-reporter=spec 'agent/tests/*.test.mjs'`，345 通过、3 个未启用的主站契约用例跳过。`node tools/build-desktop.mjs`、`node tools/test-desktop-shell.mjs`、隔离 Electron 的 `tools/test-screen-question-electron.mjs --diary-audit` 与 `tools/test-panel-titlebar-electron.mjs` 均通过。正式实例的真实对话尚待安装后确认。
+## 2026-11-21 JST · 交互本地优先（开发工作区）
+
+普通交互由主力本机模型产出实际草案或答复并复审，按用途允许重做。耗尽后才比较升级 9B 和有权限的云端候补，最后一次复审后交付。日记登记保留原文，确认前只读模板与分类。只说“帮我登记日记”时在询问窗口补正文，再核对实际草案。气泡登记的最终复审暂不可用时，可在当前请求中重试已有候选。现行写入、原编号恢复、直连、后台手记和图片资料边界沿用。交互引导 Skill 为 2.8，登记 Skill 为 1.7。交互日志分别记录生成和复审所用的本地或云端处理时间。
+
+正式桌面升级需要配套提供登记模板 GET 和候补接口的 API 版本。开发复核覆盖隔离工作流、真实本机文字模型和本地 Worker，尚未安装或部署。见 [需求](../REQUIREMENTS.md)、[详细设计](DESIGN.md)和[实现复核](reviews/LOCAL_FIRST_INTERACTION_IMPLEMENTATION_REVIEW_2026-11-21.md)。
+
+## 2026-11-21 JST · 非报纸功能联合发布
+
+Windows 正式安装已更新问答语气、气泡、手记质问与公开查阅额度，配套两个 Worker 已发布。具体回执、版本、范围和恢复方式见根目录 RELEASE_REVIEW.md。
+
+配套订阅 API 版本 `417c7b9f-504c-4772-8bd7-a99fe583bb00` 于 2026-11-21 18:08:14 JST 生效。问答、随口登记和心跳取消五小时接口故障冷却，优先同账户在一小时内上次成功的接口。旧冷却表保留并停止读写。脱敏拒绝摘要随配套主站上线。花园 #69 的明细 #146 和 #147 已独立回读并签收，修订 138。
+
+### 绯月 Windows 七日新闻实际发布 · 2026-11-21 JST
+
+用户回复「确认」，授权按审核记录安装并重启本机绯月。花园登记未获单独授权，本次无登记、花园 SQL 或外部部署。
+
+正式绯月于 18:46:55 JST 启动 PID 38364，18:46:59 JST 核验完成。旧 PID 17084 正常退出。20 项运行文件与 19 项伴随文件的内容摘要逐项一致，使用原安装入口和数据目录。安装前已保留替换项原文件和一致性的本机提醒库副本。
+
+本机 REST 指南 v4 可用，保留 14 个历史批次。正式 `reminder-checks.sqlite` 完整性检查通过，旧简报保留 1 行，迁入标记 1 行。回读 311 个事件和 316 个来源索引，正式新闻轮询继续每 720 分钟且启用。新闻库最近一次刷新为 16:38:41 JST。当前累计事件中 RSS 未提供配图。真实后续配图和本机模型生成待验证。
+
+从已安装目录用隔离资料运行 `tools/run-electron-check.mjs tools/test-news-panel-electron.mjs` 通过，覆盖 IPC、累积、详情、来源、缩略图与放大、归档入口、刷新及重开。用户停止了 Windows 桌面控制，正式新闻窗口手动操作未完成。
+
+发布标识 `92be3d7d8d0f`。Git 在上次已发布 Windows 分支的 `afc0bfe1a71c713ad636a8eb75030f23bddd64f1` 上建立独立发布分支，提交仅包含本次新闻源码、测试和审核记录。已推送至 `codex/feiyue-weekly-news-release-20261121`，远端回读核实源码提交 `91f14e8601988090603b9221e71546d16a2fac3a`。从独立 Git 工作树构建，20 个运行文件与本次安装清单的 SHA-256 一致，新闻及轮询专项 21 项通过。
+
+### 绯月 Windows 七日新闻花园登记回执 · 2026-11-21 JST
+
+用户查看完整清单后回复「确认」。本地 SQL 留痕提交为 `c3705112c931f3f1464241a903b3e556f6944152`。先提交再通过正式绯月本机 REST 入队一次，批次 `feiyue-weekly-news-release-20261121` 于 18:59:41 JST 完成。独立只读回查确认网页角色组件 #16 下绯月（桌面精灵）#61，发布 #70、明细 #148，版本 19.0 → 20.0，数据修订 140 → 141。归属、实际发布时间、说明和版本字段逐项一致，唯一发布标记核对通过。
+
+确认摘要 `b65705afd19aca3a01802f5b34114cccc172f07ec5b23ba3d60939e0ce3cf1c8`。同一登记清单与 SQL 的 Git 对象散列已复核，确认记录及独立回执随它们推送到主项目远端 `codex/feiyue-weekly-news-garden-20261121`（`a515a845841be34b3afaf45e7d32315d35e357e9`），并回读一致。正式绯月最终回执已签收。
+
+## 2026-11-21 JST · 交互本地优先
+
+普通交互由主力本机模型产出实际草案或答复并复审，按用途允许重做。耗尽后才比较升级 9B 和有权限的云端候补，最后一次复审后交付。日记登记保留原文，确认前只读模板与分类。只说“帮我登记日记”时在询问窗口补正文，再核对实际草案。气泡登记的最终复审暂不可用时，可在当前请求中重试已有候选。现行写入、原编号恢复、直连、后台手记和图片资料边界沿用。交互引导 Skill 为 2.8，登记 Skill 为 1.7。交互日志分别记录生成和复审所用的本地或云端处理时间。
+
+正式桌面升级需要配套提供登记模板 GET 和候补接口的 API 版本。开发复核覆盖隔离工作流、真实本机文字模型和本地 Worker，尚未安装或部署。见 [需求](../REQUIREMENTS.md)、[详细设计](DESIGN.md)和[实现复核](reviews/LOCAL_FIRST_INTERACTION_IMPLEMENTATION_REVIEW_2026-11-21.md)。
+
+
+2026-11-21 19:26 JST：本地优先交互已发布。正式版补齐 probe-reply.mjs，74 项程序与技能文件核验一致，真实模型隔离验收 4 项通过。API 已全量发布，发布基线、回归例外、回退和分项验证见项目根目录 RELEASE_REVIEW.md 的本地优先交互回执。
+
+## 2026-11-21 JST · 主线源码同步
+
+合并开发工作区和正式发布源码，保留七日新闻与本机旧闻归档、每 720 分钟取材、本地优先交互、取消 AI 故障冷却，以及远端已有提醒兼容。绯月全量 Node 回归 394/394、技能 19/19、桌面构建及根项目 Rigby 验证通过。本次是 Git 源码同步。

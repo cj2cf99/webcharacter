@@ -7,16 +7,17 @@ import {tmpdir} from 'node:os';
 import {openTestDatabase} from './sqlite-d1.mjs';
 import {createPersonalityDiary} from '../../desktop/personality-diary.mjs';
 import {createPersonalityNags} from '../../desktop/personality-nags.mjs';
-import {personalityMemory} from './fixtures/personality-memory.mjs';
+import {personalityMemory} from '../assistant/personality-memory.mjs';
 import {fixture as screenFixture} from './screen-question-fixture.mjs';
 import {attachScreenQuestion} from '../../desktop/screen-question-host.mjs';
 import {createDesktopTasks} from '../../desktop/task-lifecycle.mjs';
+import {createReminderChecks} from '../../desktop/reminder-checks.mjs';
 
 const start=Date.parse('2026-11-21T12:00:00+09:00'),hour=3600000,minute=60_000;
 const signal=new AbortController().signal;
 async function fixture(t,{withTaskRuntime=false}={}){
   const {DB,sqlite,close}=openTestDatabase();
-  sqlite.exec(readFileSync(new URL('./fixtures/personality-memory.sql',import.meta.url),'utf8'));
+  sqlite.exec(readFileSync(new URL('../migrations/016-personality-memory.sql',import.meta.url),'utf8'));
   const myMainStorage=bucketFixture();
   const req=(path,options)=>personalityMemory(new Request('https://test/api/memory/'+path,options),{DB,myMainStorage},'fixture');
   const post=(path,body)=>req(path,{method:'POST',body:JSON.stringify(body)});
@@ -193,7 +194,7 @@ test('五小时按稳定篇号分别计，无结果和同篇追加都占用名�
   assert.equal(f.generated,3);
 });
 
-test('查询中断后跨重启续原轮次，已完成比较不重复，三分钟后不能质询',async t=>{
+test('查询中断后跨重启续原轮次，已完成比较不重复，问题就绪后可慢慢答',async t=>{
   const f=await fixture(t),hold=Promise.withResolvers(),entered=Promise.withResolvers(),stop=new AbortController();
   f.holdVerify=hold.promise;f.verifyEntered=entered;
   const first=f.poll(false,stop.signal);
@@ -203,12 +204,11 @@ test('查询中断后跨重启续原轮次，已完成比较不重复，三分�
   f.time+=2*minute;await f.restart();assert(f.nags.recoverAudit());
   f.holdVerify=undefined;await f.poll();assert.equal(f.generated,1);
   hold.resolve();
-  const current=f.session,deadline=current.deadline;
-  f.time=start+3*minute;
-  assert.match((await current.reply('到点之后的回答。')).text,/三分钟/);
-  assert(deadline.aborted);assert(!f.nags.pending());
+  f.time=start+12*minute;f.complete=true;
+  assert((await f.session.reply('周一是测试环境。')).done);
+  assert(!f.nags.pending());
   const [n]=f.store.nags();
-  assert.equal(n.status,'回合结束');assert.equal(n.talk.length,1);
+  assert.equal(n.status,'已解释');assert.equal(n.talk.at(-1).text,'周一是测试环境。');
 });
 
 test('三分钟主动取消未完成的查询，丢弃迟到生成，已启动对象仍受五小时限制',async t=>{
@@ -216,31 +216,60 @@ test('三分钟主动取消未完成的查询，丢弃迟到生成，已启动�
   const f=await fixture(t),hold=Promise.withResolvers(),entered=Promise.withResolvers();
   f.holdCompare=hold.promise;f.compareEntered=entered;
   const check=f.poll();await entered.promise;
+  const failure=assert.rejects(check,/质询准备失败.*比对手记.*2026-11-21\.1.*2026-11-15\.1.*尚未生成.*超过三分钟/);
   f.time=start+3*minute;t.mock.timers.tick(3*minute);
-  assert.match(await check,/三分钟/);
+  await failure;
   hold.resolve();f.holdCompare=undefined;
   await f.poll();assert.equal(f.generated,1);assert(!f.session);assert(!f.nags.pending());
 });
 
-test('质询中达到三分钟保留已落盘回答，终止迟到的追问',async t=>{
+test('验证拟问超过三分钟，轮询报告记录原对象、拟问及失败原因',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const f=await fixture(t),hold=Promise.withResolvers(),entered=Promise.withResolvers(),events=[];
+  f.holdVerify=hold.promise;f.verifyEntered=entered;
+  const profile=mkdtempSync(join(tmpdir(),'feiyue-audit-timeout-log-'));
+  const checks=createReminderChecks({profile,now:()=>f.time,isBusy:()=>false,
+    log:row=>{events.push(row);return true;},handlers:{diaryAudit:signal=>f.poll(false,signal)}});
+  t.after(()=>{checks.close();rmSync(profile,{recursive:true,force:true});});
+  checks.start();f.time+=minute;t.mock.timers.tick(minute);await entered.promise;
+  f.time+=3*minute;t.mock.timers.tick(3*minute);
+  await new Promise(resolve=>setImmediate(resolve));
+  hold.resolve();
+  const row=events.find(e=>e.route==='手记质问'&&e.stage==='查询失败');
+  assert.match(row?.result,/验证拟问.*2026-11-21\.1.*2026-11-15\.1.*首次上线是哪天？.*超过三分钟/);
+  assert(!f.session);assert(!f.nags.pending());
+});
+
+test('已准备的质询不会因原倒计时关闭，提交后的正常回答不沿用倒计时',async t=>{
   t.mock.timers.enable({apis:['setTimeout']});
   const f=await fixture(t),hold=Promise.withResolvers(),entered=Promise.withResolvers();
   await f.poll();
-  f.time=start+3*minute-1;f.holdReply=hold.promise;f.replyEntered=entered;
-  const reply=f.session.reply('已在时限前回答。');await entered.promise;
-  f.time++;t.mock.timers.tick(3*minute);
-  assert.match((await reply).text,/三分钟/);hold.resolve();
+  f.time+=11*minute;t.mock.timers.tick(11*minute);
+  assert.equal(f.nags.pending().status,'提问中');
+  f.holdReply=hold.promise;f.replyEntered=entered;
+  const reply=f.session.reply('慢慢打完的回答。');await entered.promise;
+  f.time+=4*minute;t.mock.timers.tick(4*minute);
+  hold.resolve();assert.match((await reply).text,/哪天完成验收/);
   await f.nags.flush();
   const [n]=f.store.nags();
-  assert.equal(n.status,'回合结束');assert.equal(n.questions,1);
-  assert.equal(n.talk.at(-1).text,'已在时限前回答。');
+  assert.equal(n.status,'提问中');assert.equal(n.questions,2);
+  assert.equal(n.talk.at(-2).text,'慢慢打完的回答。');
+});
+
+test('过期的准备在重启后仍留下未发起质询的诊断',async t=>{
+  const f=await fixture(t),hold=Promise.withResolvers(),entered=Promise.withResolvers(),stop=new AbortController();
+  f.holdVerify=hold.promise;f.verifyEntered=entered;
+  const before=f.poll(false,stop.signal);await entered.promise;stop.abort();
+  await assert.rejects(before,{name:'AbortError'});hold.resolve();
+  f.time+=4*minute;await f.restart();assert(f.nags.recoverAudit());
+  await assert.rejects(f.poll(),/验证拟问.*2026-11-21\.1.*首次上线是哪天？.*超过三分钟/);
+  assert(!f.nags.recoverAudit());assert(!f.session);
 });
 test('实际气泡与待确认入口验证 ID，稍后和拒绝分开，附件不会转为普通问答',async t=>{
   const f=screenFixture();f.electron.BrowserWindow.prototype.isVisible=function(){return this.visible;};
   const profile=mkdtempSync(join(tmpdir(),'feiyue-audit-panel-'));
-  const root=join(import.meta.dirname,'../..');
   const item={id:'audit-1',title:'发生在什么时候？',status:'等待回应'};
-  const host=attachScreenQuestion(f.electron,{root,bundle:root,profile,win:f.win,history:f.history,auditPending:()=>item,resumeAudit:()=>'继续了'});
+  const host=attachScreenQuestion(f.electron,{root:'.',bundle:'.',profile,win:f.win,history:f.history,auditPending:()=>item,resumeAudit:()=>'继续了'});
   t.after(()=>{host.close();rmSync(profile,{recursive:true,force:true});});
   await host.openReview('pending');
   const event=f.event(host.details);const data=await f.handlers.get('conversation:read')(event,null,'pending');
@@ -267,12 +296,11 @@ test('实际气泡与待确认入口验证 ID，稍后和拒绝分开，附件�
     f.ipcMain.emit('screen-qa:close',f.event(host.panel),{reason});
     assert.equal(left,reason);
   }
-  const expiry=new AbortController();
-  let leftAfterExpiry=false;
-  await host.showNag({audit:true,signal,deadline:expiry.signal,timeoutText:'质询已结束',prompt:item.title,visible(){},leave(){leftAfterExpiry=true;}});
-  expiry.abort();
-  const ended=await f.handlers.get('screen-qa:state')(f.event(host.panel));
-  assert.equal(ended.text,'质询已结束');assert(!ended.audit);
+  let left=false;
+  await host.showNag({audit:true,signal,prompt:item.title,visible(){},leave:reason=>{left=reason;}});
+  f.ipcMain.emit('screen-qa:close',f.event(host.panel),{reason:'idle',draft:{text:''}});
+  const waiting=await f.handlers.get('screen-qa:state')(f.event(host.panel));
+  assert.equal(waiting.text,item.title);assert(waiting.audit);assert.equal(left,false);
   f.ipcMain.emit('screen-qa:close',f.event(host.panel),{reason:'later'});
-  assert.equal(leftAfterExpiry,false);
+  assert.equal(left,'later');
 });

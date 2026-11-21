@@ -18,8 +18,6 @@ VALUES
    '从今日任务取提醒编号、派发编号、东京日期及版本，确认投入小时数后提交。', '返回主站派发编号、实际小时数及登记时间。')
 ON CONFLICT(type) DO NOTHING;
 
--- 既有随手记模板仅补齐可选附图字段，保留已有参数定义。
-UPDATE tasklist
-SET parameter_spec_json = json_set(parameter_spec_json, '$.photos',
-  json('{"type":"string_array","max_items":20,"pattern":"^https://\\S+$"}'))
-WHERE type = 'records.create' AND json_type(parameter_spec_json, '$.photos') IS NULL;
+-- 为已存在的随手记模板补上可选附图，其余自定义字段保持原值。
+UPDATE tasklist SET parameter_spec_json=json_set(parameter_spec_json,'$.photos',json('{"type":"string_array","max_items":20,"pattern":"^https://\\S+$"}'))
+WHERE type='records.create' AND json_type(parameter_spec_json,'$.photos') IS NULL;

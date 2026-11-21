@@ -1,0 +1,800 @@
+[
+  {
+    "target": "api-worker",
+    "path": "src/companion/agent/assistant/personality-memory.mjs",
+    "before": "4261df2c2a51ce39cd12b301a47f4d5810eedab59a8d7dfbe30215cefa74e373",
+    "after": "0067966d997e9a1768fc0240e6bde1ff5628fb6c4396972bbe3f9e3d7592fc02",
+    "bytes": 14328
+  },
+  {
+    "target": "desktop",
+    "path": "assets/desktop-media/news-engraving.png",
+    "before": null,
+    "after": "9929ebb49ea52ddd3bbd2067251771ec3b7ad1f5b1c2e0533cc45825aa438d4c",
+    "bytes": 53655
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/conversation-routing.mjs",
+    "before": "e7156acb5bc2ace3883062f3e9a2b045c3f9913baace57b00fb39e069db6e89a",
+    "after": "0e316542c115f5743cee0dbe5f4a0b4b1a1aa7fcef0bbae3d27d9b62ea880e2e",
+    "bytes": 12473
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/conversation-ui.mjs",
+    "before": "7f95f7a1e32bf1df1c65553a7ee4269351b8864fdf0a0c798d81457428980a39",
+    "after": "efe186abfedc6bd30372836d9ca85f9cba13d53e9f34265f81e82ce24d366131",
+    "bytes": 24939
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/desire-pool.mjs",
+    "before": null,
+    "after": "72aa2460e6c394c52fb14a77d1f16c78161ddcc2f0f003ba2e918eb9ced51075",
+    "bytes": 6704
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/diary-audit.mjs",
+    "before": "ccfe86a95513dcd440187c2488ce7f68e0c16b914b581aa7d5dad209bca7f684",
+    "after": "a05d4ede1a21898cf453fd5149be24652b060fb3a5894d22c59b15c222b973b1",
+    "bytes": 14736
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/emotion-core.mjs",
+    "before": null,
+    "after": "3a6596b505ff3aca8364c12c441bc95de44603b0f7c0697b375a65b3ee42ac67",
+    "bytes": 7490
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/emotion-initiative.mjs",
+    "before": null,
+    "after": "e1708a05b0ec695d94d757e90778a8b0da90e2e4d1d4b134fb53d032a549258c",
+    "bytes": 13813
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/emotion-service.mjs",
+    "before": null,
+    "after": "4973bbcbf310efa06ea6f7a7bc4aa78487bfba08b20b52862a7ece24b106080f",
+    "bytes": 7040
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/image-planning.mjs",
+    "before": "2b3105a16853e3c76895ef694671656afb09f98324ceb44c74e3b602b5660b48",
+    "after": "4c5ab09ec0bfd20419693218c2ee2a633041f279bbbbdbc9599d31e33e3212a0",
+    "bytes": 5652
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/image-tasks.mjs",
+    "before": "3d2a008e5ee1ccdad454b17aab686ad084c050129e11f36398600caa732a531c",
+    "after": "43a16b9d6c22261a227d54e0c27cb8fa431440aad912833c4eadc25de35b1ca0",
+    "bytes": 10131
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/local-model-process.mjs",
+    "before": "6de2d3dfeb4c9ddd9e394ab1c0af51dace4ec2129060f97e31d6f83536c24f52",
+    "after": "6903c855c3df6934cf471ea89d28ad0dc8dd97f349b6dfc14cc619b65edba15b",
+    "bytes": 29578
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/local-task-pool.mjs",
+    "before": "030804af4f44d72742c0abc16600b09f64c6e4f85c9af3ce9cecbdba0ea1b11d",
+    "after": "4ea56d0f6ff3f2472a9b05a3fe867bdd5bd2b10d6b0a492319446a9879e1d7d5",
+    "bytes": 10861
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/memory-archive.mjs",
+    "before": "3f6b6a44b37cd556d8086d9a8c4ee4a597c3da2d71e76e6b4d07a55910a8d59a",
+    "after": "2fd64e0748f488ff60e74a83ba04895eb73e75c7c521126d494a8f66692cc8d0",
+    "bytes": 10106
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/menu-layout.json",
+    "before": "9649fdc8a56de14e01b9eb06a4cacbb2d2b6395f3d12da4c21016cb9c011008d",
+    "after": "45ea98479b1e126789f98a8948581633283aa485fb391c6203da3bbac4888717",
+    "bytes": 2350
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/news-briefing.mjs",
+    "before": null,
+    "after": "5c6393704a8f36c12ff32c1da75f20b5f55d4dabe9906acab30996f1326c5b7f",
+    "bytes": 4890
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/news-layout.mjs",
+    "before": null,
+    "after": "e216689d1ae576021980e1d09d37a8d3edb70701f81aa1de803330a7930b295d",
+    "bytes": 3746
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/news-panel-host.mjs",
+    "before": null,
+    "after": "87b03cd024bd20c3e433876a483755509f6e93ea88d944f4f0055bd919fa4fc0",
+    "bytes": 4760
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/news-panel-preload.cjs",
+    "before": null,
+    "after": "40da9f10e0680136f24faa125d1ba39e999b72faaad0bfecd4e62442935ce4e8",
+    "bytes": 457
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/news-panel-ui.mjs",
+    "before": null,
+    "after": "f56fd19a25dbf9ff9eb7a500d11f22f51777f44b55c42654f677ccdb019d4137",
+    "bytes": 7772
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/news-panel.css",
+    "before": null,
+    "after": "b0269697406a688d8435b7c2426c741ad13184a1f71a365427fe695d039e2a3d",
+    "bytes": 6299
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/news-panel.html",
+    "before": null,
+    "after": "c5288ecc24dbad56609cea105af42d83ab0157082d6d642b85721c1937fea68d",
+    "bytes": 1079
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/personality-diary.mjs",
+    "before": "5d3d9df35530047b35f661ac7dea6a7980f6b62ce83d8307f7233f84348620a9",
+    "after": "e6cc0dffabac8454b9fcb74239599fa193e67f4b987aefe69ac2a3a543a46973",
+    "bytes": 38711
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/personality-nags.mjs",
+    "before": "fc1c628659530577ae8a9e972b641f27f5bb0f09e53402af8733b117475daef5",
+    "after": "31d2b63e9e977ed1dc1f762ee89b4df75f693f3c37b404b3302eb29aeec85314",
+    "bytes": 12349
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/poll-scheduler.mjs",
+    "before": "4632bdac74cb1aa0a13316b723fedcd43c74ffd9f1c6df43cda6301426dfcb16",
+    "after": "32603e534fe205a0192b4db32a5add67ddef7b99d21274ea510b15f44976881d",
+    "bytes": 9679
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/poll-settings-ui.mjs",
+    "before": "0dec6d98a7f95c3de13547d76eb4ae166008b90607aef70a3965645660a24245",
+    "after": "ad92d96b3d968960ca727adc9dfbf1c529ae2fa1f07a071930ec7bbdf6d462e4",
+    "bytes": 2176
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/public-search.mjs",
+    "before": "9ca4cc9624ab9d546d68c2f54ddd61daa519ba0d308d1a865730286b1a93ef65",
+    "after": "4781ec452293897c72e9a9cb6813c4e5e413dd4a6a1c58d92d1b1fb3c9263464",
+    "bytes": 4935
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/reminder-checks.mjs",
+    "before": "b3e03fabb6d99753d2da32dfeaec1031d11c9f48c390192861a1240fbe7733c6",
+    "after": "d0e1585e86868130c25568f7ec33bdc82c02301f055e186178973004fac47728",
+    "bytes": 6575
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/scene-curiosity.mjs",
+    "before": null,
+    "after": "bf3860a3cb422f00408e83331abd372fedfd5e59639e8bd207da2e747701f168",
+    "bytes": 7427
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/scene-location.mjs",
+    "before": null,
+    "after": "88de75ca2b53843e2f4f2e63f823233f76fba2f37f30bdb802b10469b07f010b",
+    "bytes": 1734
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/scene-panel.mjs",
+    "before": null,
+    "after": "241f9caf3b35d89d542cbc953f331544a0fe90b50aa5e6b28ab0ca5a56ab0e82",
+    "bytes": 1931
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/scene-preload.cjs",
+    "before": null,
+    "after": "54e6eb160faad16bc99bacb743d69c805d4875cd6c2697c7a405d00765dc0e4f",
+    "bytes": 208
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/scene-ui.mjs",
+    "before": null,
+    "after": "331aa15a8d7320136d7308b634f782b3b136fdb79696b75aabac5993e6faad96",
+    "bytes": 2501
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/scene.css",
+    "before": null,
+    "after": "1a4fa084824c5925768889f8dd2722f378d73c7b9dca4980cfbe39af707db929",
+    "bytes": 2900
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/scene.html",
+    "before": null,
+    "after": "eff3e2857e8eacc1e8fbbe8cf00ac21f3cadb64ce93979dcf5e2b679675b6f0c",
+    "bytes": 1105
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/screen-question-client.mjs",
+    "before": "ae0bcea3f5611282b9e850f55fbcbe4d32e896d54aa1c4b83b0ff5be63e44f8a",
+    "after": "b3a0cc223935e70e59350a746e44fbcd1424deee04b090d74a282b69cff063bf",
+    "bytes": 15444
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/screen-question-host.mjs",
+    "before": "ad71ba52ae0b05784960708b4e136ba86197006759d3d1f0ee1df955b9c939bd",
+    "after": "cc97ed86d9e767628657ef5a8a84df3db0149ee4bf6efbcf91b3014939ac6e11",
+    "bytes": 54303
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/screen-question-ui.mjs",
+    "before": "c287e6a9ea4abba8c40ddeb6d272942c97b1ebc0d411848b6221660110d5ed24",
+    "after": "c516d1752266906980f69d86e29ab24d991ee3fe4ac5bfce5b704ac5c71941c4",
+    "bytes": 13172
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/screen-question.css",
+    "before": "2d322ca5229c92a342c32c6bfdc2c18a99c6d63b54b913e004a69df96245226a",
+    "after": "7d58880f979457281e9a7589399dc2ef70681cc8c2dca73d569c2ba2d4fbf86e",
+    "bytes": 7623
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/screen-question.html",
+    "before": "a1c0c65959d73e75c135dd1e6c6610cf6d4753fe5730183278a3b60040cc1939",
+    "after": "261c1b6b137c9f8c2e773c86eb269856878ef8a97219fb5580e57912e6953e00",
+    "bytes": 3262
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/shell.mjs",
+    "before": "cc02719d00c31ea808a6df4a779d4f6a85683090785375935365d857fa49530c",
+    "after": "d57b1cd5e5ee64c0d417c74da9c799fe438de92595bebfba909c2ab199a7818e",
+    "bytes": 65084
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/source-updates.mjs",
+    "before": "fb821998687dc1497b448b92506049ecf150a5fef68a657d14b6b8ac21b04684",
+    "after": "3e9ca6baf866d2d0c869d2a7f0ed354dabeca9aebddb4cd15a8fde7e899f6382",
+    "bytes": 5006
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/topic-files.mjs",
+    "before": null,
+    "after": "49a7052d5518277aff60d6f361c4004e9f26b52c463a26c6603c9fe6021d7a65",
+    "bytes": 5449
+  },
+  {
+    "target": "desktop",
+    "path": "desktop/topic-memory.mjs",
+    "before": null,
+    "after": "b0e2c29b3a2db7c6c342857122e1f8f427eff5a0c8711151bf971ea54d6fd835",
+    "bytes": 15053
+  },
+  {
+    "target": "desktop",
+    "path": "output/desktop-bundle/conversation-ui.mjs",
+    "before": "7f95f7a1e32bf1df1c65553a7ee4269351b8864fdf0a0c798d81457428980a39",
+    "after": "efe186abfedc6bd30372836d9ca85f9cba13d53e9f34265f81e82ce24d366131",
+    "bytes": 24939
+  },
+  {
+    "target": "desktop",
+    "path": "output/desktop-bundle/news-engraving.png",
+    "before": null,
+    "after": "9929ebb49ea52ddd3bbd2067251771ec3b7ad1f5b1c2e0533cc45825aa438d4c",
+    "bytes": 53655
+  },
+  {
+    "target": "desktop",
+    "path": "output/desktop-bundle/news-layout.mjs",
+    "before": null,
+    "after": "e216689d1ae576021980e1d09d37a8d3edb70701f81aa1de803330a7930b295d",
+    "bytes": 3746
+  },
+  {
+    "target": "desktop",
+    "path": "output/desktop-bundle/news-panel-ui.mjs",
+    "before": null,
+    "after": "f56fd19a25dbf9ff9eb7a500d11f22f51777f44b55c42654f677ccdb019d4137",
+    "bytes": 7772
+  },
+  {
+    "target": "desktop",
+    "path": "output/desktop-bundle/news-panel.css",
+    "before": null,
+    "after": "b0269697406a688d8435b7c2426c741ad13184a1f71a365427fe695d039e2a3d",
+    "bytes": 6299
+  },
+  {
+    "target": "desktop",
+    "path": "output/desktop-bundle/news-panel.html",
+    "before": null,
+    "after": "c5288ecc24dbad56609cea105af42d83ab0157082d6d642b85721c1937fea68d",
+    "bytes": 1079
+  },
+  {
+    "target": "desktop",
+    "path": "output/desktop-bundle/poll-settings-ui.mjs",
+    "before": "0dec6d98a7f95c3de13547d76eb4ae166008b90607aef70a3965645660a24245",
+    "after": "ad92d96b3d968960ca727adc9dfbf1c529ae2fa1f07a071930ec7bbdf6d462e4",
+    "bytes": 2176
+  },
+  {
+    "target": "desktop",
+    "path": "output/desktop-bundle/scene-ui.mjs",
+    "before": null,
+    "after": "331aa15a8d7320136d7308b634f782b3b136fdb79696b75aabac5993e6faad96",
+    "bytes": 2501
+  },
+  {
+    "target": "desktop",
+    "path": "output/desktop-bundle/scene.css",
+    "before": null,
+    "after": "1a4fa084824c5925768889f8dd2722f378d73c7b9dca4980cfbe39af707db929",
+    "bytes": 2900
+  },
+  {
+    "target": "desktop",
+    "path": "output/desktop-bundle/scene.html",
+    "before": null,
+    "after": "eff3e2857e8eacc1e8fbbe8cf00ac21f3cadb64ce93979dcf5e2b679675b6f0c",
+    "bytes": 1105
+  },
+  {
+    "target": "desktop",
+    "path": "output/desktop-bundle/screen-question-ui.mjs",
+    "before": "c287e6a9ea4abba8c40ddeb6d272942c97b1ebc0d411848b6221660110d5ed24",
+    "after": "c516d1752266906980f69d86e29ab24d991ee3fe4ac5bfce5b704ac5c71941c4",
+    "bytes": 13172
+  },
+  {
+    "target": "desktop",
+    "path": "output/desktop-bundle/screen-question.css",
+    "before": "2d322ca5229c92a342c32c6bfdc2c18a99c6d63b54b913e004a69df96245226a",
+    "after": "7d58880f979457281e9a7589399dc2ef70681cc8c2dca73d569c2ba2d4fbf86e",
+    "bytes": 7623
+  },
+  {
+    "target": "desktop",
+    "path": "output/desktop-bundle/screen-question.html",
+    "before": "a1c0c65959d73e75c135dd1e6c6610cf6d4753fe5730183278a3b60040cc1939",
+    "after": "261c1b6b137c9f8c2e773c86eb269856878ef8a97219fb5580e57912e6953e00",
+    "bytes": 3262
+  },
+  {
+    "target": "desktop",
+    "path": "skills/diary-writing/latest.json",
+    "before": "e707a0950f5e1f262d727c70a4758140d3dee0a87a63a30112f3e0cdb717f308",
+    "after": "53dc371a4beca360d62e90913793fb43328dfec10c38f3ea1bf0bf2374663220",
+    "bytes": 131
+  },
+  {
+    "target": "desktop",
+    "path": "skills/diary-writing/source/local-ai.json",
+    "before": "8147ac261d1bf5974e9db5205f0e09eb11d88b5b8119e4b2b7c18192efd5d223",
+    "after": "bbb09ac19f716d2dd11903045fa355cb12a0acbe709d726b4f4b852056361a22",
+    "bytes": 1356
+  },
+  {
+    "target": "desktop",
+    "path": "skills/diary-writing/versions/diary-writing-v1-1/SKILL.md",
+    "before": null,
+    "after": "0bc964f2e90267a345c574fd8104cd653c0f941ef9f2c04c0e58609bf535d4a5",
+    "bytes": 2007
+  },
+  {
+    "target": "desktop",
+    "path": "skills/diary-writing/versions/diary-writing-v1-1/local-ai.json",
+    "before": null,
+    "after": "bbb09ac19f716d2dd11903045fa355cb12a0acbe709d726b4f4b852056361a22",
+    "bytes": 1356
+  },
+  {
+    "target": "desktop",
+    "path": "skills/emotion-appraisal/latest.json",
+    "before": null,
+    "after": "aab829efed6617ae160787758f0464815f90e7126c8e91dca21953e028ed6f17",
+    "bytes": 135
+  },
+  {
+    "target": "desktop",
+    "path": "skills/emotion-appraisal/source/SKILL.md",
+    "before": null,
+    "after": "614e1c8b53629bbfa974ddcd787debb1cbe813bfa8b803a82a0b8832425f3c5f",
+    "bytes": 818
+  },
+  {
+    "target": "desktop",
+    "path": "skills/emotion-appraisal/source/local-ai.json",
+    "before": null,
+    "after": "270db263aab43a5e71e5036e3e45766f6d9a9a04f4ef05d4102ef68bcab2f920",
+    "bytes": 926
+  },
+  {
+    "target": "desktop",
+    "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-0/SKILL.md",
+    "before": null,
+    "after": "09b3d3974db73374b41abb74201dac065d5fd4e1fcf3bf58e94765a1d3a3ed1c",
+    "bytes": 746
+  },
+  {
+    "target": "desktop",
+    "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-0/local-ai.json",
+    "before": null,
+    "after": "ee4104d9a1cab33044c85c9eaa854b6dfbc7ad928480453824736fefec4d3bd1",
+    "bytes": 594
+  },
+  {
+    "target": "desktop",
+    "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-1/SKILL.md",
+    "before": null,
+    "after": "85b26cb7bd2233f7734a2852cb2aed3a82e5c6651bd317e3b2744bc2c86b40f0",
+    "bytes": 746
+  },
+  {
+    "target": "desktop",
+    "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-1/local-ai.json",
+    "before": null,
+    "after": "ab2ee5e3aed567cac72d8ef17c933f99ecfb7d658de9f753d0a178fe85760498",
+    "bytes": 728
+  },
+  {
+    "target": "desktop",
+    "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-2/SKILL.md",
+    "before": null,
+    "after": "52a36cfb034ad06def316d0243986df93c65bfb7311cea5ff95d8c0bbdc74f54",
+    "bytes": 746
+  },
+  {
+    "target": "desktop",
+    "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-2/local-ai.json",
+    "before": null,
+    "after": "2ae97ee20381fdb46a6b3389995a97c2fbef237f6650c2ba6052c7c20a118faf",
+    "bytes": 863
+  },
+  {
+    "target": "desktop",
+    "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-3/SKILL.md",
+    "before": null,
+    "after": "195c472cd31dffcf0138969f241987eff591218847004feacabc3d2be249eb3e",
+    "bytes": 749
+  },
+  {
+    "target": "desktop",
+    "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-3/local-ai.json",
+    "before": null,
+    "after": "7b1ab750cf92f3337278520d3f35a10d46c79bf5d0e08898bdd6f8f0899be3d7",
+    "bytes": 866
+  },
+  {
+    "target": "desktop",
+    "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-4/SKILL.md",
+    "before": null,
+    "after": "bb517d86f1f5b7f52833bedc06025d6f3b5c0d2ecf1b1f99d3d21cfea1067eaa",
+    "bytes": 809
+  },
+  {
+    "target": "desktop",
+    "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-4/local-ai.json",
+    "before": null,
+    "after": "270db263aab43a5e71e5036e3e45766f6d9a9a04f4ef05d4102ef68bcab2f920",
+    "bytes": 926
+  },
+  {
+    "target": "desktop",
+    "path": "skills/feiyue-interaction/latest.json",
+    "before": "d03d7a2bfcd92d6362d6cbdac8847d8497518e7ae78ac0eed873121c3ac07d63",
+    "after": "a0a0b46695c0e2f45a37d2894a79ce7c2f13f3810f636aef9f791f8bd1b3320e",
+    "bytes": 141
+  },
+  {
+    "target": "desktop",
+    "path": "skills/feiyue-interaction/source/routes.json",
+    "before": "8edcbda626fbbc85ee5edcb913835f59cbceeec2d05a7c0362bc1ebe119aee8e",
+    "after": "049fe0b9e192d8ce46876319d241e0ae87c43e6af7914612e652adaeeec56c83",
+    "bytes": 2194
+  },
+  {
+    "target": "desktop",
+    "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-5/SKILL.md",
+    "before": null,
+    "after": "195ab4ea6be7f0db45a5566e2a8a8a8ebb9a49bac01a239c6b3c99f69e529a45",
+    "bytes": 2268
+  },
+  {
+    "target": "desktop",
+    "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-5/routes.json",
+    "before": null,
+    "after": "049fe0b9e192d8ce46876319d241e0ae87c43e6af7914612e652adaeeec56c83",
+    "bytes": 2194
+  },
+  {
+    "target": "desktop",
+    "path": "skills/initiative-decision/latest.json",
+    "before": null,
+    "after": "9cc853bc7ad1b471ad275396db7b774bd5c69495e6b796d08da6703d2aa46c6d",
+    "bytes": 137
+  },
+  {
+    "target": "desktop",
+    "path": "skills/initiative-decision/source/SKILL.md",
+    "before": null,
+    "after": "6f023b11f94e802fded1955bdc3ebb530bbbcfd63320d3869a137b7ae3856d08",
+    "bytes": 608
+  },
+  {
+    "target": "desktop",
+    "path": "skills/initiative-decision/source/local-ai.json",
+    "before": null,
+    "after": "533d5569db8c39bdc9d6bbe3418aed9748c3283c3305d19586eb635b531e84b4",
+    "bytes": 547
+  },
+  {
+    "target": "desktop",
+    "path": "skills/initiative-decision/versions/initiative-decision-v1-0/SKILL.md",
+    "before": null,
+    "after": "b01da6c9920394374457439dcec41462db475c6eab46cd79be4a97e5eb242229",
+    "bytes": 599
+  },
+  {
+    "target": "desktop",
+    "path": "skills/initiative-decision/versions/initiative-decision-v1-0/local-ai.json",
+    "before": null,
+    "after": "54233af0e6ceb9dc2a9a0976776a37959c0745afb56544324636bb5a849d451a",
+    "bytes": 424
+  },
+  {
+    "target": "desktop",
+    "path": "skills/initiative-decision/versions/initiative-decision-v1-1/SKILL.md",
+    "before": null,
+    "after": "2611ee18ad32e219f41f730cfd65044034687ce582fdde2b367f571f2d05c77a",
+    "bytes": 599
+  },
+  {
+    "target": "desktop",
+    "path": "skills/initiative-decision/versions/initiative-decision-v1-1/local-ai.json",
+    "before": null,
+    "after": "533d5569db8c39bdc9d6bbe3418aed9748c3283c3305d19586eb635b531e84b4",
+    "bytes": 547
+  },
+  {
+    "target": "desktop",
+    "path": "skills/love-and-reason/latest.json",
+    "before": null,
+    "after": "c5d3899bdbc0dd2bde2c2a589b03f3fb995e67fe72af73d04db46e4729f9fc33",
+    "bytes": 133
+  },
+  {
+    "target": "desktop",
+    "path": "skills/love-and-reason/source/SKILL.md",
+    "before": null,
+    "after": "e72a97294b48f09ca0aece89d4c0b753fc9f200bdb169ff129f7b2c3d9cebbb2",
+    "bytes": 507
+  },
+  {
+    "target": "desktop",
+    "path": "skills/love-and-reason/source/local-ai.json",
+    "before": null,
+    "after": "f9be132da6c84902c04ee9a0b104addb3ff51bbcb3e3f3039fe9ccab225eb92a",
+    "bytes": 362
+  },
+  {
+    "target": "desktop",
+    "path": "skills/love-and-reason/versions/love-and-reason-v1-0/SKILL.md",
+    "before": null,
+    "after": "ed1624204d77f6f6bff24a263bbc30368eef32029dcb128e68abb71a685a4e02",
+    "bytes": 498
+  },
+  {
+    "target": "desktop",
+    "path": "skills/love-and-reason/versions/love-and-reason-v1-0/local-ai.json",
+    "before": null,
+    "after": "f9be132da6c84902c04ee9a0b104addb3ff51bbcb3e3f3039fe9ccab225eb92a",
+    "bytes": 362
+  },
+  {
+    "target": "desktop",
+    "path": "skills/personal-conversation/latest.json",
+    "before": "e40382f386f64a099092506547e595318760fe9af97a9a2fc13392ffe0c47ad0",
+    "after": "d949e17fa0d109f148fe6d308706fa92f63c875758a545abbf69188547b20aae",
+    "bytes": 139
+  },
+  {
+    "target": "desktop",
+    "path": "skills/personal-conversation/source/local-ai.json",
+    "before": "dc986d8c886e3b325f838a5b5a2afc5a27ed23cd24dbdea05bbdb3b292b150da",
+    "after": "17b81ff6579e136bb2dc51aef0f50654e68d841716198e0eaf2ef74451bdbdf9",
+    "bytes": 1692
+  },
+  {
+    "target": "desktop",
+    "path": "skills/personal-conversation/versions/personal-conversation-v1-4/SKILL.md",
+    "before": null,
+    "after": "36ef527774a71a455262101dd579f687e15bcc8f634cdeb499f998b562ee1708",
+    "bytes": 951
+  },
+  {
+    "target": "desktop",
+    "path": "skills/personal-conversation/versions/personal-conversation-v1-4/local-ai.json",
+    "before": null,
+    "after": "17b81ff6579e136bb2dc51aef0f50654e68d841716198e0eaf2ef74451bdbdf9",
+    "bytes": 1692
+  },
+  {
+    "target": "desktop",
+    "path": "skills/topic-memory/latest.json",
+    "before": null,
+    "after": "2ac94418ca0ba4bf0923d07b140c0c63bd45268c0365f38096b3e326300c9242",
+    "bytes": 130
+  },
+  {
+    "target": "desktop",
+    "path": "skills/topic-memory/source/SKILL.md",
+    "before": null,
+    "after": "8d981f21b670c02bdd769695ce984792feff6662ccfe57741f4cdcfd1a25fd46",
+    "bytes": 376
+  },
+  {
+    "target": "desktop",
+    "path": "skills/topic-memory/source/local-ai.json",
+    "before": null,
+    "after": "f3273e5e728b4e7f1212e09259da792853801419b96ae5535832df40d753b2e7",
+    "bytes": 258
+  },
+  {
+    "target": "desktop",
+    "path": "skills/topic-memory/versions/topic-memory-v1-0/SKILL.md",
+    "before": null,
+    "after": "570b14a9b57b7528c43e655fadb639a0205301b5499490209f4cf2b9795505bb",
+    "bytes": 367
+  },
+  {
+    "target": "desktop",
+    "path": "skills/topic-memory/versions/topic-memory-v1-0/local-ai.json",
+    "before": null,
+    "after": "ebca830862299dbe599f43d0bb596fe2aed750ed51e3be731810802716eb05e5",
+    "bytes": 182
+  },
+  {
+    "target": "desktop",
+    "path": "skills/topic-memory/versions/topic-memory-v1-1/SKILL.md",
+    "before": null,
+    "after": "f7ae948a1cffd5289e3c51415a8c22815e26184f61174a73a926b35c40f4dd45",
+    "bytes": 367
+  },
+  {
+    "target": "desktop",
+    "path": "skills/topic-memory/versions/topic-memory-v1-1/local-ai.json",
+    "before": null,
+    "after": "f3273e5e728b4e7f1212e09259da792853801419b96ae5535832df40d753b2e7",
+    "bytes": 258
+  },
+  {
+    "target": "desktop",
+    "path": "workflows/comfyui/image_chain.py",
+    "before": "061182b871c70b21ea0ebf1bd641e601cc380daef870558491deda0dba9b8d78",
+    "after": "aa69c7a2315f83be28f4471bb3daea461e5ab620b1dc7fda394f0f9a297985b2",
+    "bytes": 15309
+  },
+  {
+    "target": "desktop",
+    "path": "workflows/comfyui/news_watch.py",
+    "before": null,
+    "after": "7e9ad0b4221f6731b9d1de61331b7195bb0f15cb2324dc6ad5d33683b4fc7bc2",
+    "bytes": 5865
+  },
+  {
+    "target": "desktop",
+    "path": "workflows/comfyui/pose_landmarker_lite.task",
+    "before": null,
+    "after": "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a",
+    "bytes": 5777746
+  },
+  {
+    "target": "desktop",
+    "path": "workflows/comfyui/public_images.py",
+    "before": null,
+    "after": "79b31926171dc2c9341aca147eb9e5d54057ec822ac7dc28ebed58560a492fb0",
+    "bytes": 12868
+  },
+  {
+    "target": "desktop",
+    "path": "workflows/comfyui/public_reader.py",
+    "before": null,
+    "after": "59594b3cc278297994ba354b4cbac8980fbc9eaf859655be6a58d4a87203a1f7",
+    "bytes": 12398
+  },
+  {
+    "target": "desktop",
+    "path": "workflows/comfyui/research_preview.py",
+    "before": null,
+    "after": "7caf5e923553a20c41e19659eb45bd3d2955a99546d50580b333aa18be707ff3",
+    "bytes": 770
+  },
+  {
+    "target": "desktop",
+    "path": "workflows/comfyui/tavily_search.py",
+    "before": null,
+    "after": "a79dc152418b50967d0d1f9364320de9d59fa4653a2a28e2f306a243b0d34e50",
+    "bytes": 4465
+  },
+  {
+    "target": "desktop",
+    "path": "workflows/comfyui/tour_block.py",
+    "before": null,
+    "after": "07d9757c7ed062b049c4518c20e947caa83930baf67329c6eede7f93e66e3b20",
+    "bytes": 2849
+  },
+  {
+    "target": "desktop",
+    "path": "workflows/comfyui/tour_head.py",
+    "before": null,
+    "after": "a623d93830919c2c858c7b9982a230aa778770ff306a282ab0cc6752d0a7f9aa",
+    "bytes": 4607
+  },
+  {
+    "target": "desktop",
+    "path": "workflows/comfyui/world-tour-feiyue.jpg",
+    "before": null,
+    "after": "ed364c43c2ba990e68f6bb2d0259d08828a215fe1e0f2d0501e6d04add27ec91",
+    "bytes": 184043
+  },
+  {
+    "target": "desktop",
+    "path": "workflows/comfyui/world-tour-sources.json",
+    "before": null,
+    "after": "2cfc4c7eab074554819da152c387fd218002469c9a929728da9d825a02abffc9",
+    "bytes": 1649
+  },
+  {
+    "target": "desktop",
+    "path": "workflows/comfyui/world_tour.py",
+    "before": null,
+    "after": "38d5de064a8e12c3678afabf420c9e886a8d1954f68811abf9e88963d4db7770",
+    "bytes": 6510
+  },
+  {
+    "target": "myapp",
+    "path": "src/features/companion/vendor/memory-reader.mjs",
+    "before": "04b2a8dddf0721a6042da1756cfc20bcf325cd7b2fcafedea078c3f9404690ba",
+    "after": "ccfadedc573730a0db9982408b79ce9d013435ccc28902f676bdee7cb18c4247",
+    "bytes": 11245
+  }
+]

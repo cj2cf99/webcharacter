@@ -27,12 +27,12 @@ for (const name of [
   '001-task-units.sql','002-executions.sql','003-task-activity.sql','004-task-deadline.sql',
   '005-task-recoveries.sql','006-chains.sql','007-task-submissions.sql','008-daily-logs.sql',
   '009-chain-submissions.sql','010-temporary-chain-positions.sql','011-temporary-registration.sql',
-  '012-registration-ai-preference.sql','013-ai-route-cooldown.sql','014-pc-dispatch.sql','015-serial-pc.sql',
+  '012-registration-ai-preference.sql','013-ai-route-cooldown.sql','014-pc-dispatch.sql','015-serial-pc.sql','016-personality-memory.sql',
 ]) await copy(join(source,'agent/migrations',name), join(vendor,'agent/migrations',name));
 for (const name of ['tasklist-hu-shi.sql','tasklist-registration.sql','tasklist-pc.sql']) {
   await copy(join(source,'agent/seeds',name), join(vendor,'agent/seeds',name));
 }
-for (const name of ['registration-ai.mjs','registration-data.mjs','chain-page.mjs','reminder-edits.mjs','reminder-review.mjs']) {
+for (const name of ['registration-ai.mjs','refusal-response.mjs','registration-data.mjs','record-photo.mjs','chain-page.mjs','memory-page.mjs','memory-route.mjs','memory-reader.mjs','memory-expenses.mjs','memory-sources.mjs','task-workspace-routes.mjs','reminder-edits.mjs','reminder-review.mjs']) {
   await copy(join(source,'agent/host',name), join(main,'src/features/companion/vendor',name));
 }
 for (const name of ['chains.js','chains.css']) await copy(join(source,'web',name), join(main,'src/client/companion',name));

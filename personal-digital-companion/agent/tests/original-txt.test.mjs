@@ -5,9 +5,9 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {openTestDatabase} from './sqlite-d1.mjs';
 import {createPersonalityDiary} from '../../desktop/personality-diary.mjs';
-import {personalityMemory} from './fixtures/personality-memory.mjs';
+import {personalityMemory} from '../assistant/personality-memory.mjs';
 import {createOriginalFiles,maskOriginal,longSource} from '../../desktop/long-originals.mjs';
-import {validateTxt,automaticLimit} from './fixtures/txt-files.mjs';
+import {validateTxt,automaticLimit} from '../host/txt-files.mjs';
 
 import {bucketFixture} from './txt-test-bucket.mjs';
 test('同一超限报告同时检查只显示一次，显示失败后可重新提示',async t=>{
@@ -27,7 +27,7 @@ test('同一超限报告同时检查只显示一次，显示失败后可重新�
 });
 test('附件问答的展示文件名不计入 500 字边界，也不写进长段原文',async t=>{
   const {DB,sqlite,close}=openTestDatabase();
-  sqlite.exec(readFileSync(new URL('./fixtures/personality-memory.sql',import.meta.url),'utf8'));
+  sqlite.exec(readFileSync(new URL('../migrations/016-personality-memory.sql',import.meta.url),'utf8'));
   const bucket=bucketFixture(),day='2026-11-21',at=Date.parse(day+'T10:00:00+09:00');
   const profile=mkdtempSync(join(tmpdir(),'txt-source-question-'));
   const short='月'.repeat(500),long=' '+('🌙'.repeat(499))+'\n';
@@ -95,7 +95,7 @@ test('文件、合法编码和 1 MiB 的精确边界',async()=>{
 });
 for(const oversize of [false,true])test('写日记真实入口 · '+(oversize?'汇总超限后成功完成并报告':'两个长段一份完整附件'),async t=>{
   const {DB,sqlite,close}=openTestDatabase();
-  sqlite.exec(readFileSync(new URL('./fixtures/personality-memory.sql',import.meta.url),'utf8'));
+  sqlite.exec(readFileSync(new URL('../migrations/016-personality-memory.sql',import.meta.url),'utf8'));
   const myMainStorage=bucketFixture(),env={DB,myMainStorage};
   const profile=mkdtempSync(join(tmpdir(),'feiyue-original-')),reports=[];
   const day='2026-11-21',at=Date.parse(day+'T07:00:00+09:00');
@@ -150,7 +150,7 @@ for(const oversize of [false,true])test('写日记真实入口 · '+(oversize?'�
 
 test('普通唠叨的多轮追加、超限文件、重启与收笔后的报告',async t=>{
   const {DB,sqlite,close}=openTestDatabase();
-  sqlite.exec(readFileSync(new URL('./fixtures/personality-memory.sql',import.meta.url),'utf8'));
+  sqlite.exec(readFileSync(new URL('../migrations/016-personality-memory.sql',import.meta.url),'utf8'));
   const env={DB,myMainStorage:bucketFixture()},profile=mkdtempSync(join(tmpdir(),'feiyue-nag-original-')),reports=[];
   const req=(p,o)=>personalityMemory(new Request('https://fixture'+p,o),env,'fixture');
   const signal=new AbortController().signal,at='2026-11-21T01:05:00.000Z';

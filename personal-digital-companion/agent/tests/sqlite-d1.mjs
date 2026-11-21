@@ -37,7 +37,7 @@ export function openTestDatabase(path = ':memory:') {
 }
 
 export function initializeDatabase(sqlite) {
-  sqlite.exec(readFileSync(new URL('../migrations/013-ai-route-cooldown.sql',import.meta.url),'utf8'));
+  sqlite.exec(readFileSync(new URL('../migrations/013-ai-route-cooldown.sql', import.meta.url),'utf8'));
   for (const path of ['../migrations/001-task-units.sql', '../migrations/002-executions.sql', '../migrations/003-task-activity.sql', '../seeds/tasklist.sql']) {
     sqlite.exec(readFileSync(new URL(path, import.meta.url), 'utf8'));
   }

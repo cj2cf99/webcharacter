@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>绯月 · 联想云预览</title><style>
+*{box-sizing:border-box}body{margin:0;padding:clamp(18px,4vw,48px);font:16px/1.4 system-ui,sans-serif;color:#352e47;background:#f8f6f2}main{max-width:750px;margin:auto}h1{font-size:24px}section{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}article{position:relative;height:320px;overflow:hidden;border-radius:20px;background:linear-gradient(150deg,#dcd8ee,#f7e8df);text-align:center}h2{font-size:15px;font-weight:600;margin:12px}.pet{position:absolute;height:192px;bottom:3px;left:50%;transform:translateX(-50%)}.cloud{position:relative;isolation:isolate;display:grid;gap:2px;align-content:center;margin:24px auto 0;width: min(84%,178px);height:70px;color:#392f46;filter:drop-shadow(0 2px 2px #4a375433);font-size:13px}.shape,.shape:before,.shape:after,.tail:before,.tail:after{position:absolute;background:var(--fill);border-radius:50%}.cloud{--fill:#fffaf0}.shape{z-index:-1;inset:6px 0 0;border-radius:42px}.shape:before,.shape:after,.tail:before,.tail:after{content:""}.shape:before{width:33%;height:64%;left:18%;top:-15%}.shape:after{width:38%;height:70%;right:17%;top:-17%}.tail:before{width:12px;height:9px;left:48%;bottom:-11px}.tail:after{width:6px;height:5px;left:53%;bottom:-18px}.night{background:linear-gradient(150deg,#454058,#65516b)}.night h2{color:#fff}.night .cloud{--fill:#403554;color:#fff5db;filter:drop-shadow(0 1px 0 #e2c8ee) drop-shadow(0 -1px 0 #e2c8ee)}.cloud small{font-size:12px}.cloud[hidden]{display:none}progress{width:62%;height:5px;margin:2px auto;accent-color:#ad6678}.night progress{accent-color:#f2cc8d}label{display:inline-flex;gap:8px;align-items:center;margin-bottom:14px}select{font:inherit;border-radius:8px;padding:4px}footer{margin-top:12px;font-size:13px}@media(max-width:480px){section{gap:6px}article{height:285px}.pet{height:160px}.cloud{width:95%}}
+</style></head><body><main><h1>绯月的联想云</h1>
+<label>预览场景 <select><option>补写执行评价</option><option>写日记</option><option>检查天气</option><option>任务结束</option></select></label>
+<section><article><h2>奶油云</h2></article><article class="night"><h2>暮紫云</h2></article></section>
+<footer>模拟进度 · 切换场景可查看计数、等待和收起效果。</footer>
+<template><img class="pet" src="../assets/desktop-media/baseline.png" alt="绯月"><div class="cloud" role="status"><i class="shape"></i><i class="tail"></i><strong></strong><small></small><progress max="5"></progress></div></template></main>
+<script>
+for(const card of document.querySelectorAll('article'))card.append(document.querySelector('template').content.cloneNode(true));
+const select=document.querySelector('select');
+function render(){
+  const i=select.selectedIndex;
+  for(const cloud of document.querySelectorAll('.cloud')){
+    cloud.hidden=i===3;
+    cloud.querySelector('strong').textContent=['补写执行评价','写日记','检查天气',''][i];
+    cloud.querySelector('small').textContent=['已处理 2 / 5 条','正在整理见闻','等候天气回执',''][i];
+    const bar=cloud.querySelector('progress');
+    if(i===0)bar.value=2;else bar.removeAttribute('value');
+  }
+}
+select.onchange=render;render();
+</script></body></html>

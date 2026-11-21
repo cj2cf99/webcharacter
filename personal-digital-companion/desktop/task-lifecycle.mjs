@@ -18,6 +18,9 @@ import {tokyoDay} from './conversation-history.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 
 const terminal=task=>['COMPLETED','FAILED'].includes(task.status);
+const heartbeatLabels=new Map([
+  ['healthy','接口正常'],['switched','已切换接口'],['skipped_paid','当前为收费接口，已跳过模型调用'],
+]);
 export function interruptionDetail(task) {
   const last=task.executions.at(-1), date=last?.finished_at||last?.started_at||task.updated_at;
   const time=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',dateStyle:'medium',timeStyle:'medium'}).format(new Date(date));
@@ -42,7 +45,8 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
       const finish=(error,response)=>{clearTimeout(timeout);controller.signal.removeEventListener('abort',abort);if(error)reject(error);else resolve(response);};
       const abort=()=>{local.abort();finish(Object.assign(new Error('应用正在退出，记录保留'),{code:'CANCELLED'}));};
       if(controller.signal.aborted){abort();return;}
-      const wait=['/api/assistant/recording-plan','/api/assistant/heartbeat','/api/assistant/provider-test'].includes(path)?240000:path==='/api/records/photos'?60000:path.endsWith('/execute')||path.startsWith('/api/weather/')?15000:5000;
+      const ai=['/api/assistant/message','/api/assistant/recording-plan','/api/assistant/heartbeat','/api/assistant/provider-test'].includes(path);
+      const wait=ai&&options?.method!=='GET'?240000:path==='/api/records/photos'?60000:path.endsWith('/execute')||path.startsWith('/api/weather/')?15000:5000;
       timeout=setTimeout(()=>{local.abort();finish(Object.assign(new Error('连接超时，记录仍保留'),{code:'TIMEOUT'}));},wait);
       controller.signal.addEventListener('abort',abort,{once:true});
       Promise.resolve().then(()=>{
@@ -57,7 +61,7 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     });
     const logged=traffic.wrap(request);
     // 心跳没有业务回执，退出时由同一个 controller 取消，不占重启等待计数。
-    heartbeatCall=()=>logged('/api/assistant/heartbeat',{method:'POST',cache:'no-store'});
+    heartbeatCall=signal=>logged('/api/assistant/heartbeat',{method:'POST',cache:'no-store',signal});
     request=async(...args)=>{outstanding++;try{return await logged(...args);}finally{outstanding--;}};
   }
   const threads=await createThreadHandlers(handlerModule?{module:handlerModule}:{});
@@ -95,15 +99,20 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     return pending.finally(()=>operations.delete(pending));
   }
   const canStart=()=>!checking&&!stopped&&!draining;
-  let heartbeatTimer,heartbeatRequest;
-  function startHeartbeat(){
-    if(!heartbeatCall||heartbeatTimer)return;
-    heartbeatTimer=setInterval(()=>{
-      if(!canStart()||heartbeatRequest)return;
-      heartbeatRequest=heartbeatCall()
-        .catch(()=>{}).finally(()=>{heartbeatRequest=null;});
-    },30*60*1000);
-    heartbeatTimer.unref();
+  let heartbeatRequest;
+  async function checkAiHeartbeat(signal){
+    if(!heartbeatCall)throw Object.assign(Error('云端连接未配置'),{code:'NO_CONNECTION'});
+    if(!canStart()||heartbeatRequest)return '本轮已跳过';
+    heartbeatRequest=heartbeatCall(signal);
+    try{
+      const response=await heartbeatRequest;
+      if(!response.ok)throw Error('AI 接口探测失败（HTTP '+response.status+'）');
+      const {status,provider}=await response.json();
+      if(status==='superseded')return '当前接口已由前台请求更新';
+      const label=heartbeatLabels.get(status);
+      if(!label||typeof provider!=='string'||!/^[a-z][a-z0-9-]{0,31}$/.test(provider))throw Error('AI 接口探测回执异常');
+      return label+' · '+provider;
+    }finally{heartbeatRequest=null;}
   }
   let archiveWrites=Promise.resolve();
   let latestArchive;
@@ -520,7 +529,8 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     weatherRequest: request,
     chainClient,taskInbox,
     getAvailableTasks:()=>availableTasks.map(task=>({...task})),
-    startPolling({managed=false}={}){if(!stopped){if(!managed)poller?.start();startHeartbeat();}},
+    startPolling({managed=false}={}){if(!stopped&&!managed)poller?.start();},
+    checkAiHeartbeat,
     canPoll,tasksIdle,
     // 正式工作计数：已接取未结束的本机任务（含等待执行的），以及其中正在执行的个数。
     formalCount:()=>inFlight.size,executingCount:()=>executing,
@@ -533,13 +543,13 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     activeCount,
     beginQuitCheck(){checking=true;if(!gate)gate=new Promise(resolve=>{release=resolve;});},
     cancelQuitCheck(){checking=false;release?.();release=null;gate=null;},
-    async stop(){stopped=true;clearInterval(heartbeatTimer);poller?.stop();executor.interrupt();controller.abort();release?.();release=null;gate=null;
+    async stop(){stopped=true;poller?.stop();executor.interrupt();controller.abort();release?.();release=null;gate=null;
       const closed=!inFlight.size&&!executor.activeCount()&&!registration.activeCount()&&!reminderReview.activeCount()&&!chainClient.activeCount();
       if(closed)executor.close();
       await threads.stop();
       await Promise.allSettled([...inFlight]);
       await Promise.allSettled([registration.waitForStop(),reminderReview.waitForStop()]);
-      await heartbeatRequest;
+      await heartbeatRequest?.catch(()=>{});
       await archiveWrites;
       await traffic.flush();
       if(!closed&&!executor.activeCount())executor.close();},

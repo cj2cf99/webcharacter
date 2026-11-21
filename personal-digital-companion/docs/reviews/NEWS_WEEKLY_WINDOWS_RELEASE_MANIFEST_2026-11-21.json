@@ -1,0 +1,242 @@
+{
+  "release_id": "feiyue-weekly-news-20261121",
+  "version": "92be3d7d8d0ffb17d6cce3af9f06568db6db0bb96d9da64ed754762ab087cd73",
+  "installed": "G:\\selftool\\.release-feiyue-handbook-desktop-20261120\\personal-digital-companion",
+  "reviewBefore": "1d92a8055887fcae899f4f777443f1490f72721945a14aa6e1ff5861340dea56",
+  "files": [
+    {
+      "kind": "runtime",
+      "path": "desktop/news-briefing.mjs",
+      "before": "5c6393704a8f36c12ff32c1da75f20b5f55d4dabe9906acab30996f1326c5b7f",
+      "after": "be2e5c5b5c35ed64dcc6469e9d47c103033e9bec6d8e7c4353330c08d2dd3d8f"
+    },
+    {
+      "kind": "runtime",
+      "path": "desktop/news-editor.mjs",
+      "before": null,
+      "after": "a896cf810e59bb8ddcbabb9725652ffdb1c1839f2dd113a76df9a03f64ea3bb6"
+    },
+    {
+      "kind": "runtime",
+      "path": "desktop/news-history.mjs",
+      "before": null,
+      "after": "901fd026e160e9b5ab0d46b4ce0b498ecde948f017e6a5754b2ba2c8ff3c3d7f"
+    },
+    {
+      "kind": "runtime",
+      "path": "desktop/news-layout.mjs",
+      "before": "e216689d1ae576021980e1d09d37a8d3edb70701f81aa1de803330a7930b295d",
+      "after": "7f48d6052a4df5b795bf320a26d509eafc7faf81193dbbf2aa4673a3803b30b1"
+    },
+    {
+      "kind": "runtime",
+      "path": "desktop/news-panel-host.mjs",
+      "before": "87b03cd024bd20c3e433876a483755509f6e93ea88d944f4f0055bd919fa4fc0",
+      "after": "4f1fb6c366e3dc64d65589f3e544215955c8fb1192cf7656fe9015a526a1bbe4"
+    },
+    {
+      "kind": "runtime",
+      "path": "desktop/news-panel-preload.cjs",
+      "before": "40da9f10e0680136f24faa125d1ba39e999b72faaad0bfecd4e62442935ce4e8",
+      "after": "f0ec01861a99efc1eceddaa44d0ac748cbb155be762d0773ea3681a53b88f9dd"
+    },
+    {
+      "kind": "runtime",
+      "path": "desktop/news-panel-ui.mjs",
+      "before": "f56fd19a25dbf9ff9eb7a500d11f22f51777f44b55c42654f677ccdb019d4137",
+      "after": "dbc82be6665d36eeb86dde87cff99b4bc138ed6a7f445f83fc1a7b719948c3e0"
+    },
+    {
+      "kind": "runtime",
+      "path": "desktop/news-panel.css",
+      "before": "b0269697406a688d8435b7c2426c741ad13184a1f71a365427fe695d039e2a3d",
+      "after": "83eb7fd217f747beda912f4a44722226fb198032dee4202d0a806e12a41c566d"
+    },
+    {
+      "kind": "runtime",
+      "path": "desktop/news-panel.html",
+      "before": "c5288ecc24dbad56609cea105af42d83ab0157082d6d642b85721c1937fea68d",
+      "after": "b9a0b80616a26b3cf91e592f99cba020d1d97997821cc5fa35bf49d13f9deb17"
+    },
+    {
+      "kind": "runtime",
+      "path": "desktop/news-weekly.css",
+      "before": null,
+      "after": "5f288c802a869d3c7da6c09d154e995c19aa5703aa03ddb2a462320fd8a176df"
+    },
+    {
+      "kind": "runtime",
+      "path": "desktop/reminder-checks.mjs",
+      "before": "d0e1585e86868130c25568f7ec33bdc82c02301f055e186178973004fac47728",
+      "after": "2586fc06299bfca6f94f515736d802f78f9792e29e6c4b9d7eb53f7d2b006d4e"
+    },
+    {
+      "kind": "runtime",
+      "path": "desktop/shell.mjs",
+      "before": "b10b829fd6965c745bd346a60c190293c1c8144669fe87e4c3628edfa57b9ea0",
+      "after": "3d0fb6e267d782b0354ba8f0be3ba16396b434bdbaa034e332e3db7fbb2cec7d"
+    },
+    {
+      "kind": "runtime",
+      "path": "desktop/source-updates.mjs",
+      "before": "3e9ca6baf866d2d0c869d2a7f0ed354dabeca9aebddb4cd15a8fde7e899f6382",
+      "after": "d1d65769ddc670051c6c0ec6c2457b2d7f6e86c7c9df329b728be1b89ae58b18"
+    },
+    {
+      "kind": "runtime",
+      "path": "workflows/comfyui/news_watch.py",
+      "before": "7e9ad0b4221f6731b9d1de61331b7195bb0f15cb2324dc6ad5d33683b4fc7bc2",
+      "after": "ed23b84cde57c17208aff811ba03b55ef4f192079e5046bf4c0bcfd39e8dcd3e"
+    },
+    {
+      "kind": "runtime",
+      "path": "workflows/comfyui/research_preview.py",
+      "before": "7caf5e923553a20c41e19659eb45bd3d2955a99546d50580b333aa18be707ff3",
+      "after": "db736680b2df2429d4728eb49134595121f29ae5cc7aae8bcd0fc0a7878ba304"
+    },
+    {
+      "kind": "runtime",
+      "path": "output/desktop-bundle/news-layout.mjs",
+      "before": "e216689d1ae576021980e1d09d37a8d3edb70701f81aa1de803330a7930b295d",
+      "after": "7f48d6052a4df5b795bf320a26d509eafc7faf81193dbbf2aa4673a3803b30b1"
+    },
+    {
+      "kind": "runtime",
+      "path": "output/desktop-bundle/news-panel-ui.mjs",
+      "before": "f56fd19a25dbf9ff9eb7a500d11f22f51777f44b55c42654f677ccdb019d4137",
+      "after": "dbc82be6665d36eeb86dde87cff99b4bc138ed6a7f445f83fc1a7b719948c3e0"
+    },
+    {
+      "kind": "runtime",
+      "path": "output/desktop-bundle/news-panel.css",
+      "before": "b0269697406a688d8435b7c2426c741ad13184a1f71a365427fe695d039e2a3d",
+      "after": "83eb7fd217f747beda912f4a44722226fb198032dee4202d0a806e12a41c566d"
+    },
+    {
+      "kind": "runtime",
+      "path": "output/desktop-bundle/news-panel.html",
+      "before": "c5288ecc24dbad56609cea105af42d83ab0157082d6d642b85721c1937fea68d",
+      "after": "b9a0b80616a26b3cf91e592f99cba020d1d97997821cc5fa35bf49d13f9deb17"
+    },
+    {
+      "kind": "runtime",
+      "path": "output/desktop-bundle/news-weekly.css",
+      "before": null,
+      "after": "5f288c802a869d3c7da6c09d154e995c19aa5703aa03ddb2a462320fd8a176df"
+    },
+    {
+      "kind": "record",
+      "path": "agent/tests/news-briefing.test.mjs",
+      "before": null,
+      "after": "6896c9489ac02a6441d161f9da48e2d7939edc57c88d8788e2b93fb56d9921cb"
+    },
+    {
+      "kind": "record",
+      "path": "tools/test-news-panel-electron.mjs",
+      "before": null,
+      "after": "eef210261248926c4dcf912a39d0e33e1ed69142f54ea01cc9704f5ac5a101bc"
+    },
+    {
+      "kind": "record",
+      "path": "tools/run-electron-check.mjs",
+      "before": null,
+      "after": "48be47bf8cd3ada9ffa318fb251de63053c454c871074f4779c148af5a9e4a0c"
+    },
+    {
+      "kind": "record",
+      "path": "tools/news-fixtures/spot-nasa-jpl.jpg",
+      "before": null,
+      "after": "d335f7a5ee22af73c75605daeca697d475d358895f293e8a32a8e2874625a6ac"
+    },
+    {
+      "kind": "record",
+      "path": "docs/NEWS_BRIEFING_ARCHIVE_DESIGN.md",
+      "before": null,
+      "after": "3366c6e8da5e6cf172ad72bcf39ff80c96d724cb6f6f873f0c5efa01c1d3103b"
+    },
+    {
+      "kind": "record",
+      "path": "docs/reviews/NEWS_WEEKLY_IMPLEMENTATION_REVIEW_2026-11-21.md",
+      "before": null,
+      "after": "812bc51b6f60611fbb2495c1aba90b60cbdb3e6d6d3adf3f0051c21e1effb395"
+    },
+    {
+      "kind": "record",
+      "path": "docs/reviews/NEWS_WEEKLY_PROTOTYPE_REVIEW_2026-11-21.md",
+      "before": null,
+      "after": "9d750e2938efbe6585a0f3f2c3e534c229fc8e42a2af4589accedf06801ebef8"
+    },
+    {
+      "kind": "record",
+      "path": "docs/reviews/NEWS_BRIEFING_SUMMARY_REVIEW_2026-11-21.md",
+      "before": null,
+      "after": "7308f5d0d550b7581af0134b1756cec747f8d2dac3243099d2691ab383a94ecb"
+    },
+    {
+      "kind": "record",
+      "path": "desktop/README.md",
+      "before": "0420b0b745389e05eb4dc2107b065fd738f977708f246a4a5f3f5263cbd74a88",
+      "after": "d4c4a2cf3a2d1ef2d6a61f9b75954d2038df07313282727f7270fdd6c214fadb"
+    },
+    {
+      "kind": "record",
+      "path": "docs/REQUIREMENT_CHANGES.md",
+      "before": "2f1fd7a49358aba0becf175bc5f2e17e4941c7a9c3293ea3b808d21244669bca",
+      "after": "30904a0a3c57b006850daa48b783610fd3a1681381586abf97a12ba55d6586f7"
+    },
+    {
+      "kind": "record",
+      "path": "docs/DEVELOPMENT.md",
+      "before": "fd3164483c05dece331eec1a50edd7bce68cda30eeb66b76a7db794d2e5a33f3",
+      "after": "7269a958cd7bfec1a3e605c6529e11860701b5c2bf4a92241bc5921cae9390c5"
+    },
+    {
+      "kind": "record",
+      "path": "docs/DESKTOP_UI_GUIDE.md",
+      "before": null,
+      "after": "67166e3aca4aa6500f0a52b111f29ddd4534f421205d083b7f9fd4867a8f1c8b"
+    },
+    {
+      "kind": "record",
+      "path": "prototype/news-weekly/archive.js",
+      "before": null,
+      "after": "d5f8d83e9fc05f156c30f3d337b7b4af36173de04e8d8c4a22f0e7056979f958"
+    },
+    {
+      "kind": "record",
+      "path": "prototype/news-weekly/index.html",
+      "before": null,
+      "after": "b896e6daabc3e8ed837a52d3a58bd186f0f0bc00e63e2a613e3989c36ff3d6c1"
+    },
+    {
+      "kind": "record",
+      "path": "prototype/news-weekly/news-weekly.css",
+      "before": null,
+      "after": "c2401c50a5c5f939dd98d16225f1dbb4b27c8e7dc43dc4bb192a2ae27f908dcb"
+    },
+    {
+      "kind": "record",
+      "path": "prototype/news-weekly/prototype.js",
+      "before": null,
+      "after": "13396ac6349595acf8c86079d7611c93471c9cbc06fc7975e3135a53ebcb0994"
+    },
+    {
+      "kind": "record",
+      "path": "prototype/news-weekly/source.html",
+      "before": null,
+      "after": "e0073ad2e3c34cb2276a804e76caed8234468eb159e926287863a531b2447cb5"
+    },
+    {
+      "kind": "record",
+      "path": "prototype/news-weekly/source.js",
+      "before": null,
+      "after": "50e3ca9c5543a6435fed7e6d824ac5e25f87a16204158578fa5890a16c91096b"
+    },
+    {
+      "kind": "record",
+      "path": "prototype/news-weekly/timelines.js",
+      "before": null,
+      "after": "b577ce07409c769fc0c46576f55aa2aaa85c17ca657559df6714d56c5d3efb8d"
+    }
+  ]
+}

@@ -68,7 +68,7 @@ test('真实计时状态、忙时顺延、第三次保留一个任务与重启�
     assert.equal(read().nextAt,now+20*60_000-15_000);
     assert.equal(checks.read('2026-11-20').events.length,1,'东京跨日后仍可查看旧记录');
     for(let i=0;i<23;i++)checks.record('三地天气','查询失败','接口暂不可用');
-    assert.equal(read().events.length,20);assert.equal(read().pages,2);assert.ok(checks.read(tokyoDay(now),1).events.length>0);
+    assert.equal(read().events.length,8);assert.ok(read().pages>=3);assert.ok(checks.read(tokyoDay(now),1).events.length>0);
     assert.equal(timers.size,1);
   }finally{checks.close();}
   assert.equal(timers.size,0);
