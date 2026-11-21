@@ -1,3 +1,7 @@
+### TXT 发布源码 Git 核验（2026-11-21 JST）
+
+已从远端逐项回读：cloudflaremyapp/main 876dccba、informationmanager/main f5bebc0b、webcharacter/main b3269f90，桌宠正式安装同步分支 19d1a8d3；日记来源 b92f7ff、随手记 main 155b17e、鱼与熊掌 main cbd9f83。主站 main 含与本机 REST 所验提交 eb1955e 逐文件相同的 SQL 和清单。主站原日常工作目录另有未提交修改及非本次分支冲突，生产源码从独立发布工作树整合。Git 核验涉及上述实际推送的版本，无强制推送。
+
 ## TXT 附件正式发布与登记回执 · 2026-11-21 JST
 
 三个目标均发布成功。用户明确许可本次备份、迁移、两个 Worker 部署及七文件本机安装，并选择跳过本地手动验收。最终花园修订 130 的实际编号和版本已经再次明确确认。
