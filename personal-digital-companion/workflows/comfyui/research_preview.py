@@ -9,5 +9,5 @@ with Image.open(BytesIO(sys.stdin.buffer.read()) if news else sys.argv[1]) as im
         raise ValueError("图片超出解码范围")
     if news and (image.width < 80 or image.height < 48):
         raise ValueError("图像过小")
-    image.thumbnail((760,490) if news else (300,200))
+    image.thumbnail((288,216) if news else (300,200))
     ImageOps.exif_transpose(image).convert("RGB").save(sys.stdout.buffer if news else sys.argv[2],"JPEG",quality=82 if news else 78)

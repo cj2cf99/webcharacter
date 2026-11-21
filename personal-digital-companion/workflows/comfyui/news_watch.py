@@ -1,6 +1,7 @@
 """绯月的半日新闻关注清单。只将固定的公开主题发给新闻 RSS。"""
 from concurrent.futures import ThreadPoolExecutor
 from email.utils import parsedate_to_datetime
+from functools import partial
 import http.client
 import json
 import re
@@ -52,9 +53,9 @@ def relevant(topic, title):
     return re.search(TECH[topic], title, re.I | re.ASCII)
 
 
-def fetch_topic(topic):
+def fetch_topic(topic,days=3):
     try:
-        articles = rss_news(Reader(seconds=10), TOPICS[topic])
+        articles = rss_news(Reader(seconds=10), TOPICS[topic],days)
     except (OSError, ValueError, ParseError, http.client.HTTPException):
         return topic, None
     items = []
@@ -72,8 +73,6 @@ def fetch_topic(topic):
             continue
         items.append(dict(topic=topic, title=title, url=row["url"], source=row["source"], imageUrl=row.get("imageUrl"), excerpt=row.get("excerpt",""), lang=row.get("lang",""),
                           publishedAt=int(date.timestamp()*1000)))
-        if len(items) == 8:
-            break
     return topic, items
 
 
@@ -90,7 +89,11 @@ if __name__ == "__main__":
                                  input=raw, capture_output=True, check=True, timeout=8, creationflags=subprocess.CREATE_NO_WINDOW)
         print(base64.b64encode(preview.stdout).decode("ascii"))
         sys.exit(0)
+    days=int(sys.argv[1]) if len(sys.argv)>1 else 3
+    if days not in (1,2,3):
+        raise ValueError("新闻汇总范围为一至三天")
     with ThreadPoolExecutor(max_workers=3) as executor:
-        results = dict(executor.map(fetch_topic, TOPICS))
-    print(json.dumps(dict(items=[row for items in results.values() if items for row in items],
-                          failed=[topic for topic, items in results.items() if items is None])))
+        results = dict(executor.map(partial(fetch_topic,days=days), TOPICS))
+    result=dict(items=[row for items in results.values() if items for row in items],
+                failed=[topic for topic, items in results.items() if items is None])
+    sys.stdout.buffer.write(json.dumps(result,ensure_ascii=False).encode("utf-8"))

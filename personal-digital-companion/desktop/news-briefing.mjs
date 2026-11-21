@@ -9,8 +9,8 @@ const stamp = new Intl.DateTimeFormat('zh-CN', {
   timeZone:'Asia/Tokyo', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hourCycle:'h23'
 });
 
-export async function fetchNewsBriefing(signal) {
-  const {stdout} = await exec('python', ['-B', script], {signal, windowsHide:true, timeout:55_000, maxBuffer:1_500_000});
+export async function fetchNewsBriefing(signal, days=3) {
+  const {stdout} = await exec('python', ['-B', script, String(days)], {signal, windowsHide:true, timeout:55_000, maxBuffer:8_000_000});
   return JSON.parse(stdout);
 }
 
@@ -41,37 +41,47 @@ export function createNewsBriefing(db, now, notify, fetchNews=fetchNewsBriefing)
   function latest() {
     const raw = read.get()?.latest;
     if (!raw) return {state:'answer', text:'还没有收到关注主题的新报道。'};
-    const {at, items} = JSON.parse(raw);
+    const {at, from, items} = JSON.parse(raw);
     const sources = items.map(row=>({title:row.title, url:row.url,
       snippet:[row.source, stamp.format(row.publishedAt)+' JST'].filter(Boolean).join(' · ')}));
-    return {state:'answer', sources, text:stamp.format(at)+' JST · 最近一期新闻简报\n\n'+
+    const period=Number.isFinite(from)?stamp.format(from)+' — ':'';
+    return {state:'answer', sources, text:period+stamp.format(at)+' JST · 最近一期新闻简报\n\n'+
       items.map((row,i)=>`[${i+1}] ${row.topic} · ${row.title}\n${sources[i].snippet}`).join('\n\n')};
   }
   async function poll(signal, enabled=()=>true) {
-    const {items, failed} = await fetchNews(signal);
+    const at = now();
+    const floor = at - 3*day;
+    const previous=edition();
+    const earliest=Math.max(floor,Math.min(previous.at??floor,...Object.values(previous.retryAfter??{})));
+    const days=Math.min(3,Math.max(1,Math.ceil((at-earliest)/day)));
+    const {items, failed} = await fetchNews(signal,days);
     signal.throwIfAborted();
     if (!enabled()) return '新闻关注已暂停';
-    const at = now();
-    const fresh = [], counts = new Map(), observed = new Set();
+    const fresh = [];
     db.exec('BEGIN IMMEDIATE');
     try {
-      db.prepare('DELETE FROM news_seen WHERE at<?').run(at-3*day);
-      for (const row of items) {
-        if (!row.title || !Number.isFinite(row.publishedAt) || row.publishedAt>at || row.publishedAt<at-day) continue;
-        const titleKey = row.title.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
-        const duplicate = seen.get(row.url) || seen.get(titleKey);
-        observed.add(row.url);
-        observed.add(titleKey);
-        if (duplicate || (counts.get(row.topic)??0)>=2) continue;
-        fresh.push(row);
-        mark.run(row.url, at);
-        mark.run(titleKey, at);
-        counts.set(row.topic,(counts.get(row.topic)??0)+1);
+      const current=edition();
+      if((Number.isFinite(current.at) && current.at>=at) || (read.get()?.lastCheck??0)>at){
+        db.exec('COMMIT');
+        return '本次未收录新报道';
       }
-      for (const key of observed) mark.run(key, at);
+      const after=topic=>current.retryAfter?.[topic]??current.at??(floor-1);
+      const retryAfter=Object.fromEntries(failed.map(topic=>[topic,Math.max(floor-1,after(topic))]));
+      let from=Math.max(floor,current.at??floor);
+      db.prepare('DELETE FROM news_seen WHERE at<?').run(floor);
+      for (const row of items) {
+        if (!row.url || !row.title || !Number.isFinite(row.publishedAt) || row.publishedAt>at ||
+            row.publishedAt<floor || row.publishedAt<=after(row.topic)) continue;
+        const titleKey = row.title.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
+        if (seen.get(row.url) || (titleKey && seen.get(titleKey))) continue;
+        fresh.push(row);
+        from=Math.min(from,Math.max(floor,after(row.topic)));
+        mark.run(row.url, at);
+        if(titleKey)mark.run(titleKey, at);
+      }
       db.prepare(`INSERT INTO news_briefing VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET
         lastCheck=excluded.lastCheck, latest=coalesce(excluded.latest,latest)`)
-        .run(at, fresh.length?JSON.stringify({at,items:fresh}):null);
+        .run(at, fresh.length?JSON.stringify({at,from,retryAfter,items:fresh}):null);
       db.exec('COMMIT');
     } catch (error) { db.exec('ROLLBACK'); throw error; }
     if (fresh.length) notify(fresh);

@@ -25,13 +25,13 @@ test('新闻排版随内容影响调整，跨栏目同一事件排相邻栏',()=
   assert.equal(needsChinese('運行開始','ja'),true);
 });
 
-test('新闻简报跨栏合并、空轮静默、重启可读回，额度已满的栏目不遮住其他栏目',async()=>{
+test('新闻简报跨栏去重、空轮静默，重启可读回',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'feiyue-news-test-'));
   const path=join(dir,'news.sqlite');
   const at=Date.now(), signal=new AbortController().signal, notifications=[];
   const row=(id,topic,title)=>({url:'https://example.org/'+id,topic,title,source:'某报',publishedAt:at-60000});
   const items=[row(1,'人工智能','第一条'),row(2,'人工智能','第二条'),row(3,'人工智能','模型发布'),
-    row(3,'大模型','模型发布'),row(4,'大模型','第一条'),{...row(5,'美国社会','旧闻'),publishedAt:at-86400001}];
+    row(3,'大模型','模型发布'),row(4,'大模型','第一条'),{...row(5,'美国社会','旧闻'),publishedAt:at-3*86400000-1}];
   let db=new DatabaseSync(path);
   const make=()=>createNewsBriefing(db,()=>at,rows=>notifications.push(rows),async()=>({items,failed:[]}));
   try{
@@ -53,4 +53,40 @@ test('新闻简报跨栏合并、空轮静默、重启可读回，额度已满�
     assert.equal(news.edition().items[0].title,items[0].title);
     assert.match(news.latest().text,/JST/);
   }finally{db.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('按已生成期次覆盖最多72小时，空轮、栏目失败、延迟恢复和精确边界',async()=>{
+  const db=new DatabaseSync(':memory:'),hour=3600000,first=Date.UTC(2026,10,20);
+  let at=first,items=[],failed=[];
+  const days=[],signal=new AbortController().signal;
+  const news=createNewsBriefing(db,()=>at,()=>{},async(_signal,n)=>{
+    days.push(n);return {items,failed};
+  });
+  const row=(key,time,topic='机器人')=>({url:'https://example.org/'+key,title:key,topic,publishedAt:time});
+  try{
+    items=[row('三天边界',at-72*hour),row('超期',at-72*hour-1),row('未来',at+1)];
+    await news.poll(signal);
+    assert.deepEqual(news.edition().items.map(r=>r.title),['三天边界']);
+    at+=12*hour;items=[];await news.poll(signal);
+    assert.equal(news.edition().at,first);
+    at+=24*hour;failed=['日本社会'];
+    items=[row('上一期同一毫秒',first),row('期后首毫秒',first+1),
+      row('已报重发',at),row('第三条同栏',at),row('第四条同栏',at)];
+    await news.poll(signal);
+    assert.equal(news.edition().items.length,4);
+    assert.equal(news.edition().from,first);
+    const second=at;
+    at+=12*hour;failed=[];
+    items=[row('延迟恢复的栏目',first+hour,'日本社会'),row('已报重发',at),
+      row('正常栏目早于上期',second-1),row('本轮截止',at)];
+    await news.poll(signal);
+    assert.deepEqual(news.edition().items.map(r=>r.title),['延迟恢复的栏目','本轮截止']);
+    assert.deepEqual(news.edition().retryAfter,{});
+    at+=96*hour;
+    items=[row('四天前',at-96*hour),row('三天内',at-60*hour)];
+    await news.poll(signal);
+    assert.equal(news.edition().from,at-72*hour);
+    assert.deepEqual(news.edition().items.map(r=>r.title),['三天内']);
+    assert.deepEqual(days,[3,1,2,2,3]);
+  }finally{db.close();}
 });

@@ -45,6 +45,21 @@ class SkillTests(unittest.TestCase):
         self.assertEqual(topic,"机器人")
         self.assertEqual([row["title"] for row in items],["机器人量产"])
 
+    def test_channel_picture_is_excluded_even_when_repeated_in_an_item(self):
+        from unittest.mock import Mock
+        from public_reader import rss_news
+        brand = 'https://example.org/asset?id=brand'
+        story = 'https://example.org/asset?id=story'
+        entries = []
+        for index, images in enumerate([[], [brand], [brand+'&#38;width=200',story]]):
+            media = ''.join(f'<m:thumbnail url="{url}"/>' for url in images)
+            entries.append(f'<item><title>N{index}</title><link>https://example.org/{index}</link>{media}</item>')
+        xml = (f'<rss xmlns:m="http://search.yahoo.com/mrss/"><channel><image><url>{brand}</url></image>'
+               + ''.join(entries) + '</channel></rss>')
+        reader=Mock()
+        reader.get.return_value=(200,{},xml.encode())
+        self.assertEqual([row["imageUrl"] for row in rss_news(reader,"news")],[None,None,story])
+
     def test_old_google_credentials_cannot_start_a_search(self):
         import os
         import public_reader

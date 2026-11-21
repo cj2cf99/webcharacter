@@ -27,7 +27,7 @@ export function attachNewsPanel(electron,{root,bundle,checks,model,readImage=fet
   const handlers={
     list(){
       edition=checks.newsEdition();
-      return {at:edition.at,items:edition.items.map(({title,topic,url,source,publishedAt,chinese,lang,imageUrl})=>
+      return {at:edition.at,from:edition.from,items:edition.items.map(({title,topic,url,source,publishedAt,chinese,lang,imageUrl})=>
         ({title,topic,url,source,publishedAt,lang,hasImage:Boolean(imageUrl),chinese:{title:chinese?.title}}))};
     },
     image(row){

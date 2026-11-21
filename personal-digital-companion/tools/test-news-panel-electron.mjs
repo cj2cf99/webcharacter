@@ -26,7 +26,7 @@ items[0].imageUrl=photoUrl;
 items[0].url='https://www.jpl.nasa.gov/news/robots-autonomously-navigate-underground-in-darpa-challenge/';
 const translations=Object.fromEntries(cases.filter(c=>c[4]).flatMap(c=>[[c[1],c[4]],[c[3],c[5]]]));
 const previewApi={
-  list:async()=>({at,items:items.map(({excerpt,...row})=>({...row,hasImage:Boolean(row.imageUrl),chinese:{}}))}),
+  list:async()=>({at,from:at-12*3600000,items:items.map(({excerpt,...row})=>({...row,hasImage:Boolean(row.imageUrl),chinese:{}}))}),
   image:async(_at,url)=>items.find(row=>row.url===url)?.imageUrl?photoData:null,
   detail:async(_at,url)=>({excerpt:items.find(row=>row.url===url).excerpt}),
   translate:async(_at,url,field)=>translations[items.find(row=>row.url===url)[field]],
@@ -64,7 +64,7 @@ try{
   }
   let detailSaved=0,opens=0;
   const saved=new Map();
-  const checks={newsEdition:()=>({at,items:items.map(row=>({...row,chinese:saved.get(row.url)}))}),
+  const checks={newsEdition:()=>({at,from:at-12*3600000,items:items.map(row=>({...row,chinese:saved.get(row.url)}))}),
     saveNewsChinese:(_at,url,field,_original,value)=>{
       saved.set(url,{...saved.get(url),[field]:value});if(field==='excerpt')detailSaved++;
     }};
@@ -83,7 +83,10 @@ try{
   }
   await waitFor("document.querySelectorAll('.story').length===8 && ![...document.querySelectorAll('.headline')].some(n=>/正在本机翻译|翻译暂不可用/.test(n.textContent))");
   assert.equal(detailSaved,0);
+  assert.match(await ui("document.querySelector('#edition').textContent"),/06:00.*18:00 JST/);
   await waitFor("Boolean(document.querySelector('.picture.ready img')?.naturalWidth)");
+  const thumbSize=await ui("document.querySelector('.picture.ready img').getBoundingClientRect().toJSON()");
+  assert.ok(thumbSize.width>0 && thumbSize.width<=144 && thumbSize.height>0 && thumbSize.height<=108);
   const target="[...document.querySelectorAll('.tile')].find(e=>e.querySelector('.meta').textContent.includes('技术周刊'))";
   for(const theme of ['light','dark']){
     electron.nativeTheme.themeSource=theme;panel.setContentSize(980,740);

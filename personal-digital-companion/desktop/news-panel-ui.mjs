@@ -12,11 +12,15 @@ const shortTime=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Tokyo',month:'2-
 const editionTime=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Tokyo',year:'numeric',month:'long',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 let edition={at:null,items:[]},active='全部',generation=0,worker=Promise.resolve(),engaged=false;
 const views=new Map();
+let photoQueue=Promise.resolve();
 const photos=new IntersectionObserver(entries=>{
   for(const entry of entries)if(entry.isIntersecting){
     const slot=entry.target;
     photos.unobserve(slot);
-    void slot.loadPhoto();
+    photoQueue=photoQueue.then(async()=>{
+      if(slot.isConnected)await slot.loadPhoto();
+      else if(slot.editionGeneration===generation)photos.observe(slot);
+    });
   }
 },{root:document.querySelector('main')});
 function status(message){const el=byId('state');el.textContent=message;el.hidden=!message;}
@@ -44,6 +48,7 @@ function tile(row,size,family){
   story.append(node('span','tile-topic',row.topic),title,meta);
   if(row.hasImage){
     const slot=node('span','picture');
+    slot.editionGeneration=generation;
     const photo=node('img');
     photo.alt='';photo.decoding='async';
     slot.append(photo);story.insertBefore(slot,meta);
@@ -136,7 +141,8 @@ async function load(){
     if(id!==generation)return;
     photos.disconnect();edition=data;views.clear();engaged=false;
     for(const row of edition.items)row.chinese??={};
-    byId('edition').textContent=data.at?editionTime.format(data.at)+' JST':'东京时间 JST';
+    byId('edition').textContent=data.at?(Number.isFinite(data.from)
+      ?editionTime.formatRange(data.from,data.at):editionTime.format(data.at))+' JST':'东京时间 JST';
     byId('count').textContent=data.items.length?data.items.length+' 篇报道':'';
     refresh.textContent='↻';refresh.setAttribute('aria-label','重新读取简报');draw();
     if(data.items.some(row=>needsChinese(row.title,row.lang)&&!row.chinese.title))

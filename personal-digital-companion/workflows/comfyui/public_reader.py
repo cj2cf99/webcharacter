@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
-from urllib.parse import urlencode, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 from urllib.robotparser import RobotFileParser
 
 AGENT = "FeiyueDesktop"
@@ -209,7 +209,15 @@ def news(reader,query):
         item["source"], stamp(item["published"])]))) for item in rows[:3]]
 
 
-def rss_picture(item):
+def picture_key(url):
+    # 同一张频道图可能按不同尺寸分发。保留 id 等标识资源的查询参数。
+    parts = urlsplit(url.strip())
+    query = sorted((k,v) for k,v in parse_qsl(parts.query,keep_blank_values=True)
+                   if k.lower() not in {"w","h","width","height","size"})
+    return parts.hostname, parts.path, tuple(query)
+
+
+def rss_picture(item, channel_images=()):
     media = "{http://search.yahoo.com/mrss/}"
     candidates = [el.get("url") for el in item.iter(media+"thumbnail")]
     for el in [*item.iter(media+"content"), *item.findall("enclosure")]:
@@ -222,6 +230,8 @@ def rss_picture(item):
     for url in filter(None, candidates):
         try:
             target(url)
+            if picture_key(url) in channel_images:
+                continue
             if not re.search(r"(?:^|[/_.-])(?:logo|avatar|favicon|pixel|tracking)(?:[/_.?-]|$)",url,re.I):
                 return url
         except ValueError:
@@ -229,20 +239,33 @@ def rss_picture(item):
     return None
 
 
-def rss_news(reader, query):
-    url="https://news.google.com/rss/search?"+urlencode(dict(q=query+" when:1d",hl="zh-CN",gl="CN",ceid="CN:zh-Hans"))
+def rss_news(reader, query, days=1):
+    url="https://news.google.com/rss/search?"+urlencode(dict(q=f"{query} when:{days}d",hl="zh-CN",gl="CN",ceid="CN:zh-Hans"))
     status,_,raw=reader.get(url,1_500_000)
     if status!=200:
         raise ValueError("Google 新闻暂不可用")
     rows=[]
-    for item in ElementTree.fromstring(raw).findall("./channel/item"):
+    channel = ElementTree.fromstring(raw).find("channel")
+    if channel is None:
+        return rows
+    channel_images = set()
+    for child in channel:
+        name = child.tag.split("}")[-1]
+        if name in {"image","thumbnail","icon","logo"}:
+            value = child.findtext("url") or child.get("href") or child.get("url") or child.text
+            if value:
+                try:
+                    channel_images.add(picture_key(value))
+                except ValueError:
+                    continue
+    for item in channel.findall("item"):
         link=item.findtext("link","")
         title=item.findtext("title","")
         if title and link.startswith("https://"):
             description = item.findtext("description", "")
             text = html.unescape(re.sub(r"<[^>]*>", " ", description))
             rows.append(dict(title=title[:200], url=link, source=item.findtext("source",""),
-                             imageUrl=rss_picture(item), lang=item.get("{http://www.w3.org/XML/1998/namespace}lang",""),
+                             imageUrl=rss_picture(item, channel_images), lang=item.get("{http://www.w3.org/XML/1998/namespace}lang",""),
                              excerpt=" ".join(text.split())[:900], published=item.findtext("pubDate","")))
     return rows
 
