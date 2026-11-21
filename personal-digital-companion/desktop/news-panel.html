@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+<title>绯月 · 半日新闻</title><link rel="stylesheet" href="feiyue-surface.css"><link rel="stylesheet" href="news-panel.css"></head>
+<body><header class="fy-titlebar"><div class="fy-caption"><h1>新闻简报</h1></div><button id="refresh" aria-label="重新读取简报" title="重新读取简报">↻</button></header>
+<main class="fy-scroll"><div class="page">
+<div class="mast"><h2>绯月<span>半日新闻</span></h2><div class="engraving" aria-hidden="true"></div></div>
+<div class="folio"><nav aria-label="新闻分类" id="filters"></nav><div class="issue"><time id="edition"></time><span id="count"></span></div></div>
+<p id="state" role="status">正在读取本机简报…</p><div id="board"></div>
+</div></main><script type="module" src="news-panel-ui.mjs"></script></body></html>

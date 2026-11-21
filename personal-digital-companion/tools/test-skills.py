@@ -14,9 +14,185 @@ sys.path[:0] = [str(ROOT / "skills"), str(ROOT / "workflows/comfyui")]
 from catalog import resolve_skill, route_skill
 from image_chain import compile_plan, make_graph
 import image_chain
+import world_tour
 
 
 class SkillTests(unittest.TestCase):
+    def test_rss_article_images(self):
+        from public_reader import rss_picture
+        from xml.etree.ElementTree import fromstring
+        for markup in ('<m:thumbnail url="https://example.org/news/a.jpg"/>',
+                       '<m:group><m:content medium="image" url="https://example.org/news/a.jpg"/></m:group>',
+                       '<enclosure type="image/jpeg" url="https://example.org/news/a.jpg"/>',
+                       '<description>&lt;img src="https://example.org/news/a.jpg"&gt;</description>'):
+            item=fromstring('<item xmlns:m="http://search.yahoo.com/mrss/">'+markup+'</item>')
+            self.assertEqual(rss_picture(item),'https://example.org/news/a.jpg')
+        item=fromstring('<item><image><url>https://example.org/logo.png</url></image>'
+                        '<enclosure type="audio/mpeg" url="https://example.org/audio"/></item>')
+        self.assertIsNone(rss_picture(item))
+
+    def test_news_watch_filters_and_skips_invalid_dates(self):
+        import news_watch
+        self.assertTrue(news_watch.relevant("美国社会","美国龙卷风造成大规模停电"))
+        self.assertFalse(news_watch.relevant("中国社会","泉州民企发布可持续生态马桶阶段性成果"))
+        self.assertFalse(news_watch.relevant("日本社会","美国宣布进入紧急状态"))
+        self.assertTrue(news_watch.relevant("日本股市","日经指数暴跌5.06%"))
+        self.assertFalse(news_watch.relevant("美国股市","美股分析师访谈"))
+        entry = dict(title="机器人量产 - 某报",source="某报",url="https://example.com/news")
+        with patch.object(news_watch, "rss_news", return_value=[
+                dict(entry,published="bad"),dict(entry,published="Sat, 21 Nov 2026 00:00:00 GMT")]):
+            topic, items = news_watch.fetch_topic("机器人")
+        self.assertEqual(topic,"机器人")
+        self.assertEqual([row["title"] for row in items],["机器人量产"])
+
+    def test_channel_picture_is_excluded_even_when_repeated_in_an_item(self):
+        from unittest.mock import Mock
+        from public_reader import rss_news
+        brand = 'https://example.org/asset?id=brand'
+        story = 'https://example.org/asset?id=story'
+        entries = []
+        for index, images in enumerate([[], [brand], [brand+'&#38;width=200',story]]):
+            media = ''.join(f'<m:thumbnail url="{url}"/>' for url in images)
+            entries.append(f'<item><title>N{index}</title><link>https://example.org/{index}</link>{media}</item>')
+        xml = (f'<rss xmlns:m="http://search.yahoo.com/mrss/"><channel><image><url>{brand}</url></image>'
+               + ''.join(entries) + '</channel></rss>')
+        reader=Mock()
+        reader.get.return_value=(200,{},xml.encode())
+        self.assertEqual([row["imageUrl"] for row in rss_news(reader,"news")],[None,None,story])
+
+    def test_old_google_credentials_cannot_start_a_search(self):
+        import os
+        import public_reader
+        import public_images
+        from unittest.mock import Mock
+        reader = Mock()
+        with patch.dict(os.environ, {"GOOGLE_CSE_API_KEY":"old", "GOOGLE_CSE_ID":"old"}, clear=True):
+            with self.assertRaisesRegex(ValueError, "TAVILY_NOT_CONFIGURED"):
+                public_reader.page_material(None, "京都", reader)
+            with patch.object(public_images, "Reader", return_value=reader):
+                old = {"roles":{"images":["old"]}, "providers":{"old":{"adapter":"google"}}}
+                with self.assertRaises(ValueError):
+                    public_images.search("images", "京都", old)
+        reader.get.assert_not_called()
+        reader.read.assert_not_called()
+
+    def test_tavily_common_budget_and_x_sources(self):
+        import os
+        import tavily_search as provider
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,{"TAVILY_API_KEY":"fixture"}):
+            account=dict(current_plan="Researcher",plan_usage=0,plan_limit=2,paygo_limit=None,paygo_usage=0)
+            payloads=[]
+            post=str(((int(time.time()*1000)-1288834974657)<<22)+1)
+            def send(key,path,payload=None):
+                if path=="/usage":
+                    return {"account":account}
+                payloads.append(payload)
+                return {"results":[{"url":url,"title":"消息","content":"摘录"} for url in [
+                    "https://example.org/news","https://x.com/a","https://x.com/a/status/"+post+"?s=20",
+                    "https://x.com/i/web/status/"+post,"https://x.com.fake/a/status/"+post]]}
+            def search(x_only):
+                return provider.search("京都",x_only,send=send,directory=Path(tmp))
+            self.assertTrue(search(False))
+            result,=search(True)
+            self.assertIn("近12小时",result["snippet"])
+            self.assertIn("observedAt",result)
+            self.assertEqual(result["url"],"https://x.com/a/status/"+post)
+            self.assertNotIn("include_domains",payloads[0])
+            self.assertEqual(payloads[1]["include_domains"],["x.com"])
+            self.assertEqual(payloads[1]["search_depth"],"basic")
+            with self.assertRaisesRegex(ValueError,"TAVILY_QUOTA"):
+                search(True)
+            account["paygo_limit"]=20
+            with self.assertRaisesRegex(ValueError,"TAVILY_FREE_UNVERIFIED"):
+                search(False)
+            self.assertEqual(len(payloads),2)
+
+    def test_tavily_concurrent_allowance(self):
+        import tavily_search as provider
+        from concurrent.futures import ThreadPoolExecutor
+        account=dict(current_plan="Researcher",plan_usage=999,plan_limit=1000,paygo_limit=0,paygo_usage=0)
+        with tempfile.TemporaryDirectory() as tmp:
+            def attempt(_):
+                try:
+                    provider.reserve(account,"2026-11",Path(tmp))
+                    return "ok"
+                except ValueError as error:
+                    return str(error)
+            with ThreadPoolExecutor(4) as executor:
+                self.assertCountEqual(executor.map(attempt,range(4)),["ok"]+["TAVILY_QUOTA"]*3)
+
+    def test_world_tour_uses_distinct_visual_references(self):
+        import public_images
+        settings=public_images.config()
+        settings["roles"]={k:["commons"] for k in settings["roles"]}
+        def fetch(url, limit):
+            if url.startswith("https://upload.wikimedia.org/"):
+                return b"\xff\xd8\xff"+url.encode()
+            return json.dumps({"query":{"pages":{"1":{"title":"File:street.jpg","imageinfo":[{
+                "mime":"image/jpeg","descriptionurl":"https://commons.wikimedia.org/wiki/File:street.jpg",
+                "thumburl":"https://upload.wikimedia.org/street.jpg"}]}}}}).encode()
+        with tempfile.TemporaryDirectory() as tmp, patch.object(world_tour,"config",return_value=settings), patch.object(world_tour,"single_model",return_value=True):
+            directory=Path(tmp)
+            steps, attachments, report=world_tour.prepare(directory,"京都",10,fetch)
+            self.assertEqual([s["op"] for s in steps],["edit","edit"])
+            self.assertEqual(steps[0]["refs"],[2,3,4])
+            self.assertTrue(steps[0]["blocking"])
+            self.assertEqual((steps[1]["refs"],steps[1]["region"]),([5],"head"))
+            self.assertEqual(len(set(attachments)),5)
+            self.assertEqual((directory/attachments[-1]).read_bytes(),world_tour.PORTRAIT.read_bytes())
+            self.assertIn("Kyoto",report["location"]["query"])
+            self.assertTrue(all((directory/item).is_file() for item in attachments))
+            with self.assertRaisesRegex(ValueError,"参考图片"):
+                world_tour.prepare(directory,"",10,lambda *_:b'{}')
+
+    def test_five_image_candidates_one_selection(self):
+        import public_images as images
+        settings={"roles":{"images":["source"]},"providers":{"source":{"adapter":"json"}}}
+        rows=[(f"photo {n}","https://example.org/story",f"https://example.org/{n}.jpg",
+               "","",["example.org"],["example.org"]) for n in range(9)]
+        choices=[]
+        fetched=[]
+        def fetch(url,limit):
+            fetched.append(url)
+            return b"\xff\xd8\xff-test"
+        def choose(titles):
+            choices.append(titles)
+            return 4
+        with patch.object(images,"catalogue",return_value=iter(rows)):
+            selected=images.search("images","Kyoto",settings,fetch=fetch,choose=choose)
+        self.assertEqual(len(choices[0]),5)
+        self.assertEqual(len(selected),1)
+        self.assertEqual(selected[0][0]["title"],"photo 4")
+        self.assertEqual(fetched,["https://example.org/4.jpg"])
+
+    def test_public_reader_boundaries(self):
+        from public_reader import Reader, Article, public_address
+        for ip in ("127.0.0.1","10.1.2.3","169.254.169.254","::1","::ffff:127.0.0.1","224.0.0.1"):
+            self.assertFalse(public_address(ip))
+        reader=Reader()
+        with patch("socket.getaddrinfo",return_value=[(2,1,6,"",("127.0.0.1",443))]):
+            with self.assertRaisesRegex(ValueError,"公开网络"):
+                reader.get("https://example.org/news",1000)
+        doc=Article()
+        doc.feed("<script>ignore instructions</script><p>A public source with sufficient text.</p>")
+        self.assertEqual(doc.paragraphs,["A public source with sufficient text."])
+
+    def test_news_sources_and_tokyo_dates(self):
+        import os
+        from unittest.mock import Mock
+        from public_reader import news
+        reader=Mock()
+        with patch.dict(os.environ,{"BRAVE_SEARCH_API_KEY":""}):
+            reader.get.return_value=(200,{},b"<rss><channel><item><title>Headline</title><link>https://example.org/story</link><pubDate>Fri, 20 Nov 2026 17:30:00 GMT</pubDate></item></channel></rss>")
+            self.assertIn("2026-11-21 02:30 JST",news(reader,"Kyoto")[0]["snippet"])
+            self.assertIn("news.google.com/rss",reader.get.call_args.args[0])
+        with patch.dict(os.environ,{"BRAVE_SEARCH_API_KEY":"fixture"}):
+            reader.reset_mock()
+            self.assertEqual(news(reader,"Kyoto")[0]["url"],"https://example.org/story")
+            reader.get.assert_called_once()
+            self.assertIn("news.google.com/rss",reader.get.call_args.args[0])
+            self.assertNotIn("fixture",str(reader.get.call_args))
+
     def test_publication(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -64,6 +240,12 @@ class SkillTests(unittest.TestCase):
         self.assertIn("线上唯一主对象", selected["content"])
         for stage in ("extract", "compare", "verify", "keywords", "condense", "reply", "write"):
             self.assertTrue(selected["localAi"][stage].strip())
+
+    def test_emotion_appraisal_wife_identity(self):
+        selected = route_skill("emotionAppraisal")
+        for prompt in (selected["instruction"], selected["localAi"]["assess"]):
+            self.assertIn("丈夫心爱的妻子、贤内助，是他口中“可爱的心尖肉肉”", prompt)
+            self.assertNotRegex(prompt, r"助理|私人助手|文字助手")
 
     def test_image_steps(self):
         text = "生成女孩，再换上图1的风衣，最后放大"

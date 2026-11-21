@@ -2,11 +2,12 @@ diff --git a/src/companion-entrypoint.js b/src/companion-entrypoint.js
 index ed48970..24311ac 100644
 --- a/src/companion-entrypoint.js
 +++ b/src/companion-entrypoint.js
-@@ -1,9 +1,14 @@
+@@ -1,9 +1,16 @@
  import {WorkerEntrypoint} from 'cloudflare:workers';
  import {companionGateway} from './features/companion/gateway.js';
  import {companionReminderReview} from './features/companion/reminder-review-gateway.js';
 +import {memoryExpenses} from './features/companion/vendor/memory-expenses.mjs';
++import {memorySources} from './features/companion/vendor/memory-sources.mjs';
 +import {createContext} from './features/expenses/context.js';
 +import {configuredOwners} from './features/expenses/identity.js';
 +import {getExpenses} from './features/expenses/routes.js';
@@ -14,6 +15,7 @@ index ed48970..24311ac 100644
  
  export class CompanionHost extends WorkerEntrypoint {
 +  memoryExpenses(query) { return memoryExpenses(this.env,query,{createContext,configuredOwners,getExpenses}); }
++  memorySources(query) { return memorySources(this.env,query); }
    providers() { return companionGateway(this.env).providers(); }
    attempt(provider, input) { return companionGateway(this.env).attempt(provider, input); }
    categories() { return companionGateway(this.env).categories(); }

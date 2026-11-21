@@ -82,7 +82,7 @@ export function createLocalTaskPool({file,garden,record,onProgress=()=>{},onResu
       progress('保存整批复盘');
       const key='garden-batch:'+row.id;
       await record({key,taskId:key,title:row.title,action:'完成花园登记',at:verifiedAt,
-        detail:[plan.result,...steps.map((s,i)=>{
+        detail:[...(plan.kind==='desktop-update'&&plan.release==='succeeded'?['绯月本机更新已核验']:[]),plan.result,...steps.map((s,i)=>{
           const scope=full.steps[i].scope;
           const targets=[...scope.projects,...scope.flowers].map(target=>target.name).join(' → ');
           return [targets,s.label+'（花园修订 '+s.revision+'）'].filter(Boolean).join(' · ');

@@ -59,6 +59,18 @@ export function conversationRoute(text, mode = 'auto', withScreen = false) {
   if (mode === 'direct') return {kind:'direct'};
   if (mode === 'registration' || mode === 'supplement') return {kind:'registration'};
   if (mode === 'memory') return {kind:'memory'};
+  if (/^(?:绯月[，,\s]*)?(?:看看?|查[看查]?|读|打开)?(?:我的|本期|最新)?(?:关注新闻|新闻简报)[。！!]?$/u.test(text.trim())) return {kind:'newsBriefing'};
+  const xSearch=/^(?:(?:绯月|请|帮我|替我)[，,\s]*)*(?:(?:查|搜|搜索)(?:一下)?\s*(?:X(?:\.com)?|推特|Twitter)(?=$|[\s：:，,上帖推])(?:上(?:的)?)?(?:帖子|贴子|推文)?|(?:在|去)\s*(?:X(?:\.com)?|推特|Twitter)\s*上?\s*(?:搜索|搜|查)(?:一下)?)[：:，,\s]*(.+)$/iu.exec(text.trim());
+  if(xSearch)return {kind:'search',query:xSearch[1].trim(),research:'x'};
+  const specialist=/^(?:(?:绯月|请|帮我|替我)[，,\s]*)*(?:问(?:问|一下)?|请教)\s*deepsee+k[\s：:，,]+(.+)$/iu.exec(text.trim());
+  if(specialist)return {kind:'search',query:specialist[1].trim(),research:'deepseek'};
+  const page=/^(?:(?:请|帮我|绯月)[，,\s]*)*(?:打开|阅读|读取|提取|抓取)(?:这个|该)?(?:网页|页面|链接)?[\s：:，,]*(https:\/\/[^\s，。]+)(?:[\s，,]+(.*))?$/iu.exec(text.trim());
+  if(page)return {kind:'search',query:page[1],page:page[1],purpose:page[2]?.trim(),images:/图片|照片|找图/u.test(page[2]??''),summarize:true};
+  const news=/^(?:(?:绯月|请|帮我|上网|谷歌|Google)[，,\s]*)*(?:查询|搜索|查|找|搜)(?:一下|一搜)?(?:(?:最新消息|新闻)[：:\s]*(.+)|(.+?)(?:的)?(?:最新消息|最新新闻|新闻))[。！!]?$/iu.exec(text.trim());
+  if(news)return {kind:'search',query:(news[1]??news[2]).trim(),research:'news'};
+  const imageQuery = /^(?:(?:绯月|请|帮我|给我|替我|上网|网上|去网上)[，,\s]*)*(?:搜图|找图|查图)[片像照]*[\s：:，,]*(.+?)\s*[。!！]?$/u.exec(text.trim())
+    ?? /^(?:(?:绯月|请|帮我|给我|替我|上网|网上|去网上)[，,\s]*)*(?:找|搜|搜索|查找)(?:一下|一些|几张|一张|找找)?\s*(.+?)(?:的)?(?:图片|照片|参考图)[。!！]?$/u.exec(text.trim());
+  if (imageQuery) return {kind:'search',query:imageQuery[1].trim(),images:true};
   if (mode === 'web') return {kind:'search',query:requestedSearch(text) ?? text.trim(),summarize:true};
   if (!withScreen && /^(?:(?:绯月|请你?|帮我|替我|麻烦你?)[，,\s]*)*(?:(?:提交|创建|新增|发起|建|生成)(?:一个|一条|个)?\s*)?(?:云端任务|服务器任务)(?=$|有哪些|[：:，,\s。！!])/u.test(text.trim())) return {kind:'serverTask'};
   if(isSelfRestart(text))return {kind:'restart'};

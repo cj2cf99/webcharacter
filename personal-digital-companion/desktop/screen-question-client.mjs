@@ -23,7 +23,7 @@ async function abortable(work,signal){
   try{return await Promise.race([Promise.resolve().then(()=>{if(signal.aborted)throw cancelled();return work();}),stopped]);}
   finally{signal.removeEventListener('abort',onAbort);}
 }
-function encodeImage(image){
+export function encodeImage(image){
   if(!image||image.isEmpty())throw failure('CAPTURE_EMPTY','未能获取屏幕图片');
   for(let step=0;step<8;step++){
     for(const quality of [85,65,45]){const bytes=image.toJPEG(quality);if(bytes.length&&bytes.length<=limit){if(bytes[0]!==255||bytes[1]!==216||bytes[2]!==255)throw failure('CAPTURE_FAILED','截图编码失败');return {mime_type:'image/jpeg',data_base64:bytes.toString('base64')};}}
@@ -97,12 +97,7 @@ async function call(request,{endpoint,body,weather,question,grounded},signal,dia
   }
   finally{clearTimeout(timer);signal.removeEventListener('abort',abort);}
 }
-export async function createScreenQuestionClient({profile,screen,desktopCapturer,request,memory,vision}={}){
-  let configurationError=null;
-  if(request===undefined)try{request=await configuredRequest(profile);}catch(error){configurationError=error;}
-  if(!configurationError&&typeof request!=='function')configurationError=failure('CONFIG_NOT_CONFIGURED','问答连接尚未配置');
-  let active=null,last=null;
-  async function capture(signal){
+export async function captureCursorDisplay(screen,desktopCapturer,signal){
     const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const size=display.size??display.bounds,scale=display.scaleFactor??1;
     if(!Number.isFinite(size?.width)||!Number.isFinite(size?.height)||size.width<=0||size.height<=0||!Number.isFinite(scale)||scale<=0)throw failure('CAPTURE_FAILED','无法确定鼠标所在屏幕');
@@ -111,6 +106,12 @@ export async function createScreenQuestionClient({profile,screen,desktopCapturer
     if(!source)throw failure('DISPLAY_NOT_FOUND','未找到鼠标所在屏幕，未截取其他屏幕');
     return source.thumbnail;
   }
+export async function createScreenQuestionClient({profile,screen,desktopCapturer,request,memory,vision}={}){
+  let configurationError=null;
+  if(request===undefined)try{request=await configuredRequest(profile);}catch(error){configurationError=error;}
+  if(!configurationError&&typeof request!=='function')configurationError=failure('CONFIG_NOT_CONFIGURED','问答连接尚未配置');
+  let active=null,last=null;
+  const capture=signal=>captureCursorDisplay(screen,desktopCapturer,signal);
   async function run(question,{signal,onState,onFailure,onImage,turn,grounded=false,image:attachedImage,document}={},retry=false,withScreen=false){
     if(active)return failure('BUSY','已有一个问题正在处理');
     const controller=new AbortController(),externalAbort=()=>controller.abort();active=controller;

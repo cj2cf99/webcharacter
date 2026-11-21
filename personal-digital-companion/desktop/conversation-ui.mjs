@@ -144,6 +144,12 @@ function reportButton(date,id,label='查看详情'){
         contents.append(element('h3',turn.question),element('p',turn.text),element('small','编号 '+id+' · '+stamp(turn.at)+' 提交'));
         if(turn.answeredAt)contents.append(element('p',stamp(turn.answeredAt)+' 结束'));
         if(turn.report.workflowVersion)contents.append(element('small','工作流 '+turn.report.workflowVersion));
+        if(turn.report.tour){
+          const {destination,outfit,pose,location,camera}=turn.report.tour;
+          contents.append(element('p',destination+' · '+(location?'实景参考 · '+location.title:'本机合成背景')),
+            element('small','服装：'+outfit.title+'（'+outfit.author+'） · 姿势：'+pose.title+'（'+pose.author+'）'));
+          if(camera)contents.append(element('small','镜头：'+camera.title+'（'+camera.author+'）'));
+        }
         for(const s of turn.report.steps){
           const section=element('section','');section.className='fy-card';
           section.append(element('h3','第 '+s.step+' 步 · '+(phase[s.operation]??'图像结果')));
@@ -214,6 +220,15 @@ function renderPending(data,explicit){
       finally{resume.disabled=false;}
     });
     s.append(head('绯月的手记质问',chip(data.audit.status,'accent')),element('p',data.audit.title,'fy-clamp'),resume);sections.push(s);
+  }
+  if(data.audit){
+    const s=element('section','');s.className='event';
+    const resume=button('继续回答',async()=>{
+      resume.disabled=true;
+      try{status.textContent=await api.resumeAudit(data.audit.id);}catch(error){status.textContent=error.message;}
+      finally{resume.disabled=false;}
+    });
+    s.append(element('h2','绯月的手记质问'),element('p',data.audit.title),element('small',data.audit.status+'　'),resume);sections.push(s);
   }
   for(const choice of data.choices){
     const s=section('要修改哪些事项？',choice.expires),selected=new Set();
@@ -348,6 +363,10 @@ async function load(date,requestedView,explicit=true,cursor=null) {
       for(const source of turn.sources??[]){
         const button=element('button',new URL(source.url).hostname+' · '+source.title);
         button.className='source';button.onclick=()=>api.openSource(source.url);
+        if(source.preview?.startsWith('data:image/')){
+          const img=document.createElement('img');img.loading='lazy';img.width=144;img.alt=source.title;img.src=source.preview;
+          button.prepend(img);
+        }
         answer.append(button);
       }
       row.append(summary,answer);

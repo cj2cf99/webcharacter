@@ -19,10 +19,16 @@
     "memory": "activity-review",
     "diaryAudit": "diary-audit",
     "diaryWriting": "diary-writing",
+    "emotionAppraisal": "emotion-appraisal",
+    "loveAndReason": "love-and-reason",
+    "initiativeDecision": "initiative-decision",
+    "topicMemory": "topic-memory",
+    "basicNag": "personal-conversation",
     "restart": "desktop-controls",
     "image": "image-task-chain"
   },
   "menu": {
+    "news": "public-lookup",
     "question": "personal-conversation",
     "continueNag": "personal-conversation",
     "registration": "record-submission",

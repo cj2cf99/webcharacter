@@ -322,6 +322,16 @@ test('消费 RPC 复用同一 owner 的 GET 处理函数，保留快照游标和
   await assert.rejects(memoryExpenses({},{...q,from:'2026-10-01'},deps));
 });
 
+test('手记评价只保留有原文支持的动机和受赠关系，失据时仍有绯月自己的评价',async t=>{
+  const profile=mkdtempSync(join(tmpdir(),'feiyue-attribution-'));let review;
+  const store=createPersonalityDiary({profile,model:{memory:async()=>({review})}});
+  t.after(()=>{store.close();rmSync(profile,{recursive:true,force:true});});
+  const evaluate=async record=>(await store.think(JSON.stringify({来源:'你的日记',记录:record}),'写感受',['review'],new AbortController().signal,{name:'diary-writing'})).review;
+  review='他特意为我挑了一本书，肯定是想让我开心。';
+  assert.doesNotMatch(await evaluate('买了一本散文集。'),/特意|为我|肯定/);
+  review='送给朋友的书选好了，我也替你高兴。';assert.equal(await evaluate('这是送给朋友的书。'),review);
+  review='我很好奇哪篇最吸引你。';assert.equal(await evaluate('买了一本散文集。'),review);
+});
 test('凭据、代码和错误堆栈从材料中清理，保留用户纠正',()=>{
   const text=cleanMemory('你昨天说错了，书是送朋友的。\nconst fake = 123;\n```js\nconsole.log(123)\n```\n密码：示例口令，记下修正。');
   assert(text.includes('书是送朋友的'));assert(text.includes('记下修正'));assert(!/fake|console|示例口令/.test(text));
@@ -348,14 +358,21 @@ test('按清洗结果和固定段尾入册，归档根目录缺失时不产生�
   store.saveNag({id:'legacy',revision:0,source:'paylog',source_id:'P1',source_day:day,title:'书店',reason:'大额消费',mood,
     created_at:new Date(start).toISOString(),status:'等待回应',talk:[{at:new Date(start).toISOString(),who:'绯月',text:'买书了吗？'}]});
   await store.syncNags(signal);
-  assert.equal((await (await req('nags/legacy')).json()).mood,'🌙'.repeat(40));
+  const local=store.nags().find(n=>n.id==='legacy');
+  local.localInitiativeRound='private-round';store.saveNag(local);await store.syncNags(signal);
+  const published=await (await req('nags/legacy')).json();
+  assert.equal(published.mood,'🌙'.repeat(40));assert.equal(published.localInitiativeRound,undefined);
+  const updated=await req('nags',{...published,revision:published.revision+1,status:'用户结束'});assert.equal(updated.ok,true);
+  await store.refresh(signal);
+  const refreshed=store.nags().find(n=>n.id==='legacy');
+  assert.equal(refreshed.status,'用户结束');assert.equal(refreshed.localInitiativeRound,'private-round');
 });
 test('气泡没显示不登记，候选先排除已问和退款，再从金额前五和悬念中随机选一件',async()=>{
   const records=Array.from({length:9},(_,i)=>({id:'P'+i,spendDate:day,amount:9000-i*100,description:'书'+i,category:'图书'}));
   records[1].description='退款';records[2].spendDate='2026-11-18';
   const archive=[{id:'done',source:'paylog',source_id:'P0',status:'已解释'}];
   let displayed=false,stored=0;
-  const s={nags:()=>archive,pages:()=>[{day,part:1,threads:[{no:1,text:'已问',asked:true},{no:2,text:'待问',asked:false,resolved:false}]}],
+  const s={nags:()=>archive,handledThread:()=>false,pages:()=>[{day,part:1,threads:[{no:1,text:'已问',asked:true},{no:2,text:'待问',asked:false,resolved:false}]}],
     last:()=>null,mark(){},saveNag(n){stored++;n.revision++;},syncNags:async()=>{},think:async()=>({question:'书买好了？',evaluation:'惦记着',mood:'好奇'}),
     api:async()=>({records,nextCursor:null,complete:false})};
   let opened;
@@ -377,7 +394,7 @@ test('等待期间留下解释但推理中断，恢复后用已存原话收尾',
   await engine.poll(new AbortController().signal);assert.equal(saved.status,'已解释');assert.equal(saved.afterEvaluation,'明白用途了。');await engine.close();
 });
 
-test('记忆锁定 4B，显存不足走 CPU，前台对话抢占后回到普通模型',async()=>{
+test('记忆锁定 Aggressive 9B，显存不足走 CPU，前台对话抢占后回到普通模型',async()=>{
   const started=Promise.withResolvers(),chosen=[];
   const model=createBalancedLocalModel({modelPath:'models/base.gguf',readGpu:async()=>({freeMiB:100,utilization:99}),
     create:({modelPath,device})=>{
@@ -392,5 +409,5 @@ test('记忆锁定 4B，显存不足走 CPU，前台对话抢占后回到普通�
   await started.promise;
   const checked=assert.rejects(waiting);
   const reply=await model.analyze('你好',{hint:'auto'});await checked;
-  assert.equal(reply.reply,'我在。');assert.match(chosen[0][0],/4B/);assert.equal(chosen[0][1],'cpu');assert.match(chosen[1][0],/0.8B/);await model.close();
+  assert.equal(reply.reply,'我在。');assert.match(chosen[0][0],/9B-Uncensored-HauhauCS-Aggressive/);assert.equal(chosen[0][1],'cpu');assert.match(chosen[1][0],/0.8B/);await model.close();
 });

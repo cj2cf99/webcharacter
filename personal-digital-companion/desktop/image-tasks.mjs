@@ -3,7 +3,7 @@ import {mkdir,mkdtemp,readFile,readdir,rename,rm,writeFile} from 'node:fs/promis
 import {join,resolve} from 'node:path';
 import {validAttachment} from './question-attachment.mjs';
 
-import {imageSlots,resolveImageChoices,checkEditConstraints,previousImage} from './image-planning.mjs';
+import {imageSlots,resolveImageChoices,checkEditConstraints,previousImage,tourDestination} from './image-planning.mjs';
 export {imageRequest,literalPlan,checkEditConstraints} from './image-planning.mjs';
 
 const labels={generate:'文字生图',img2img:'图生图',edit:'定向编辑',upscale:'高清放大'};
@@ -37,7 +37,7 @@ export function createImageTasks({root,profile,localModel,onChange,onFinish,arch
     if(!closed)onChange?.();
   };
   async function archiveResult(row){
-    if(!archive||row.archiveComplete)return;
+    if(!archive||row.archiveComplete||row.sceneDrawing)return;
     try{
       const result=await archive(row);
       row.archiveComplete=result.complete;
@@ -54,6 +54,7 @@ export function createImageTasks({root,profile,localModel,onChange,onFinish,arch
     const label=labels[row.operation]??'图像任务';
     row.text=row.state==='done'?`已完成 ${row.width}×${row.height} 图片。`:
       `${row.step?'第 '+row.step+' 步「'+label+'」':'图像任务'}失败：${row.error??'未收到结果'}`;
+    if(row.tour&&row.state==='done')row.text=`绯月环球之旅 · ${row.tour.destination}，已完成 ${row.width}×${row.height} 写实合成照。`;
     await archiveResult(row);
     await save(row);
     await onFinish?.(row);
@@ -66,6 +67,13 @@ export function createImageTasks({root,profile,localModel,onChange,onFinish,arch
     void pending.catch(error=>{if(!closed)return onFinish?.({...row,state:'failed',text:'图像回执写入失败：'+error.message});}).catch(()=>{});
     return pending;
   }
+  async function queued(row,original,label){
+    if(row.state!=='queued')throw Error(row.error??'提交失败');
+    Object.assign(row,{at:Date.now(),original,text:'已排队 · '+label});
+    await save(row);
+    monitorJob(row);
+    return row;
+  }
   const ready=(async()=>{
     let names;
     try{names=await readdir(receipts);}catch(error){if(error.code==='ENOENT')return;throw error;}
@@ -73,29 +81,29 @@ export function createImageTasks({root,profile,localModel,onChange,onFinish,arch
       const row=JSON.parse(await readFile(join(receipts,name),'utf8'));
       jobs.set(row.job,row);
       if(!['done','failed'].includes(row.state))monitorJob(row);
-      else if(archive&&!row.archiveComplete){await archiveResult(row);await save(row);}
+      else if(archive&&!row.archiveComplete&&!row.sceneDrawing){await archiveResult(row);await save(row);}
     }
   })().finally(()=>{restoring=false;});
   const ordered=()=>[...jobs.values()].sort((a,b)=>b.at-a.at);
   return {
     get busy(){return restoring||monitors.size>0;},
-    async generateServerImage(prompt,taskId){
+    async generateServerImage(prompt,taskId,sceneDrawing=false){
       await ready;
-      if(!archive)throw Error('本地图片归档未就绪。');
+      if(!archive&&!sceneDrawing)throw Error('本地图片归档未就绪。');
       const job=taskId.replaceAll('-','');
       let row=jobs.get(job);
-      if(row&&(row.serverTaskId!==taskId||row.original!==prompt))throw Error('已有图像任务与本次提交不符。');
+      if(row&&(Boolean(row.sceneDrawing)!==sceneDrawing||row.serverTaskId!==taskId||row.original!==prompt))throw Error('已有图像任务与本次提交不符。');
       if(!row){
         const queued=await runPython(cli,['submit','--server-task-id',taskId],{original:prompt,steps:[{op:'generate',quote:prompt,refs:[]}]});
         if(queued.job!==job){
-          const failure={job,serverTaskId:taskId,original:prompt,at:Date.now(),state:'failed',completed:[],
+          const failure={job,sceneDrawing,serverTaskId:taskId,original:prompt,at:Date.now(),state:'failed',completed:[],
             error:queued.error??'图像作业提交回执不匹配。'};
           failure.text='服务器生图提交失败：'+failure.error;
           await mkdir(receipts,{recursive:true});
           await archiveResult(failure);await save(failure);
           throw Error(failure.text);
         }
-        row={...queued,serverTaskId:taskId,original:prompt,at:Date.parse(queued.submitted)||Date.now(),text:'已排队 · 服务器文字生图'};
+        row={...queued,sceneDrawing,serverTaskId:taskId,original:prompt,at:Date.parse(queued.submitted)||Date.now(),text:sceneDrawing?'已排队 · 绯月画作':'已排队 · 服务器文字生图'};
         await mkdir(receipts,{recursive:true});
         await save(row);
         row=await monitorJob(row);
@@ -103,6 +111,7 @@ export function createImageTasks({root,profile,localModel,onChange,onFinish,arch
         row=await monitorJob(row);
       }
       if(row.state!=='done')throw Error(row.text);
+      if(sceneDrawing)return row.output??row.completed?.at(-1)?.output;
       if(!row.archiveComplete){await archiveResult(row);await save(row);}
       if(!row.archiveComplete||!row.archivedOutput)throw Object.assign(Error('生成成功，PNG 尚未归档。'),{code:'IMAGE_ARCHIVE_FAILED'});
       return {job_id:row.job,format:'PNG',width:row.width,height:row.height,archived:true};
@@ -116,6 +125,13 @@ export function createImageTasks({root,profile,localModel,onChange,onFinish,arch
     async submit(text,attachments){
       await ready;
       if(text.length>2000)throw Error('图像指令最多 2000 字。');
+      const destination=tourDestination(text);
+      if(destination!==null){
+        if(attachments.length||destination.length>80)throw Error('请用“绯月环球之旅：目的地”启动，参考图由绯月挑选。');
+        await mkdir(receipts,{recursive:true});
+        const row=await runPython(cli,['submit','--tour'],{original:text,destination});
+        return queued(row,text,'绯月环球之旅');
+      }
       if(attachments.length>16||attachments.some(a=>!validAttachment(a)||a.kind!=='image'))throw Error('图片任务仅支持最多 16 张图片。');
       const prior=previousImage.test(text)?ordered().find(r=>r.state==='done'||r.completed?.length):null;
       if(previousImage.test(text)&&!prior)throw Error('没有可继续编辑的本地结果，请附上底图。');
@@ -156,11 +172,7 @@ export function createImageTasks({root,profile,localModel,onChange,onFinish,arch
           args.push('--image',path);
         }
         const row=await runPython(cli,args,{original:text,steps});
-        if(row.state!=='queued')throw Error(row.error??'提交失败');
-        Object.assign(row,{at:Date.now(),original:text,text:'已排队 · '+steps.map(s=>labels[s.op]).join(' → ')});
-        await save(row);
-        monitorJob(row);
-        return row;
+        return await queued(row,text,steps.map(s=>labels[s.op]).join(' → '));
       }finally{await rm(temp,{recursive:true,force:true});}
     },
     close(){closed=true;}

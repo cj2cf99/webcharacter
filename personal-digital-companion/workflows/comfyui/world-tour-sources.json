@@ -1,0 +1,71 @@
+{
+  "roles": {
+    "destination": [
+      "serpapi",
+      "editorials",
+      "commons",
+      "openverse"
+    ],
+    "camera": [
+      "serpapi",
+      "editorials",
+      "commons"
+    ],
+    "outfit": [
+      "serpapi",
+      "editorials",
+      "sketchfab",
+      "openverse"
+    ],
+    "pose": [
+      "serpapi",
+      "editorials",
+      "sketchfab",
+      "openverse"
+    ],
+    "images": [
+      "serpapi",
+      "openverse",
+      "editorials",
+      "commons"
+    ]
+  },
+  "cameraQuery": "full length candid street photograph pedestrian walking pavement natural perspective",
+  "providers": {
+    "serpapi": {
+      "adapter": "serpapi",
+      "roleQueries": {
+        "outfit": "{query} fashion week full length single model",
+        "pose": "{query} full length candid street style one person",
+        "destination": "{query} street level travel photograph"
+      }
+    },
+    "editorials": {
+      "adapter": "web",
+      "roleQueries": {
+        "outfit": "{query} fashion magazine fashion week single model full length runway look",
+        "pose": "{query} full length candid street style one person",
+        "destination": "{query} street level travel photograph foreground pedestrian pavement"
+      }
+    },
+    "commons": {
+      "adapter": "commons",
+      "roleQueries": {
+        "camera": "intitle:\"Woman walking across street.jpg\""
+      }
+    },
+    "sketchfab": {
+      "adapter": "sketchfab"
+    },
+    "openverse": {
+      "adapter": "openverse"
+    }
+  },
+  "outfits": [
+    "trench coat",
+    "denim jacket",
+    "leather jacket",
+    "fashion week runway look",
+    "fashion magazine street style outfit"
+  ]
+}

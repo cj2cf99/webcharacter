@@ -1,0 +1,45 @@
+{
+  "installedAt": "2026-11-21T16:23:16.552+09:00",
+  "pidAtInstall": 4348,
+  "settings": {
+    "enabled": 1,
+    "minutes": 180
+  },
+  "paths": [
+    {
+      "path": "desktop/poll-scheduler.mjs",
+      "installed": "dfa3f42425a3b5993e06bcd9415d9efac37daef264c6d72c2d7c98d83e1c8524",
+      "combined": "ccd886192774eba6c6aac8c3790c494765519530d0b56b7aecc4456115da9e32"
+    },
+    {
+      "path": "desktop/poll-settings.html",
+      "installed": "62b18acbf2f1bd65295f7fa77929c5def88cbf5caa880850d4056e79fa642d02",
+      "combined": "62b18acbf2f1bd65295f7fa77929c5def88cbf5caa880850d4056e79fa642d02"
+    },
+    {
+      "path": "desktop/poll-settings-ui.mjs",
+      "installed": "559a6549ca296e2af0e17021303d6c6b5d14654441deec56baa88520b05a7df4",
+      "combined": "f2d6f5157f681b092116365304d351cae8817f358999b03293f31b0536b3be7c"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "installed": "868aba59f83183e39fd986743ec41305544b607d35208ce12c959be766271563",
+      "combined": "b10b829fd6965c745bd346a60c190293c1c8144669fe87e4c3628edfa57b9ea0"
+    },
+    {
+      "path": "desktop/task-lifecycle.mjs",
+      "installed": "a475735c1d90073206ccca790269647c511b0ac2a39b4edbc309fe722b016532",
+      "combined": "a475735c1d90073206ccca790269647c511b0ac2a39b4edbc309fe722b016532"
+    },
+    {
+      "path": "output/desktop-bundle/poll-settings.html",
+      "installed": "62b18acbf2f1bd65295f7fa77929c5def88cbf5caa880850d4056e79fa642d02",
+      "combined": "62b18acbf2f1bd65295f7fa77929c5def88cbf5caa880850d4056e79fa642d02"
+    },
+    {
+      "path": "output/desktop-bundle/poll-settings-ui.mjs",
+      "installed": "559a6549ca296e2af0e17021303d6c6b5d14654441deec56baa88520b05a7df4",
+      "combined": "f2d6f5157f681b092116365304d351cae8817f358999b03293f31b0536b3be7c"
+    }
+  ]
+}

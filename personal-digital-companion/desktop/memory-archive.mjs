@@ -95,7 +95,7 @@ export function createMemoryArchive(root=memoryRoot){
       }catch{entry.error='原图未能归档';problems.push('第 '+step+' 步原图未能归档');}
       steps.push(entry);
     }
-    const report={job:row.job,...(row.serverTaskId?{serverTaskId:row.serverTaskId}:{}),version:row.version,workflowVersion:row.workflowVersion,steps,state:row.state,error:row.error};
+    const report={job:row.job,...(row.serverTaskId?{serverTaskId:row.serverTaskId}:{}),...(row.tour?{tour:row.tour}:{}),version:row.version,workflowVersion:row.workflowVersion,steps,state:row.state,error:row.error};
     const at=Date.parse(row.updated)||Date.parse(steps.at(-1)?.finished)||row.at;
     const turn={id:row.job,at:row.at,answeredAt:at,question:row.original,state:row.state==='done'?'answer':'error',
       text:[row.serverTaskId&&'服务器任务 '+row.serverTaskId,row.text,...problems].filter(Boolean).join('\n'),report};

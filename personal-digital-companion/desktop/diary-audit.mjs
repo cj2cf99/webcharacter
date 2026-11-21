@@ -43,7 +43,7 @@ function formatQuestion(n){
     n.questions===1?'想搞清楚的问题':'追问 '+(n.questions-1)+' / 2',n.next].join('\n');
 }
 
-export function createDiaryAudit({store,show,idle,canContinue,save,changed,onInterrupted,now=Date.now,random=Math.random,loadSkill=()=>readInteractionSkill('diaryAudit')}){
+export function createDiaryAudit({emotion,store,show,idle,canContinue,save,changed,onInterrupted,now=Date.now,random=Math.random,loadSkill=()=>readInteractionSkill('diaryAudit')}){
   let active=null,budget=null,working=false,state;
   function expireQuestion(n){
     if(!n||!open(n))return;
@@ -227,9 +227,10 @@ export function createDiaryAudit({store,show,idle,canContinue,save,changed,onInt
           if(active!==session)throw Error('这次气泡已关闭');
           const text=store.nagText?await untilAbort(store.nagText(n,raw,replySignal),replySignal):cleanMemory(raw);
           limit.check();replySignal.throwIfAborted();
-          if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请用 1 至 3000 字文字回答。',invalid:true};
+          if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请输入文字回答。',invalid:true};
           line(n,'你',text);delete n.notBefore;save(n);
           const result=await advance(n,write,replySignal);
+          if(result.text&&!result.invalid)emotion?.chat({id:n.id+'/'+n.talk.length,state:'answer',at:now(),question:text,text:result.text});
           if(result.done){active=null;if(!open(n))stopRun();}
           return result;
         }catch(error){

@@ -54,7 +54,7 @@ export const memoryScript=String.raw`
       if(thread.no===focus)requestAnimationFrame(()=>block.scrollIntoView({block:'nearest'}));
     }
   }
-  const sourceName=s=>({audit:'手记质问',diary:'悬念',paylog:'消费'})[s]??s;
+  const sourceName=s=>({curiosity:'此刻所想',audit:'手记质问',diary:'悬念',paylog:'消费'})[s]??s;
   async function origin(n){
     const token=++originToken,box=el('originBody'),dialog=el('origin');
     if(!dialog.open)dialog.showModal();
@@ -103,7 +103,8 @@ export const memoryScript=String.raw`
       if(token!==readToken)return;
       const files=node('a','TXT 附件');files.href=base+kind+'/'+encodeURIComponent(id)+'/txt';files.target='_blank';files.rel='noopener';
       container.replaceChildren(files);if(kind==='diaries'){renderDiary(container,r);return;}
-      container.append(node('h2',r.title),node('p',[r.status,r.reason,r.stats].filter(Boolean).join('\n')),button(r.source==='audit'?'查看主篇 →':'查看原记录 →',()=>origin(r)));
+      container.append(node('h2',r.title),node('p',[r.status,r.reason,r.stats].filter(Boolean).join('\n')));
+      if(r.source!=='curiosity')container.append(button(r.source==='audit'?'查看主篇 →':'查看原记录 →',()=>origin(r)));
       if(r.source==='audit'){
         container.append(node('h3','手记原文'),...r.refs.map((v,i)=>node('p',(i+1)+'. '+v.page+'　「'+v.quote+'」')),
           node('h3','矛盾点'),...r.points.map((v,i)=>node('p',(i+1)+'. '+v)));
@@ -138,7 +139,7 @@ export const memoryScript=String.raw`
       const data=await fetchJson(base+kind+'?'+params);
       if(token!==listToken)return;
       rows.replaceChildren();total=data.total;knownDays=new Set(data.items.map(r=>diary?r.day:localDay(r.created_at)));calendar();
-      const choices=diary?[...new Set([filter,...data.items.flatMap(r=>r.tags)].filter(Boolean))]:['paylog','diary','audit'];
+      const choices=diary?[...new Set([filter,...data.items.flatMap(r=>r.tags)].filter(Boolean))]:['paylog','diary','audit','curiosity'];
       el('filter').replaceChildren(new Option(diary?'全部标签':'全部来源',''),...choices.map(v=>new Option(diary?v:sourceName(v),v)));
       el('filter').value=filter;
       el('archiveSummary').textContent=diary?'日记':'小唠叨';

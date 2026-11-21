@@ -8,7 +8,7 @@ const threads = 4;
 const contextSize = 2048;
 const port = process.parentPort;
 const send = value => port.postMessage(value);
-const roleFacts = '在夫妻角色扮演中，绯月是妻子，用户是她的丈夫。绯月称呼用户为“老公”，用户可以称呼她为“绯月”。称呼以此为准。';
+const roleFacts = '在夫妻角色扮演中，用户是绯月的丈夫。绯月是他心爱的妻子、贤内助，是他口中“可爱的心尖肉肉”。绯月称呼丈夫为“老公”。';
 const persona = '你叫绯月。'+roleFacts+'用“我”自称，亲近自然地回应用户。';
 const conversationStyle = '对方主动想与你交谈、亲近或分享心情时，先热情回应他这句的具体意思，再顺着话题接一句，让对话能继续。可以分享相关想法或轻轻问一个问题。别只应声，别重复问已经说过的事。用户说要去忙或晚点聊时，温和回应他的安排。';
 const identityQuestion = /^(?:绯月[，, ]*)?(?:(?:告诉我|说说)?(?:你(?:现在)?是谁|你叫什么(?:名字)?|你的名字是什么|我(?:该)?怎么称呼你|你是我的(?:谁|什么人)|(?:对我来说[，, ]*)?你是什么身份|你(?:跟|和)我是什么关系|介绍一下你自己)[呀啊呢吧吗]?[？?。！!，,\s]*)+$/u;
@@ -29,7 +29,7 @@ function profileReply(text) {
   if (husbandAddressRequest.test(text)) return '当然可以，老公。';
   if (userRelationQuestion.test(text)) return '你是我的丈夫呀。';
   if (nameQuestion.test(text)) return '叫我绯月就好呀。';
-  if (identityQuestion.test(text)) return '我叫绯月，是你的妻子。';
+  if (identityQuestion.test(text)) return '我叫绯月，是你心爱的妻子呀。';
   return null;
 }
 
@@ -59,7 +59,7 @@ const system = [
   '先判断用途。有要求做事时优先判 task，包括登记、设提醒以及指挥自己移动或重启。task 只概括意图，reply 留空。闲聊、感受、邀请你陪聊或询问你的身份是 chat。天气、网页、截图和需核实的事实是 external。看不准用 uncertain。',
   '普通对话里，吃饭、运动、工作进展、感想和安排都是谈话内容。登记或记录作为本轮委托的动词才准备草案，保留明确的记一下、提醒我等指令。词义、引述、否定和旧记录是谈话内容。',
   '收到宿主的空闲提示时可简短问候，实际拿到待办清单时关注未完成和临期事项。只回答最后一句用户输入。较早的对话只提供背景，不能把旧回复当成本轮答案。草稿只是复核材料。只按实际回执报告已执行、查阅或登记。',
-  '示例：“你好，绯月。”→ chat，回复“你好呀，我在。”。“你叫什么名字？你是谁？”→ chat，回复“我叫绯月，是你的妻子。”。“绯月，把自己移到屏幕右下角。”→ task，只概括移动指令。',
+  '示例：“你好，绯月。”→ chat，回复“你好呀，我在。”。“你叫什么名字？你是谁？”→ chat，回复“我叫绯月，是你心爱的妻子呀。”。“绯月，把自己移到屏幕右下角。”→ task，只概括移动指令。',
   '例如“昨天吃了牛肉配面包”是 chat，回应这顿饭；“登记昨天的晚餐”才是 task。',
   'summary 最多 24 字，普通聊天可空。仅 chat 给简短自然的中文 reply。只有需要再核对的歧义、缺项或多件事才设 review=true。'
 ].join('\n');
@@ -348,6 +348,10 @@ async function start() {
           result=reply?{kind:'chat',reply}:{error:'LOCAL_AI_RESULT_INVALID'};
         }else if (hint === 'serverTask' || hint === 'personalityMemory') {
           activeSignal = signal;
+          if(hint==='personalityMemory'&&['emotion-appraisal','initiative-decision','topic-memory'].includes(data.skillInstruction.name)){
+            const used=model.tokenize(text).length+model.tokenize(data.skillInstruction.instruction).length;
+            if(used+420+32>contextSize)throw Object.assign(Error('本轮人格材料超出上下文'),{code:'LOCAL_AI_CONTEXT_BUDGET'});
+          }
           const taskGrammar = await engine.createGrammarForJsonSchema(data.skillInstruction.schema);
           result = await pass(text,signal,data.skillInstruction.instruction,undefined,taskGrammar,420);
         } else if (hint === 'image-plan') {

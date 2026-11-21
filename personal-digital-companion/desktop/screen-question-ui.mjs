@@ -13,6 +13,7 @@ const labels={resume:'恢复原链',continue:'继续',skip:'跳过',stop:'停止
 const recordingInput=['输入登记内容，可按 Win + H 听写','登记 ↗'];
 const modes={
   auto:['问绯月，或拖入图片、文本，粘贴图片…','发送 ↗'],
+  tour:['输入目的地，留空由绯月选一站','出发 ↗'],
   registration:recordingInput,
   supplement:recordingInput,
   web:['输入想确认的公开问题','查询 ↗'],
@@ -23,10 +24,11 @@ let busy=false,composing=false,idleTimer,draftReady=false;
 let attachment=null,reading=false,attachmentReady=false;
 let references=[],audit=false;
 let imageJob=null,imageRequest=0;
+let displayed='',expanded=false,lastView=null;
 
 const resetIdle=()=>{
   clearTimeout(idleTimer);
-  if(busy||composing||reading||audit&&question.value.trim())return;
+  if(busy||composing||reading||expanded||audit&&question.value.trim())return;
   idleTimer=setTimeout(()=>{
     if(draftReady&&host.idleClose){
       host.idleClose({text:question.value,mode:mode.value,withScreen:withScreen.checked,attachment,references});
@@ -71,6 +73,7 @@ async function attachFiles(files){
   if(busy||reading||audit)return;
   attachmentError();
   if(directActive())return attachmentError('直连仅支持文字；关闭直连后可以添加附件。');
+  if(mode.value==='tour')return attachmentError('旅行参考图由绯月挑选，直接选目的地即可。');
   if(!host.attachmentInput||!attachmentReady)return attachmentError('请重新启动绯月以启用附件。');
   if(!files.length||files.length+references.length+Number(Boolean(attachment))>16)return attachmentError('每次最多 16 张图片。');
   reading=true;updateMode();resetIdle();
@@ -117,8 +120,10 @@ function render(value){
   byId('asked').hidden=!value.question;
   byId('asked').textContent=value.question??'';
   const full=value.text??'';
+  lastView=value;
+  if(displayed!==full){displayed=full;expanded=false;}
   const chars=[];
-  for(const {segment} of segmenter.segment(full)){chars.push(segment);if(chars.length===51)break;}
+  for(const {segment} of segmenter.segment(full)){chars.push(segment);if(chars.length===201)break;}
   if(!waiting){
     audit=Boolean(value.audit);byId('auditActions').hidden=!audit;
     if(audit)mode.value='auto';
@@ -126,12 +131,15 @@ function render(value){
     const close=byId('close');close.dataset.nag=String(Boolean(value.nag));
     close.textContent=value.nag&&!audit?'结束追问':'×';close.setAttribute('aria-label',value.nag&&!audit?'结束这次追问':'关闭问答');
   }
-  answer.textContent=!value.nagReply&&chars.length>50?chars.slice(0,49).join('')+'…':full;
+  answer.textContent=!expanded&&chars.length>200?chars.slice(0,200).join(''):full;
   byId('unsaved').hidden=!value.unsaved;
   question.disabled=busy;mode.disabled=busy;retry.disabled=busy;
   retry.hidden=value.state!=='error'||!value.retryable;
-  const clipped=answer.scrollHeight>answer.clientHeight+1;
-  byId('full').hidden=value.nagReply||busy||value.state==='idle'||(chars.length<=50&&!clipped&&!value.sources?.length);
+  const more=byId('full');
+  more.hidden=chars.length<=200;
+  more.textContent=expanded?'收起':'展开全文';
+  more.setAttribute('aria-expanded',String(expanded));
+  byId('sources').hidden=!value.sources?.length;
   badge.textContent={idle:'对话',waiting:'处理中',answer:'回复',error:'未完成'}[value.state];
   badge.hidden=value.state==='error'&&!(typeof value.question==='string'&&value.question.trim()&&full.trim());
   if(Object.hasOwn(value,'hasPending'))updatePending(value.hasPending);
@@ -165,7 +173,7 @@ function render(value){
     return button;
   }));
   const requiredHeight=Math.ceil(innerHeight-reply.getBoundingClientRect().height+replyContent.getBoundingClientRect().height);
-  host.fit(Math.min(420,Math.max(260,requiredHeight)));
+  host.fit(Math.min(640,Math.max(260,requiredHeight)));
 }
 async function invoke(run){
   if(busy)return;
@@ -178,7 +186,7 @@ withScreen.onchange=()=>{updateMode();retry.hidden=true;};
 question.oninput=()=>{retry.hidden=true;};
 form.onsubmit=async event=>{
   event.preventDefault();
-  const text=question.value;if((!text.trim()&&!attachment)||send.disabled)return;
+  const text=question.value;if((!text.trim()&&!attachment&&mode.value!=='tour')||send.disabled)return;
   const direct=directActive();
   const value=await invoke(()=>host.ask(text,withScreen.checked,direct?'direct':mode.value,attachment,references));
   if(value?.state==='answer'&&!value.invalid){question.value='';showAttachment(null);attachmentError();updateMode('auto');question.focus();}
@@ -187,11 +195,12 @@ question.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey
 for(const event of ['keydown','input','pointerdown','change']){
   document.addEventListener(event,resetIdle,{capture:true,passive:true});
 }
-document.addEventListener('wheel',event=>{if(!event.target.closest?.('#imageResults,#reply[data-nag=true]'))event.preventDefault();},{capture:true,passive:false});
+document.addEventListener('wheel',event=>{if(!event.target.closest?.('#imageResults,#reply'))event.preventDefault();},{capture:true,passive:false});
 question.addEventListener('compositionstart',()=>{composing=true;resetIdle();});
 question.addEventListener('compositionend',()=>{composing=false;resetIdle();});
 retry.onclick=async()=>{const value=await invoke(()=>host.retry());if(attachment&&value?.state==='answer'){question.value='';showAttachment(null);attachmentError();}};
-for(const [id,full] of [['full',true],['history',false]])byId(id).onclick=()=>host.details(full).catch(()=>render({state:'error',text:'对话记录窗口未能打开。'}));
+for(const [id,full] of [['sources',true],['history',false]])byId(id).onclick=()=>host.details(full).catch(()=>render({state:'error',text:'对话记录窗口未能打开。'}));
+byId('full').onclick=()=>{expanded=!expanded;render(lastView);resetIdle();};
 for(const action of ['later','refuse'])byId(action).onclick=()=>host.close(action);
 byId('close').onclick=()=>host.close('button');
 pending.onclick=()=>host.pending(!question.value&&!attachment&&!reading).catch(()=>render({state:'error',text:'待确认窗口未能打开。'}));

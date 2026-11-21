@@ -10,10 +10,11 @@ import {createPersonalityNags} from '../../desktop/personality-nags.mjs';
 import {personalityMemory} from '../assistant/personality-memory.mjs';
 import {fixture as screenFixture} from './screen-question-fixture.mjs';
 import {attachScreenQuestion} from '../../desktop/screen-question-host.mjs';
+import {createDesktopTasks} from '../../desktop/task-lifecycle.mjs';
 
-const start=Date.parse('2026-11-21T12:00:00+09:00'),hour=3600000;
+const start=Date.parse('2026-11-21T12:00:00+09:00'),hour=3600000,minute=60_000;
 const signal=new AbortController().signal;
-async function fixture(t){
+async function fixture(t,{withTaskRuntime=false}={}){
   const {DB,sqlite,close}=openTestDatabase();
   sqlite.exec(readFileSync(new URL('../migrations/016-personality-memory.sql',import.meta.url),'utf8'));
   const myMainStorage=bucketFixture();
@@ -33,14 +34,22 @@ async function fixture(t){
     const data=JSON.parse(input);f.calls.push(data);
     if(s.required.includes('score')){
       f.generated++;assert(data.every(r=>r.page>='2026-11-15'));
-      return {score:f.found?'5':'0',refs:'1,2',summary:'同一版首次上线日期不一致',points:'周三与周一不能同时是首次上线',question:'首次上线是哪天？',keywords:'花园,上线'};
+      f.compareEntered?.resolve();
+      await f.holdCompare;
+      return {score:f.found?'5':'0',refs:data.length>1?'1,2':'1',summary:'同一版首次上线日期不一致',points:'周三与周一不能同时是首次上线',question:'首次上线是哪天？',keywords:'花园,上线'};
     }
     if(s.required.includes('keep')){
+      f.verifyEntered?.resolve();
+      await f.holdVerify;
       assert(data.本机线索.some(r=>r.snippet.includes('仅本地检索的材料')));
       return {keep:f.explained?'0':'1',question:'首次上线是哪天？'};
     }
     if(s.required.includes('keywords'))return {keywords:'花园'};
-    if(s.required.includes('complete'))return {complete:f.complete?'1':'0',next:f.follow??(data.问答.length===2?'哪天完成验收？':'哪天收到回执？')};
+    if(s.required.includes('complete')){
+      f.replyEntered?.resolve();
+      await f.holdReply;
+      return {complete:f.complete?'1':'0',next:f.follow??(data.问答.length===2?'哪天完成验收？':'哪天收到回执？')};
+    }
     if(s.required[0]==='text'&&data.回答片段)return {text:(data.此前摘要+data.回答片段).includes('周一是测试环境')?'周一是测试环境':'尚不明确'};
     assert.deepEqual(s.required,['text']);return {text:'我带着'+data.情绪+'记下他的解释。'};
   }};
@@ -50,28 +59,48 @@ async function fixture(t){
       f.requests.push(url);if(f.offline)throw Error('隔离测试断网');
       return req(url.slice('/api/memory/'.length),options);
     }};
+  let tasks;
+  if(withTaskRuntime){
+    const request=options.request;
+    tasks=await createDesktopTasks({profile,request:async(url,opts)=>{
+      if(url==='/api/memory/nags'&&opts.method==='POST')await f.holdNagWrite;
+      return request(url,opts);
+    }});
+    options.request=tasks.weatherRequest;
+  }
   function init(){
     f.store=createPersonalityDiary(options);
-    f.nags=createPersonalityNags({store:f.store,now:()=>f.time,idle:()=>true,canContinue:()=>!f.busy,
+    f.nags=createPersonalityNags({store:f.store,now:()=>f.time,idle:()=>true,canContinue:()=>!f.busy&&(!tasks||tasks.tasksIdle({allowPendingRequests:true})),
       show:async s=>{if(!f.show)return false;f.session=s;s.visible();return true;}});
   }
   init();
-  f.poll=(manual=false)=>f.nags.pollAudit(signal,{manual});
+  f.poll=(manual=false,outer=signal)=>f.nags.pollAudit(outer,{manual});
   f.restart=async()=>{await f.nags.flush();await f.nags.close();f.store.close();init();};
-  Object.assign(f,{req,post,diary});
-  t.after(async()=>{await f.nags.flush();await f.nags.close();f.store.close();close();rmSync(profile,{recursive:true,force:true});});
+  Object.assign(f,{req,post,diary,tasks});
+  t.after(async()=>{await f.nags.flush();await f.nags.close();f.store.close();await tasks?.stop();close();rmSync(profile,{recursive:true,force:true});});
   f.original=async id=>(await req('nags/'+id+'/original')).text();
   return f;
 }
+test('回答自己的质问时，念叨补传仍在途也能完成同一回合',async t=>{
+  const f=await fixture(t,{withTaskRuntime:true});
+  await f.poll();await f.nags.flush();
+  const hold=Promise.withResolvers();
+  f.holdNagWrite=hold.promise;f.complete=true;
+  try{
+    const result=await f.session.reply('周一是测试环境。');
+    assert.equal(f.tasks.tasksIdle(),false);
+    assert(result.done);assert.equal(f.store.nags()[0].status,'已解释');
+  }finally{hold.resolve();}
+});
 test('七天多篇引文、单一主对象、关键词只读本机；稍后跨重启，忙时保留回答，两轮结束',async t=>{
   const f=await fixture(t);
   await f.poll();const id=f.nags.pending().id;
   assert.match(f.session.prompt,/日记源头.*主篇[\s\S]+矛盾简述[\s\S]+1\. 2026-11-21\.1[\s\S]+2\. 2026-11-15\.1[\s\S]+矛盾点[\s\S]+首次上线是哪天？/);
   assert.equal((f.session.prompt.match(/？/g)??[]).length,1);
-  f.session.leave('later');f.time+=hour-1;
-  await f.restart();assert.equal((await f.poll()).nextAt,start+hour);
+  f.session.leave('later');f.time+=minute;
+  await f.restart();assert.match((await f.poll()).detail,/待确认/);
   assert.equal(f.nags.pending().status,'等待回应');
-  f.time++;await f.poll();assert.equal(f.nags.pending().questions,1);
+  await f.poll(true);assert.equal(f.nags.pending().questions,1);
   f.busy=true;assert((await f.session.reply('先部署了测试版本。')).done);
   await f.restart();assert.equal(f.nags.pending().talk.at(-1).text,'先部署了测试版本。');
   f.busy=false;await f.poll();
@@ -90,7 +119,7 @@ test('七天多篇引文、单一主对象、关键词只读本机；稍后跨�
   assert.equal((await f.post('nags',conflicting)).status,409);
   assert.equal((await (await f.req('nags')).json()).total,1);
 });
-test('气泡未能显示仍保留原题；主动继续无需等满一小时；拒答关闭同一记录',async t=>{
+test('气泡未显示仍保留原题，期限内继续或拒答复用同一记录',async t=>{
   const f=await fixture(t);f.show=false;
   assert((await f.poll()).deferred);
   assert.equal(f.nags.pending().status,'等待回应');f.show=true;await f.poll();
@@ -120,7 +149,8 @@ test('两条质问同时引用同一篇，只保留一条；篇号按原篇登�
 test('足够的首答直接收笔，没有当天情绪时抽取；无疑点与本机已有解释均不弹窗',async t=>{
   const f=await fixture(t);f.found=false;await f.poll();await f.poll();assert.equal(f.generated,1);assert(!f.nags.pending());
   await f.diary('2026-11-21','后来有新证据。','new');f.found=true;f.explained=true;await f.poll();assert(!f.nags.pending());
-  f.explained=false;await f.poll();f.time+=24*hour;f.complete=true;
+  f.time+=5*hour;await f.poll();assert(!f.nags.pending());assert.equal(f.generated,2);
+  f.time+=5*hour;f.explained=false;await f.poll();f.complete=true;
   assert((await f.session.reply('周一是测试，周三对外。')).done);
   assert.equal(f.store.nags()[0].questions,1);assert.equal(f.store.nags()[0].status,'已解释');assert(f.store.nags()[0].mood);
 });
@@ -141,12 +171,69 @@ test('模型判断尚缺细节却重复原问题，停止追问并如实记录�
 });
 test('离线稍后、重启、续答、再次重启后，恢复连接只补传同一条收笔',async t=>{
   const f=await fixture(t);await f.poll();await f.nags.flush();const id=f.nags.pending().id;
-  f.offline=true;f.session.leave('later');await f.restart();f.time+=hour-1;
-  assert.equal((await f.poll()).nextAt,start+hour);
+  f.offline=true;f.session.leave('later');await f.restart();f.time+=minute;
+  assert.match((await f.poll()).detail,/待确认/);
   await f.poll(true);f.complete=true;assert((await f.session.reply('周一是测试。')).done);
   await f.restart();assert(!f.nags.pending());f.offline=false;await f.nags.flush();await f.nags.flush();
   const n=await (await f.req('nags/'+id)).json();assert.equal(n.status,'已解释');
   assert.equal(n.talk.filter(t=>t.who==='你').length,1);assert.equal((await (await f.req('nags')).json()).total,1);
+});
+
+test('五小时按稳定篇号分别计，无结果和同篇追加都占用名额，新对象正常检查',async t=>{
+  const f=await fixture(t);f.found=false;
+  await f.poll();assert.equal(f.generated,1);
+  await f.diary('2026-11-21','同一篇追加内容。','update');
+  await f.diary('2026-11-20','另一个尚未检查的对象。');
+  f.time+=minute;await f.restart();await f.poll();
+  const compared=()=>f.calls.filter(Array.isArray);
+  assert.deepEqual(compared().at(-1).map(row=>row.page),['2026-11-20.1']);
+  f.time=start+5*hour-1;await f.poll();assert.equal(f.generated,2);
+  f.time++;await f.poll();
+  assert.deepEqual(compared().at(-1).map(row=>row.page),['2026-11-21.1','2026-11-15.1']);
+  assert.equal(f.generated,3);
+});
+
+test('查询中断后跨重启续原轮次，已完成比较不重复，三分钟后不能质询',async t=>{
+  const f=await fixture(t),hold=Promise.withResolvers(),entered=Promise.withResolvers(),stop=new AbortController();
+  f.holdVerify=hold.promise;f.verifyEntered=entered;
+  const first=f.poll(false,stop.signal);
+  await entered.promise;stop.abort();
+  await assert.rejects(first,{name:'AbortError'});
+  assert.equal(f.generated,1);
+  f.time+=2*minute;await f.restart();assert(f.nags.recoverAudit());
+  f.holdVerify=undefined;await f.poll();assert.equal(f.generated,1);
+  hold.resolve();
+  const current=f.session,deadline=current.deadline;
+  f.time=start+3*minute;
+  assert.match((await current.reply('到点之后的回答。')).text,/三分钟/);
+  assert(deadline.aborted);assert(!f.nags.pending());
+  const [n]=f.store.nags();
+  assert.equal(n.status,'回合结束');assert.equal(n.talk.length,1);
+});
+
+test('三分钟主动取消未完成的查询，丢弃迟到生成，已启动对象仍受五小时限制',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const f=await fixture(t),hold=Promise.withResolvers(),entered=Promise.withResolvers();
+  f.holdCompare=hold.promise;f.compareEntered=entered;
+  const check=f.poll();await entered.promise;
+  f.time=start+3*minute;t.mock.timers.tick(3*minute);
+  assert.match(await check,/三分钟/);
+  hold.resolve();f.holdCompare=undefined;
+  await f.poll();assert.equal(f.generated,1);assert(!f.session);assert(!f.nags.pending());
+});
+
+test('质询中达到三分钟保留已落盘回答，终止迟到的追问',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const f=await fixture(t),hold=Promise.withResolvers(),entered=Promise.withResolvers();
+  await f.poll();
+  f.time=start+3*minute-1;f.holdReply=hold.promise;f.replyEntered=entered;
+  const reply=f.session.reply('已在时限前回答。');await entered.promise;
+  f.time++;t.mock.timers.tick(3*minute);
+  assert.match((await reply).text,/三分钟/);hold.resolve();
+  await f.nags.flush();
+  const [n]=f.store.nags();
+  assert.equal(n.status,'回合结束');assert.equal(n.questions,1);
+  assert.equal(n.talk.at(-1).text,'已在时限前回答。');
 });
 test('实际气泡与待确认入口验证 ID，稍后和拒绝分开，附件不会转为普通问答',async t=>{
   const f=screenFixture();f.electron.BrowserWindow.prototype.isVisible=function(){return this.visible;};
@@ -158,6 +245,19 @@ test('实际气泡与待确认入口验证 ID，稍后和拒绝分开，附件�
   const event=f.event(host.details);const data=await f.handlers.get('conversation:read')(event,null,'pending');
   assert.deepEqual(data.audit,item);assert.throws(()=>f.handlers.get('conversation:resume-audit')(event,'wrong'));
   assert.equal(await f.handlers.get('conversation:resume-audit')(event,item.id),'继续了');
+  const raw=' '+'月'.repeat(499)+'\n';
+  for(const audit of [false,true]){
+    let received;
+    assert(await host.showNag({audit,signal,prompt:item.title,visible(){},leave(){},reply:async value=>{
+      received=value;return {text:'收到',done:true};
+    }}));
+    const answering=host.panel;
+    f.ipcMain.emit('screen-qa:close',f.event(answering),{reason:'idle',draft:{text:raw}});
+    assert.equal(host.panel,answering,'停下来想一想时应保留原来的回答窗口');
+    await f.handlers.get('screen-qa:ask')(f.event(host.panel),{text:raw,mode:'auto'});
+    assert.equal(received,raw);
+    host.hide();
+  }
   for(const reason of ['later','refuse']){
     let left;
     await host.showNag({audit:true,signal,prompt:item.title,visible(){},leave:r=>{left=r;}});
@@ -166,4 +266,12 @@ test('实际气泡与待确认入口验证 ID，稍后和拒绝分开，附件�
     f.ipcMain.emit('screen-qa:close',f.event(host.panel),{reason});
     assert.equal(left,reason);
   }
+  const expiry=new AbortController();
+  let leftAfterExpiry=false;
+  await host.showNag({audit:true,signal,deadline:expiry.signal,timeoutText:'质询已结束',prompt:item.title,visible(){},leave(){leftAfterExpiry=true;}});
+  expiry.abort();
+  const ended=await f.handlers.get('screen-qa:state')(f.event(host.panel));
+  assert.equal(ended.text,'质询已结束');assert(!ended.audit);
+  f.ipcMain.emit('screen-qa:close',f.event(host.panel),{reason:'later'});
+  assert.equal(leftAfterExpiry,false);
 });

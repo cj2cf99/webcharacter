@@ -10,15 +10,16 @@ import { getDeviceIdentity } from '../devices/identity.mjs';
 import { createTaskExecutor } from '../execution/runner.mjs';
 import { createTaskPoller } from '../../desktop/task-poller.mjs';
 import { createDesktopTasks } from '../../desktop/task-lifecycle.mjs';
+import { createReminderChecks } from '../../desktop/reminder-checks.mjs';
+import { tokyoDay } from '../../desktop/conversation-history.mjs';
 
 const device = 'pc-12345678-1234-4123-8123-123456789abc';
 const other = 'pc-22345678-1234-4123-8123-123456789abc';
 const tick = () => new Promise(setImmediate);
-test('桌面半小时心跳不重入，不阻塞重启，退出取消在途请求并清除定时器',{timeout:5000},async t => {
-  t.mock.timers.enable({apis:['setInterval']});
+test('AI 心跳默认三小时，保存后改期，停用和重开保留设置，退出取消在途检查',{timeout:5000},async t => {
   const profile=mkdtempSync(join(tmpdir(),'companion-heartbeat-'));
-  t.after(()=>rmSync(profile,{recursive:true,force:true}));
-  const beats=[];
+  const minute=60_000,beats=[];
+  let now=Date.parse('2026-11-20T01:00:00Z'),timer,checks,quitting=false,stopped=false;
   const tasks=await createDesktopTasks({profile,dialog:{},request:async(path,options)=>{
     if(path==='/api/assistant/heartbeat'){
       const pending=Promise.withResolvers();
@@ -27,32 +28,54 @@ test('桌面半小时心跳不重入，不阻塞重启，退出取消在途请�
     }
     return Response.json(options.method==='PUT'?{device:{device_id:path.split('/').at(-1)}}:{tasks:[],next_after:null});
   }});
-  tasks.startPolling();
-  tasks.startPolling();
-  t.mock.timers.tick(1800000-1);
-  await tick();
+  t.after(async()=>{checks?.close();if(!stopped)await tasks.stop();rmSync(profile,{recursive:true,force:true});});
+  const open=()=>createReminderChecks({profile,now:()=>now,handlers:{aiHeartbeat:tasks.checkAiHeartbeat},isBusy:()=>quitting,
+    setTimer(fn,ms){timer={fn,at:now+ms};return timer;},clearTimer(current){if(timer===current)timer=null;}});
+  const advance=async ms=>{
+    now+=ms;
+    if(timer?.at<=now){const {fn}=timer;timer=null;fn();}
+    await tick();
+  };
+  const row=()=>checks.polls()[0];
+  checks=open();checks.start();checks.start();
+  assert.deepEqual([row().enabled,row().minutes,row().nextAt],[true,180,now+180*minute]);
+  await advance(180*minute-1);
   assert.equal(beats.length,0);
-  t.mock.timers.tick(1);
-  await tick();
+  await advance(1);
   assert.equal(beats.length,1);
   assert.equal(beats[0].options.method,'POST');
   assert.equal(beats[0].options.body,undefined);
-  t.mock.timers.tick(1800000);
-  await tick();
+  assert.throws(()=>checks.configure('aiHeartbeat',{enabled:true,minutes:9}));
+  assert.throws(()=>checks.configure('aiHeartbeat',{enabled:true,minutes:301}));
+  checks.configure('aiHeartbeat',{enabled:true,minutes:10});
+  assert.equal(row().nextAt,now+10*minute);
+  await advance(10*minute);
   assert.equal(beats.length,1);
-  beats[0].pending.resolve(Response.json({status:'healthy'}));
+  assert.equal(checks.pending,false);
+  beats[0].pending.resolve(Response.json({status:'skipped_paid',provider:'openai'}));
   await tick();
-  t.mock.timers.tick(1800000);
-  await tick();
+  assert.match(checks.read(tokyoDay(now)).events.find(event=>event.status==='已检查').detail,/已跳过模型调用 · openai/);
+  checks.configure('aiHeartbeat',{enabled:false,minutes:10});
+  assert.equal(row().nextAt,null);
+  await advance(30*minute);
+  assert.equal(beats.length,1);
+  checks.close();checks=open();checks.start();
+  assert.deepEqual([row().enabled,row().minutes,row().nextAt],[false,10,null]);
+  checks.configure('aiHeartbeat',{enabled:true,minutes:10});
+  await advance(10*minute-1);
+  assert.equal(beats.length,1);
+  await advance(1);
   assert.equal(beats.length,2);
   await tasks.drainForRestart();
-  t.mock.timers.tick(1800000);
-  await tick();
+  quitting=true;
+  await advance(10*minute);
   assert.equal(beats.length,2);
-  await tasks.stop();
+  assert.equal(checks.pending,false);
+  await tasks.stop();stopped=true;
   assert.ok(beats[1].options.signal.aborted);
-  t.mock.timers.tick(1800000);
-  await tick();
+  checks.close();checks=null;
+  assert.equal(timer,null);
+  await advance(10*minute);
   assert.equal(beats.length,2);
 });
 function fixture(t) {
@@ -169,8 +192,12 @@ test('启动时有桌面工作或上次执行结果待补传，自动轮询按�
     pollerOptions:{setTimer:(fn,ms)=>{assert.equal(ms,900_000);next=fn;return 1;},clearTimer(){}}});
   try{
     runtime.startPolling();await tick();assert.deepEqual(calls,[]);
+    assert.equal(runtime.tasksIdle(),false);
     runtime.executor.markUploaded('prior');
-    busy=true;next();await tick();assert.deepEqual(calls,[]);
+    busy=true;
+    assert.equal(runtime.canPoll(),false);
+    assert.equal(runtime.tasksIdle(),true,'自己的质问气泡占用前台时，仍能判断其他任务是否空闲');
+    next();await tick();assert.deepEqual(calls,[]);
     busy=false;runtime.cancelRestart();runtime.cancelQuitCheck();await tick();assert.deepEqual(calls,[]);
     next();await tick();
     assert.deepEqual(calls,[`/api/devices/${identity.device_id}`,`/api/devices/${identity.device_id}/pending`]);
@@ -207,6 +234,8 @@ test('P05：空闲轮询自动领取，真实线程执行回传，未知类型�
     release.resolve();
     for(let i=0;i<400&&!nextTimer;i++)await new Promise(resolve=>setTimeout(resolve,5));
     assert.ok(nextTimer);
+    // 轮询在领取确认后即结束，执行与汇报随后完成。
+    await runtime.settled();await new Promise(resolve=>setTimeout(resolve,30));
     assert.deepEqual(progress.map(value=>value?.stage??null),['正在领取','正在本机执行',null]);
     assert.equal(reports.filter(r=>r.title==='绯月 · 自动任务汇报').length,1);
     assert.match(reports.find(r=>r.title==='绯月 · 自动任务汇报').detail,/云端已确认收到结果/);
@@ -301,10 +330,11 @@ test('桌宠自动领取任一电脑和指定本机的任务，完成后从云�
   assert.deepEqual(older.tasks,before.tasks);
   assert.deepEqual(reads,['standalone','standalone',null]);
   legacy=false;
-  await runtime.pollOnce();
+  // 有名额就接：一轮轮询把两个可做的任务都接下，本机逐个执行。
+  await runtime.pollOnce();await runtime.settled();
   const remote=id=>request('/api/tasks/'+id).then(response=>response.json());
-  assert.equal((await Promise.all([fixed,pool].map(remote))).filter(task=>task.status==='COMPLETED').length,1);
-  await runtime.pollOnce();
+  assert.equal((await Promise.all([fixed,pool].map(remote))).filter(task=>task.status==='COMPLETED').length,2);
+  await runtime.pollOnce();await runtime.settled();
   for(const id of [fixed,pool]){
     const task=await remote(id);
     assert.equal(task.status,'COMPLETED');
