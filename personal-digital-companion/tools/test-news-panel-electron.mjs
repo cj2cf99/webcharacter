@@ -9,8 +9,10 @@ import {attachNewsPanel,translateNews} from '../desktop/news-panel-host.mjs';
 
 const root=resolve(import.meta.dirname,'..'),bundle=join(root,'output/desktop-bundle'),out=process.env.FEIYUE_NEWS_QA_OUTPUT||join(root,'output/news-panel-qa');
 const at=Date.parse('2026-11-21T18:00:00+09:00');
+const photoUrl='https://d2pn8kiwq2w21t.cloudfront.net/images/imagesdarpa20200227darpa_amanda-16.width-1024.jpg';
+const photoData='data:image/jpeg;base64,'+readFileSync(join(root,'tools/news-fixtures/spot-nasa-jpl.jpg')).toString('base64');
 const cases=[
-  ['人工智能','开源模型首次部署到应急救援机器人','科技观察','新模型在离线环境理解现场指令。研发团队公布了训练方法与测评条件，实际部署仍需检验。'],
+  ['人工智能','没有 GPS，救援机器人如何在地下部署？','NASA/JPL-Caltech（2020 年资料）','地下挑战赛把机器人送进一座未完工的电厂。队伍需要让机器自主探路、识别目标，并把位置传回地面。图为队员 Amanda Bouman 操作 Spot 机器人。'],
   ['大模型','Open model runs offline on rescue robots','技术周刊','The team tested a smaller open model without a network connection. The test covered 12 simulated scenes.','开源模型在救援机器人上实现离线运行','团队在断网条件下测试了一个较小的开源模型，测试覆盖 12 个模拟场景。'],
   ['机器人','机器人实验室公开复杂地形步态数据','机器人通讯','这批记录包含砂石、台阶和缓坡三类地形，并标明了测试载荷。'],
   ['日本社会','避難所を結ぶ臨時バス、運行を開始','地域通信','避難所と駅を結ぶ臨時バスは、朝と夕方に運行します。','连接避难所的临时巴士开始运行','连接避难所和车站的临时巴士在早晚时段运行。'],
@@ -20,9 +22,12 @@ const cases=[
   ['美国股市','科技股回落，美股主要指数收跌','财经周刊','主要指数收盘下行，各板块表现分化。'],
 ];
 const items=cases.map(([topic,title,source,excerpt],i)=>({topic,title,source,excerpt,publishedAt:at-(i+1)*1200000,url:'https://example.org/news/'+i}));
+items[0].imageUrl=photoUrl;
+items[0].url='https://www.jpl.nasa.gov/news/robots-autonomously-navigate-underground-in-darpa-challenge/';
 const translations=Object.fromEntries(cases.filter(c=>c[4]).flatMap(c=>[[c[1],c[4]],[c[3],c[5]]]));
 const previewApi={
-  list:async()=>({at,items:items.map(({excerpt,...row})=>({...row,chinese:{}}))}),
+  list:async()=>({at,items:items.map(({excerpt,...row})=>({...row,hasImage:Boolean(row.imageUrl),chinese:{}}))}),
+  image:async(_at,url)=>items.find(row=>row.url===url)?.imageUrl?photoData:null,
   detail:async(_at,url)=>({excerpt:items.find(row=>row.url===url).excerpt}),
   translate:async(_at,url,field)=>translations[items.find(row=>row.url===url)[field]],
   source:async()=>{document.querySelector('#state').hidden=false;document.querySelector('#state').textContent='样刊采用演示数据。';},
@@ -32,10 +37,11 @@ mkdirSync(out,{recursive:true});
 const read=name=>readFileSync(join(bundle,name),'utf8');
 function exportPreview(){
   const code=read('news-layout.mjs').replaceAll('export function','function')+'\n'+read('news-panel-ui.mjs').replace(/^import .*$/m,'');
-  const api='const at='+at+',items='+JSON.stringify(items)+',translations='+JSON.stringify(translations)+';window.newsPanel={'+
+  const api='const at='+at+',items='+JSON.stringify(items)+',photoData='+JSON.stringify(photoData)+',translations='+JSON.stringify(translations)+';window.newsPanel={'+
     Object.entries(previewApi).map(([k,v])=>k+':'+v.toString()).join(',')+'};';
   const html=read('news-panel.html').replace("style-src 'self'; script-src 'self'","style-src 'unsafe-inline'; script-src 'unsafe-inline'")
-    .replace(/<link rel="stylesheet"[^>]+>/g,'').replace('</head>',()=>'<style>'+read('feiyue-surface.css')+read('news-panel.css')+'</style></head>')
+    .replace(/<link rel="stylesheet"[^>]+>/g,'').replace('</head>',()=>'<style>'+read('feiyue-surface.css')+
+      read('news-panel.css').replace('news-engraving.png','data:image/png;base64,'+readFileSync(join(bundle,'news-engraving.png')).toString('base64'))+'</style></head>')
     .replace('<h1>新闻简报</h1>','<h1>新闻简报 · 交互样刊</h1>')
     .replace(/<script type="module"[^<]+<\/script>/,()=>'<script type="module">'+api+'\n'+code+'</script>');
   writeFileSync(join(out,'新闻简报样刊.html'),html);
@@ -67,6 +73,7 @@ try{
     show(){this.showInactive();}focus(){}
   }
   host=attachNewsPanel({...electron,BrowserWindow:TestWindow,shell:{openExternal:async()=>{opens++;}}},{root,bundle,checks,
+    readImage:async url=>{assert.equal(url,photoUrl);return photoData;},
     model:model||{memory:async raw=>({translation:translations[JSON.parse(raw).text]})}});
   await host.open();
   const panel=host.panel,ui=code=>host.panel.webContents.executeJavaScript(code);
@@ -76,12 +83,19 @@ try{
   }
   await waitFor("document.querySelectorAll('.story').length===8 && ![...document.querySelectorAll('.headline')].some(n=>/正在本机翻译|翻译暂不可用/.test(n.textContent))");
   assert.equal(detailSaved,0);
+  await waitFor("Boolean(document.querySelector('.picture.ready img')?.naturalWidth)");
   const target="[...document.querySelectorAll('.tile')].find(e=>e.querySelector('.meta').textContent.includes('技术周刊'))";
   for(const theme of ['light','dark']){
     electron.nativeTheme.themeSource=theme;panel.setContentSize(980,740);
     await new Promise(r=>setTimeout(r,350));
     writeFileSync(join(out,'报面-'+theme+'.png'),(await panel.webContents.capturePage()).toPNG());
   }
+  electron.nativeTheme.themeSource='light';
+  await ui("[...document.querySelectorAll('#filters button')].find(b=>b.textContent==='社会').click()");
+  assert.equal(await ui("document.querySelectorAll('.picture').length"),0);
+  await new Promise(r=>setTimeout(r,250));
+  writeFileSync(join(out,'纯文字报面.png'),(await panel.webContents.capturePage()).toPNG());
+  await ui("[...document.querySelectorAll('#filters button')].find(b=>b.textContent==='全部').click()");
   await ui(target+".querySelector('.story').click()");
   await waitFor(target+".querySelector('.details p').textContent.match(/12|十二/) !== null");
   assert.equal(detailSaved,1);

@@ -4,6 +4,7 @@ from email.utils import parsedate_to_datetime
 import http.client
 import json
 import re
+import sys
 from xml.etree.ElementTree import ParseError
 
 from public_reader import Reader, rss_news
@@ -69,7 +70,7 @@ def fetch_topic(topic):
             title = title.removesuffix(" - " + row["source"])
         if not relevant(topic, title):
             continue
-        items.append(dict(topic=topic, title=title, url=row["url"], source=row["source"], excerpt=row.get("excerpt",""), lang=row.get("lang",""),
+        items.append(dict(topic=topic, title=title, url=row["url"], source=row["source"], imageUrl=row.get("imageUrl"), excerpt=row.get("excerpt",""), lang=row.get("lang",""),
                           publishedAt=int(date.timestamp()*1000)))
         if len(items) == 8:
             break
@@ -77,6 +78,18 @@ def fetch_topic(topic):
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--image"]:
+        import base64
+        import subprocess
+        from pathlib import Path
+        sys.path.insert(0,str(Path(__file__).resolve().parents[3]/"tools"))
+        from comfy_job import installation
+        _, runtime, _ = installation()
+        _, raw = Reader(seconds=9).read(sys.argv[2], "image")
+        preview = subprocess.run([str(runtime), "-B", str(Path(__file__).with_name("research_preview.py")), "--news"],
+                                 input=raw, capture_output=True, check=True, timeout=8, creationflags=subprocess.CREATE_NO_WINDOW)
+        print(base64.b64encode(preview.stdout).decode("ascii"))
+        sys.exit(0)
     with ThreadPoolExecutor(max_workers=3) as executor:
         results = dict(executor.map(fetch_topic, TOPICS))
     print(json.dumps(dict(items=[row for items in results.values() if items for row in items],

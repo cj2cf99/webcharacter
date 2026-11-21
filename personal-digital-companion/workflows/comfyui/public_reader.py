@@ -209,6 +209,26 @@ def news(reader,query):
         item["source"], stamp(item["published"])]))) for item in rows[:3]]
 
 
+def rss_picture(item):
+    media = "{http://search.yahoo.com/mrss/}"
+    candidates = [el.get("url") for el in item.iter(media+"thumbnail")]
+    for el in [*item.iter(media+"content"), *item.findall("enclosure")]:
+        if el.get("medium") == "image" or el.get("type","").startswith("image/"):
+            candidates.append(el.get("url"))
+    for field in ("description", "{http://purl.org/rss/1.0/modules/content/}encoded"):
+        parser = Article()
+        parser.feed(item.findtext(field, "") or "")
+        candidates.extend(src for src, _ in parser.images)
+    for url in filter(None, candidates):
+        try:
+            target(url)
+            if not re.search(r"(?:^|[/_.-])(?:logo|avatar|favicon|pixel|tracking)(?:[/_.?-]|$)",url,re.I):
+                return url
+        except ValueError:
+            continue
+    return None
+
+
 def rss_news(reader, query):
     url="https://news.google.com/rss/search?"+urlencode(dict(q=query+" when:1d",hl="zh-CN",gl="CN",ceid="CN:zh-Hans"))
     status,_,raw=reader.get(url,1_500_000)
@@ -222,7 +242,7 @@ def rss_news(reader, query):
             description = item.findtext("description", "")
             text = html.unescape(re.sub(r"<[^>]*>", " ", description))
             rows.append(dict(title=title[:200], url=link, source=item.findtext("source",""),
-                             lang=item.get("{http://www.w3.org/XML/1998/namespace}lang",""),
+                             imageUrl=rss_picture(item), lang=item.get("{http://www.w3.org/XML/1998/namespace}lang",""),
                              excerpt=" ".join(text.split())[:900], published=item.findtext("pubDate","")))
     return rows
 

@@ -14,6 +14,13 @@ export async function fetchNewsBriefing(signal) {
   return JSON.parse(stdout);
 }
 
+export async function fetchNewsImage(url,signal) {
+  const {stdout}=await exec('python',['-B',script,'--image',url],{signal,windowsHide:true,timeout:22000,maxBuffer:1100000});
+  const jpeg=stdout.trim();
+  if(!jpeg.startsWith('/9j/'))throw Error('未取得新闻图片');
+  return 'data:image/jpeg;base64,'+jpeg;
+}
+
 export function createNewsBriefing(db, now, notify, fetchNews=fetchNewsBriefing) {
   db.exec(`CREATE TABLE IF NOT EXISTS news_seen (key TEXT PRIMARY KEY, at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS news_briefing (id INTEGER PRIMARY KEY, lastCheck INTEGER, latest TEXT);`);

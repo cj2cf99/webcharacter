@@ -18,6 +18,19 @@ import world_tour
 
 
 class SkillTests(unittest.TestCase):
+    def test_rss_article_images(self):
+        from public_reader import rss_picture
+        from xml.etree.ElementTree import fromstring
+        for markup in ('<m:thumbnail url="https://example.org/news/a.jpg"/>',
+                       '<m:group><m:content medium="image" url="https://example.org/news/a.jpg"/></m:group>',
+                       '<enclosure type="image/jpeg" url="https://example.org/news/a.jpg"/>',
+                       '<description>&lt;img src="https://example.org/news/a.jpg"&gt;</description>'):
+            item=fromstring('<item xmlns:m="http://search.yahoo.com/mrss/">'+markup+'</item>')
+            self.assertEqual(rss_picture(item),'https://example.org/news/a.jpg')
+        item=fromstring('<item><image><url>https://example.org/logo.png</url></image>'
+                        '<enclosure type="audio/mpeg" url="https://example.org/audio"/></item>')
+        self.assertIsNone(rss_picture(item))
+
     def test_news_watch_filters_and_skips_invalid_dates(self):
         import news_watch
         self.assertTrue(news_watch.relevant("美国社会","美国龙卷风造成大规模停电"))
