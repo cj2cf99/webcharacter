@@ -97,6 +97,10 @@ def route_skill(hint, group="hints"):
     local = child / "local-ai.json"
     if local.is_file():
         selected["localAi"] = json.loads(local.read_bytes())
+    for key in ("schemas", "templates"):
+        data_file = child / (key + ".json")
+        if data_file.is_file():
+            selected[key] = json.loads(data_file.read_bytes())
     return {**selected, "instruction": instruction}
 
 

@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {createPanelWindow} from './panel-window.mjs';
+import {createPanelWindow,showPanel} from './panel-window.mjs';
 import {createWeatherService, JMA_WARNING_PAGE, JMA_RADAR_PAGE} from './weather-service.mjs';
 import {JMA_TYPOON_PAGE, JMA_BULLETIN_PAGE} from './jma-typhoon.mjs';
 
@@ -61,7 +61,7 @@ export function attachWeather(electron, {bundle, root, profile, service, request
   async function open(activate = true) {
     if (closed) return;
     if (panel && !panel.isDestroyed()) {
-      if (visible && activate) { panel.show(); panel.focus(); }
+      if (visible && activate) { showPanel(panel); panel.focus(); }
       else if (visible && !panel.isVisible()) panel.showInactive();
       return;
     }
@@ -79,7 +79,7 @@ export function attachWeather(electron, {bundle, root, profile, service, request
     try {
       await created.loadFile(entry);
       if (closed || panel !== created || created.isDestroyed()) return;
-      if (visible && activate) created.show();
+      if (visible && activate) showPanel(created);
       else if (visible) created.showInactive();
     } catch (error) {
       if (!created.isDestroyed()) created.destroy();

@@ -34,8 +34,7 @@ async function test(){
   const records=new Promise(resolve=>{finishRead=resolve;});
   memory.readTasks=()=>{reads++;return records;};
   const host=await startDesktop({...electron,Tray:TestTray},{profile,memory,benchmark:true,windowSource:()=>()=>{}});
-  const tasks=menu.items.find(item=>item.label==='任务');
-  tasks.submenu.items.find(item=>item.label==='本地复盘').click();
+  menu.items.find(item=>item.label==='本地复盘').click();
   for(let i=0;i<200&&!(reads&&host.screenQuestion.details?.isVisible());i++)await delay(25);
   const panel=host.screenQuestion.details;
   assert.equal(reads,1,'首次点击应恰好读取一次');

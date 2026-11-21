@@ -175,16 +175,16 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
     return { status: 'paused', chain, pending: saved.pending };
   }
 
-  function once(text, action, reviewed) {
+  function once(text, action, reviewed, batch) {
     if(!canEnter())return Promise.reject(Error('正在准备重启或退出，暂缓新的登记。'));
     if (active) {
-      if (action === undefined && (active.text === text || text === undefined)) return active.promise;
+      if (action === undefined && (batch?active.batch===batch.owner:active.text === text || text === undefined)) return active.promise;
       return Promise.reject(Error('已有登记正在进行'));
     }
     const promise = (async () => {
       const saved = await load();
       if (saved) {
-        if (text !== undefined) throw Error('已有登记链待处理，请先恢复原链');
+        if (text !== undefined && (!batch||saved.owner!==batch.owner)) throw Error('已有登记链待处理，请先恢复原链');
         if (action !== undefined && !saved.decision) {
           if (!saved.created) throw Error('请先恢复原登记链');
           const path = `/api/chains/${saved.submissionId}`;
@@ -214,16 +214,17 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
       if (!Array.isArray(planned?.pending)) throw Error('AI 登记计划回执无效');
       if (planned.chain === null) return { status: 'needs_input', chain: null, pending: planned.pending };
       if (!Array.isArray(planned.chain?.nodes) || !planned.chain.nodes.length) throw Error('AI 登记计划回执无效');
-      const issued = await call('/api/task-submissions', {});
-      if (!isSubmissionId(issued?.submission_id)) throw Error('登记提交号回执无效');
-      const next = { submissionId: issued.submission_id, plan: planned.chain, pending: planned.pending, created: false };
+      const submissionId=batch?.submissionId??(await call('/api/task-submissions', {}))?.submission_id;
+      if (!isSubmissionId(submissionId)) throw Error('登记提交号回执无效');
+      batch?.onIssued(submissionId);
+      const next = { submissionId, plan: planned.chain, pending: planned.pending, created: false, ...(batch?{owner:batch.owner}:{}) };
       await save(next);
       const traceId = planned.ai?.trace_id;
       void log({direction: 'local', event: 'registration_prepared', chain_id: next.submissionId,
         ...(isSubmissionId(traceId) ? {ai_trace_id: traceId} : {})});
       return run(next);
     })();
-    active = { text, promise };
+    active = { text, promise,batch:batch?.owner };
     void promise.finally(() => { active = null; }).catch(() => {});
     return promise;
   }
@@ -244,6 +245,7 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
   return {
     preview,
     submitReviewed:(text,plan)=>once(text,undefined,plan),
+    submitBatch:(owner,plan,submissionId,onIssued)=>once('对话内容转录 '+owner,undefined,plan,{owner,submissionId,onIssued}),
     submit(text) {
       if (typeof text !== 'string' || !text.trim()) return Promise.reject(Error('请输入登记内容'));
       return once(text);

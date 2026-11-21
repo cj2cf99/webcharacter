@@ -214,14 +214,21 @@ function renderPending(data,explicit){
   }
   for(const [index,question] of (data.questions??[]).entries()){
     const s=stagger(card('section','accent'),sections.length);
-    const resume=button('回答',async()=>{
+    const resume=button(question.privateChat?(question.active?'回到专聊':question.title):'回答',async()=>{
       resume.disabled=true;
       try{status.textContent=await api.resumeAudit(question.id);}catch(error){status.textContent=error.message;}
       finally{resume.disabled=false;}
     });
-    s.append(head(question.kind??'绯月的质问',index===0?chip('最想知道','accent'):null,
-      chip(question.status,question.status==='意外中断'?'warn':'info')),
-      element('p',question.title,'fy-clamp'),resume);
+    s.append(head(question.kind??'绯月的质问',index===0&&!question.privateChat?chip('最想知道','accent'):null,
+      chip(question.status,question.status==='意外中断'?'warn':'info')));
+    if(question.privateChat){
+      const portrait=element('img');
+      portrait.src='./feiyue-faces/waiting-b.png';portrait.alt='';
+      resume.classList.add('private-chat-invite');
+      resume.prepend(portrait);
+      if(question.active&&question.stage)s.append(element('p',question.stage,'fy-clamp'));
+    }else s.append(element('p',question.title,'fy-clamp'));
+    s.append(resume);
     sections.push(s);
   }
   for(const choice of data.choices){

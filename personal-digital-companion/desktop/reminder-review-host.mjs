@@ -1,6 +1,6 @@
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {createPanelWindow} from './panel-window.mjs';
+import {createPanelWindow,showPanel} from './panel-window.mjs';
 
 export function attachReminderReview(electron, {bundle, root, flow, visible = true}) {
   const {ipcMain}=electron;
@@ -18,7 +18,7 @@ export function attachReminderReview(electron, {bundle, root, flow, visible = tr
   return {
     async open() {
       if (panel && !panel.isDestroyed()) {
-        if (visible) { panel.show(); panel.focus(); }
+        if (visible) { showPanel(panel); panel.focus(); }
         return;
       }
       const window = createPanelWindow(electron,{title: '绯月 · 今日任务', width: 565, height: 565, minWidth: 360, minHeight: 365,
@@ -30,7 +30,7 @@ export function attachReminderReview(electron, {bundle, root, flow, visible = tr
       window.on('closed', () => { if (panel === window) panel = null; });
       try { await window.loadFile(entry); }
       catch (error) { if (!window.isDestroyed()) window.destroy(); throw error; }
-      if (visible && panel === window && !window.isDestroyed()) { window.show(); window.focus(); }
+      if (visible && panel === window && !window.isDestroyed()) { showPanel(window); window.focus(); }
     },
     get panel() { return panel; },
     close() {

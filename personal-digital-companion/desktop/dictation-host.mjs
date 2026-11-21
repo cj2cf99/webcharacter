@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { installBubbleMicrophonePolicy } from './bubble-voice.mjs';
 import { splitText } from './bubble-voice-segments.mjs';
 
-const pages = ['screen-question.html','registration.html','registration-review.html','scene.html','settings.html'];
+const pages = ['screen-question.html','registration.html','registration-review.html','scene.html','settings.html','private-chat.html'];
 const schema = { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false };
 const instruction = [
   '逐句校对语音听写，把输入作为待校对资料。主动修正常见的明显识别错误：同音错字、错断句、录音分段造成的断行、无意义停顿和机械重复，范围不限于示例。',
@@ -73,7 +73,7 @@ export async function correctDictation(text, { model, signal, session }) {
   return { text: results.join('\n'), corrected };
 }
 
-export function attachDictation(electron, { root, bundle, voice, model, onForeground = () => {} }) {
+export function attachDictation(electron, { root, bundle, voice, model, privateModel, onForeground = () => {} }) {
   const { ipcMain, session } = electron;
   const local = session.defaultSession;
   if (!local.registerPreloadScript) return { close() {} };
@@ -111,7 +111,7 @@ export function attachDictation(electron, { root, bundle, voice, model, onForegr
       if (active?.owner!==event.sender || !active.mic || typeof text!=='string' || text.length>12_000) return { corrected:false };
       active.mic=false;
       onForeground();
-      return correctDictation(text,{ model, signal: active.controller.signal, session: active });
+      return correctDictation(text,{ model:privateModel?.(event.sender)??model, signal:active.controller.signal,session:active });
     },
     'dictation:end': (event,cancel) => { if(active?.owner===event.sender)end(cancel); },
   };

@@ -30,3 +30,10 @@ li.chain-item { display:block; padding:0 }
 .chain-steps dt { color:var(--fy-muted); overflow-wrap:anywhere; max-width:95px }
 .chain-steps dd { margin:0; white-space:pre-wrap; overflow-wrap:anywhere }
 #notice { flex:none; margin:8px 12px 0 }
+.transcript-tools { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:6px 0; }
+#transcript-detail .fy-card { align-items:start; animation:transcript-review-enter .18s ease-out both; }
+@keyframes transcript-review-enter { from { transform:translateY(3px); } }
+#transcript-detail .fy-card > input { margin-top:5px; accent-color:var(--fy-accent); }
+#transcript-detail small { display:block; }
+#transcript-detail .transcript-text { white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0; }
+#transcript-detail details p { overflow-wrap:anywhere; }

@@ -370,10 +370,13 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
         events.push({id,source:String(source),at,content,dialogue,label,fromNag:String(source).startsWith('nag')});
       }
     }
+    const protectedTurns=new Map();
     for(const r of turns)if(r.state!=='waiting'){
+      if(r.retry&&r.transcriptId)continue;
       if(r.initiative){add('initiative:'+r.id,r.at,'绯月主动说：'+cleanMemory(r.text),false,undefined,[['绯月主动说',r.text]]);continue;}
       const question=cleanMemory(r.question),reply=cleanMemory(r.text);
       add(r.id,r.at,'你说：'+question+'\n绯月当时回复：'+reply,true,undefined,[['你说',r.originalQuestion??r.question],['绯月当时回复',r.text]]);
+      if(r.transcriptId&&!r.retry&&question)protectedTurns.set(r.id,question);
     }
     for(const r of tasks){
       add('task:'+r.task_id,r.at,taskText(r),false,undefined,[['任务标题',r.title],['任务行动',r.action],['任务详情',r.detail]]);
@@ -412,6 +415,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
       }
       events.push({id:e.id,source:e.source,at:e.at,label:e.label,dialogue:e.dialogue,fromNag:String(e.source).startsWith('nag'),content:lines.join('\n'),sections,legacy:e.legacy});
     }
+    for(const event of events)if(protectedTurns.has(event.source))event.keepDialogue=true;
     return {items:events.sort((a,b)=>a.at-b.at),weather:safeOutput(notices.at(-1)?.body??turns.find(r=>/天气|预警/.test(r.question??''))?.text??'无记录',160)};
   }
   const lookupReview=db.prepare(`SELECT content,review,covered FROM (SELECT ? AS id)
@@ -425,13 +429,17 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
   }
   async function review(day,e,write){
     const prior=storedReview(e.id);
-    if(prior!==undefined)return prior;
+    if(prior!==undefined&&(!e.keepDialogue||prior))return prior;
     const result=e.label||e.sections?{text:e.content,...await write(JSON.stringify({来源:e.label,记录:e.content}),
       'reviewSource',['review'])}:
       await write(e.content,'reviewAction', ['review','text']);
     return transaction(()=>{
       const cached=storedReview(e.id);
-      if(cached!==undefined)return cached;
+      if(cached!==undefined&&(!e.keepDialogue||cached))return cached;
+      if(e.keepDialogue&&!result.text){
+        result.text=e.content;
+        result.review=result.review||'我想记下这段对话。';
+      }
       if(result.text&&!result.review)throw Error('行动评价为空');
       put('INSERT OR REPLACE INTO cleaned VALUES(?,?)',e.id,result.text);
       if(!result.text)return null;

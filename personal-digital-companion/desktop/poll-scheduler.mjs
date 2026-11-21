@@ -16,10 +16,10 @@ const types=[
 
 const goals={tasks:'检查云端待办并处理可领取任务',due:'检查今日到期和逾期事项',weather:'核对三地天气变化与预警',
   aiHeartbeat:'检查当前云端 AI 接口是否可用',
-  diaryAudit:'核对手记并判断是否有待确认的疑点',curiosity:'按设置观察当前场景并判断是否分享',nag:'核对待续事项并决定本轮主动行动',
+  diaryAudit:'核对近七天的手记，找出待确认的疑点',curiosity:'按设置观察当前场景并判断是否分享',nag:'核对待续事项并决定本轮主动行动',
   news:'查阅关注主题的公开报道，有新消息时提醒',diary:'整理未入册的素材并跟进未解悬念',review:'核查待整理专题并补写缺失的行动评价'};
 
-export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,clearTimer,add,audit,weatherLastAt,lastRun=()=>null}){
+export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,clearTimer,add,audit,onIdleResult,weatherLastAt,lastRun=()=>null}){
   db.exec(`CREATE TABLE IF NOT EXISTS local_polls (
     id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, minutes INTEGER NOT NULL, maximum INTEGER NOT NULL,
     misses INTEGER NOT NULL, queuedAt INTEGER);
@@ -114,14 +114,16 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
     j.first=false;j.running=true;
     const at=now(),id=add(j.name,'检查中',j.queuedAt!==null?'执行本地等待任务':'开始轮询',at,due);
     changed();
-    let status='已检查',detail,blocked=false;
+    let status='已检查',detail,blocked=false,idleStarted=false;
     const round=memoryPolls.has(j.id)?startMemoryRound():null;
-    const action=audit?.begin(j.name,goals[j.id]);
+    const goal=goals[j.id];
+    const action=audit?.begin(j.name,goal,undefined,at);
     try{
       const signal=round?AbortSignal.any([abort.signal,round.controller.signal]):abort.signal;
-      const result=await handlers[j.id](signal,action?.step);
+      const result=await handlers[j.id](signal,action?.step,goal);
       blocked=result?.deferred===true;
-      detail=result?.detail??(blocked?'执行前被本地任务占用':result);
+      idleStarted=result?.started===true;
+      detail=result?.detail??(typeof result==='string'?result:undefined);
       if(!closed&&j.enabled&&!signal.aborted&&!blocked&&['nag','diary','diaryAudit','news'].includes(j.id)){
         const anchor=lastRun(j.id);
         const next=result?.nextAt??(anchor&&anchor+j.minutes*60000);
@@ -129,12 +131,19 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
       }
     }catch(error){status=error.code==='NO_CONNECTION'?'未执行':'查询失败';detail=error.message;}
     if(closed)return;
-    if(round&&now()>=round.until)expire(round);
+    const finishedAt=now();
+    if(round&&finishedAt>=round.until)expire(round);
+    if(blocked)detail??=idleStarted?'等待下次轮询':'执行前被本地任务占用';
     if(round?.controller.signal.aborted){status='已暂停';detail=blocked&&typeof detail==='string'&&detail.startsWith('中断时进度')?pauseDetail+' · '+detail:pauseDetail;blocked=false;}
-    action?.finish(blocked?'推延':status,detail??'轮询已返回，无额外回执');
+    if(typeof detail!=='string'||!detail.trim())detail='本轮未提供结果回执';
+    const outcome=blocked?(idleStarted?'已暂停':'推延'):status;
+    action?.finish(outcome,detail,finishedAt);
     j.running=false;
+    if(round&&(!blocked||idleStarted)){
+      onIdleResult?.({id:j.id,status:outcome,detail,durationMs:Math.max(0,finishedAt-at)});
+    }
     if(blocked&&j.enabled){postpone(j,due,id);return;}
-    db.prepare('UPDATE checks SET status=?,detail=? WHERE id=?').run(blocked?'未执行':status,detail??'本轮完成',id);
+    db.prepare('UPDATE checks SET status=?,detail=? WHERE id=?').run(blocked?'未执行':status,detail,id);
     j.queuedAt=null;j.misses=0;persist(j);
     if(!queue().length){clearTimer(retry);retry=null;}
     releaseRound();changed();retryLater();

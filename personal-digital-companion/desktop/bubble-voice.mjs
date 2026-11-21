@@ -14,14 +14,15 @@ export function installBubbleMicrophonePolicy(session, allowed) {
   ));
 }
 
-function speechWorker({ python, script, runtime, reference, cache, mode }) {
-  let child, pending;
+function speechWorker({ python, script, runtime, reference, cache, mode, device = 'auto' }) {
+  let child, pending, exited;
 
   function close(message = '语音操作已结束。') {
     const process = child;
     child = undefined;
     process?.kill();
     pending?.finish({ error: message });
+    return exited;
   }
 
   function start() {
@@ -29,11 +30,12 @@ function speechWorker({ python, script, runtime, reference, cache, mode }) {
     const worker = spawn(python, ['-X', 'utf8', '-B', '-u', script, mode, runtime, reference, cache], {
       cwd: cache, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'],
       env: { ...process.env, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1', HF_HUB_DISABLE_TELEMETRY: '1',
-        GRADIO_ANALYTICS_ENABLED: 'False', OMP_NUM_THREADS: '4' },
+        GRADIO_ANALYTICS_ENABLED: 'False', OMP_NUM_THREADS: '4', FEIYUE_TTS_DEVICE: device },
     });
     const failed = () => { if (child === worker) close('本机语音进程未就绪，请重试。'); };
     worker.on('error', failed);
     worker.on('exit', failed);
+    exited = new Promise(resolveExit => worker.once('close', resolveExit));
     worker.stdin.on('error', failed);
     createInterface({ input: worker.stdout }).on('line', line => {
       if (child !== worker || !pending) return;
@@ -64,15 +66,15 @@ function speechWorker({ python, script, runtime, reference, cache, mode }) {
   return { run, close };
 }
 
-export function createBubbleVoice({ root, profile }) {
+export function createBubbleVoice({ root, profile, ttsDevice = 'auto' }) {
   const runtime = resolve(process.env.FEIYUE_SOVITS_PATH ?? 'G:/selftool/voice/GPT-SoVITS-v5-20261006');
   const reference = resolve(process.env.FEIYUE_VOICE_REFERENCE ?? 'G:/voicesample/新建文件夹');
   const python = join(runtime, 'runtime', 'python.exe');
   const script = resolve(root, 'desktop/bubble-voice-worker.py');
-  const cache = resolve(profile, 'voice-runtime');
+  const cache = resolve(profile, ttsDevice === 'gpu' ? 'private-voice-runtime' : 'voice-runtime');
   const enabled = process.platform === 'win32' && existsSync(python) && existsSync(script);
   const asr = speechWorker({ python, script, runtime, reference, cache, mode: 'asr' });
-  const tts = speechWorker({ python, script, runtime, reference, cache, mode: 'tts' });
+  const tts = speechWorker({ python, script, runtime, reference, cache, mode: 'tts', device: ttsDevice });
   return {
     enabled,
     async transcribe(wav) {
@@ -92,6 +94,6 @@ export function createBubbleVoice({ root, profile }) {
     },
     stopRecording: () => asr.close(),
     stopSpeaking: () => tts.close(),
-    close() { asr.close(); tts.close(); },
+    close() { return Promise.allSettled([asr.close(), tts.close()]); },
   };
 }

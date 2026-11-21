@@ -6,5 +6,8 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent
 #thought i::before{width:10px;height:7px;bottom:-6px;left:47%}#thought i::after{width:5px;height:4px;bottom:-11px;left:52%}
 #thought strong,#thought small{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #thought small{font-weight:400;font-size:.83em}#thought progress{width:70%;height:4px;accent-color:#ac6677}
+#thought[data-summary] small{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal;overflow-wrap:anywhere;text-align:center}
+#thought time{font-size:.78em;color:#785267}
 body:has(#thought:not([hidden])) #character{position:absolute;bottom:0;left:50%;margin-left:calc((100% - 48px) / -2);width:calc(100% - 48px);height:calc(100% - 70px)}
+body:has(#thought[data-receipt]:not([hidden])) #character{height:calc(100% - 84px)}
 @media(prefers-reduced-motion:reduce){#thought progress:indeterminate{visibility:hidden}}

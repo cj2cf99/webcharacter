@@ -13,6 +13,8 @@ const lists={
   chains:{rows:new Set(),key:'chain_id',items:'chains',more:'next_after',empty:'当前没有未结束的任务链。'},
 };
 let view='local';
+let shownTranscript,transcriptPage=0,transcriptDecision=false;
+let selection=new Set(),checklist;
 const working=new Set();
 const operationKey=({method,id})=>method==='inspect'?'inspect':method+':'+id;
 
@@ -78,6 +80,120 @@ async function loadLocal(){
   }catch(error){
     byId('local-message').textContent=error.message;
   }
+}
+const transcriptStates={queued:'排队中',running:'整理中',ready:'待确认',empty:'无登记候选',failed:'待重试',
+  approved:'已确认 · 排队中',submitting:'提交中','submit-pending':'提交待处理',done:'已登记',discarded:'已放弃'};
+const fieldNames={...fields,reflection:'感想',url:'网址',level:'级别',conditions:'准备条件',categoryLabel:'分类'};
+function node(tag,value){const element=document.createElement(tag);if(value)element.textContent=value;return element;}
+async function loadTranscripts(){
+  const items=await read('transcripts');
+  byId('transcripts').hidden=!items.length&&!shownTranscript;
+  byId('transcript-items').hidden=Boolean(shownTranscript);
+  if(!shownTranscript){
+    byId('transcript-items').replaceChildren(...items.map(item=>{
+      const card=row('对话内容转录',[transcriptStates[item.state],stamp(item.at),item.stage,item.count?`${item.count} 项`:'']);
+      const button=node('button','查看结果');button.type='button';button.onclick=()=>void showTranscript(item.id).catch(error=>putNotice(error.message));
+      card.append(button);return card;
+    }));
+  }else{
+    const match=items.find(item=>item.id===shownTranscript);
+    if(match&&checklist&&match.state!==checklist.state&&!transcriptDecision)await showTranscript(shownTranscript);
+  }
+}
+async function showTranscript(id){
+  const entering=shownTranscript!==id;
+  shownTranscript=id;
+  if(entering){transcriptPage=0;selection=new Set();}
+  const data=await read('transcript',id);
+  if(shownTranscript!==id)return;
+  if((entering||checklist?.state!==data.state)&&data.state==='ready')
+    selection=new Set(data.result.rows.filter(item=>!item.missing.length&&!item.prepareError).map(item=>item.id));
+  checklist=data;
+  renderTranscript();
+}
+function renderTranscript(){
+  const data=checklist,body=byId('transcript-detail');
+  if(!data||data.id!==shownTranscript)return;
+  byId('transcripts').hidden=false;body.hidden=false;byId('transcript-items').hidden=true;
+  byId('local-message').hidden=true;byId('local-items').hidden=true;
+  const button=(label,fn,id)=>{
+    const value=node('button',label);value.type='button';if(id)value.id=id;
+    value.disabled=transcriptDecision;value.onclick=fn;return value;
+  };
+  const bar=node('div');bar.className='transcript-tools';
+  bar.append(button('返回',()=>{
+    shownTranscript=undefined;checklist=null;body.hidden=true;
+    byId('local-message').hidden=false;byId('local-items').hidden=false;
+    void loadTranscripts().catch(error=>putNotice(error.message));
+  }),
+    node('strong',transcriptStates[data.state]||data.state));
+  if(data.durationMs!=null)bar.append(node('small',`${Math.round(data.durationMs/1000)} 秒`));
+  if(['failed','submit-pending'].includes(data.state))bar.append(button('重试',()=>void transcriptAction('transcriptRetry',data.id)));
+  body.replaceChildren(bar);
+  if(data.error)body.append(node('p',data.error));
+  if(!data.result)return;
+  const notes=node('details');notes.append(node('summary','查看整理摘要'));
+  for(const [key,label] of [['actions','已发生'],['requests','可能的委托'],['signals','登记线索']]){
+    const matters=data.result.summaries.flatMap(summary=>summary[key]);
+    if(matters.length)notes.append(node('p',label+' · '+matters.map(item=>[item.summary,...item.conditions].join('，')).join('；')));
+  }
+  for(const summary of data.result.summaries)if(summary.summary&&!summary.actions.length&&!summary.requests.length&&!summary.signals.length)
+    notes.append(node('p',summary.summary));
+  for(const note of data.result.notes)notes.append(node('p',note));
+  body.append(notes);
+  const rows=data.result.rows,form=node('ul');form.className='fy-list';
+  const statuses=new Map((data.receipts??[]).map(item=>[item.key,item]));
+  const ready=data.state==='ready';
+  const available=rows.filter(item=>!item.missing.length);
+  const nextPage=Math.max(0,Math.ceil(rows.length/20)-1);
+  transcriptPage=Math.min(nextPage,transcriptPage);
+  const actions=node('div');actions.className='transcript-tools';
+  const selected=button('生成已选',()=>{
+    if(selection.size)void transcriptAction('transcriptDecision',{id:data.id,selected:[...selection]});
+  },'transcript-selected');
+  const sync=()=>{selected.textContent=`生成已选（${selection.size}）`;selected.disabled=transcriptDecision||!selection.size;};
+  for(const item of rows.slice(transcriptPage*20,(transcriptPage+1)*20)){
+    const receipt=statuses.get(item.id);
+    const card=row(item.params.title||item.label,[receipt?states[receipt.status]??receipt.status:item.missing.length?'待补充':item.params.title?item.label:'',
+      receipt?.recordId&&'记录 '+receipt.recordId]);
+    if(ready){
+      const box=node('input');box.type='checkbox';box.dataset.type=item.type;box.checked=selection.has(item.id);
+      box.disabled=Boolean(item.missing.length)||transcriptDecision;box.setAttribute('aria-label','生成 '+(item.params.title||item.label));
+      box.onchange=()=>{if(box.checked)selection.add(item.id);else selection.delete(item.id);sync();};
+      card.prepend(box);
+    }
+    const center=card.querySelector('div');
+    for(const [key,value] of Object.entries({...item.params,categoryLabel:item.categoryLabel})){
+      if(!value||key==='title')continue;
+      const info=node('p',(fieldNames[key]||key)+' · '+value+(key==='deadline'?' JST':''));
+      info.className='transcript-text';center.append(info);
+    }
+    for(const message of [item.conditions.length?'准备条件 · '+item.conditions.join('、'):'',
+      item.dependsOn.length?'前置登记 · '+item.dependsOn.map(id=>{const row=rows.find(other=>other.id===id);return row?.params.title||row?.label||id;}).join('、'):'',
+      item.missing.length?'待补 · '+item.missing.join('、'):'',item.prepareError,item.previewNote,item.timing&&'原话时间 · '+item.timing,receipt?.error])if(message)center.append(node('small',message));
+    const proof=node('details');proof.append(node('summary','查看来源'));
+    for(const ref of item.evidence)proof.append(node('p',ref.quote));
+    for(const source of item.sources)proof.append(node('small',(fieldNames[source.field]||source.field)+' · '+({explicit:'原话',inferred:'推定',default:'默认'}[source.kind])+ ' · '+source.basis));
+    center.append(proof);form.append(card);
+  }
+  body.append(form);
+  if(nextPage){const page=node('div');page.className='transcript-tools';
+    const previous=button('‹',()=>{transcriptPage--;renderTranscript();});previous.disabled=transcriptPage===0;
+    const next=button('›',()=>{transcriptPage++;renderTranscript();});next.disabled=transcriptPage===nextPage;
+    page.append(previous,node('span',`${transcriptPage+1} / ${nextPage+1}`),next);body.append(page);}
+  if(ready){
+    const all=button('全部生成',()=>void transcriptAction('transcriptDecision',{id:data.id,selected:available.map(item=>item.id)}),'transcript-all');
+    all.disabled=transcriptDecision||!available.length;
+    actions.append(all,button('全部不生成',()=>void transcriptAction('transcriptDecision',{id:data.id,selected:[]}),'transcript-none'),selected);
+    sync();body.append(actions);
+  }
+}
+async function transcriptAction(method,value){
+  if(transcriptDecision)return;
+  transcriptDecision=true;renderTranscript();putNotice();
+  try{await read(method,value);}
+  catch(error){putNotice(error.message);}
+  finally{transcriptDecision=false;if(shownTranscript)await showTranscript(shownTranscript).catch(error=>putNotice(error.message));}
 }
 function taskRow(task){
   const running=task.status==='RUNNING';
@@ -173,7 +289,7 @@ async function loadReceipts(){
     ['等待核对原回执'],{text:'核对回执',method:'resume',id:item.request_id})));
 }
 async function refresh(){
-  if(view==='local')return loadLocal();
+  if(view==='local')return Promise.all([loadLocal(),loadTranscripts().catch(error=>putNotice(error.message))]);
   await Promise.all([loadList('tasks'),loadList('chains'),loadReceipts().catch(error=>putNotice(error.message))]);
 }
 function syncButtons(){
@@ -224,4 +340,5 @@ byId('refresh').addEventListener('click',async()=>{
 });
 for(const name of Object.keys(lists))byId(name+'-more').addEventListener('click',()=>void loadList(name,true));
 void refresh();
-setInterval(()=>{if(view==='local'&&!document.hidden)void loadLocal();},1500);
+api.onTranscript(id=>{select('local');void showTranscript(id).catch(error=>putNotice(error.message));});
+setInterval(()=>{if(view==='local'&&!document.hidden)void refresh();},1500);

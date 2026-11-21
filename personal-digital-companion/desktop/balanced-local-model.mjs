@@ -69,7 +69,7 @@ function workChoices(gpu,residentMiB,primaryResident,tier){
 }
 
 export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=readGpuLoad,create=createLocalModel,localFirst=false}){
-  let current,chosen,initializing,warmController,exiting,busy=false,closed=false,failedText='',failures=0,lastUsed,lastWork;
+  let current,chosen,initializing,warmController,exiting,busy=false,closed=false,suspended=false,failedText='',failures=0,lastUsed,lastWork;
   function release(){
     const worker=current;
     current=chosen=undefined;
@@ -106,8 +106,21 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     await release();
     return false;
   }
+  let workSession;
+  async function waitForWorkSession(signal){
+    while(workSession){if(signal?.aborted)signal.throwIfAborted();await untilAbort(workSession.done,signal);}
+  }
+  async function withWorkSession(id,signal,run){
+    await waitForWorkSession(signal);
+    signal?.throwIfAborted();
+    if(closed||suspended||busy||workSession)throw Object.assign(Error('本地模型正在使用'),{code:'LOCAL_AI_BUSY'});
+    const lease=Promise.withResolvers();
+    workSession={id,done:lease.promise};
+    try{return await run((text,options)=>runWork(text,{...options,session:id,signal}));}
+    finally{workSession=null;lease.resolve();}
+  }
   function start(){
-    if(closed || busy || current?.snapshot().state==='ready')return initializing;
+    if(closed || suspended || busy || workSession || current?.snapshot().state==='ready')return initializing;
     if(!initializing){
       warmController=new AbortController();
       initializing=prepare(warmController.signal,localFirst?{workTier:'main'}:{primaryChat:true})
@@ -116,8 +129,9 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     return initializing;
   }
   async function analyze(text,options={}){
+    if(workSession)await waitForWorkSession(options.signal);
     if(memoryTurn){memoryTurn.controller.abort();await memoryTurn.done;}
-    if(closed)return {error:'LOCAL_AI_STOPPED'};
+    if(closed||suspended)return {error:'LOCAL_AI_STOPPED'};
     if(busy)return {error:'LOCAL_AI_BUSY'};
     busy=true;
     const prompt=text.trim();
@@ -171,7 +185,8 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     }
   }
   async function memory(text,instruction,schema,signal,skill){
-    if(busy||closed||memoryTurn)throw Error('本地模型忙碌');
+    if(workSession)await waitForWorkSession(signal);
+    if(busy||closed||suspended||memoryTurn)throw Error('本地模型忙碌');
     const controller=new AbortController(),done=Promise.withResolvers();
     signal=AbortSignal.any([controller.signal,signal]);
     memoryTurn={controller,done:done.promise};busy=true;
@@ -187,15 +202,20 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
       busy=false;memoryTurn=null;done.resolve();
     }
   }
-  async function work(text,{instruction,schema,skill,signal,tier='main',onProgress,maxTokens,session}){
+  async function work(text,options){
+    if(workSession)await waitForWorkSession(options.signal);
+    return runWork(text,options);
+  }
+  async function runWork(text,{instruction,schema,skill,signal,tier='main',onProgress,maxTokens,session}){
     signal?.throwIfAborted();
     if(memoryTurn){memoryTurn.controller.abort();await untilAbort(memoryTurn.done,signal);}
-    if(closed)return {error:'LOCAL_AI_STOPPED'};
+    if(closed||suspended)return {error:'LOCAL_AI_STOPPED'};
     if(busy)return {error:'LOCAL_AI_BUSY'};
     busy=true;
     try{
       await untilAbort(initializing,signal);
       const ready=lastWork?.session===session&&lastWork?.tier===tier&&current?.snapshot().state==='ready';
+      if(workSession?.id===session&&lastWork?.session===session&&!ready)return {error:'LOCAL_AI_PROCESS_EXITED'};
       if(!ready&&!await prepare(signal,{workTier:tier}))return {error:lastUsed?.error??'LOCAL_AI_NOT_READY'};
       lastWork={session,tier};
       const model=lastUsed=current.snapshot();
@@ -206,6 +226,16 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
       busy=false;
     }
   }
-  return {start,analyze,memory,work,close(){closed=true;memoryTurn?.controller.abort();warmController?.abort();return release();},
+  async function suspend(){
+    if(closed||workSession||busy&&!memoryTurn)return false;
+    suspended=true;
+    warmController?.abort();
+    memoryTurn?.controller.abort();
+    await Promise.allSettled([initializing,memoryTurn?.done]);
+    await release();
+    return true;
+  }
+  return {start,analyze,memory,work,withWorkSession,isBusy:()=>Boolean(busy||workSession||suspended||closed),suspend,resume(){suspended=false;},
+    close(){closed=true;memoryTurn?.controller.abort();warmController?.abort();return release();},
     snapshot:()=>current?.snapshot()??(closed?{state:'stopped'}:{...lastUsed,state:'idle'})};
 }

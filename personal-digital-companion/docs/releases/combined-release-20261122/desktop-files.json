@@ -1,0 +1,650 @@
+{
+  "manifest": "b767af5df02701559a1894168de66b279e0d75fcf673fb430c76f417ac15833c",
+  "files": [
+    {
+      "path": "agent/host/main-site-task-adapter.mjs",
+      "before": "a2604159136d4e030a6e8e3f8368a44cc4732bbabdefe0e9b6ed5971820e8493",
+      "after": "fce7d41c258d2a1636d0b02233196c77e2cc0faadc1cacf42d2d2b211c941bda"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/README.md",
+      "before": null,
+      "after": "83b6c143719f508ccb40cb1583eac35f6cdf3bf7fddd44e9b8962b2720f2a1ce"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/emotions/amusement.png",
+      "before": null,
+      "after": "24a2e42660e07d6ff8902a1ada76a5ac715835ab530d4c26504a8dad26a23894"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/emotions/anger.png",
+      "before": null,
+      "after": "e0edbd7e2d9251b67bacc9d2d9ca3b1e4e8be212ba5e7391b094754d6cbab1a2"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/emotions/excited.png",
+      "before": null,
+      "after": "52231ae0f34a466e07c2470c0cbbee1cb7bf3e19c081fe3dd70484d058538b21"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/emotions/joy.png",
+      "before": null,
+      "after": "0e0249fede71ee582ffb7a22ae2fd0993c9e3e34e9c48ae7f9699f4e7cb28231"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/emotions/neutral.png",
+      "before": null,
+      "after": "a5505aa5e1ba732d5b749f336def51215e4aa53f6931daccdcc26e6a00c29428"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/emotions/sorrow.png",
+      "before": null,
+      "after": "c944c9885c47063d18df94a1253163260bd55736e2cd822012c2c8660ed18ee7"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/emotions/tired.png",
+      "before": null,
+      "after": "ecbdcac30dc0357ea4eb8b39da5524994a69858de7f0287161a182359cb52eda"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/manifest.json",
+      "before": null,
+      "after": "8d0245b0b5b8ac73d910c9caaeaaad787a684d49673f407c408280946e6729cd"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/sins/envy.png",
+      "before": null,
+      "after": "2742728c4072267a567a07cfa5391429083241cfe6ef424f09566ea304d44126"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/sins/gluttony.png",
+      "before": null,
+      "after": "780d78df881b2d984b6b653965565ec8354728108212db2e71b20900d9ac3fe8"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/sins/greed.png",
+      "before": null,
+      "after": "8394b5a9f4b9091dab6c75a8d9ecb1b3712ac62746f56a613ca009fda391a267"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/sins/lust.png",
+      "before": null,
+      "after": "69fbab572f5ba8ced801c2b6d6886bcd430c5e810726cdf679dc4228523da6b8"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/sins/pride.png",
+      "before": null,
+      "after": "9d5dbc8a456472e1f0de58fd864db99189e5d42dc6dba8a4dce12f3c510be4ed"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/sins/sloth.png",
+      "before": null,
+      "after": "c623e4d661c150f86b33323cd9fdb51a3f20eefeddcf22c4256ea2cb15c322fd"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/sins/wrath.png",
+      "before": null,
+      "after": "904412edef6a6f0cf5340ebcff6ca09876b6c6375482f61dfd2774cc649692d1"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/waiting-a.png",
+      "before": null,
+      "after": "15887d71c7a40e871b673e53fd1a2a0eb5f3a43bfce5b79808d0cc3f6cf46d6b"
+    },
+    {
+      "path": "assets/desktop-media/feiyue-faces/waiting-b.png",
+      "before": null,
+      "after": "8196a26f21e93793cf73194a460ee2dddd7e16b67904334430b249c3c30b15c3"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted-alt.wav",
+      "before": null,
+      "after": "176f42f9790d6ff57d4647677854ca73d8373ee52e3b57c68eb538dc4393e17b"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted-count.wav",
+      "before": null,
+      "after": "6c275de790bc320d7960f9ecf0cd3ff1dff423d8cc5f8ed1f2cacdb9395fd4a5"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted-guess.wav",
+      "before": null,
+      "after": "db17898cc412bf625c4e1db3bb59c7fa52177ad5c76a47ec594b15e2085e2db8"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted-here.wav",
+      "before": null,
+      "after": "c55807c4b282425e015eedfcd67972de38318d1942243a7532f683e6a2fe9362"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted-tail.wav",
+      "before": null,
+      "after": "85f6d593ce8cce7cd61c92e6c420bcd20037e8de5b9752466fe1a5c2ed2b5330"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted-wife.wav",
+      "before": null,
+      "after": "e9ef8ed80cf898593187990d607200aa8c69043236fd5e229449fc84d3364edd"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted.wav",
+      "before": null,
+      "after": "d29ee69781d88f10a8935224254bf428fe3784dc08736dea4bd7b82e4097cc5c"
+    },
+    {
+      "path": "assets/voice/private-chat/invite.wav",
+      "before": null,
+      "after": "abeb5141fdc0b90b6694e7cc9cd424d7f568a0730731682ef6f103de4a1aa560"
+    },
+    {
+      "path": "assets/voice/private-chat/manifest.json",
+      "before": null,
+      "after": "95b577b660e574406a61a4e7ee8e856959fe354fb5116e8d305858311c45a21c"
+    },
+    {
+      "path": "desktop/autonomous-audit.mjs",
+      "before": "95e020b4862c3b3d0de70072480a8778a306f7c0d40d38622292fe9f418ac5ac",
+      "after": "c85454253a0bc09885a6d1acf19093e5ec948ea12c3135b8e8e8ef75f4677452"
+    },
+    {
+      "path": "desktop/balanced-local-model.mjs",
+      "before": "4baf8ac6e3b5d7bb90279f16ff67655b9dee772235de9c7f6c35a1630b90774e",
+      "after": "76ebf26d94b13f421bc092358014a3c5cd99e45d65eb24220c1e4fd57ce1d111"
+    },
+    {
+      "path": "desktop/bubble-voice-worker.py",
+      "before": "a117f96cceed1351b7f7c427b6946aa444ce9f296e64c17ec294e0f89c6ad99a",
+      "after": "90233ce036da45adae9b461b1f09bc7e53bf733d921422f066af98b0fa963f3b"
+    },
+    {
+      "path": "desktop/bubble-voice.mjs",
+      "before": "db5b105f41ed2b61a07642885d5abd4e1d72982199d363f1d77abcad4a4fb5a8",
+      "after": "35928255f26d2d96191c5b257038da728500090097ac0cc2b9ba3e63a7486004"
+    },
+    {
+      "path": "desktop/configured-renderer.mjs",
+      "before": "a3f9e1594c30b5c7be96cf8988e088675f69cec599736d25cc9667a5d90a70d6",
+      "after": "170150727d72f1cf55062df4d77d09f58c3a1d08ceadf00cbc4da50512985194"
+    },
+    {
+      "path": "desktop/conversation-history.mjs",
+      "before": "2f7bcac99f186b9adc1afef9768d505beefbac953d547e54033698cb9a29f6c1",
+      "after": "c8e472eba7ee0a36f7b85e53386121e9bd83dcc8f87a5f88fa86a16c89663972"
+    },
+    {
+      "path": "desktop/conversation-transcription.mjs",
+      "before": null,
+      "after": "d03a00a97d45d591293128a61ea1bb5015ac0eed0ab1e1690f58618bad002840"
+    },
+    {
+      "path": "desktop/conversation-ui.mjs",
+      "before": "c300a19647c70b84753e098d084915fca6120c860a4b37eaaf7e4c926f4e1bc6",
+      "after": "5e8ea25422ca7e19c4aca9c3929f1c4098d7d66f380638151253cc81162675ef"
+    },
+    {
+      "path": "desktop/conversation.css",
+      "before": "07eb526d75e516163b53266bd7001cf8c880011cbbf7cf1576dd8afdca97dc91",
+      "after": "45a1a03d03e57254e92803de7f66c48c50929ea2d412c86f8cac58a9b8c9023d"
+    },
+    {
+      "path": "desktop/conversation.html",
+      "before": "57100021de6e2eeebe28844a55061fc7c9d75ce30b2fa717b19552e0d25213d8",
+      "after": "53178ba81d0ff7f09973191949727e193f86148c59e415bd85a5f11ca6a694f0"
+    },
+    {
+      "path": "desktop/dictation-host.mjs",
+      "before": "3810752fa1f0dfefba5e4706185b0ceb4409f9b770fa579fd2a3a8d7f35bdf07",
+      "after": "e0c98143740e939ba137c3c6c305e3da7d509d6840ada7d3749b0692a0b3e073"
+    },
+    {
+      "path": "desktop/emotion-initiative.mjs",
+      "before": "bf09fa1993d25dea7f3b3f642a24f4a58d15f0c75b5149b5913b436db5195be6",
+      "after": "29884669e747a4d060d69b29a798c93a405f5ba5bc47b4631edec5ff2864c693"
+    },
+    {
+      "path": "desktop/index.html",
+      "before": "b2230245351e8bb8935c082a7686cb11f0efc7b65fa93489da02803d439553e6",
+      "after": "8152374c9378b053ec259c0eccde69208d1d7e1c33979fc8752380fadbb5308e"
+    },
+    {
+      "path": "desktop/local-model.mjs",
+      "before": "a754aedd46da874af65f417ddc25c25f7b1e956d4d6d50c7d0a4354e2a32c70b",
+      "after": "71c0509d0c690355e01ea5dee202e51261ac7f18bdbbcc06c148f03d709a1837"
+    },
+    {
+      "path": "desktop/menu-layout.json",
+      "before": "fb1b7e3bbaa21e960d71b29005cda3a89a19b68f4c55f4d3860e085008286bd3",
+      "after": "02dc9a812b5ffec58c285393ff9c308866cf587dd6188369718e147527297c0b"
+    },
+    {
+      "path": "desktop/menu-popup.mjs",
+      "before": "300d58e45022329385b2a1c96c0041b1e764e86d4ecf59f678d71781718b0b7c",
+      "after": "bb4683bac6235b689243f3d4e1a1e3b18161593bccd5f00cfed7213fd3a53754"
+    },
+    {
+      "path": "desktop/menu-preload.cjs",
+      "before": "3d23feae4db83f594eb493749ce668d4db7d29a9d77ea54f714326a4f9d71a5c",
+      "after": "127a8c5103c7555ab5a6b089f0e0ba0dafa76e7ad029819f8db29affbd877c21"
+    },
+    {
+      "path": "desktop/menu-ui.mjs",
+      "before": "caaef4fd04025ea29ce4f52a23ed8d98aa7c1c30c6ace3ebf7fb06c1d516bc95",
+      "after": "0f621cc894eb08bafa80e22db5c5c2bcca138067a76d5d8148d925a5cfcfb600"
+    },
+    {
+      "path": "desktop/menu.css",
+      "before": "19b99f4b7894da11775a377261873dd20ad255db41cc9ff8b57518c9457ae41c",
+      "after": "3b11d852449f87a2df8086c7c37080a7c7fc222814c85d9a311cc5dfb858d6f7"
+    },
+    {
+      "path": "desktop/menu.html",
+      "before": "c86a7abbeacbfa846a7bcdae533ea6caab5ee8cccf8a8bcdb003fa09d2672e36",
+      "after": "1db542ae105757cb402e3c9082c7abc5cee7b523d676f007ddbcc81ff573d5aa"
+    },
+    {
+      "path": "desktop/panel-window.mjs",
+      "before": "017fcd5781f390fe11f10485270adecfc24ec683641485ec6be5e8f1cb426638",
+      "after": "3607709fc532a1e3fd1ce6df0663ac2f5b43f942741878d71026f80ebf5b9ae1"
+    },
+    {
+      "path": "desktop/personality-diary.mjs",
+      "before": "37c5fc56deb9a70065d5eeee5ba57c679ed61321422e38a033bb8384471113b3",
+      "after": "cd460daf22bb747ad88c9d89eb3a7d7b83348526bd5c29a367a56a172c8f0f64"
+    },
+    {
+      "path": "desktop/personality-nags.mjs",
+      "before": "42183c4cc6e2ab36662e405dc05e7ebe66da1ed76c511bc4a1646fa3fc902386",
+      "after": "3908ad46ea04a7b398c25dd84179c9abee9e1f8f1c0da051173f35b5dcf79de2"
+    },
+    {
+      "path": "desktop/poll-scheduler.mjs",
+      "before": "87d04b35faf71dd837ce1baf5e8fcd2d3e3dba05764b2b38ea58f9a6a4e99786",
+      "after": "a19e59fa4dc5c28d3da24531f47935768aa118d7d8908504702f395effa67029"
+    },
+    {
+      "path": "desktop/private-chat-panel.mjs",
+      "before": null,
+      "after": "9c07fc6cab37d078435915c07949eaf1680f6e0afba77c88b55675a5c5c82b1f"
+    },
+    {
+      "path": "desktop/private-chat-preload.cjs",
+      "before": null,
+      "after": "1f6b800477c5bacf887bfd318c59e6ffc6f4f166f8a4f42814645ba84cee606b"
+    },
+    {
+      "path": "desktop/private-chat-ui.mjs",
+      "before": null,
+      "after": "c30d530e830c2afc5d0be853d544387c282f4a391cc2535404102e0d04892bd2"
+    },
+    {
+      "path": "desktop/private-chat.css",
+      "before": null,
+      "after": "cb1d9000bbac7b6d9c8a59072c2c4506bd816b0bc727ab87c2241b1018262c73"
+    },
+    {
+      "path": "desktop/private-chat.html",
+      "before": null,
+      "after": "4667fbd7b003650db66fb0c91f66a3a62cb54ac910e93e1a24989b0a5b198585"
+    },
+    {
+      "path": "desktop/private-chat.mjs",
+      "before": null,
+      "after": "5a72e9deb53c5cefc32302f855324c0845390b45312bdf518bad180bb62604b2"
+    },
+    {
+      "path": "desktop/registration-flow.mjs",
+      "before": "d4f4aa0269da2f241c40f14fe7190a6ebb1420718480e80bbb21d14f5756d909",
+      "after": "8dccb0709750ef7545366067220108ac6850e882ed555063925e742e936a086c"
+    },
+    {
+      "path": "desktop/reminder-checks.mjs",
+      "before": "2586fc06299bfca6f94f515736d802f78f9792e29e6c4b9d7eb53f7d2b006d4e",
+      "after": "efadffce0c1a12baa14fbd1255df89a3de31c35e8512d4059b814f00f6699dbf"
+    },
+    {
+      "path": "desktop/reminder-review-host.mjs",
+      "before": "fb1f9a1b1b0ddb48ec4c015297478984711ba1bba2b7fb659452ffcad5439a7c",
+      "after": "21ff3566ab844db4b7c13032fa68dc7771f1899b7567d174cd59e7cd2305ed47"
+    },
+    {
+      "path": "desktop/screen-question-host.mjs",
+      "before": "9ece1558161c3ff32a041e5b63573b99e104e223212a28a419cbb62b01506a2c",
+      "after": "e56fe525a138a641ad93fffc50653fcfa35c1ee9eb3c9096f038edc47f3f46a7"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "before": "af45546dd2101644bb904f1b0a6f937ed4ac0202ab36e992fbe067f5fdef0a9d",
+      "after": "19dd82a296bb446dc03e3fddc22f1610fa766c2c7d27890e9944eadddeed376f"
+    },
+    {
+      "path": "desktop/source-updates.mjs",
+      "before": "d3daedf334e6bbf576a025c1a1b4b98ba00b6472abe65c3eaaa5faff341f601b",
+      "after": "adbaac2405a62beefb6cf0efef790494f8a891b4df7363c24292b78dfc07ddb4"
+    },
+    {
+      "path": "desktop/style.css",
+      "before": "c6b80896e31f236e9772727fab8eafb8e213714bda7fd5f48e5cf3c91bc5a49d",
+      "after": "5540ff5723afe292b9dab4f7f2210a6bb1c1dc50af38e1815a3ae14ccbd8a937"
+    },
+    {
+      "path": "desktop/task-inbox-host.mjs",
+      "before": "07762a4f28c2335560652b1583e1511cccf03c1f08a9d75505ffe843d76d7dda",
+      "after": "7ce016516aa10b2b03c780497f5adc83afcaf94307cc340eb002542df966ae50"
+    },
+    {
+      "path": "desktop/task-inbox-preload.cjs",
+      "before": "8a314da98da055c7204f97abca1419163fe48cc4ac8fc675fb19f773a1144bc8",
+      "after": "e19cf9198e70c60be5c30906489d14c7ccb3a1e40279e46149709f74a3f6f083"
+    },
+    {
+      "path": "desktop/task-inbox-ui.mjs",
+      "before": "e47cf8ce738f28805c88ae19be95b71dd58e21e2d9fd03acffbd44a4fc7161fd",
+      "after": "70c663ccec639f258edbad477a464835ca877b63c160cf9ea2a4d2c5e655f4cb"
+    },
+    {
+      "path": "desktop/task-inbox.css",
+      "before": "d3c40d5d5ed52b38104a3e9b8a6fa9f3d0a6df8d706ff88dde7c43b7cf217e27",
+      "after": "e7c48cde0ce0d2afeafcf7e2e5478ead91dba20fc8de48ae772e691c02a3f72a"
+    },
+    {
+      "path": "desktop/task-inbox.html",
+      "before": "5b711a66fe84e921ec6673d86da8da78db85d145e1418757858236950de7acc7",
+      "after": "e17433818ae0a98aed580844e116ddb307bfe7a45f763484f5ca2a423b8eb7c6"
+    },
+    {
+      "path": "desktop/task-lifecycle.mjs",
+      "before": "60b1a99225ce0480e541e551f29bf62c92c129c1866d3c0043b95f9a19e803e3",
+      "after": "8058a9b466eff38c10b582ac2cdd9c354a6f68669b9892adcb2232c71a779f58"
+    },
+    {
+      "path": "desktop/weather-host.mjs",
+      "before": "94c1d4df5aba19e27eb2681a93a1db6e0236c4c7b3a831124a4036e9f5441078",
+      "after": "50d7725786d4b09b747743915208c06f0a0f7d9b2689c897c645f37cad6a3e8b"
+    },
+    {
+      "path": "output/desktop-bundle/configured-renderer.mjs",
+      "before": "a3f9e1594c30b5c7be96cf8988e088675f69cec599736d25cc9667a5d90a70d6",
+      "after": "170150727d72f1cf55062df4d77d09f58c3a1d08ceadf00cbc4da50512985194"
+    },
+    {
+      "path": "output/desktop-bundle/conversation-ui.mjs",
+      "before": "c300a19647c70b84753e098d084915fca6120c860a4b37eaaf7e4c926f4e1bc6",
+      "after": "5e8ea25422ca7e19c4aca9c3929f1c4098d7d66f380638151253cc81162675ef"
+    },
+    {
+      "path": "output/desktop-bundle/conversation.css",
+      "before": "07eb526d75e516163b53266bd7001cf8c880011cbbf7cf1576dd8afdca97dc91",
+      "after": "45a1a03d03e57254e92803de7f66c48c50929ea2d412c86f8cac58a9b8c9023d"
+    },
+    {
+      "path": "output/desktop-bundle/conversation.html",
+      "before": "57100021de6e2eeebe28844a55061fc7c9d75ce30b2fa717b19552e0d25213d8",
+      "after": "53178ba81d0ff7f09973191949727e193f86148c59e415bd85a5f11ca6a694f0"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/README.md",
+      "before": null,
+      "after": "83b6c143719f508ccb40cb1583eac35f6cdf3bf7fddd44e9b8962b2720f2a1ce"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/emotions/amusement.png",
+      "before": null,
+      "after": "24a2e42660e07d6ff8902a1ada76a5ac715835ab530d4c26504a8dad26a23894"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/emotions/anger.png",
+      "before": null,
+      "after": "e0edbd7e2d9251b67bacc9d2d9ca3b1e4e8be212ba5e7391b094754d6cbab1a2"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/emotions/excited.png",
+      "before": null,
+      "after": "52231ae0f34a466e07c2470c0cbbee1cb7bf3e19c081fe3dd70484d058538b21"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/emotions/joy.png",
+      "before": null,
+      "after": "0e0249fede71ee582ffb7a22ae2fd0993c9e3e34e9c48ae7f9699f4e7cb28231"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/emotions/neutral.png",
+      "before": null,
+      "after": "a5505aa5e1ba732d5b749f336def51215e4aa53f6931daccdcc26e6a00c29428"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/emotions/sorrow.png",
+      "before": null,
+      "after": "c944c9885c47063d18df94a1253163260bd55736e2cd822012c2c8660ed18ee7"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/emotions/tired.png",
+      "before": null,
+      "after": "ecbdcac30dc0357ea4eb8b39da5524994a69858de7f0287161a182359cb52eda"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/manifest.json",
+      "before": null,
+      "after": "8d0245b0b5b8ac73d910c9caaeaaad787a684d49673f407c408280946e6729cd"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/sins/envy.png",
+      "before": null,
+      "after": "2742728c4072267a567a07cfa5391429083241cfe6ef424f09566ea304d44126"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/sins/gluttony.png",
+      "before": null,
+      "after": "780d78df881b2d984b6b653965565ec8354728108212db2e71b20900d9ac3fe8"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/sins/greed.png",
+      "before": null,
+      "after": "8394b5a9f4b9091dab6c75a8d9ecb1b3712ac62746f56a613ca009fda391a267"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/sins/lust.png",
+      "before": null,
+      "after": "69fbab572f5ba8ced801c2b6d6886bcd430c5e810726cdf679dc4228523da6b8"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/sins/pride.png",
+      "before": null,
+      "after": "9d5dbc8a456472e1f0de58fd864db99189e5d42dc6dba8a4dce12f3c510be4ed"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/sins/sloth.png",
+      "before": null,
+      "after": "c623e4d661c150f86b33323cd9fdb51a3f20eefeddcf22c4256ea2cb15c322fd"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/sins/wrath.png",
+      "before": null,
+      "after": "904412edef6a6f0cf5340ebcff6ca09876b6c6375482f61dfd2774cc649692d1"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/waiting-a.png",
+      "before": null,
+      "after": "15887d71c7a40e871b673e53fd1a2a0eb5f3a43bfce5b79808d0cc3f6cf46d6b"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/waiting-b.png",
+      "before": null,
+      "after": "8196a26f21e93793cf73194a460ee2dddd7e16b67904334430b249c3c30b15c3"
+    },
+    {
+      "path": "output/desktop-bundle/index.html",
+      "before": "a4b486de48c8c108c07145d7e881de24fc32f4e63188120defbc1fc40d4a7898",
+      "after": "e9712f6600673b6579dc1e26e3cf7f3806d8346ceb273ddaeb8468f8e6a44b70"
+    },
+    {
+      "path": "output/desktop-bundle/menu-ui.mjs",
+      "before": "caaef4fd04025ea29ce4f52a23ed8d98aa7c1c30c6ace3ebf7fb06c1d516bc95",
+      "after": "0f621cc894eb08bafa80e22db5c5c2bcca138067a76d5d8148d925a5cfcfb600"
+    },
+    {
+      "path": "output/desktop-bundle/menu.css",
+      "before": "19b99f4b7894da11775a377261873dd20ad255db41cc9ff8b57518c9457ae41c",
+      "after": "3b11d852449f87a2df8086c7c37080a7c7fc222814c85d9a311cc5dfb858d6f7"
+    },
+    {
+      "path": "output/desktop-bundle/menu.html",
+      "before": "c86a7abbeacbfa846a7bcdae533ea6caab5ee8cccf8a8bcdb003fa09d2672e36",
+      "after": "1db542ae105757cb402e3c9082c7abc5cee7b523d676f007ddbcc81ff573d5aa"
+    },
+    {
+      "path": "output/desktop-bundle/private-chat-ui.mjs",
+      "before": null,
+      "after": "c30d530e830c2afc5d0be853d544387c282f4a391cc2535404102e0d04892bd2"
+    },
+    {
+      "path": "output/desktop-bundle/private-chat.css",
+      "before": null,
+      "after": "cb1d9000bbac7b6d9c8a59072c2c4506bd816b0bc727ab87c2241b1018262c73"
+    },
+    {
+      "path": "output/desktop-bundle/private-chat.html",
+      "before": null,
+      "after": "4667fbd7b003650db66fb0c91f66a3a62cb54ac910e93e1a24989b0a5b198585"
+    },
+    {
+      "path": "output/desktop-bundle/style.css",
+      "before": "c6b80896e31f236e9772727fab8eafb8e213714bda7fd5f48e5cf3c91bc5a49d",
+      "after": "5540ff5723afe292b9dab4f7f2210a6bb1c1dc50af38e1815a3ae14ccbd8a937"
+    },
+    {
+      "path": "output/desktop-bundle/task-inbox-ui.mjs",
+      "before": "e47cf8ce738f28805c88ae19be95b71dd58e21e2d9fd03acffbd44a4fc7161fd",
+      "after": "70c663ccec639f258edbad477a464835ca877b63c160cf9ea2a4d2c5e655f4cb"
+    },
+    {
+      "path": "output/desktop-bundle/task-inbox.css",
+      "before": "d3c40d5d5ed52b38104a3e9b8a6fa9f3d0a6df8d706ff88dde7c43b7cf217e27",
+      "after": "e7c48cde0ce0d2afeafcf7e2e5478ead91dba20fc8de48ae772e691c02a3f72a"
+    },
+    {
+      "path": "output/desktop-bundle/task-inbox.html",
+      "before": "5b711a66fe84e921ec6673d86da8da78db85d145e1418757858236950de7acc7",
+      "after": "e17433818ae0a98aed580844e116ddb307bfe7a45f763484f5ca2a423b8eb7c6"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted-alt.wav",
+      "before": null,
+      "after": "176f42f9790d6ff57d4647677854ca73d8373ee52e3b57c68eb538dc4393e17b"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted-count.wav",
+      "before": null,
+      "after": "6c275de790bc320d7960f9ecf0cd3ff1dff423d8cc5f8ed1f2cacdb9395fd4a5"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted-guess.wav",
+      "before": null,
+      "after": "db17898cc412bf625c4e1db3bb59c7fa52177ad5c76a47ec594b15e2085e2db8"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted-here.wav",
+      "before": null,
+      "after": "c55807c4b282425e015eedfcd67972de38318d1942243a7532f683e6a2fe9362"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted-tail.wav",
+      "before": null,
+      "after": "85f6d593ce8cce7cd61c92e6c420bcd20037e8de5b9752466fe1a5c2ed2b5330"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted-wife.wav",
+      "before": null,
+      "after": "e9ef8ed80cf898593187990d607200aa8c69043236fd5e229449fc84d3364edd"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted.wav",
+      "before": null,
+      "after": "d29ee69781d88f10a8935224254bf428fe3784dc08736dea4bd7b82e4097cc5c"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/invite.wav",
+      "before": null,
+      "after": "abeb5141fdc0b90b6694e7cc9cd424d7f568a0730731682ef6f103de4a1aa560"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/manifest.json",
+      "before": null,
+      "after": "95b577b660e574406a61a4e7ee8e856959fe354fb5116e8d305858311c45a21c"
+    },
+    {
+      "path": "skills/catalog.py",
+      "before": "299a45d5f26e40ca1a14eaf417ab8be587df40523b0ca0cd18f33ade581d34c3",
+      "after": "a2d79059981a5c8da582bed39108a7d0d98c1f0035623568b68903f7ad3116c9"
+    },
+    {
+      "path": "skills/conversation-transcription/latest.json",
+      "before": null,
+      "after": "264128efd276eb231268d5a567544f8f1dc5d91b8d2412cff4cf25ff93754690"
+    },
+    {
+      "path": "skills/conversation-transcription/source/SKILL.md",
+      "before": null,
+      "after": "51559afb619a84de64053e67c90ff51869f2f6f82ccacd6cbf45ef8eec4f86fa"
+    },
+    {
+      "path": "skills/conversation-transcription/source/local-ai.json",
+      "before": null,
+      "after": "391434b431b0abe904d9cff7ae7896835cdb49144005ef9f41bc8f55cd00df3b"
+    },
+    {
+      "path": "skills/conversation-transcription/source/schemas.json",
+      "before": null,
+      "after": "bea5827f0aa9446c97e91a25d3e2f3bff77fa4a31ca1498d6a5453ec6d78448a"
+    },
+    {
+      "path": "skills/conversation-transcription/source/templates.json",
+      "before": null,
+      "after": "76701cbbd23dde31482c24522c0a7b780bde1eea43708e9d04ed75cd7cb1a502"
+    },
+    {
+      "path": "skills/conversation-transcription/versions/conversation-transcription-v1-7/SKILL.md",
+      "before": null,
+      "after": "df88a93a58de72fe5e52c08250d9a7abc70dca1440924b44770285b95b7f2bd1"
+    },
+    {
+      "path": "skills/conversation-transcription/versions/conversation-transcription-v1-7/local-ai.json",
+      "before": null,
+      "after": "391434b431b0abe904d9cff7ae7896835cdb49144005ef9f41bc8f55cd00df3b"
+    },
+    {
+      "path": "skills/conversation-transcription/versions/conversation-transcription-v1-7/schemas.json",
+      "before": null,
+      "after": "bea5827f0aa9446c97e91a25d3e2f3bff77fa4a31ca1498d6a5453ec6d78448a"
+    },
+    {
+      "path": "skills/conversation-transcription/versions/conversation-transcription-v1-7/templates.json",
+      "before": null,
+      "after": "76701cbbd23dde31482c24522c0a7b780bde1eea43708e9d04ed75cd7cb1a502"
+    },
+    {
+      "path": "skills/feiyue-interaction/latest.json",
+      "before": "296a95da109d311f743dc96cff23f316f00b86bf073684f2e740bc76cd892d1d",
+      "after": "0f05a89d36bfadaf0953da060abe767b3617efca831fcee802c9780acd0f0888"
+    },
+    {
+      "path": "skills/feiyue-interaction/source/SKILL.md",
+      "before": "e676d9fce12d55db2f6dbfac5239fa6ebf45ff126762e850dff7f4dd804b795f",
+      "after": "29b52bb21127136f88cd49000ccc4c2fa7f7c44d431c3a97a806c67832e195cc"
+    },
+    {
+      "path": "skills/feiyue-interaction/source/routes.json",
+      "before": "9e78d6d4fb450f03e1288ffb82731f8d2db5a7ae19f0d84cb734723425af44bd",
+      "after": "3ee8fd63a11da55a9fb1d554ef29b3570af30e0152d47c9534fea8e2aa70dbd5"
+    },
+    {
+      "path": "skills/feiyue-interaction/versions/feiyue-interaction-v3-1/SKILL.md",
+      "before": null,
+      "after": "c8a85b320975b05d49e2b2472ad69cde0fa94eb140553a712d9033bf1eff9f54"
+    },
+    {
+      "path": "skills/feiyue-interaction/versions/feiyue-interaction-v3-1/routes.json",
+      "before": null,
+      "after": "3ee8fd63a11da55a9fb1d554ef29b3570af30e0152d47c9534fea8e2aa70dbd5"
+    }
+  ]
+}

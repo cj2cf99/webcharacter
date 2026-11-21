@@ -1,5 +1,6 @@
 [
   {"action":"question","label":"问绯月","icon":"💬"},
+  {"action":"privateChat","tone":"hot"},
   {"action":"notices","icon":"🔔","tone":"hot"},
   {"action":"continueNag","label":"待确认","icon":"💭","tone":"hot"},
   "-",

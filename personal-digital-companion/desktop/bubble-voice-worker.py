@@ -3,6 +3,7 @@
 import base64
 import io
 import json
+import os
 from pathlib import Path
 import sys
 import wave
@@ -75,7 +76,17 @@ def synthesize(text):
         from TTS_infer_pack.TTS import TTS, TTS_Config
 
         torch.set_num_threads(4)
-        cuda = torch.cuda.is_available() and torch.cuda.mem_get_info()[0] >= 5800 * 1024**2
+        dedicated_gpu = os.environ.get('FEIYUE_TTS_DEVICE') == 'gpu'
+        cuda = torch.cuda.is_available()
+        if dedicated_gpu:
+            if not cuda:
+                raise ValueError('专聊语音需要 CUDA。')
+            free, total = torch.cuda.mem_get_info()
+            if free < 3700 * 1024**2:
+                raise ValueError('专聊语音没有足够的显存，请等 GPU 空闲后重试。')
+            torch.cuda.set_per_process_memory_fraction(3072 * 1024**2 / total, 0)
+        else:
+            cuda = cuda and torch.cuda.mem_get_info()[0] >= 5800 * 1024**2
         options = dict(TTS_Config.default_configs['v5turbo'], device='cuda:0' if cuda else 'cpu', is_half=cuda)
         config = TTS_Config({'custom': options})
         config.configs_path = str(cache / 'gpt-tts-config.yaml')

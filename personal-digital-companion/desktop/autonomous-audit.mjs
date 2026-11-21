@@ -23,13 +23,13 @@ export function createAutonomousAudit(db,write,now){
     if(event.stage)deliver(event,true);
     else end(event,'中断','上次退出前未留下完成回执，结束时间和耗时未知',null);
   }
-  function begin(action,goal,parent_id){
-    const started_at=now(),action_id=randomUUID();
+  function begin(action,goal,parent_id,started_at=now()){
+    const action_id=randomUUID();
     const event={direction:'local',category:'绯月自主行动',route:action,goal,action_id,parent_id,started_at,archive_day:tokyoDay(started_at)};
     db.prepare('INSERT INTO active_autonomous_actions VALUES(?,?)').run(action_id,JSON.stringify(event));
     write({...event,stage:'开始'});
     return {
-      finish:(stage,result)=>end(event,stage,String(result),now()),
+      finish:(stage,result,finishedAt=now())=>end(event,stage,String(result),finishedAt),
       async step(name,target,work){
         const child=begin(name,target,action_id);
         try{const result=await work();child.finish('完成',result);return result;}

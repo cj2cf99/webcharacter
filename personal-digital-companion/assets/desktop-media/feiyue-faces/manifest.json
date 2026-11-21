@@ -1,0 +1,118 @@
+{
+  "format": 1,
+  "canonical": "waiting-b.png",
+  "items": [
+    {
+      "file": "waiting-a.png",
+      "label": "A · 委屈",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "15887d71c7a40e871b673e53fd1a2a0eb5f3a43bfce5b79808d0cc3f6cf46d6b"
+    },
+    {
+      "file": "waiting-b.png",
+      "label": "B · 期待",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "8196a26f21e93793cf73194a460ee2dddd7e16b67904334430b249c3c30b15c3"
+    },
+    {
+      "file": "sins/pride.png",
+      "label": "傲慢",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "9d5dbc8a456472e1f0de58fd864db99189e5d42dc6dba8a4dce12f3c510be4ed"
+    },
+    {
+      "file": "sins/envy.png",
+      "label": "嫉妒",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "2742728c4072267a567a07cfa5391429083241cfe6ef424f09566ea304d44126"
+    },
+    {
+      "file": "sins/wrath.png",
+      "label": "暴怒",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "904412edef6a6f0cf5340ebcff6ca09876b6c6375482f61dfd2774cc649692d1"
+    },
+    {
+      "file": "sins/sloth.png",
+      "label": "怠惰",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "c623e4d661c150f86b33323cd9fdb51a3f20eefeddcf22c4256ea2cb15c322fd"
+    },
+    {
+      "file": "sins/greed.png",
+      "label": "贪婪",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "8394b5a9f4b9091dab6c75a8d9ecb1b3712ac62746f56a613ca009fda391a267"
+    },
+    {
+      "file": "sins/gluttony.png",
+      "label": "暴食",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "780d78df881b2d984b6b653965565ec8354728108212db2e71b20900d9ac3fe8"
+    },
+    {
+      "file": "sins/lust.png",
+      "label": "色欲",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "69fbab572f5ba8ced801c2b6d6886bcd430c5e810726cdf679dc4228523da6b8"
+    },
+    {
+      "file": "emotions/joy.png",
+      "label": "喜",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "0e0249fede71ee582ffb7a22ae2fd0993c9e3e34e9c48ae7f9699f4e7cb28231"
+    },
+    {
+      "file": "emotions/anger.png",
+      "label": "怒",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "e0edbd7e2d9251b67bacc9d2d9ca3b1e4e8be212ba5e7391b094754d6cbab1a2"
+    },
+    {
+      "file": "emotions/sorrow.png",
+      "label": "哀",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "c944c9885c47063d18df94a1253163260bd55736e2cd822012c2c8660ed18ee7"
+    },
+    {
+      "file": "emotions/amusement.png",
+      "label": "乐",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "24a2e42660e07d6ff8902a1ada76a5ac715835ab530d4c26504a8dad26a23894"
+    },
+    {
+      "file": "emotions/neutral.png",
+      "label": "平淡",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "a5505aa5e1ba732d5b749f336def51215e4aa53f6931daccdcc26e6a00c29428"
+    },
+    {
+      "file": "emotions/excited.png",
+      "label": "激动",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "52231ae0f34a466e07c2470c0cbbee1cb7bf3e19c081fe3dd70484d058538b21"
+    },
+    {
+      "file": "emotions/tired.png",
+      "label": "疲惫",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "ecbdcac30dc0357ea4eb8b39da5524994a69858de7f0287161a182359cb52eda"
+    }
+  ]
+}

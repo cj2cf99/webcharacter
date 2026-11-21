@@ -43,7 +43,8 @@ export function questionBounds(pet,area,preferredHeight=260){
   return {bounds:{x,y,width,height},tail,tailX:Math.max(20,Math.min(width-60,pet.x+pet.width/2-x-20))};
 }
 
-export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,checks,reminderRequest,requestRestart,localModel,interactionWork,log,emotion=()=>null,topics=()=>null,auditPending=()=>[],resumeAudit,openNews,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,visible=true,voice=createBubbleVoice({root,profile})}={}){
+export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,checks,reminderRequest,requestRestart,localModel,interactionWork,transcription,log,emotion=()=>null,topics=()=>null,auditPending=()=>[],resumeAudit,openNews,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,visible=true,voice=createBubbleVoice({root,profile})}={}){
+  const sessions=new WeakMap();
   const {ipcMain,screen,desktopCapturer}=electron;
   let panel=null,servicePromise=null,controller=null,busy=false,disposed=false,generation=0,panelHeight=260,state={state:'idle',text:'想问我什么？'};
   const entry=resolve(bundle,'screen-question.html'),entryUrl=pathToFileURL(entry).href;
@@ -287,6 +288,15 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const reviewState=retry?route.reviewState??{}:{};
     const inputAt=retry?route.inputAt??route.turn.at:Date.now();
     const turn={id:crypto.randomUUID(),at:Date.now(),question:route.fileName?userText+' · '+route.fileName:userText,retry,...(route.kind==='direct'?{direct:true}:{})},timing=newTiming();
+    const session=sessions.get(panel);
+    const deferRegistration=Boolean(transcription&&session&&mode==='auto'&&!decision&&!withScreen&&!attachment&&route.kind==='registration'&&!emptyDiaryRequest(text));
+    const transcriptId=retry?route.turn?.transcriptId:transcription&&session&&
+      (deferRegistration||!decision&&['auto','direct'].includes(mode)&&['question','direct'].includes(route.kind))?turn.id:null;
+    if(transcriptId){
+      turn.transcriptId=transcriptId;
+      if(!retry)try{transcription.turn(session,{id:transcriptId,at:inputAt,text:userText});}
+      catch{void log?.({direction:'local',route:'对话内容转录',error:'TRANSCRIPTION_STORE_FAILED'});}
+    }
     if(route.fileName)turn.originalQuestion=userText;
     let operation=({serverTask:'服务器 PC 任务',registration:'随口登记',decision:'登记确认',reminders:'提醒查询或修改',reminderConsent:'提醒确认',search:'联网查询'})[route.kind]??(retry?route.operation:withScreen?'截图问答':'文字问答');
     if(attachment)operation=attachment.kind==='image'?'图片问答':'文件问答';
@@ -424,6 +434,8 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         const response=await withinChat(localModel?.analyze(userText,{hint:'direct',previous,signal,onProgress:waiting,replyMode:style,skillInstruction,turnStart:timing.start}));
         timing.localMs=performance.now()-timing.start;
         result=response?.reply?.trim()?{state:'answer',text:response.reply}:response?.error==='LOCAL_CHAT_TIME_LIMIT'?timedReply:{state:'error',text:'本地直连暂未取得回复。',code:response?.error??'LOCAL_AI_NOT_READY'};
+      }else if(deferRegistration){
+        result={state:'answer',text:'我会在你关窗后整理这件事，再给你确认。'};
       }else if(route.kind==='registration'&&emptyDiaryRequest(text)){
         if(!registration?.preview||!registration.submitReviewed)throw Error('当前实例未载入登记核对，请重启绯月。');
         if(registration.hasSaved?.())throw Error('已有登记链待处理，请先恢复原链。');
@@ -636,6 +648,8 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         httpStatus:Number.isInteger(result.httpStatus)?result.httpStatus:undefined,text:result.text});
     }
     const completed={...turn,...(stale?{emotionSkip:true}:{}),state:result.state,text:result.text+(result.fields?'\n'+result.fields:''),sources:result.sources,answeredAt,failures:failures.length?failures:undefined};
+    if(transcriptId&&result.state==='answer')try{transcription.reply(session,transcriptId,result.text);}
+    catch{void log?.({direction:'local',route:'对话内容转录',error:'TRANSCRIPTION_STORE_FAILED'});}
     if(!stale)latest=completed;
     let unsaved=false;
     const saveCompleted=async()=>{await pendingWrite;try{await records.save(completed);emotion()?.chat(completed);}catch{unsaved=true;unsavedReplies.set(turn.id,completed);}};
@@ -801,9 +815,14 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       webPreferences:{preload:resolve(root,'desktop/screen-question-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,offscreen:!visible}},root);
     ready=false;
     panel=created;
+    const session=!forNag&&mode!=='registration'?crypto.randomUUID():null;
+    if(session)sessions.set(created,session);
     created.webContents.setWindowOpenHandler(()=>({action:'deny'}));created.webContents.on('will-navigate',(event,target)=>{if(target!==entryUrl)event.preventDefault();});
     created.webContents.on('did-start-loading',()=>{if(panel===created)voice.stopSpeaking();});
-    created.on('closed',()=>{if(panel===created){voice.stopSpeaking();leaveNag('interrupted');panel=null;idleDraft=null;if(!draining)cancel();}});
+    created.on('closed',()=>{
+      if(session)try{transcription?.seal(session);}catch{void log?.({direction:'local',route:'对话内容转录',error:'TRANSCRIPTION_STORE_FAILED'});}
+      if(panel===created){voice.stopSpeaking();leaveNag('interrupted');panel=null;idleDraft=null;if(!draining)cancel();}
+    });
     const today=tokyoDay(Date.now());
     if(!latest||tokyoDay(latest.at)!==today){
       let stored;

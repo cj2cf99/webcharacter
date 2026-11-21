@@ -5,6 +5,7 @@
     "screen": "evidence-reading",
     "attachment": "evidence-reading",
     "registration": "record-submission",
+    "conversationTranscription": "conversation-transcription",
     "supplement": "record-submission",
     "resourceRegistration": "resource-registration",
     "attachmentRegistration": "evidence-reading",

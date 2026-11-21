@@ -158,6 +158,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       const result=await audit.prepare(signal);
       if(result.n&&queue(result.n))return {detail:'已新增 1 个手记质问'};
       if(!result.deferred&&pending())remind();
+      if(result.n)return {detail:'已拟出手记质问，本轮未能加入待确认'};
       return result.detail??result;
     }finally{working=false;}
   }
