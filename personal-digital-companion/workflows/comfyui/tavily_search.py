@@ -50,7 +50,8 @@ def search(query, x_only=False, *, send=request, directory=None):
     now=datetime.now(timezone.utc)
     usage=send(key,"/usage")
     reserve(usage.get("account"),now.strftime("%Y-%m"),directory or Path(os.environ["LOCALAPPDATA"])/"Feiyue/PublicResearch")
-    payload=dict(query=query,topic="general",search_depth="basic",max_results=8 if x_only else 5,
+    result_limit=8 if x_only else 10
+    payload=dict(query=query,topic="general",search_depth="basic",max_results=result_limit,
                  auto_parameters=False,include_answer=False,include_raw_content=False)
     if x_only:
         payload["include_domains"]=["x.com"]
@@ -58,7 +59,7 @@ def search(query, x_only=False, *, send=request, directory=None):
     sources=[]
     seen=set()
     observed=datetime.now(timezone.utc)
-    for item in rows:
+    for item in rows[:result_limit]:
         url=item.get("url","")
         if not url.startswith("https://"):
             continue

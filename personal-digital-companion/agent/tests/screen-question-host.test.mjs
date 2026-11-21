@@ -222,7 +222,8 @@ test('查询网络先搜公开资料，再用 AI 按来源整理；记忆入口�
   const f=fixture(), queries=[], summaries=[], history=[];
   let searchAvailable=false, aiAvailable=true;
   f.history.save=value=>history.push(value);
-  const sources=[{title:'发布公告',snippet:'11 月 20 日发布。',url:'https://example.test/official'}];
+  const sources=Array.from({length:10},(_,i)=>({title:'发布公告'+(i+1),
+    snippet:i===9?'第十条证据':'11 月 20 日发布。',url:'https://example.test/official/'+i}));
   const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:'unused',
     client:{forget(){},captureAndAsk(){assert.fail('联网模式不能采图')},askText(){assert.fail('检索不能交给云端模型')}},
     localModel:{async analyze(text,options){
@@ -250,6 +251,7 @@ test('查询网络先搜公开资料，再用 AI 按来源整理；记忆入口�
   assert.deepEqual(queries,['发行版最新动向','发行版最新动向']);
   assert.match(summaries[0],/无法确认是最新情况/);
   assert.match(summaries[0],/11 月 20 日发布/);
+  assert.match(summaries[0],/第十条证据/);
   assert.doesNotMatch(summaries[0],/https:\/\//);
   assert.equal(answer.text,'公告显示 11 月 20 日发布。[1]');
   assert.deepEqual(answer.sources,sources);

@@ -145,6 +145,26 @@ class SkillTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"参考图片"):
                 world_tour.prepare(directory,"",10,lambda *_:b'{}')
 
+    def test_five_image_candidates_one_selection(self):
+        import public_images as images
+        settings={"roles":{"images":["source"]},"providers":{"source":{"adapter":"json"}}}
+        rows=[(f"photo {n}","https://example.org/story",f"https://example.org/{n}.jpg",
+               "","",["example.org"],["example.org"]) for n in range(9)]
+        choices=[]
+        fetched=[]
+        def fetch(url,limit):
+            fetched.append(url)
+            return b"\xff\xd8\xff-test"
+        def choose(titles):
+            choices.append(titles)
+            return 4
+        with patch.object(images,"catalogue",return_value=iter(rows)):
+            selected=images.search("images","Kyoto",settings,fetch=fetch,choose=choose)
+        self.assertEqual(len(choices[0]),5)
+        self.assertEqual(len(selected),1)
+        self.assertEqual(selected[0][0]["title"],"photo 4")
+        self.assertEqual(fetched,["https://example.org/4.jpg"])
+
     def test_public_reader_boundaries(self):
         from public_reader import Reader, Article, public_address
         for ip in ("127.0.0.1","10.1.2.3","169.254.169.254","::1","::ffff:127.0.0.1","224.0.0.1"):

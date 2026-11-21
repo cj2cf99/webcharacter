@@ -35,8 +35,9 @@ def target(url):
 
 
 class Reader:
-    def __init__(self, seconds=30):
+    def __init__(self, seconds=30, request_timeout=6):
         self.deadline = time.monotonic()+seconds
+        self.request_timeout=request_timeout
         self.requests = 0
         self.budget = 16_000_000
         self.rules = {}
@@ -45,7 +46,7 @@ class Reader:
         left = self.deadline-time.monotonic()
         if left<=0:
             raise TimeoutError("本轮公开取材超时")
-        return min(6,left)
+        return min(self.request_timeout,left)
 
     def get(self, url, limit, api_headers=None):
         p = target(url)
@@ -274,16 +275,18 @@ def page_material(url,query="",reader=None):
     reader=reader or Reader()
     candidates=[url] if url else discover(query)
     sources=[]
-    for address in candidates:
+    visited=set()
+    for address in list(dict.fromkeys(candidates))[:10]:
         try:
             final,doc=article(reader,address)
-            if doc.paragraphs:
+            if doc.paragraphs and final not in visited:
+                visited.add(final)
                 sources.append(dict(title=" ".join(doc.title)[:200] or urlsplit(final).hostname,url=final,
                                     snippet="\n".join(doc.paragraphs)[:2200]))
         except (OSError,ValueError,http.client.HTTPException):
             if url:
                 raise
-        if len(sources)>=3 or reader.requests>=20:
+        if len(sources)>=10 or reader.requests>=20:
             break
     if not sources:
         raise ValueError("未读取到可用的公开正文")
