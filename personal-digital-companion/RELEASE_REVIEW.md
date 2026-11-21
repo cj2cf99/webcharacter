@@ -389,3 +389,14 @@ Windows 旧 PID 33608 经原生窗口正常退出，安装前备份清单到准�
 主站 `07dc0532-6937-48d1-8521-305a50899d77` 于 18:07:31 JST 上线，订阅 API `417c7b9f-504c-4772-8bd7-a99fe583bb00` 于 18:08:14 JST 上线。两端均为 100% 流量，42 个和 14 个绑定逐项一致。无生产数据迁移或配置变更。Windows 于 18:08:54 JST 重启，18:08:55 JST 核对 46 项文件、安装进程 17084、轮询配置、13 个历史批次和 REST v4。直接载入正式安装模块的隔离 Electron 质问回归通过。Access 线上效果待用户截图。
 
 用户收到带实际版本和时间的具体清单后明确回复「确认这份清单」。已确认批次 `feiyue-non-newspaper-release-20261121`，正式绯月配置仓库先提交精确 SQL `bbb41510fe18507f2a5a38ce07e8245c698fbd19`，再向新版 REST 提交一次。18:12:21 JST 回执为 done，步骤 verified，修订 138。新增部署 #69 和明细 #143–#147，最终版本依次为 4.0、7.0、3.0、7.0、19.0。第三方独立审核未执行。
+
+### Git 远端核对与登记签收
+
+花园已独立逐项回读并完成绯月签收，修订 138，部署 #69 和五条明细均已核实。此次已核对以下源码提交与各远端发布分支一致。主站和日记来源共用一个远端，各自使用独立分支。
+
+- myapp `fb6d4e7` · `codex/feiyue-non-newspaper-release-myapp-20261121`
+- subscriptions-api `db0d5bf` · `codex/feiyue-non-newspaper-release-20261121`
+- Windows `435c5b0` · `codex/feiyue-non-newspaper-release-20261121`
+- recordanyting `3d46157` · `codex/feiyue-non-newspaper-release-20261121`
+- resourceforlater `f8b3aa2` · `codex/feiyue-non-newspaper-release-20261121`
+- diary-attachments `73f593f` · `codex/feiyue-non-newspaper-release-20261121`
