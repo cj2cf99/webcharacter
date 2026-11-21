@@ -15,9 +15,15 @@ export const isHuShiTaskType = type => Object.hasOwn(huShiOperations, type);
 // 受信任的业务接口表。D1 存参数定义和说明，不提供运行地址或代码。
 const operations = {
   ...huShiOperations,
+  'resources.create': {
+    path: '/api/resources',
+    // 鱼与熊掌的 body 对应「这是什么」标题，note 对应「打算用它做什么」正文。
+    body: ({title, body, category_id = 'other', url = ''}) => ({body:title, note:body, category_id, url}),
+    recordId: response => typeof response?.id === 'string' && response.id.trim() ? response.id : null,
+  },
   'records.create': {
     path: '/api/records',
-    body: ({ body, category_id }) => ({ body: body.trim(), category_id, tag_ids: [], photos: [] }),
+    body: ({ body, category_id, photos = [] }) => ({ body: body.trim(), category_id, tag_ids: [], photos }),
     recordId: response => typeof response?.id === 'string' && response.id.trim() ? response.id : null,
   },
   'reminders.create': {

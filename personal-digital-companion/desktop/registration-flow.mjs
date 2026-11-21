@@ -3,6 +3,22 @@ import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isSubmissionId } from '../agent/tasks/submissions.mjs';
 import {registrationTypes} from './conversation-routing.mjs';
+import {calendarDate,datePattern,relativePattern,tokyoDate} from './calendar-date.mjs';
+
+// “加个提醒，这周日看手顺书，……”只需一个日期、标题和可选正文。
+// 有第二个日期、其它指令或额外字段时，交给原有计划器拆解。
+const singleReminder=new RegExp('^(?:(?:宝贝|绯月|请|帮我|给我)[，,\\s]*)*(?:加|添加|新增|创建|设|设置)(?:一?[个条项])?提醒[，,：:\\s]+('+relativePattern+')\\s*(.+)$','u');
+function datedReminder(match,deadline){
+  const subject=match[2];
+  if(!/^(?:看|读|写|做|交|提交|检查|复习|确认|联系|完成|推进|整理|准备|还|取|买|去|参加|开会|处理|更新|查看)/u.test(subject)||
+     new RegExp(datePattern+'|(?:周|星期)[一二三四五六日天]|\\d{1,2}[月号点时]|\\d{1,2}[:：]\\d{2}|提醒|待办|随手记|日记|登记|另外|然后|同时|顺便|再(?:加|设|建)|取消|不要设|不设日期|改到|改为|推迟|提前|优先级|紧急|重复|循环|每[天周月年]|[；;\\n]','u').test(subject))return null;
+  const split=subject.search(/[，,]/u);
+  const title=(split<0?subject:subject.slice(0,split)).trim();
+  const content=split<0?'':subject.slice(split+1).trim();
+  if(!title||title.length>300||content.length>30000)return null;
+  const params={title,deadline,...(content?{content}:{})};
+  return {pending:[],chain:{name:'临时登记',nodes:[{key:'entry-1',type:'reminders.create',params,target_device_id:null}]}};
+}
 
 function chooseNode(chain) {
   const active = chain.nodes.filter(node => !node.skipped);
@@ -24,7 +40,7 @@ function chooseNode(chain) {
   return next ? { status: 'ready', node: next } : { status: 'blocked', node: null };
 }
 
-export function createRegistrationFlow({ profile, request, canStart = () => true, canEnter=canStart, pauseChain = () => false, log = () => {}, record = () => {} }) {
+export function createRegistrationFlow({ profile, request, canStart = () => true, canEnter=canStart, pauseChain = () => false, log = () => {}, record = () => {}, now=Date.now }) {
   const file = join(profile, 'registration-submission.json');
   let active = null;
   function recordNode(task,stage,action) {
@@ -192,7 +208,7 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
         if (action !== undefined) throw Error('没有待处理的登记链');
         return null;
       }
-      const planned = reviewed ?? await call('/api/assistant/recording-plan', { text });
+      const planned = reviewed ?? await preview(text);
       if (!Array.isArray(planned?.pending)) throw Error('AI 登记计划回执无效');
       if (planned.chain === null) return { status: 'needs_input', chain: null, pending: planned.pending };
       if (!Array.isArray(planned.chain?.nodes) || !planned.chain.nodes.length) throw Error('AI 登记计划回执无效');
@@ -210,8 +226,20 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
     return promise;
   }
 
+  async function preview(text){
+    if(!canStart())throw Error('精灵暂时不能继续领取，登记请求已保留');
+    const match=singleReminder.exec(text.trim());
+    if(match){
+      const deadline=calendarDate(match[1],tokyoDate(now()));
+      const plan=datedReminder(match,deadline);
+      if(plan)return plan;
+      // 复杂事项仍走原登记技能，仅将指令日期位置换算为东京日期。
+      text=text.replace(match[1],deadline);
+    }
+    return call('/api/assistant/recording-plan',{text});
+  }
   return {
-    preview:text=>call('/api/assistant/recording-plan',{text}),
+    preview,
     submitReviewed:(text,plan)=>once(text,undefined,plan),
     submit(text) {
       if (typeof text !== 'string' || !text.trim()) return Promise.reject(Error('请输入登记内容'));

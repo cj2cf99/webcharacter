@@ -10,7 +10,7 @@ const decisions = byId('decisions');
 const actions = [...decisions.querySelectorAll('button')];
 const labels = {
   'hu-shi.food.create': '吃喝记录', 'hu-shi.exercise.create': '运动记录', 'hu-shi.event.create': '撸管记录',
-  'records.create': '随手记', 'diaries.create': '日记', 'reminders.create': '提醒',
+  'resources.create': '资源（鱼与熊掌）', 'records.create': '随手记', 'diaries.create': '日记', 'reminders.create': '提醒',
 };
 const nodeStatus = { PENDING: '待登记', RUNNING: '待确认', COMPLETED: '✓ 已登记', FAILED: '登记失败',
   CANCELLED: '已取消', SKIPPED: '已跳过' };

@@ -435,3 +435,13 @@ Qwen 会话通过 local-model-process.mjs 中的 systemPrompt 加载绯月人设
 服务器仅接收 prompt 与标准 PC 任务字段。成功回执含 job_id、format、width、height、archived。图片报告保存服务器任务号；默认归档根目录为 F:/feiyuememory。失败沿用标准 FAILED 回执，具体步骤和错误在本机查看。同一服务器任务绑定同一本地图像作业。设计沿用 TASK_TEMPLATE_PREVIEW.md 的备忘录索引和全局 FRAMEWORK_PREFERENCES.md 的最简原则。
 
 联调命令为 `node personal-digital-companion/tools/test-server-image-live.mjs --live`（从工作区根目录运行）。使用隔离的 Worker 数据库、模拟桌面 IPC 和真实本机 ComfyUI，输出及测试归档在 work/server-image-qa。两次独立建单均实际生成并归档 512×512 PNG，最终测试任务 734bd5bc-d212-4bd7-8d90-cccce2fff7c8 收到 COMPLETED。单测 server-image-task.test.mjs 另验证派给 all、无模板、空提示词、注入失败和同一任务不会重复生图。线上发布与当前桌宠进程加载另行进行。
+
+## 2026-11-21 JST · 正式 Windows 安装源码合入主线
+
+本次以 GitHub 主线 `cbc6dea` 为基线，合入 `59b3e43` 记录的 14:10 JST 正式安装版。沿用安装版的桌面模块、菜单与气泡、动作资源、版本化技能及本机花园 REST 和工作队列。终端绑定与本机运行任务查询等共享模块随桌面依赖同步。保留主线的工时接口、日记原文、生图结果恢复，以及云端配置和迁移。没有引入开发区的情绪、此刻所想、环球之旅或 Tavily 功能。
+
+按用户确认补齐三处接口兼容。随手记只提交用户确认的图库回执，模型提供的图片地址留在草稿之外。任务模板种子对旧定义只补缺少的可选 `photos` 字段，可重复加载。鱼与熊掌复用原文、标题、分类和网址的登记规则与固定业务回执。设备任务清单可选 `scope=standalone`，过滤逻辑发生在分页之前，省略参数时沿用原清单。Electron 巡检使用任务日志的前后翻页控件。四个技能的源文件与已发布快照一致，修正摘要后保留原版本号。
+
+本次为 Git 源码整合。Windows 安装版和 Cloudflare 服务不随这次 Git 同步更新。
+
+隔离验证通过桌面资源构建、Node 全量回归 264 通过和 2 项可选外部契约跳过、六项技能测试、普通及模拟花园 API 桌宠壳测试、Electron 七面板及本轮生图卡和自主行动日志巡检，并通过网页角色的骨骼、动作和资源检查。验证使用临时数据和本机回环服务。

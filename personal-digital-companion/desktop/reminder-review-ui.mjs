@@ -31,7 +31,7 @@ function updateButtons() {
 }
 
 function row(item) {
-  const line = node('li', '', 'row'), info = node('div', '', 'row-main');
+  const line = node('li', '', 'row fy-card'), info = node('div', '', 'row-main');
   info.append(node('strong', item.title),
     node('div', [deadline(item.deadline), item.plannerWork?'计划 '+item.plannerWork.plannedHours+' 小时':item.reason, item.recurrence && '循环'].filter(Boolean).join(' · '), 'meta'));
   line.append(info);
@@ -109,12 +109,13 @@ function render(data) {
     groups.append(section);
   }
   status.textContent = data.items.length||data.recordedHours?.length ? '' : '今天没有到期事项。';
+  status.className = status.textContent ? 'fy-empty' : 'fy-toast';
   renderReport(data.report);
 }
 
 async function load() {
   if (busy) return;
-  busy = true; status.textContent = '正在查询提醒…'; updateButtons();
+  busy = true; status.className = 'fy-toast'; status.textContent = '正在查询提醒…'; updateButtons();
   try { render(await window.reminderReview.load()); }
   catch (error) {
     selected.clear(); groups.replaceChildren();

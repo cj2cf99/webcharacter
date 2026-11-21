@@ -1,4 +1,5 @@
 import {searchHint} from '../agent/assistant/search-hint.mjs';
+import {refusalExcerpt} from '../agent/host/refusal-response.mjs';
 import {loadCloudConnection} from './cloud-connection.mjs';
 import {matchWeatherQuestion,answerWeatherQuestion} from '../agent/weather/question.mjs';
 const limit=4*1024*1024;
@@ -49,7 +50,7 @@ async function call(request,{endpoint,body,weather,question,grounded},signal,dia
     }
     const response=await request(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json',
       ...(endpoint==='/api/assistant/message'?{'X-Feiyue-AI-Trace':'1'}:{}),
-      ...(grounded?{}:{'X-Feiyue-Search-Hint':'1'})},body,signal:local.signal,redirect:'error'});
+      ...(grounded?{}:{'X-Feiyue-Search-Hint':'1','X-Feiyue-Inquiry':'1'})},body,signal:local.signal,redirect:'error'});
     diagnostic.httpStatus=response.status;
     diagnostic.phase='读取响应';
     const ray=response.headers?.get('cf-ray');
@@ -62,11 +63,13 @@ async function call(request,{endpoint,body,weather,question,grounded},signal,dia
     const hint = grounded ? {} : searchHint(question??'',value?.search_query);
     if(object(value))delete value.search_query;
     if(endpoint==='/api/assistant/message'){
+      if(!grounded&&value?.ask_user===true&&!value.proposal){hint.askUser=true;delete value.ask_user;}
       if(Array.isArray(value?.ai?.attempts)){
         diagnostic.routes=value.ai.attempts.slice(0,32).filter(row=>row&&typeof row.provider==='string'&&
           /^[a-z][a-z0-9-]{0,31}$/.test(row.provider)&&['probe','request'].includes(row.stage)&&
           typeof row.code==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(row.code)).map(row=>({
             provider:row.provider,stage:row.stage,code:row.code,at:Number.isSafeInteger(row.at)?row.at:Date.now(),
+            refusal_response:row.code!=='OK'?refusalExcerpt(row.refusal_response):undefined,
             durationMs:Number.isSafeInteger(row.duration_ms)?row.duration_ms:0,upstream:Number.isInteger(row.upstream_status)?row.upstream_status:undefined}));
         delete value.ai;
       }
@@ -74,7 +77,7 @@ async function call(request,{endpoint,body,weather,question,grounded},signal,dia
       if(!response.ok&&typeof value?.error?.code==='string'){
         const code=/^[A-Z][A-Z0-9_]{0,63}$/.test(value.error.code)?value.error.code:'UNKNOWN_SERVICE_ERROR';
         const textErrors={TIMEOUT:'文字模型响应超时',RATE_LIMITED:'文字模型请求过于频繁',NOT_CONFIGURED:'服务端文字模型尚未配置',
-          CONFIG_ERROR:'服务端文字模型配置无效',AI_UNAVAILABLE:'服务端调用文字模型失败',AI_COOLDOWN:'所有模型线路都在五小时冷却期内',AI_ROUTING_UNAVAILABLE:'模型路由状态暂不可用',
+          CONFIG_ERROR:'服务端文字模型配置无效',AI_UNAVAILABLE:'服务端调用文字模型失败',AI_COOLDOWN:'当前服务端报告线路处于冷却期',AI_ROUTING_UNAVAILABLE:'模型路由状态暂不可用',
           INVALID_AI_RESPONSE:'文字模型没有返回可用的完整答复',CONTEXT_TOO_LARGE:'清单与消息超出模型上下文限制'};
         const reason=Object.hasOwn(textErrors,code)?textErrors[code]:Object.hasOwn(userMessages,code)?userMessages[code]:'文字问答服务返回错误';
         return failure(code,reason+`（HTTP ${response.status} · ${code}）`,[429,502,504].includes(response.status));
@@ -115,19 +118,19 @@ export async function createScreenQuestionClient({profile,screen,desktopCapturer
     const emit=value=>{if(!controller.signal.aborted&&typeof onState==='function')try{onState(value);}catch{}};
     try{
       if(controller.signal.aborted)return cancelled();
-      if(configurationError&&!(memory&&(attachedImage||withScreen||retry&&last?.source))){emit(configurationError);return configurationError;}
+      if(configurationError&&!(attachedImage||withScreen||retry&&last?.source)){emit(configurationError);return configurationError;}
       let payload;
       if(retry){if(!last){const value=failure('NO_CAPTURE','没有可重试的问题，请重新提问');emit(value);return value;}payload=last;}
       else{
         if(typeof question!=='string'||!question.trim()||[...question.trim()].length>2000){const value=failure('INVALID_QUESTION','请输入1至2000个字符的问题');emit(value);return value;}
         last=null;
         const text=question.trim();
-        const weather=grounded||withScreen&&memory?null:matchWeatherQuestion(text);
+        const weather=grounded||attachedImage||withScreen&&memory?null:matchWeatherQuestion(text);
         if(weather){
           payload={weather};
         }else if(withScreen||attachedImage){
           const source=attachedImage??await capture(controller.signal);
-          payload={question:text,grounded,attachedImage:Boolean(attachedImage),endpoint:'/api/assistant/screen-question',source};
+          payload={question:text,grounded,source};
         }else if(document){
           const messages=[
             {role:'user',content:'附件名称：'+document.name+'\n附件正文：\n'+document.text},
@@ -148,21 +151,15 @@ export async function createScreenQuestionClient({profile,screen,desktopCapturer
           controller.signal.throwIfAborted();
         }
         const image=encodeImage(payload.source);
-        if(memory){
-          emit({state:'waiting',text:'正在本地查看图片…'});
-          const start=Date.now();
-          const local=await vision(payload.question,image,controller.signal).catch(()=>({reason:'本地识图未完成'}));
-          controller.signal.throwIfAborted();
-          const localMs=Date.now()-start;
-          if(local.text){
-            await onImage?.({...ref,route:'本地回答',localMs});
-            const value={state:'answer',text:local.text};emit(value);return value;
-          }
-          await onImage?.({...ref,route:configurationError?'云端未配置':'转交云端',reason:local.reason,localMs});
-          if(configurationError)return configurationError;
-          controller.signal.throwIfAborted();
-        }
-        payload={...payload,body:JSON.stringify({question:payload.question,image})};
+        emit({state:'waiting',text:'正在本地查看图片…'});
+        const start=Date.now();
+        const local=vision?await abortable(()=>vision(payload.question,image,controller.signal),controller.signal).catch(()=>({})):null;
+        controller.signal.throwIfAborted();
+        const localMs=Date.now()-start;
+        const reason=local?.reason??'本机视觉模型不可用';
+        await onImage?.({...ref,route:local?.text?'本地回答':'本地未识别',localMs,...(!local?.text&&{reason})});
+        const value=local?.text?{state:'answer',text:local.text}:failure('LOCAL_VISION_UNAVAILABLE',reason+'，请补充文字或重试。',true);
+        emit(value);return value;
       }
       emit({state:'waiting',text:payload.weather?'正在查询天气…':payload.endpoint.endsWith('/message')?'正在回答…':payload.attachedImage?'正在查看图片…':'正在查看屏幕…'});
       let value;
@@ -174,7 +171,8 @@ export async function createScreenQuestionClient({profile,screen,desktopCapturer
         delete diagnostic.routes;
         for(const row of routes??[]){
           if(row.code!=='OK'&&onFailure)await onFailure({attempt,operation:'文字问答',phase:row.stage==='probe'?'线路探测':'模型调用',
-            at:row.at,durationMs:row.durationMs,code:row.code,httpStatus:row.upstream,text:row.provider+' · '+row.code});
+            at:row.at,durationMs:row.durationMs,code:row.code,httpStatus:row.upstream,text:row.provider+' · '+row.code,
+            ...(row.refusal_response?{refusal_response:row.refusal_response}:{})});
         }
         if(value.state==='error'&&onFailure){
           const at=Date.now();

@@ -9,10 +9,10 @@ import {searchPublicWeb} from '../../desktop/public-search.mjs';
 import {createConversationHistory} from '../../desktop/conversation-history.mjs';
 
 test('自动输入区分登记、询问和显式搜索，登记中的搜索文字保留在原记录',()=>{
-  for(const text of ['午饭吃了拉面，帮我记一下','今天刚跑了五公里','帮我登记今天的支出','明天下午提醒我看医生','随手记：上网查 Firefox']){
+  for(const text of ['午饭吃了拉面，帮我记一下','帮我登记今天跑了五公里','帮我登记今天的支出','明天下午提醒我看医生','随手记：上网查 Firefox']){
     assert.equal(conversationRoute(text).kind,'registration',text);
   }
-  for(const text of ['今天吃了多少算合理？','刚才那段是什么意思','提醒我是什么意思？','今天需要带伞吗','不用联网，解释这个词']){
+  for(const text of ['今天刚跑了五公里','今天吃了多少算合理？','刚才那段是什么意思','提醒我是什么意思？','今天需要带伞吗','不用联网，解释这个词']){
     assert.equal(conversationRoute(text).kind,'question',text);
   }
   assert.deepEqual(conversationRoute('帮我上网查一下 Firefox'),{kind:'search',query:'Firefox'});

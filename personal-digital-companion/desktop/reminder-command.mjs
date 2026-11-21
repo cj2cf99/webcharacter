@@ -1,5 +1,4 @@
-const days = ['今天','明天','后天'];
-const datePattern = '(?:今天|明天|后天|\\d{4}-\\d{2}-\\d{2})';
+import {calendarDate as dateValue,datePattern} from './calendar-date.mjs';
 const names = '提醒事项|事项提醒|事项|提醒|任务|待办';
 const field = '循环周期|重复周期|循环|重复|标题|名称|内容|正文|日期|时间';
 const verb = '修改为|修改成|调整为|调整到|改为|改成|改到|设为|设成|设置为|换成|推迟到|提前到|移动到|移到|挪到|挪至|移至';
@@ -10,12 +9,6 @@ const digit = s => /^\d+$/.test(s)?Number(s):s==='两'?2:s.includes('十')?
   (s[0]==='十'?1:'一二三四五六七八九'.indexOf(s[0])+1)*10+(s.endsWith('十')?0:'一二三四五六七八九'.indexOf(s.at(-1))+1):
   '零一二三四五六七八九'.indexOf(s);
 const pad = n=>String(n).padStart(2,'0');
-function dateValue(value,today) {
-  if(days.includes(value))return new Date(Date.parse(today+'T00:00:00Z')+days.indexOf(value)*86400000).toISOString().slice(0,10);
-  const d=new Date(value+'T00:00:00Z');
-  if(!Number.isFinite(+d)||d.toISOString().slice(0,10)!==value)throw Error('请给出有效日期。');
-  return value;
-}
 function timeValue(raw) {
   if(/^(?:全天|无时间|取消时间)$/.test(raw))return '';
   const m=/^(凌晨|上午|早上|中午|下午|晚上)?\s*([零一二两三四五六七八九十\d]+)(?:[:：]([0-5]\d)|[点时](半|[零一二三四五六七八九十\d]+分?)?)$/.exec(raw);

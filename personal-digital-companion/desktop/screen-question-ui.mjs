@@ -4,6 +4,10 @@ const byId=id=>document.getElementById(id);
 const form=byId('questionForm'),question=byId('question'),answer=byId('answer'),reply=byId('reply');
 const mode=byId('mode'),withScreen=byId('withScreen'),send=byId('send'),retry=byId('retry'),decisions=byId('decisions');
 const badge=byId('badge'),pending=byId('pending'),replyContent=byId('replyContent');
+const directChat=byId('directChat');
+directChat.checked=localStorage.getItem('feiyue.directChat')==='on';
+const directActive=()=>directChat.checked&&!directChat.disabled&&!byId('directOption').hidden;
+directChat.onchange=()=>{localStorage.setItem('feiyue.directChat',directChat.checked?'on':'off');updateMode();retry.hidden=true;decisions.hidden=directActive()||!decisions.childElementCount;};
 const segmenter=new Intl.Segmenter('zh',{granularity:'grapheme'});
 const labels={resume:'恢复原链',continue:'继续',skip:'跳过',stop:'停止后续',supplement:'补充登记'};
 const recordingInput=['输入登记内容，可按 Win + H 听写','登记 ↗'];
@@ -17,11 +21,12 @@ const modes={
 const webMode=mode.querySelector('option[value="web"]');
 let busy=false,composing=false,idleTimer,draftReady=false;
 let attachment=null,reading=false,attachmentReady=false;
-let references=[];
-let reviewId=null;
+let references=[],audit=false;
+let imageJob=null,imageRequest=0;
+
 const resetIdle=()=>{
   clearTimeout(idleTimer);
-  if(busy||composing||reading)return;
+  if(busy||composing||reading||audit&&question.value.trim())return;
   idleTimer=setTimeout(()=>{
     if(draftReady&&host.idleClose){
       host.idleClose({text:question.value,mode:mode.value,withScreen:withScreen.checked,attachment,references});
@@ -36,12 +41,13 @@ function updateMode(value){
   if(attachment)value='auto';
   if (value)mode.value=Object.hasOwn(modes,value)&&mode.querySelector('option[value="'+value+'"]')?value:'auto';
   const selected=mode.value;
-  if(selected!=='auto')withScreen.checked=false;
-  withScreen.disabled=busy||reading||Boolean(attachment)||selected!=='auto';
-  mode.disabled=busy||reading||Boolean(attachment);
+  directChat.disabled=busy||reading||selected!=='auto'||audit||Boolean(attachment)||withScreen.checked;
+  if(selected!=='auto'||audit)withScreen.checked=false;
+  withScreen.disabled=directActive()||audit||busy||reading||Boolean(attachment)||selected!=='auto';
+  mode.disabled=directActive()||audit||busy||reading||Boolean(attachment);
   byId('removeAttachment').disabled=busy||reading;
   const [placeholder, label]=modes[selected]??modes.auto;
-  question.placeholder=placeholder;
+  question.placeholder=audit?'写下你对这件事的解释…':placeholder;
   send.textContent=label;
   send.disabled=busy||reading||selected==='memory'||(selected==='web'&&webMode.disabled);
 }
@@ -62,8 +68,9 @@ function attachmentError(message=''){
   byId('attachmentError').hidden=!message;
 }
 async function attachFiles(files){
-  if(busy||reading)return;
+  if(busy||reading||audit)return;
   attachmentError();
+  if(directActive())return attachmentError('直连仅支持文字；关闭直连后可以添加附件。');
   if(!host.attachmentInput||!attachmentReady)return attachmentError('请重新启动绯月以启用附件。');
   if(!files.length||files.length+references.length+Number(Boolean(attachment))>16)return attachmentError('每次最多 16 张图片。');
   reading=true;updateMode();resetIdle();
@@ -95,26 +102,40 @@ document.addEventListener('paste',event=>{
 byId('removeAttachment').onclick=()=>{showAttachment(null);attachmentError();retry.hidden=true;question.focus();};
 function render(value){
   if(!value||!['idle','waiting','answer','error'].includes(value.state))return;
+  const job=value.imageJob??null;
+  if(job!==imageJob){
+    imageJob=job;
+    imageRequest++;
+    const list=byId('imageResults');
+    list.hidden=true;
+    list.replaceChildren();
+    if(job)void refreshImages();
+  }
   const waiting=value.state==='waiting';
   if(waiting!==busy){busy=waiting;resetIdle();}
   reply.dataset.state=value.state;reply.setAttribute('aria-busy',String(busy));
-  reviewId=value.reviewId??null;
-  byId('recordReview').hidden=!reviewId;
-  byId('recordFields').textContent=value.fields??'';
   byId('asked').hidden=!value.question;
   byId('asked').textContent=value.question??'';
   const full=value.text??'';
   const chars=[];
   for(const {segment} of segmenter.segment(full)){chars.push(segment);if(chars.length===51)break;}
-  answer.textContent=chars.length>50?chars.slice(0,49).join('')+'…':full;
+  if(!waiting){
+    audit=Boolean(value.audit);byId('auditActions').hidden=!audit;
+    if(audit)mode.value='auto';
+    reply.dataset.nag=String(Boolean(value.nagReply));
+    const close=byId('close');close.dataset.nag=String(Boolean(value.nag));
+    close.textContent=value.nag&&!audit?'结束追问':'×';close.setAttribute('aria-label',value.nag&&!audit?'结束这次追问':'关闭问答');
+  }
+  answer.textContent=!value.nagReply&&chars.length>50?chars.slice(0,49).join('')+'…':full;
   byId('unsaved').hidden=!value.unsaved;
   question.disabled=busy;mode.disabled=busy;retry.disabled=busy;
   retry.hidden=value.state!=='error'||!value.retryable;
   const clipped=answer.scrollHeight>answer.clientHeight+1;
-  byId('full').hidden=busy||value.state==='idle'||(chars.length<=50&&!clipped&&!value.sources?.length);
+  byId('full').hidden=value.nagReply||busy||value.state==='idle'||(chars.length<=50&&!clipped&&!value.sources?.length);
   badge.textContent={idle:'对话',waiting:'处理中',answer:'回复',error:'未完成'}[value.state];
   badge.hidden=value.state==='error'&&!(typeof value.question==='string'&&value.question.trim()&&full.trim());
   if(Object.hasOwn(value,'hasPending'))updatePending(value.hasPending);
+  if(value.directInput===true)byId('directOption').hidden=false;
   if(value.webSearch===true&&webMode.disabled){
     webMode.textContent='查询网络';
     webMode.disabled=false;
@@ -132,7 +153,7 @@ function render(value){
   }
   const actions=[...(value.actions??[])];
   if(value.canSupplement)actions.push('supplement');
-  decisions.hidden=busy||!actions.length;
+  decisions.hidden=directActive()||busy||!actions.length;
   decisions.replaceChildren(...actions.map(action=>{
     const button=document.createElement('button');button.textContent=labels[action];
     button.onclick=()=>{
@@ -153,32 +174,27 @@ async function invoke(run){
   catch{render({state:'error',text:'问答连接中断，请重新打开气泡。'});}
 }
 mode.onchange=()=>{updateMode();retry.hidden=true;};
-withScreen.onchange=()=>{retry.hidden=true;};
-question.oninput=()=>{retry.hidden=true;if(reviewId){reviewId=null;byId('recordReview').hidden=true;}};
+withScreen.onchange=()=>{updateMode();retry.hidden=true;};
+question.oninput=()=>{retry.hidden=true;};
 form.onsubmit=async event=>{
   event.preventDefault();
   const text=question.value;if((!text.trim()&&!attachment)||send.disabled)return;
-  const value=await invoke(()=>host.ask(text,withScreen.checked,mode.value,attachment,references));
-  if(value?.state==='answer'&&!value.reviewId){question.value='';showAttachment(null);attachmentError();updateMode('auto');question.focus();}
+  const direct=directActive();
+  const value=await invoke(()=>host.ask(text,withScreen.checked,direct?'direct':mode.value,attachment,references));
+  if(value?.state==='answer'&&!value.invalid){question.value='';showAttachment(null);attachmentError();updateMode('auto');question.focus();}
 };
-for(const [id,approve] of [['approveRecord',true],['discardRecord',false]]){
-  byId(id).onclick=async()=>{
-    const token=reviewId;if(!token||busy)return;
-    const result=await invoke(()=>host.reviewAttachment(token,approve));
-    if(result?.state==='answer'){question.value='';showAttachment(null);attachmentError();}
-  };
-}
 question.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();form.requestSubmit();}};
 for(const event of ['keydown','input','pointerdown','change']){
   document.addEventListener(event,resetIdle,{capture:true,passive:true});
 }
-document.addEventListener('wheel',event=>{if(!event.target.closest?.('#recordFields,#imageResults'))event.preventDefault();},{capture:true,passive:false});
+document.addEventListener('wheel',event=>{if(!event.target.closest?.('#imageResults,#reply[data-nag=true]'))event.preventDefault();},{capture:true,passive:false});
 question.addEventListener('compositionstart',()=>{composing=true;resetIdle();});
 question.addEventListener('compositionend',()=>{composing=false;resetIdle();});
 retry.onclick=async()=>{const value=await invoke(()=>host.retry());if(attachment&&value?.state==='answer'){question.value='';showAttachment(null);attachmentError();}};
 for(const [id,full] of [['full',true],['history',false]])byId(id).onclick=()=>host.details(full).catch(()=>render({state:'error',text:'对话记录窗口未能打开。'}));
-byId('close').onclick=()=>host.close();
-pending.onclick=()=>host.pending().catch(()=>render({state:'error',text:'待确认窗口未能打开。'}));
+for(const action of ['later','refuse'])byId(action).onclick=()=>host.close(action);
+byId('close').onclick=()=>host.close('button');
+pending.onclick=()=>host.pending(!question.value&&!attachment&&!reading).catch(()=>render({state:'error',text:'待确认窗口未能打开。'}));
 document.onkeydown=event=>{if(event.key==='Escape')host.close();};
 window.addEventListener('companion-page-update',event=>{if(busy||reading||attachment||question.value||withScreen.checked||reply.dataset.state!=='idle')event.preventDefault();});
 const off=[host.onState(render),host.onMode?.(updateMode),host.onPending?.(updatePending),host.onLayout(value=>{
@@ -192,12 +208,14 @@ if(!host.details){
 resetIdle();
 window.addEventListener('pagehide',()=>{clearTimeout(idleTimer);off.forEach(remove=>remove?.());});
 
-let listRequest=0;
 async function refreshImages(){
-  if(!host.imageList)return;
-  const current=++listRequest;
-  const rows=await host.imageList();
-  if(current!==listRequest)return;
+  if(!imageJob||!host.imageList)return;
+  const current=++imageRequest;
+  let rows;
+  try{rows=await host.imageList();}
+  catch{if(current===imageRequest)attachmentError('图像任务记录暂时无法读取。');return;}
+  if(current!==imageRequest)return;
+  rows=rows.filter(row=>row.job===imageJob);
   const list=byId('imageResults');
   list.hidden=!rows.length;
   list.replaceChildren(...rows.map(row=>{
@@ -210,6 +228,4 @@ async function refreshImages(){
   }));
   if(rows.length)host.fit(Math.min(420,Math.max(320,innerHeight)));
 }
-const refresh=()=>{void refreshImages().catch(()=>attachmentError('图像任务记录暂时无法读取。'));};
-if(host.onImages)off.push(host.onImages(refresh));
-refresh();
+if(host.onImages)off.push(host.onImages(refreshImages));

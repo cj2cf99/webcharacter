@@ -9,6 +9,7 @@ function render(rows){
       forms.set(row.id,form);form.dataset.poll=row.id;section.append(form);
       form.querySelector('h2').textContent=row.name;
       form.elements.enabled.checked=row.enabled;
+      if(row.id==='diary')form.elements.minutes.max=720;
       form.elements.minutes.value=row.minutes;form.elements.maximum.value=row.maximum;
       form.onsubmit=async event=>{
         event.preventDefault();
@@ -21,7 +22,7 @@ function render(rows){
         finally{button.disabled=false;}
       };
     }
-    form.querySelector('.state').textContent=[row.running?'执行中':row.queuedAt!==null?'等待执行':row.enabled?'已启用':'已停用',
+    form.querySelector('.state').textContent=[row.running?'执行中':row.queuedAt!==null?'等待执行':'',
       row.misses?'连续推延 '+row.misses+' 次':'',row.nextAt?'下次 '+format.format(row.nextAt)+' JST':''].filter(Boolean).join(' · ');
   }
   const waiting=rows.filter(row=>row.queuedAt!==null).sort((a,b)=>a.queuedAt-b.queuedAt);

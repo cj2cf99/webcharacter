@@ -6,6 +6,10 @@ import {join} from 'node:path';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 import {startDesktop,initialBounds} from '../desktop/shell.mjs';
+import {createMemoryArchive} from '../desktop/memory-archive.mjs';
+import {createPersonalityDiary} from '../desktop/personality-diary.mjs';
+import {DatabaseSync} from 'node:sqlite';
+import {canonical,hash,schemaQuery} from '../desktop/garden-registration.mjs';
 assert.deepEqual(initialBounds({x:0,y:0,width:1440,height:900}),{x:1181,y:528,width:243,height:360});
 const app=new EventEmitter();Object.assign(app,{requestSingleInstanceLock:()=>true,setName(){},setPath(){},whenReady:async()=>{},quit(){this.emit('before-quit')}});
 let loginEntries=[],loginWrites=0,loginError=false;
@@ -43,16 +47,35 @@ class Window extends EventEmitter{
   constructor(options){super();win=this;this.options=options;this.visible=false;this.bounds=options;this.ignore=[];this.sent=[];this.webContents=new EventEmitter();
     this.webContents.mainFrame={id:1};this.webContents.setWindowOpenHandler=fn=>this.open=fn;this.webContents.send=(...args)=>this.sent.push(args);}
   setIgnoreMouseEvents(...args){this.ignore.push(args)}isDestroyed(){return false}isVisible(){return this.visible}
+  setAlwaysOnTop(value,level){assert.ok(this.visible,'显示后恢复置顶');assert.equal(level,'pop-up-menu');this.topmost=value;}
   getBounds(){return this.bounds}setBounds(b){this.bounds={...b};this.boundsCalls=(this.boundsCalls||0)+1}setPosition(x,y){this.bounds={...this.bounds,x,y,width:this.bounds.width+1,height:this.bounds.height+1}}showInactive(){this.visible=true}hide(){this.visible=false}async loadFile(file){this.file=file}
 }
-class Tray {constructor(){tray=this;this.events={}}setToolTip(){}setContextMenu(menu){this.menu=menu}popUpContextMenu(){this.openedMenu=this.menu}on(name,fn){this.events[name]=fn}destroy(){this.destroyed=true}}
+class Tray {constructor(){tray=this;this.events={}}setToolTip(){}setContextMenu(menu){this.menu=menu}displayBalloon(options){this.balloon=options;}popUpContextMenu(){this.openedMenu=this.menu}on(name,fn){this.events[name]=fn}destroy(){this.destroyed=true}}
 const session={defaultSession:{webRequest:{onBeforeRequest(_filter,fn){network=fn}},setPermissionRequestHandler(fn){permission=fn}}};
 const profile=mkdtempSync(join(tmpdir(),'companion-sound-'));
+const memory=createMemoryArchive(join(profile,'memory'));
+await memory.save({id:'diary-menu-test',at:Date.now(),state:'answer',question:'今天一起读了书',text:'我记住了'});
+const previousDiary=createPersonalityDiary({profile,memory});
+previousDiary.mark('diary',Date.now());
+previousDiary.close();
 let modelStarts=0,modelStops=0;
-const model={start(){assert.equal(win.visible,true);modelStarts++;},close(){modelStops++;}};
+const model={start(){assert.equal(win.visible,true);modelStarts++;},close(){modelStops++;},
+  async memory(text,_instruction,schema){
+    if(schema.required.includes('review'))return {text,review:'记住今天读的书'};
+    return {text:'今天一起读书。',comment:'下次还想一起读。',summary:'一起读书',mood:'开心',tags:'读书',thread:''};
+  }};
 const loginErrors=[];
+const testGarden=process.argv.includes('--garden-api')?new DatabaseSync(':memory:'):null;
+let gardenPlan,localAPI;
+if(testGarden){
+  testGarden.exec("CREATE TABLE garden_revision(id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER CHECK(revision>=0)); INSERT INTO garden_revision VALUES(1,0);CREATE TABLE garden_project(id INTEGER PRIMARY KEY,name TEXT)");
+  const garden={read:sql=>testGarden.prepare(sql).all(),write:sql=>testGarden.exec('BEGIN;'+sql+'COMMIT;')};
+  gardenPlan={format:1,id:'shell-fixture',title:'本机花园登记测试',kind:'garden',result:'隔离记录',noChanges:[],revision:0,schemaHash:hash(canonical(garden.read(schemaQuery))),
+    steps:[{label:'登记项目',scope:{projects:[],flowers:[]},changes:[{table:'project',before:null,after:{id:1,name:'隔离项目'}}]}]};
+  localAPI={garden,listenPort:0,load:async()=>gardenPlan};
+}
 const result=await startDesktop({app,shell:{},powerMonitor:{getSystemIdleTime:()=>systemIdle},BrowserWindow:Window,Tray,Menu:{buildFromTemplate:buildMenu},nativeImage:{createFromPath:x=>x},screen,ipcMain,session},
-  {profile,localModel:model,messageBoxes:{showMessageBox:async data=>{loginErrors.push(data);return {response:0};},close(){}},windowSource:({onSnapshot})=>{publishWindows=onSnapshot;return ()=>{};},now:()=>clock,random:()=>roamRandom,
+  {profile,memory,localAPI,localModel:model,messageBoxes:{showMessageBox:async data=>{loginErrors.push(data);return {response:0};},close(){}},windowSource:({onSnapshot})=>{publishWindows=onSnapshot;return ()=>{};},now:()=>clock,random:()=>roamRandom,
     setInterval:(fn,ms)=>{timer=fn;intervalMs=ms;return 1},clearInterval:()=>{timer=null;clears++}});
 assert.equal(win.options.transparent,true);assert.equal(win.options.frame,false);assert.equal(win.options.webPreferences.nodeIntegration,false);
 assert.equal(win.options.webPreferences.contextIsolation,true);assert.equal(win.options.webPreferences.sandbox,true);
@@ -61,12 +84,21 @@ network({},r=>assert.equal(r.cancel,true));permission(null,'camera',value=>asser
 const event={sender:win.webContents,senderFrame:win.webContents.mainFrame};
 ipcMain.emit('desktop:ready',{sender:{},senderFrame:{}});assert.equal(win.visible,false,'拒绝无关窗口消息');
 ipcMain.emit('desktop:ready',event);assert.equal(win.visible,true);assert(timer);
+assert.equal(win.topmost,true);
+for(let cycle=0;cycle<2;cycle++){
+  tray.events['double-click']();
+  assert.equal(win.visible,false);
+  win.topmost=false;
+  tray.events['double-click']();
+  assert.equal(win.topmost,true,'托盘再次显示时恢复置顶');
+}
 assert.equal(modelStarts,0,'首帧就绪先显示窗口');
 await new Promise(resolve=>setImmediate(resolve));
 assert.equal(modelStarts,1,'窗口显示后启动本地模型');
 ipcMain.emit('desktop:ready',event);
 await new Promise(resolve=>setImmediate(resolve));
 assert.equal(modelStarts,1,'重复首帧通知不会重载模型');
+assert.deepEqual(win.sent.filter(([name])=>name==='desktop:action').map(([,v])=>v.kind),['startup','resume']);
 ipcMain.emit('desktop:hit',event,true);assert.equal(win.ignore.at(-1)[0],false,'人物可命中');
 ipcMain.emit('desktop:hit',event,false);assert.equal(win.ignore.at(-1)[0],true,'透明区域穿透');
 const count=win.ignore.length;ipcMain.emit('desktop:hit',event,'false');assert.equal(win.ignore.length,count,'拒绝非布尔值');
@@ -82,7 +114,32 @@ ipcMain.emit('desktop:hit',event,false);assert.equal(win.ignore.at(-1)[0],false,
 ipcMain.emit('desktop:drag-end',event);ipcMain.emit('desktop:hit',event,false);assert.equal(win.ignore.at(-1)[0],true);
 const actionsMenu=()=>tray.menu.find(item=>item.label==='桌宠动作').submenu;
 const moveItems=()=>actionsMenu().find(item=>item.label==='移动到').submenu;
+const watchDiary=tray.menu.find(item=>item.label==='日记与评价').submenu.find(item=>item.label==='看绯月写日记').click;
+result.hide();
+const writing=watchDiary();
+assert.equal(win.visible,true);
+assert.ok(win.sent.some(([channel,v])=>channel==='desktop:thought'&&v?.title==='闲时 · 写日记'&&v.stage==='整理资料'),'手动写日记立即显示进度');
+await watchDiary();
+await writing;
+const diaryDatabase=new DatabaseSync(join(profile,'personality-memory.sqlite'),{readOnly:true});
+assert.equal(diaryDatabase.prepare("SELECT count(*) AS n FROM drafts WHERE packet LIKE '%绯月私语：下次还想一起读。%'").get().n,1);
+diaryDatabase.close();
+assert.deepEqual(win.sent.filter(([name])=>name==='desktop:idle-context').slice(-2).map(([,value])=>value),['diary-review-idle','']);
+assert.match(loginErrors.pop().detail,/云端连接未配置/);
+assert.ok(win.sent.some(([channel,v])=>channel==='desktop:thought'&&v?.title==='闲时 · 写日记'&&v.total===7),'手动写日记显示真实归档进度');
+const reviewTasks=tray.menu.find(item=>item.label==='日记与评价').submenu.find(item=>item.label==='补写本机任务执行评价').click;
+const oldDay='2020-01-01',oldTime=Date.parse(oldDay+'T12:00:00+09:00');
+await memory.saveTasks(oldDay,[{task_id:'old-task',at:oldTime,title:'登记',action:'完成',detail:'测试'}],{index:false});
+await memory.save({id:'old-dialogue',at:oldTime,state:'answer',question:'聊天',text:'非任务资料'},{index:false});
+await Promise.all([reviewTasks(),reviewTasks()]);
+assert.match(loginErrors.pop().message,/补写 1 条/);
+assert.ok(win.sent.some(([channel,value])=>channel==='desktop:thought'&&value?.title==='闲时 · 补写执行评价'&&value.done===1&&value.total===1));
+assert.equal(win.sent.filter(([channel])=>channel==='desktop:thought').at(-1)[1],null);
+await reviewTasks();assert.match(loginErrors.pop().message,/补写 0 条/);
+console.log('PASS：手动扫描七天以前的本机任务、排除聊天、显示真实进度、结束收云、重复执行保留评价。');
+console.log('PASS：本周期已写仍能手动启动绯月手记，隐藏时显示桌宠，重复点击只写一份，离线保留草稿。');
 actionsMenu().find(item=>item.label==='开始工作').click();assert.deepEqual(win.sent.at(-1),['desktop:work',true]);
+await watchDiary();if(process.platform==='win32')assert.match(tray.balloon.content,/正在忙/);
 tray.menu.find(item=>item.label==='隐藏').click();assert.equal(win.visible,false);assert.equal(timer,null);
 tray.menu.find(item=>item.label==='显示').click();assert.equal(win.visible,true);assert(timer);
 let prevented=false;win.webContents.emit('will-navigate',{preventDefault(){prevented=true}},'https://example.com');assert(prevented);
@@ -92,9 +149,9 @@ ipcMain.emit('desktop:sound-ready',event);assert.equal(win.sent.at(-1)[1].enable
 ipcMain.emit('desktop:sound-change',event,{enabled:false,volume:23});assert.deepEqual(JSON.parse(readFileSync(join(profile,'sound-settings.json'),'utf8')),normalizeSound({enabled:false,volume:23}));
 ipcMain.emit('desktop:sound-change',event,{enabled:true,volume:999});ipcMain.emit('desktop:sound-ready',event);assert.equal(win.sent.at(-1)[1].volume,23);
 const labels=items=>items.filter(item=>item.type!=='separator').map(item=>item.label);
-assert.deepEqual(labels(tray.menu),['问绯月','三地天气','任务','桌宠动作','设置与维护','隐藏','退出']);
+assert.deepEqual(labels(tray.menu),['问绯月','今日任务','三地天气','本地复盘','任务','日记与评价','桌宠动作','设置与维护','隐藏','退出']);
 win.webContents.emit('context-menu');assert.equal(tray.openedMenu,tray.menu,'角色右键与托盘使用同一菜单');
-assert.deepEqual(labels(tray.menu.find(item=>item.label==='任务').submenu),['今日任务','接取任务与任务链','中断任务与补传','本地复盘','任务日志']);
+assert.deepEqual(labels(tray.menu.find(item=>item.label==='任务').submenu),['绯月任务管理','中断任务与补传','任务日志']);
 const settingsLabels=labels(tray.menu.find(item=>item.label==='设置与维护').submenu);
 if(process.platform==='win32'){
   assert.deepEqual(settingsLabels,['动画与声音','轮询设定','登录 Windows 后延迟 1 分钟启动','云端连接','重启绯月']);
@@ -183,6 +240,14 @@ assert.equal(result.attachment.active,null);
 assert.equal(attachments().at(-1)[1],null,'远处松手解除依附');
 assert.equal(win.getBounds().width,243);
 assert.notEqual(win.getBounds().x,1181,'保留松手附近位置');
+actionsMenu().find(m=>m.label==='窗口依附').submenu.find(m=>m.label==='上沿坐姿').click();
+assert.equal(result.attachment.active.mode,'sit');
+const originalCount=result.tasks.activeCount;
+result.tasks.activeCount=()=>1;timer();
+assert.equal(result.attachment.active,null,'本地执行任务时解除依附，给工作动作让出画布');
+assert.deepEqual(win.sent.filter(([name])=>name==='desktop:work').at(-1),['desktop:work',true]);
+result.tasks.activeCount=originalCount;timer();
+assert.deepEqual(win.sent.filter(([name])=>name==='desktop:work').at(-1),['desktop:work',false]);
 console.log('PASS：上沿拖拽保持播放和尺寸、快照不抢位置、松手更新锚点、拖远退出。');
 
 const crossMenu=()=>moveItems().find(m=>m.label==='其他屏幕');
@@ -322,8 +387,43 @@ await saveLock(false);result.moveTo('top-left');
 assert.equal(lastWalk(),true,'退出全屏后重新允许移动');
 console.log('PASS：逐屏全屏避让、全屏固定、锁定、拖拽、跨屏路线、窗口依附及热插拔。');
 
-result.hide();assert.equal(timer,null);app.quit();assert.equal(tray.destroyed,true);assert.equal(modelStops,1);assert.equal(ipcMain.listenerCount('desktop:hit'),0);assert(clears>0);
+if(testGarden){
+  const headers={Authorization:'Bearer '+readFileSync(join(profile,'local-api.token'),'utf8'),'Content-Type':'application/json'};
+  const base=result.localAPIAddress;
+  const guide=await (await fetch(base+'/infoguide')).json();
+  assert.equal(guide.instance.profile,profile);assert.match(guide.batch.steps,/checking/);
+  const beforeBatch=win.sent.length;
+  const response=await fetch(base+'/v1/batches',{method:'POST',headers,body:JSON.stringify({id:gardenPlan.id,reviewHash:hash(canonical(gardenPlan)),commit:'1'.repeat(40),userConfirmed:true})});
+  assert.equal(response.status,202);
+  const accepted=(await response.json()).batch;
+  assert.equal(accepted.queue.position,1);assert.equal(accepted.queue.limit,20);assert.equal(accepted.queue.used,1);
+  let batch;
+  for(let i=0;i<100;i++){
+    batch=await (await fetch(base+'/v1/batches/'+gardenPlan.id,{headers})).json();if(batch.state==='done')break;
+    await new Promise(resolve=>setTimeout(resolve,30));
+  }
+  assert.equal(batch.state,'done',batch.error);
+  const batchMessages=win.sent.slice(beforeBatch);
+  assert.ok(batchMessages.some(([ch,v])=>ch==='desktop:thought'&&v?.title==='正式 · '+gardenPlan.title&&v.done===1));
+  assert.deepEqual(batchMessages.filter(([ch])=>ch==='desktop:work').map(([,v])=>v),[true,false]);
+  assert.equal(batchMessages.filter(([ch])=>ch==='desktop:thought').at(-1)[1],null);
+  assert.equal(tray.balloon.title,'花园登记完成');
+  const day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo'}).format(new Date(batch.finished));
+  assert.equal((await memory.readTasks(day)).filter(r=>r.task_id==='garden-batch:'+gardenPlan.id).length,1);
+  console.log('PASS：正式桌宠壳启动隔离 REST，工作节点和奶油云显示真实进度，完成汇报并归档一条日记素材。');
+}
+result.hide();assert.equal(timer,null);app.quit();
+if(testGarden)await new Promise(resolve=>setImmediate(resolve));
+const farewell=win.sent.findLast(([name,data])=>name==='desktop:action'&&data.kind==='farewell')[1];
+assert.equal(win.visible,true);
+app.quit();
+ipcMain.emit('desktop:action-finished',event,{ticket:farewell.ticket-1,ok:true});
+assert.ok(!tray.destroyed,'重复退出、旧回执都不能提前关闭桌宠');
+ipcMain.emit('desktop:action-finished',event,{ticket:farewell.ticket,ok:true});
+for(let i=0;i<100&&!tray.destroyed;i++)await new Promise(resolve=>setTimeout(resolve,10));
+assert.equal(tray.destroyed,true);assert.equal(modelStops,1);assert.equal(ipcMain.listenerCount('desktop:hit'),0);assert(clears>0);
 assert.equal(screen.listenerCount('display-metrics-changed'),0);
 console.log('PASS：透明窗口参数、默认穿透、可信IPC与类型校验、人物命中、托盘工作/显隐/退出、隐藏停轮询、禁止外联/导航/权限。');
 
 assert.equal(ipcMain.listenerCount('desktop:sound-change'),0);rmSync(profile,{recursive:true});
+testGarden?.close();

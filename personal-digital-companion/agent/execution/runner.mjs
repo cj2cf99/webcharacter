@@ -176,6 +176,13 @@ export function createTaskExecutor({ databasePath, deviceId, handlers = {}, canE
     }); },
     discardRejectedRecovery(id) { db.prepare('DELETE FROM local_recoveries WHERE task_id=? AND acknowledged=0').run(id); },
     activeCount() { return active.size; },
+    runningTasks() {
+      const read = db.prepare(`SELECT t.task_id,t.type,m.name,t.attempt_count,e.started_at
+        FROM local_tasks t LEFT JOIN local_task_metadata m USING(task_id)
+        JOIN executions e ON e.task_id=t.task_id AND e.attempt_no=t.attempt_count
+        WHERE t.task_id=? AND t.status='RUNNING'`);
+      return [...active].map(id => read.get(id)).filter(Boolean);
+    },
     hasUnsettledWork() {
       // 未获领取回执的 PENDING 副本可能已被云端拒绝。待确认的领取由 chainClient 跟踪。
       return Boolean(db.prepare(`SELECT 1 FROM local_tasks t

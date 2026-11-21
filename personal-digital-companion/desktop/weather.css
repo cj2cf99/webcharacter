@@ -1,29 +1,32 @@
-:root{color-scheme:light dark;font:14px system-ui,sans-serif;--bg:#fbf7f4;--panel:#fffdfa;--ink:#2d2431;--dim:#685b70;--edge:#eadfe8;--accent:#953f73;--warn:#9c4c09;--danger:#ae2035}
-@media(prefers-color-scheme:dark){:root{--bg:#211d28;--panel:#2d2636;--ink:#f6eaf3;--dim:#c6b3cd;--edge:#4b3b58;--accent:#f3aad4;--warn:#ffbb72;--danger:#ff9bac}}
 *{box-sizing:border-box}
-body{margin:0;padding:15px;background:var(--bg);color:var(--ink)}
-header,.weather-line{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 12px}
-header{margin-bottom:12px}
+body{margin:0}
 h1,h2,p{margin:0}
-h1{font-size:20px} h2{font-size:15px}
 #places{display:grid;gap:8px}
-article{background:var(--panel);border:1px solid var(--edge);border-radius:12px;padding:10px 12px}
-.label{color:var(--accent);margin-right:8px;font-weight:700}
-.stats{font-variant-numeric:tabular-nums;min-height:1.5em}
-.stats strong{font-size:17px}
-button{border:1px solid var(--edge);border-radius:20px;padding:5px 10px;color:var(--accent);background:var(--panel);font:inherit;cursor:pointer}
-button:disabled{opacity:.6;cursor:wait}
-button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.alert-line,.detail,.age,#status,footer{font-size:12px;color:var(--dim);margin-top:5px}
-.alert,.official{color:var(--warn)}
-.urgent{color:var(--danger);font-weight:700}
-details{margin-block:5px;overflow-wrap:anywhere}
-summary{cursor:pointer}
+/* 每地一张卡片：左上地点，右上大号温度；预警用暖色，紧急用红色 */
+article{position:relative;padding:9px 12px 9px 14px;border:1px solid var(--fy-line);border-radius:var(--fy-radius);background:var(--fy-surface);animation:fy-rise .3s ease-out both;overflow:hidden}
+article:nth-child(2){animation-delay:40ms}article:nth-child(3){animation-delay:80ms}
+article::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--fy-info)}
+article:has(.alert)::before{background:var(--fy-warn)}
+article:has(.urgent)::before{background:var(--fy-danger)}
+.weather-line{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px 12px}
+h2{font-size:14px;font-weight:650}
+.label{margin-right:6px;padding:0 7px;border-radius:999px;font-size:11px;line-height:18px;vertical-align:1px;color:var(--fy-accent);background:var(--fy-soft)}
+.stats{font-variant-numeric:tabular-nums;min-height:1.5em;font-size:12px;color:var(--fy-muted)}
+.stats strong{font:700 22px/1 var(--fy-sans);color:var(--fy-ink);vertical-align:-2px}
+.alert-line,.detail,.age,#status,footer{font-size:11.5px;color:var(--fy-muted);margin-top:3px}
+.alert,.official{color:var(--fy-warn)}
+.urgent{color:var(--fy-danger);font-weight:700}
+details{margin-block:4px;overflow-wrap:anywhere}
+summary{cursor:pointer;font-size:12.5px}
+summary::before{content:"▲ ";font-size:10px}
+summary.urgent::before{animation:fy-pulse 1.4s ease-in-out infinite;display:inline-block}
 .detail{white-space:pre-wrap;line-height:1.5}
-.links{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
-.links button{padding:3px 7px;font-size:12px}
+.links{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+.fy-panel .links button{min-height:24px;padding:1px 9px;border-radius:999px;font-size:11.5px;color:var(--fy-accent)}
+.fy-panel .links button::after{content:" ↗"}
 .minimum{font-variant-numeric:tabular-nums}
 .minimum.alert{font-weight:650}
-.japan-updates{margin-top:7px;padding-top:4px;border-top:1px solid var(--edge)}
-footer{display:grid;gap:3px;overflow-wrap:anywhere}
-a{color:var(--accent)}
+.japan-updates{margin-top:6px;padding-top:4px;border-top:1px dashed var(--fy-line)}
+#status:empty{display:none}
+footer{display:grid;gap:2px;margin-top:8px;overflow-wrap:anywhere;opacity:.8}
+a{color:var(--fy-accent)}

@@ -14,8 +14,8 @@
       <div class="fy-caption"><strong class="fy-caption-title">绯月</strong></div>
       <span id="badge">对话</span>
       <nav aria-label="对话工具">
-        <button type="button" class="quiet" id="pending" hidden>待确认</button>
-        <button type="button" class="quiet" id="history">对话记录</button>
+        <button type="button" class="quiet" id="pending" data-icon="✋" hidden>待确认</button>
+        <button type="button" class="quiet" id="history" data-icon="📜">对话记录</button>
       </nav>
       <button id="close" type="button" aria-label="关闭问答">×</button>
     </header>
@@ -31,12 +31,8 @@
         <span id="unsaved" hidden>记录未保存</span>
       </div>
     </section>
+    <div id="auditActions" hidden><button id="later" type="button">稍后回答</button> <button id="refuse" type="button">拒绝回答</button></div>
     <div id="decisions" hidden></div>
-    <section id="recordReview" aria-label="核对登记字段" hidden>
-      <pre id="recordFields"></pre>
-      <button id="approveRecord" type="button">确认登记</button>
-      <button id="discardRecord" type="button">放弃</button>
-    </section>
     <div id="imageResults" aria-live="polite" hidden></div>
     <form id="questionForm">
       <div id="attachment" hidden>
@@ -49,6 +45,7 @@
       <textarea id="question" rows="2" placeholder="问绯月，或记点什么…" aria-describedby="hint"></textarea>
       <footer>
         <label class="capture" title="附上鼠标所在屏幕的截图"><input id="withScreen" type="checkbox">附上截图</label>
+        <label class="capture" title="仅普通文字聊天直连本地模型" hidden id="directOption"><input id="directChat" type="checkbox">直连</label>
         <select id="mode" aria-label="输入用途"><option value="auto">自动</option><option value="registration">登记</option><option value="web" disabled>查询网络（待重启）</option><option value="memory" disabled>查询记忆（未开放）</option></select>
         <span id="hint">Ctrl+Enter</span>
         <button id="send" type="submit">发送 ↗</button>

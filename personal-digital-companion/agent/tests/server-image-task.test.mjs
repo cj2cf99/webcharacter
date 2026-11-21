@@ -11,6 +11,41 @@ import {createImageTasks} from '../../desktop/image-tasks.mjs';
 import {createMemoryArchive} from '../../desktop/memory-archive.mjs';
 import {tokyoDay} from '../../desktop/conversation-history.mjs';
 
+for(const upload of [true,false])test('自动生图明确汇报并打开归档图片，云端回执 '+upload,async t=>{
+  const profile=await mkdtemp(join(tmpdir(),'feiyue-image-receipt-'));
+  const db=openTestDatabase(),memory=createMemoryArchive(join(profile,'memory'));
+  initializeDatabase(db.sqlite);
+  db.sqlite.exec(await readFile(new URL('../seeds/tasklist-pc.sql',import.meta.url),'utf8'));
+  const output=join(profile,'fixture.png');
+  await writeFile(output,'test image');
+  const images=createImageTasks({root:profile,profile,archive:memory.archiveImageTask,
+    runPython:async(_cli,args)=>args[0]==='submit'?{job:args[2].replaceAll('-',''),state:'queued'}:
+      {state:'done',width:512,height:768,output}});
+  const reports=[],opened=Promise.withResolvers();
+  const dialog={async showMessageBox(options){
+    if(options.title==='绯月 · 自动任务汇报'){reports.push(options);return {response:0};}
+    return {response:1};
+  }};
+  const request=(path,options={})=>{
+    if(!upload&&path.endsWith('/result'))throw Error('模拟回传断线');
+    return worker.fetch(new Request('https://test.invalid'+path,{...options,headers:{...options.headers,Authorization:'Bearer test'}}),{DB:db.DB,API_TOKEN:'test'});
+  };
+  const tasks=await createDesktopTasks({profile,dialog,request,generateImage:images.generateServerImage,
+    openImage:job=>opened.resolve(images.result(job))});
+  t.after(async()=>{await tasks.stop();images.close();db.close();await rm(profile,{recursive:true,force:true});});
+  await createServerTaskCommand({profile,tasks,dialog})('服务器任务：派给 all，生图：一棵树');
+  await tasks.pollOnce();
+  await tasks.settled();
+  assert.equal(reports.length,1);
+  assert.match(reports[0].detail,upload?/云端已确认收到结果/:/云端回执待确认/);
+  assert.match(reports[0].detail,/512 × 768 PNG/);
+  assert.deepEqual(reports[0].buttons,['查看成图','知道了']);
+  assert.equal(await readFile(await opened.promise,'utf8'),'test image');
+  await tasks.pollOnce();
+  await tasks.settled();
+  assert.equal(reports.length,1);
+});
+
 test('服务器生图保留完整提示词；all 等待领取，失败复盘且回执重放不会重复作图',async t=>{
   const profile=await mkdtemp(join(tmpdir(),'feiyue-server-image-'));
   const db=openTestDatabase(),memory=createMemoryArchive(join(profile,'memory'));
@@ -39,6 +74,7 @@ test('服务器生图保留完整提示词；all 等待领取，失败复盘且�
   assert.match(reply,/等待空闲电脑自动领取/);
   assert.equal(submissions,0);
   await tasks.pollOnce();
+  await tasks.settled();
   const row=db.sqlite.prepare('SELECT * FROM tasks').get();
   assert.deepEqual(JSON.parse(row.params_json),{prompt});
   assert.equal(row.status,'FAILED');
@@ -96,6 +132,7 @@ for (const delivery of ['未送达', '已写入但回执丢失']) {
     const command = createServerTaskCommand({profile, tasks, dialog});
     await command('服务器任务：派给 all，生图：一朵蓝花');
     await tasks.pollOnce();
+    await tasks.settled();
     const task = db.sqlite.prepare('SELECT task_id,status FROM tasks').get();
     assert.equal(task.status, delivery === '未送达' ? 'RUNNING' : 'COMPLETED');
     assert.equal(reports.length, 1);

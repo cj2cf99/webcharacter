@@ -107,7 +107,11 @@ export function createImageTasks({root,profile,localModel,onChange,onFinish,arch
       if(!row.archiveComplete||!row.archivedOutput)throw Object.assign(Error('生成成功，PNG 尚未归档。'),{code:'IMAGE_ARCHIVE_FAILED'});
       return {job_id:row.job,format:'PNG',width:row.width,height:row.height,archived:true};
     },
-    async list(){await ready;return ordered().map(({job,text,state,original,width,height,archiveWarning})=>({job,text:[text,archiveWarning].filter(Boolean).join(' '),state,original,width,height}));},
+    async list(selectedJob){
+      await ready;
+      const rows=selectedJob===undefined?ordered():[jobs.get(selectedJob)].filter(Boolean);
+      return rows.map(({job,text,state,original,width,height,archiveWarning})=>({job,text:[text,archiveWarning].filter(Boolean).join(' '),state,original,width,height}));
+    },
     async result(job){await ready;const row=jobs.get(job);return row?.archivedOutput??(row?.state==='done'?row.output:row?.completed?.at(-1)?.output);},
     async submit(text,attachments){
       await ready;

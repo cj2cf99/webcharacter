@@ -75,7 +75,7 @@ test('无云端连接可本地识图，跨日重试使用同一份截图',async(
   let captures=0,calls=0;
   const client=await screenClient({memory,request:null,desktopCapturer:{getSources:async()=>{captures++;return [{display_id:'1',thumbnail:source}];}},
     vision:async()=>++calls===1?{reason:'看不清'}:{text:'编号 18'}});
-  assert.equal((await client.captureAndAsk(turn.question,{turn})).code,'CONFIG_NOT_CONFIGURED');
+  assert.equal((await client.captureAndAsk(turn.question,{turn})).code,'LOCAL_VISION_UNAVAILABLE');
   const later={...turn,at:turn.at+2000,id:'test-two'};
   assert.equal((await client.retryLast({turn:later})).text,'编号 18');
   assert.equal(captures,1);

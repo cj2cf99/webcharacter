@@ -13,10 +13,12 @@ test('L02：真实shell确认前不清理，取消保留，重复合并，关闭
   class Window extends EventEmitter{
     constructor(options){super();win=this;this.options=options;this.visible=false;this.webContents=new EventEmitter();Object.assign(this.webContents,{mainFrame:{},setWindowOpenHandler(){},send(){}});}
     setIgnoreMouseEvents(){}isDestroyed(){return false;}isVisible(){return this.visible;}showInactive(){this.visible=true;}hide(){this.visible=false;}
+    setAlwaysOnTop(value){this.topmost=value;}
     async loadFile(){}getBounds(){return this.options;}setBounds(){}
   }
   class Tray {constructor(){tray=this;}setToolTip(){}setContextMenu(menu){this.menu=menu;}on(){}destroy(){this.destroyed=true;}}
   const screen=new EventEmitter();screen.getPrimaryDisplay=()=>({workArea:{x:0,y:0,width:1000,height:800}});
+  screen.getDisplayNearestPoint=screen.getPrimaryDisplay;
   const ipcMain=new EventEmitter();ipcMain.handle=()=>{};ipcMain.removeHandler=()=>{};
   const tasks={activeCount:()=>active,beginQuitCheck(){gates++;},cancelQuitCheck(){cancels++;},async stop(){stops++;},async startup(){},async retryPending(){}};
   const electron={app,BrowserWindow:Window,Tray,Menu:{buildFromTemplate:x=>x},nativeImage:{createFromPath(){}},screen,ipcMain,
@@ -27,7 +29,14 @@ test('L02：真实shell确认前不清理，取消保留，重复合并，关闭
     assert.equal(app.quit().prevented,true);assert.equal(dialogs,1);assert.ok(!tray.destroyed);assert.ok(ipcMain.listenerCount('desktop:hit'));
     app.quit();assert.equal(dialogs,1);answer({response:0});await tick();assert.equal(cancels,1);assert.ok(!tray.destroyed);
     let closePrevented=false;win.emit('close',{preventDefault(){closePrevented=true;}});assert.ok(closePrevented);assert.equal(dialogs,2);
-    active=0;answer({response:1});await tick();assert.equal(stops,1);assert.ok(tray.destroyed);assert.equal(ipcMain.listenerCount('desktop:hit'),0);
+    let ticket;
+    win.webContents.send=(channel,data)=>{if(channel==='desktop:action'&&data.kind==='farewell')ticket=data.ticket;};
+    active=0;answer({response:1});await tick();
+    const mainFrame={sender:win.webContents,senderFrame:win.webContents.mainFrame};
+    ipcMain.emit('desktop:ready',mainFrame);
+    assert.ok(Number.isInteger(ticket));assert.equal(stops,0);
+    ipcMain.emit('desktop:action-finished',mainFrame,{ticket,ok:true});await tick();
+    assert.equal(stops,1);assert.ok(tray.destroyed);assert.equal(ipcMain.listenerCount('desktop:hit'),0);
     assert.equal(gates,2);assert.ok(quits>=4);
   }finally{rmSync(profile,{recursive:true});}
 });

@@ -145,7 +145,16 @@ test('R05：摘要MAX与50条分页稳定，无静态遗漏或全部详情负载
   assert.ok(items.every(row => !Object.hasOwn(row, 'params') && !Object.hasOwn(row, 'result') && !Object.hasOwn(row, 'executions')));
   const emptyWeb = await (await call(DB, `/api/devices/${web}/tasks`)).json();
   assert.deepEqual(emptyWeb.tasks, []); assert.equal(emptyWeb.next_offset, null);
-  for (const suffix of ['?offset=-1', '?offset=1.5', '?offset=', '?offset=NaN', '?offset=9007199254740992', '?offset=1&offset=2', '?extra=x']) {
+  const chainResponse=await call(DB,'/api/chains',{nodes:[{key:'pooled',type:'mock.unit',target_device_id:'all',params:{value:'test'}}]});
+  assert.equal(chainResponse.status,201);
+  const pooled=(await chainResponse.json()).nodes[0].current_task.task_id;
+  const unfiltered=await (await call(DB,`/api/devices/${device}/tasks`)).json();
+  assert.ok(unfiltered.tasks.some(task=>task.task_id===pooled));
+  const scoped=await (await call(DB,`/api/devices/${device}/tasks?scope=standalone`)).json();
+  assert.deepEqual(scoped.tasks,items.slice(0,50));
+  assert.equal(scoped.next_offset,50);
+  for (const suffix of ['?offset=-1', '?offset=1.5', '?offset=', '?offset=NaN', '?offset=9007199254740992', '?offset=1&offset=2',
+    '?extra=x', '?scope=', '?scope=unknown', '?scope=standalone&scope=standalone']) {
     assert.equal((await call(DB, `/api/devices/${device}/tasks${suffix}`)).status, 400);
   }
   const unknown = 'pc-42345678-1234-4123-8123-123456789abc';

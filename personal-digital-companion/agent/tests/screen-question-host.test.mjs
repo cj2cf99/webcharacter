@@ -13,6 +13,42 @@ import {fixture} from './screen-question-fixture.mjs';
 import {checkEditConstraints,imageRequest,literalPlan} from '../../desktop/image-tasks.mjs';
 import {attachmentRegistration,menuGuidance,validatePreview} from '../../desktop/interaction-skills.mjs';
 import {attachScreenQuestion,questionBounds} from '../../desktop/screen-question-host.mjs';
+import {conversationRoute} from '../../desktop/conversation-routing.mjs';
+
+test('两次真实措辞走登记技能，引用原文，先核对无日期草案，确认一次才写入',async t=>{
+  const original='加个没时间的提醒，内容是关注Qwen4的量化模型发布，目前在使用qwen3.5的0.8到9b版本，需要关注qwen4的2b,4b版本的发布';
+  const followup='上面那个需要提交为事项提醒哦';
+  for(const q of [original,followup,'提醒我查看账单','关注 Qwen4 发布，作为事项提醒'])assert.equal(conversationRoute(q).kind,'registration',q);
+  for(const q of ['不用提醒我','提醒怎么打开','如何设置提醒？','别把这条登记为提醒'])assert.equal(conversationRoute(q).kind,'question',q);
+  for(const q of ['查一下今天的提醒','看看已设置的提醒','把周报提醒的日期改为明天'])assert.equal(conversationRoute(q).kind,'reminders',q);
+  const f=fixture(),plans=[],writes=[],skills=[],saved=new Map();
+  const history={save:row=>saved.set(row.id,row),read:()=>[...saved.values()].reverse()};
+  const registration={
+    preview:async input=>{
+      const plan={pending:[],chain:{nodes:[{type:'reminders.create',target_device_id:null,params:{title:'关注 Qwen4 2B、4B 量化模型发布',deadline:'2026-12-01'}}]}};
+      plans.push({input,plan});return plan;
+    },
+    submit:()=>assert.fail('未确认直接登记'),
+    submitReviewed:async(input,plan)=>{
+      writes.push({input,plan});return {chain:{nodes:[{current_task:{status:'COMPLETED',type:'reminders.create',params:plan.chain.nodes[0].params,result:{record_id:9}}}]}};
+    }};
+  const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',root:join(import.meta.dirname,'../..'),bundle:'unused',history,registration,
+    localModel:{analyze:async(_,{skillInstruction})=>{skills.push(skillInstruction.name);return {kind:'chat',reply:'已记入待办清单'};}}});
+  t.after(()=>host.close());await host.open();
+  const event=f.event(host.panel),ask=text=>f.handlers.get('screen-qa:ask')(event,{text});
+  const decide=(id,approve)=>f.handlers.get('screen-qa:attachment-review')(event,{id,approve});
+  const first=await ask(original);assert.match(first.text,/要登记.*提醒吗/);assert.match(first.fields,/不设日期/);
+  const second=await ask(followup);assert.match(second.fields,/Qwen4 2B、4B/);
+  assert.ok(plans[1].input.includes(original));assert.equal(plans[1].input.includes('已记入'),false);
+  assert.equal((await decide(first.reviewId,true)).state,'error');
+  assert.match((await ask('取消登记')).text,/已放弃/);assert.equal(writes.length,0);
+  const last=await ask(followup);assert.ok(last.reviewId);assert.ok(plans.at(-1).input.includes(original));
+  const receipts=await Promise.all([ask('确认登记'),decide(last.reviewId,true)]);
+  assert.ok(receipts.some(r=>r.text.includes('已登记')));assert.equal(writes.length,1);
+  assert.equal(writes[0].plan,plans.at(-1).plan);
+  assert.equal(Object.hasOwn(writes[0].plan.chain.nodes[0].params,'deadline'),false);
+  assert.deepEqual(skills,['record-submission','record-submission','record-submission']);
+});
 
 test('图像确定性步骤、附件角色与负面指令',()=>{
   const input='生成车站女孩，再换上图1的风衣，最后放大';
@@ -26,7 +62,7 @@ test('图像确定性步骤、附件角色与负面指令',()=>{
   assert.equal(imageRequest('放大这张照片',1),true);
   assert.equal(attachmentRegistration('把图里的会议记成提醒'),true);
   assert.equal(attachmentRegistration('请描述这张图片'),false);
-  assert.match(menuGuidance('本地复盘怎么打开'),/任务 → 本地复盘/);
+  assert.match(menuGuidance('本地复盘怎么打开'),/选择「本地复盘」/);
   assert.match(menuGuidance('要怎么才能登记日记？'),/问绯月.*帮我写日记/);
 });
 
@@ -34,7 +70,7 @@ test('附件登记核对同一份计划，放弃、旧令牌和重复确认都�
   const f=fixture(),plans=[],writes=[];
   const plan={pending:[],chain:{nodes:[{key:'entry-1',type:'reminders.create',target_device_id:null,params:{title:'会议',deadline:'2026-11-24'}}]}};
   assert.throws(()=>validatePreview(plan,'登记成运动'),/类型/);
-  const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:'unused',
+  const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:join(import.meta.dirname,'../..'),
     client:{forget(){},async askText(_text,opts){assert.equal(opts.document.name,'会议.txt');return {state:'answer',text:'会议，2026-11-24'};}},
     registration:{preview:async input=>{plans.push(input);return plan;},submitReviewed:async(input,exact)=>{
       assert.equal(exact,plan);writes.push(input);return {status:'completed',chain:{nodes:[]}};
