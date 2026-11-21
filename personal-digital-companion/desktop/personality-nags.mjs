@@ -16,7 +16,7 @@ const iso=at=>new Date(at).toISOString();
 export function createPersonalityNags({store,show,idle,canContinue=()=>true,onInterrupted=()=>{},changed=()=>{},now=Date.now,random=Math.random}){
   let active=null,syncJob=null,stopped=false;
   const lifetime=new AbortController();
-  const pending=()=>store.nags().find(n=>openStates.includes(n.status));
+  const pending=()=>store.nags().find(n=>openStates.includes(n.status)&&(n.source!=='audit'||audit.eligible(n)));
   for(const n of store.nags())if(n.status==='提问中'){
     n.status='意外中断';n.interruptions++;store.saveNag(n);
   }
@@ -28,7 +28,7 @@ export function createPersonalityNags({store,show,idle,canContinue=()=>true,onIn
     return syncJob;
   }
   function save(n){store.saveNag(n);changed();void sync();}
-  const audit=createDiaryAudit({store,show,idle,canContinue,save,changed,now,random});
+  const audit=createDiaryAudit({store,show,idle,canContinue,save,changed,onInterrupted:()=>onInterrupted('diaryAudit'),now,random});
   function talk(n,who,text){n.talk.push({who,text,at:iso(now())});}
   async function candidates(signal){
     const day=i=>tokyoDay(now()-i*dayMs),known=new Set(store.nags().map(n=>sourceKey(n.source,n.source_id)));
@@ -159,8 +159,8 @@ export function createPersonalityNags({store,show,idle,canContinue=()=>true,onIn
       save(n);if(reason!=='idle')onInterrupted();
     }
     async function reply(input){
-      const text=cleanMemory(input);
-      if(!text||Array.from(text).length>3000)return {text:'请把这次的解释控制在 3000 字以内。'};
+      const text=store.nagText?await store.nagText(n,input,session.controller.signal):cleanMemory(input);
+      if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请把这次的解释控制在 3000 字以内。'};
       talk(n,'你',text);save(n);
       const v=await appraise(n,text,session.controller.signal);
       n.afterEvaluation=v.evaluation;n.mood=v.mood;
@@ -179,5 +179,5 @@ export function createPersonalityNags({store,show,idle,canContinue=()=>true,onIn
     }catch(error){active=null;throw error;}
     return '只问了这一件：'+n.title;
   }
-  return {poll,pollAudit:audit.poll,pending,flush:sync,async close(){audit.close();stopped=true;lifetime.abort();active?.controller.abort();await syncJob;}};
+  return {poll,pollAudit:audit.poll,recoverAudit:audit.recover,pending,flush:sync,async close(){audit.close();stopped=true;lifetime.abort();active?.controller.abort();await syncJob;}};
 }

@@ -1,0 +1,30 @@
+{
+  "personality-diary.mjs": {
+    "before": "60c03f766314f5df29f3b10bc19227a0df16bf263b396995c606d4ad824e39f7",
+    "candidate": "5d3d9df35530047b35f661ac7dea6a7980f6b62ce83d8307f7233f84348620a9"
+  },
+  "long-originals.mjs": {
+    "before": null,
+    "candidate": "36973c1f43f386d1ac241d5cbe44d9beefeae2907b22829dc756ff9bb7ff0cd4"
+  },
+  "diary-sources.mjs": {
+    "before": "cdc6274ad2ff32de6a93084357b11f38a268e55ffb4e442a7a863c14aae073d2",
+    "candidate": "d32fed91a6e6221802facbb796725d4cee60f19c3c74adbcd9b96c9f0cd5b7de"
+  },
+  "personality-nags.mjs": {
+    "before": "aeae006c89c5bf597073d3641794a59a563640d8939923937a86a85731d41312",
+    "candidate": "fc1c628659530577ae8a9e972b641f27f5bb0f09e53402af8733b117475daef5"
+  },
+  "diary-audit.mjs": {
+    "before": "ba40e686c4b6704be92403eef5f5c08c6c8f5178d89ba0a8fc0463fc6db806ad",
+    "candidate": "ccfe86a95513dcd440187c2488ce7f68e0c16b914b581aa7d5dad209bca7f684"
+  },
+  "shell.mjs": {
+    "before": "cf4b7b72a19cea16ab3a1530f85db279c57bac26e1ab77a4d6b243cfedb309af",
+    "candidate": "cc02719d00c31ea808a6df4a779d4f6a85683090785375935365d857fa49530c"
+  },
+  "screen-question-host.mjs": {
+    "before": "a4cb1ae32974eb0c864e2b1a7e870dbbd81899c9f241de02e96d53c12033a6f2",
+    "candidate": "ad71ba52ae0b05784960708b4e136ba86197006759d3d1f0ee1df955b9c939bd"
+  }
+}
