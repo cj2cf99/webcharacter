@@ -3,15 +3,30 @@ import {canonical,compileStep,effectiveChanges,hash,invariant,scopeTargets,targe
 import {inspectGarden} from './garden-backend.mjs';
 
 const now=()=>new Date().toISOString();
-export function createLocalTaskPool({file,garden,record,onProgress=()=>{},onResult=()=>{},canWork=()=>true}){
+// 正式工作队列（docs/FORMAL_WORK_QUEUE.md）：hasRoom 判断本地待处理是否还有名额，queueInfo 提供排在前面的本机任务数及当前执行项。
+export function createLocalTaskPool({file,garden,record,onProgress=()=>{},onResult=()=>{},canWork=()=>true,
+  hasRoom=()=>true,queueInfo=()=>({used:0,limit:20,running:null,tasks:0}),onStart=()=>{}}){
   const db=new DatabaseSync(file);
   db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA secure_delete=ON; CREATE TABLE IF NOT EXISTS batches(id TEXT PRIMARY KEY,digest TEXT NOT NULL,source_commit TEXT NOT NULL,title TEXT NOT NULL,created TEXT NOT NULL,state TEXT NOT NULL,payload TEXT,steps TEXT NOT NULL,error TEXT,finished TEXT)");
+  // acknowledged：调用方已取回最终回执的时间。补列时历史批次一律视为已取回。
+  if(!db.prepare('PRAGMA table_info(batches)').all().some(c=>c.name==='acknowledged')){
+    db.exec('ALTER TABLE batches ADD COLUMN acknowledged TEXT');
+    db.prepare('UPDATE batches SET acknowledged=COALESCE(finished,created)').run();
+  }
   const find=db.prepare('SELECT * FROM batches WHERE id=?');
   const report=row=>row&&({id:row.id,title:row.title,reviewHash:row.digest,commit:row.source_commit,state:row.state,
-    steps:JSON.parse(row.steps),created:row.created,finished:row.finished,error:row.error});
+    steps:JSON.parse(row.steps),created:row.created,finished:row.finished,error:row.error,acknowledged:row.acknowledged??null});
+  const RUNNABLE="state IN ('queued','running','verifying','archiving')";
+  // 未完成的批次附带排队信息：position 为 1 时表示正在执行或下一个执行。
+  function withQueue(batch){
+    if(!batch||!['queued','running','verifying','archiving'].includes(batch.state))return batch;
+    const ahead=db.prepare('SELECT count(*) AS n FROM batches WHERE '+RUNNABLE+' AND rowid<(SELECT rowid FROM batches WHERE id=?)').get(batch.id).n;
+    const q=queueInfo();
+    return {...batch,queue:{position:ahead+q.tasks+1,used:q.used,limit:q.limit,running:q.running}};
+  }
   const get=id=>report(find.get(id));
   function list(limit=50,before=Number.MAX_SAFE_INTEGER){
-    return db.prepare('SELECT rowid AS cursor,id,title,digest,source_commit,state,created,finished,steps,error FROM batches WHERE rowid<? ORDER BY rowid DESC LIMIT ?').all(before,limit).map(row=>({...report(row),cursor:row.cursor}));
+    return db.prepare('SELECT rowid AS cursor,id,title,digest,source_commit,state,created,finished,steps,error,acknowledged FROM batches WHERE rowid<? ORDER BY rowid DESC LIMIT ?').all(before,limit).map(row=>({...report(row),cursor:row.cursor}));
   }
   const update=db.prepare('UPDATE batches SET state=?, steps=?, error=? WHERE id=?');
   function unpack(row){
@@ -82,6 +97,7 @@ export function createLocalTaskPool({file,garden,record,onProgress=()=>{},onResu
     if(!canWork()){defer();return;}
     const row=db.prepare("SELECT * FROM batches WHERE state IN ('queued','running','verifying','archiving') ORDER BY rowid LIMIT 1").get();
     if(!row)return;
+    onStart();
     working=processBatch(row).finally(()=>{working=null;if(!stopped)defer();});
     return working;
   }
@@ -93,10 +109,11 @@ export function createLocalTaskPool({file,garden,record,onProgress=()=>{},onResu
     const old=get(plan.id);
     if(old){invariant(old.reviewHash===digest,'批次编号已对应另一份清单');return {existing:true,batch:old};}
     invariant(!plan.continues,'续办清单必须提交到原批次');
+    if(!hasRoom()){const q=queueInfo();throw Object.assign(Error('本地待处理已满（'+q.used+'/'+q.limit+'），请稍后再提交'),{status:429});}
     const steps=plan.steps.map(s=>({label:s.label,state:'pending'}));
     db.prepare("INSERT INTO batches(id,digest,source_commit,title,created,state,payload,steps) VALUES(?,?,?,?,?,'queued',?,?)")
       .run(plan.id,digest,commit,plan.title,now(),JSON.stringify({plan,prior:[],sql:plan.steps.map((_,i)=>compileStep(plan,i))}),JSON.stringify(steps));
-    schedule();return {existing:false,batch:get(plan.id)};
+    schedule();return {existing:false,batch:withQueue(get(plan.id))};
   }
   async function revise(plan,commit,digest){
     validatePlan(plan);
@@ -127,7 +144,15 @@ export function createLocalTaskPool({file,garden,record,onProgress=()=>{},onResu
     invariant(result.changes===1,'批次已发生变化，请读取最新回执');
     schedule();return get(plan.id);
   }
-  return {submit,revise,get,list,tick,start:schedule,get active(){return active;},
+  return {submit,revise,get,list,tick,start:schedule,withQueue,get active(){return active;},
+    // 占用名额的批次：除 done 外都算，暂停（blocked）的也占名额，直到恢复或续办完成。
+    unfinished:()=>db.prepare("SELECT count(*) AS n FROM batches WHERE state!='done'").get().n,
+    unacknowledged:()=>db.prepare("SELECT rowid AS cursor,* FROM batches WHERE state IN ('done','blocked') AND acknowledged IS NULL ORDER BY rowid").all().map(row=>({...report(row),cursor:row.cursor})),
+    ack(id){
+      const batch=get(id);invariant(batch?.state==='done','只能取回已完成批次的回执');
+      db.prepare('UPDATE batches SET acknowledged=? WHERE id=? AND acknowledged IS NULL').run(now(),id);
+      return get(id);
+    },
     pending:()=>db.prepare("SELECT id,title,digest,source_commit,state,created,finished,steps,error FROM batches WHERE state!='done' ORDER BY rowid").all().map(report),
     retry(id,digest){
       const batch=get(id);invariant(batch?.state==='blocked'&&digest===batch.reviewHash,'只能按原确认摘要恢复已暂停批次');

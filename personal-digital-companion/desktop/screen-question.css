@@ -2,12 +2,13 @@
   color-scheme: light dark;
   font: 13px/1.5 var(--fy-sans);
   color: var(--fy-ink);
-  --paper: light-dark(#fffaf7, #29232b);
-  --editor: light-dark(#fffefd, #342e37);
-  --edge: light-dark(#d6c4c8, #665763);
-  --soft: light-dark(#f4ebed, #3d333d);
-  --rose: light-dark(#804760, #d9a9c3);
-  --warning: light-dark(#844e38, #e6b69f);
+  /* 气泡沿用面板令牌（feiyue-surface.css），只保留本地别名，避免两套色板 */
+  --paper: var(--fy-paper);
+  --editor: var(--fy-surface);
+  --edge: var(--fy-line);
+  --soft: var(--fy-soft);
+  --rose: var(--fy-accent);
+  --warning: var(--fy-warn);
 }
 
 * { box-sizing: border-box; }
@@ -101,16 +102,19 @@ button { cursor: pointer; }
 }
 #unsaved { color: var(--warning); font-size: 11px; }
 #decisions, #auditActions { display: flex; flex-wrap: wrap; gap: 4px; }
-#decisions button, #auditActions button { border: 1px solid var(--edge); border-radius: 6px; background: var(--editor); font-size: 11px; }
+#decisions button, #auditActions button { min-height: 24px; padding: 1px 10px; border: 1px solid var(--edge); border-radius: 999px; background: var(--editor); font-size: 11.5px; transition: border-color .15s, background-color .15s, transform .1s; }
+#decisions button:hover, #auditActions button:hover { border-color: var(--rose); color: var(--rose); }
+#decisions button:active, #auditActions button:active, #send:active { transform: scale(.95); }
 .dots { display: none; gap: 3px; align-self: center; }
 #reply[data-state=waiting] .dots { display: flex; }
 .dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--rose); }
-@media (prefers-reduced-motion: no-preference) {
-  .dots i { animation: pulse .9s ease-in-out infinite alternate; }
-  .dots i:nth-child(2) { animation-delay: .15s; }
-  .dots i:nth-child(3) { animation-delay: .3s; }
-  @keyframes pulse { from { opacity: .3; } to { opacity: 1; } }
-}
+/* 动效始终开启；透明窗口内只做透明度动画 */
+.dots i { animation: pulse .9s ease-in-out infinite alternate; }
+.dots i:nth-child(2) { animation-delay: .15s; }
+.dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes pulse { from { opacity: .3; } to { opacity: 1; } }
+#replyContent { animation: fade .25s ease-out; }
+@keyframes fade { from { opacity: .4; } }
 
 form {
   flex: none;
@@ -152,9 +156,11 @@ footer { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
 }
 .capture { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .capture input { width: 12px; height: 12px; margin: 0; accent-color: var(--rose); }
+#mode { field-sizing: content; min-width: 0; max-width: 100%; }
 #hint { margin-left: auto; color: var(--fy-muted); font-size: 10px; white-space: nowrap; }
 #send {
   flex: none;
+  white-space: nowrap;
   padding: 4px 11px;
   min-height: 27px;
   border: 0;
@@ -164,19 +170,23 @@ footer { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
   font-weight: 600;
   font-size: 12px;
 }
-#send:hover { background: color-mix(in srgb, var(--rose) 90%, var(--fy-ink)); }
+#send { transition: background-color .15s, box-shadow .15s, transform .1s; }
+#send:hover { background: color-mix(in srgb, var(--rose) 90%, var(--fy-ink)); box-shadow: 0 2px 8px color-mix(in srgb, var(--rose) 35%, transparent); }
 button:disabled, select:disabled { cursor: default; opacity: .55; }
 :is(button, select, input):focus-visible { outline: 2px solid var(--rose); outline-offset: 1px; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 [hidden] { display: none !important; }
 #imageResults { max-height: 82px; overflow: auto; flex: 0 1 auto; }
-#imageResults button { display: flex; gap: 6px; align-items: center; width: 100%; padding: 3px 6px; text-align: start; color: var(--fy-ink); background: var(--soft); border: 0; border-radius: 6px; }
+#imageResults button { cursor: pointer; display: flex; gap: 6px; align-items: center; width: 100%; padding: 3px 6px; text-align: start; color: var(--fy-ink); background: var(--soft); border: 0; border-radius: 6px; }
 #imageResults img { width: 48px; height: 38px; object-fit: contain; }
-@media (max-width: 315px) {
+@media (max-width: 335px) {
   .bubble { padding-inline: 8px; }
   .bubble header.fy-titlebar { gap: 2px; }
   #hint { position: absolute; clip-path: inset(50%); }
   #send { margin-left: auto; }
+}
+@media (max-width: 285px) {
+  footer { flex-wrap: wrap; }
 }
 
 .bubble .fy-compact #close[data-nag=true] { width:auto; padding:3px 6px; font-size:12px; color:var(--fy-ink); }

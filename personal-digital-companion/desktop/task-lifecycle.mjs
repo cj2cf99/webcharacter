@@ -23,7 +23,9 @@ export function interruptionDetail(task) {
   const time=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',dateStyle:'medium',timeStyle:'medium'}).format(new Date(date));
   return `任务：${task.metadata?.name||task.type} (${task.task_id})\n参数：${JSON.stringify(task.params)}\n最后记录：${last?`第${last.attempt_no}次 ${last.status}`:task.status}，${time} JST\n结果未知，可能已产生部分操作。重做可能重复原操作。`;
 }
-export async function createDesktopTasks({profile,dialog,request,handlerModule,pollerOptions={},memory,generateImage,openImage,desktopBusy=()=>false,onAutomaticProgress=()=>{}}={}) {
+export async function createDesktopTasks({profile,dialog,request,handlerModule,pollerOptions={},memory,generateImage,openImage,desktopBusy=()=>false,onAutomaticProgress=()=>{},
+  hasRoom=()=>true,beforeExecute=async()=>{}}={}) {
+  // 正式工作队列（docs/FORMAL_WORK_QUEUE.md）：hasRoom 为本地待处理是否还有名额；beforeExecute 在每个任务开始执行前等待正在执行的登记批次并让闲时工作暂停。
   const identity=await getDeviceIdentity(profile);
   let configurationError=null, connection;
   if(request===undefined)try {connection=await loadCloudConnection(profile); request=connection?.request;} catch(error){configurationError=error.message;request=null;}
@@ -87,6 +89,7 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
   let checking=false,stopped=false,gate=null,release=null,showing=null;
   const inFlight=new Set();
   const operations=new Set();
+  let executionTail=Promise.resolve(),executing=0;
   function trackOperation(work){
     const pending=work();operations.add(pending);
     return pending.finally(()=>operations.delete(pending));
@@ -126,12 +129,17 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     pauseItem:item=>defer('reminder',item.id,item),record});
   const sync=request?createTaskSync({request,executor,deviceId:identity.device_id,pauseBeforeExecute:()=>draining}):null;
   let availableTasks=[],automaticTask=null;
-  function tasksIdle(){
-    if(!canStart()||activeCount()||operations.size||outstanding||resuming)return false;
+  function tasksIdle({allowPendingRequests=false}={}){
+    if(!canStart()||activeCount()||operations.size||resuming)return false;
+    if(outstanding&&!allowPendingRequests)return false;
     if(continuation.entries().length||chainClient.pending().length||executor.hasUnsettledWork())return false;
     return !registration.hasSaved()&&!reminderReview.hasUnknown();
   }
-  const canPoll=()=>!desktopBusy()&&tasksIdle();
+  // 有空位就接：不再等绯月空闲；结果未知的旧记录仍会阻止接新任务，服务器每台两个名额不变。
+  const canPoll=()=>canStart()&&!desktopBusy()&&!resuming&&!continuation.entries().length&&!chainClient.pending().length
+    &&!executor.hasUnsettledWork()&&!reminderReview.hasUnknown()&&inFlight.size<2&&hasRoom();
+  // 自动接取：领取确认后即返回（claimed），执行在本机串行队列里继续，轮询接着看下一项。
+  const claimWaiters=new Map();
   const poller=sync?createTaskPoller({...pollerOptions,request,identity,
     canStart:canPoll,
     onTasks:async tasks=>{
@@ -142,12 +150,16 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
         const title=task.name||task.metadata?.name||(task.type===PC_IMAGE_GENERATE?'生成图片':Object.hasOwn(pcRegistrations,task.type)?'执行登记':task.type);
         automaticTask={id:task.task_id,title};
         onAutomaticProgress({title,stage:'正在领取'});
-        try{await runTask(task.task_id,true);break;}
-        catch(error){
-          if(error.status===404||error.status===409)continue;
+        const claimed=new Promise(resolve=>claimWaiters.set(task.task_id,resolve));
+        const run=runTask(task.task_id,true).then(()=>'ended',error=>{
+          if(error.status===404||error.status===409)return 'skip';
           void traffic.write({direction:'local',route:'自动接取',task_id:task.task_id,error:error.message});
-          break;
-        }finally{automaticTask=null;onAutomaticProgress(null);}
+          return 'stop';
+        });
+        let outcome;
+        try{outcome=await Promise.race([claimed.then(()=>'claimed'),run]);}
+        finally{claimWaiters.delete(task.task_id);automaticTask=null;if(outcome!=='claimed')onAutomaticProgress(null);}
+        if(outcome==='stop'||outcome==='ended')break;
       }
     },
   }):null;
@@ -170,9 +182,20 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     waitForStart:async()=>{if(gate)await gate;},
     executeClaimed:async receipt=>{
       if(checking||stopped||inFlight.size>=2)throw new Error('本机暂不能开始新任务，领取记录已保存');
-      const automatic=automaticTask?.id===receipt.task.task_id;
-      if(automatic)onAutomaticProgress({title:automaticTask.title,stage:receipt.task.type===PC_IMAGE_GENERATE?'等待生图结果':'正在本机执行'});
-      const pending=sync.executeClaimed(receipt);inFlight.add(pending);
+      const auto=automaticTask?.id===receipt.task.task_id?automaticTask:null,automatic=Boolean(auto);
+      claimWaiters.get(receipt.task.task_id)?.();
+      // 逐个执行：等前一个本机任务结束，再等正在执行的登记批次，然后开始。
+      const previous=executionTail;let release;
+      executionTail=new Promise(resolve=>{release=resolve;});
+      const pending=(async()=>{
+        try{
+          await previous;await beforeExecute();
+          if(automatic)onAutomaticProgress({title:auto.title,stage:receipt.task.type===PC_IMAGE_GENERATE?'等待生图结果':'正在本机执行'});
+          executing++;
+          try{return await sync.executeClaimed(receipt);}finally{executing--;}
+        }finally{release();}
+      })();
+      inFlight.add(pending);
       let result;
       let completed,uploaded=false;
       try{
@@ -186,8 +209,9 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
         throw error;
       }finally{
         inFlight.delete(pending);
+        if(automatic)onAutomaticProgress(null);
         if(automatic&&completed){
-          const title=completed.definition?.name||automaticTask.title;
+          const title=completed.definition?.name||auto.title;
           void reportCompletion(completed,title,uploaded).catch(()=>traffic.write({direction:'local',route:'自动任务完成汇报',error:'未能显示回执'}));
         }
       }
@@ -255,7 +279,7 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
       const task=await response.json();
       if(defer('task',id))return {paused:true};
       if(checking||stopped)throw new Error('正在退出，未领取任务');
-      if(automatic&&(desktopBusy()||operations.size>1||activeCount()))return {paused:true};
+      if(automatic&&!canPoll())return {paused:true};
       if(task.status!=='PENDING')throw Object.assign(Error('该任务已被领取或结束'),{status:409});
       if(task.target_device_id==='all')executor.validateTask({...task,target_device_id:identity.device_id});
       else executor.prepare(task);
@@ -498,6 +522,10 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     getAvailableTasks:()=>availableTasks.map(task=>({...task})),
     startPolling({managed=false}={}){if(!stopped){if(!managed)poller?.start();startHeartbeat();}},
     canPoll,tasksIdle,
+    // 正式工作计数：已接取未结束的本机任务（含等待执行的），以及其中正在执行的个数。
+    formalCount:()=>inFlight.size,executingCount:()=>executing,
+    // 自动接取在领取确认后即返回；需要等执行结束时（测试、退出前）用它等待本机任务全部完成。
+    settled:async()=>{while(inFlight.size||operations.size)await delay(20);},
     pollOnce(){
       if(!poller)throw Object.assign(Error('云端连接未配置'),{code:'NO_CONNECTION'});
       return poller.scanOnce();

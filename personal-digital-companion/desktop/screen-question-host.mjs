@@ -46,7 +46,9 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     async onFinish(row){
       if(disposed)return;
       const at=Date.now(),text=[row.text,row.archiveWarning,row.archivedOutput??row.output??row.completed?.at(-1)?.output].filter(Boolean).join('\n');
-      const turn={id:row.job,at:row.at,answeredAt:at,question:row.original,state:row.state==='done'?'answer':'error',text};
+      const turn={id:row.job,at:row.at,answeredAt:at,question:row.original,state:row.state==='done'?'answer':'error',text,
+        ...(row.serverTaskId?{serverTaskId:row.serverTaskId}:{imageJob:row.job})};
+      if(!row.serverTaskId&&latest?.imageJob===row.job)latest={...turn,text:row.text,imageJob:row.job};
       if(records!==memory||!memory?.archiveImageTask)try{await records.save(turn);}catch{unsavedReplies.set(turn.id,turn);}
       if(!panel&&visible&&electron.Notification?.isSupported()){
         const note=new electron.Notification({title:'绯月 · 图像任务',body:row.text});
@@ -130,7 +132,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   async function think(text,hint,signal,onProgress,timing) {
     if(!localModel)return null;
     const start=performance.now();
-    const previous=latest?.state==='answer'?{用户:String(latest.question??'').slice(0,180),绯月:String(latest.text??'').slice(0,220)}:undefined;
+    const previous=latest?.state==='answer'&&!latest.direct?{用户:String(latest.question??'').slice(0,180),绯月:String(latest.text??'').slice(0,220)}:undefined;
     try{
       const menu=hint==='auto'&&menuEntry(text);
       const selected=await (menu?readInteractionSkill(menu.action,'menu'):readInteractionSkill(hint==='registration'&&requestsResource(text)?'resourceRegistration':hint)).catch(()=>null);
@@ -144,9 +146,14 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   }
   async function ask(args){
     idleDraft=null;
+    const direct=args?.mode==='direct';
     const mode=inputModes.has(args?.mode)?args.mode:'auto';
     const text=typeof args?.text==='string'?args.text.trim():'';
     onForeground();
+    if(direct){
+      if(args?.withScreen||args?.attachment||args?.references?.length)return {state:'error',text:'直连仅支持文字对话。'};
+      return track(()=>perform(text,false,false,'direct'));
+    }
     if(nag?.audit&&(!text||mode!=='auto'||args?.withScreen||args?.attachment||args?.references?.length))return {state:'error',text:'请用文字回答这条质问。',audit:true,nag:true,nagReply:true};
     if(nag&&text&&mode==='auto'&&!args?.withScreen&&!args?.attachment){
       if(busy)return {state:'error',text:'正在听你刚才的解释。',nag:true,nagReply:true};
@@ -177,14 +184,23 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     }
     if(mode==='auto'&&!args?.withScreen&&conversationRoute(text).kind==='question'&&files.every(f=>f.kind==='image')&&imageRequest(text,files.length)){
       return track(async()=>{
+        if(busy)return {state:'error',code:'BUSY',text:'正在处理上一条。'};
+        busy=true;
+        const token=++generation;
+        publish({state:'waiting',question:text,text:'正在提交图像任务…'},token);
         try{
           const row=await images.submit(text,files);
-          return {state:'answer',question:text,text:row.text};
+          if(token!==generation)return cancelled();
+          const result={state:'answer',question:text,text:row.text,imageJob:row.job};
+          latest={...result,id:row.job,at:row.at};
+          publish(result,token);
+          return result;
         }catch(error){
           const turn={id:crypto.randomUUID(),at:Date.now(),question:text,state:'error',text:error.message};
+          if(token===generation){latest=turn;publish(turn,token);}
           try{await records.save({...turn,answeredAt:Date.now()});}catch{unsavedReplies.set(turn.id,turn);}
           return turn;
-        }
+        }finally{if(token===generation)busy=false;}
       });
     }
     if(extra.length)return {state:'error',text:'请说明如何使用这些参考图，例如“把图1的外套换成图2的”。'};
@@ -229,21 +245,22 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(busy)return {state:'error',code:'BUSY',text:'正在处理上一条。',retryable:false};
     const text=typeof question==='string'?question.trim():'';
     const assent=/^(?:我)?(不同意|同意|放弃)(这组(?:提醒)?修改)?[。！!]?$/u.exec(text);
-    const route=retry?lastRequest:mode==='attachmentRegistration'?{kind:'attachmentRegistration',fileName:attachment?.name}:attachment?{kind:'question',fileName:attachment.name}:decision?{kind:'decision',decision}:memory&&withScreen&&mode==='auto'?{kind:'question'}:mode==='auto'&&assent&&(reviewedGroup||assent[2]||edits?.hasPending())?
+    const route=retry?lastRequest:mode==='direct'?{kind:'direct'}:mode==='attachmentRegistration'?{kind:'attachmentRegistration',fileName:attachment?.name}:attachment?{kind:'question',fileName:attachment.name}:decision?{kind:'decision',decision}:memory&&withScreen&&mode==='auto'?{kind:'question'}:mode==='auto'&&assent&&(reviewedGroup||assent[2]||edits?.hasPending())?
       {kind:'reminderConsent',action:assent[1]==='同意'?'approve':'reject',token:reviewedGroup}:conversationRoute(text,mode,withScreen);
     if(route?.kind==='memory')return {state:'error',code:'MEMORY_NOT_AVAILABLE',text:'记忆查询暂未开放。'};
     if(!['reminders','reminderConsent'].includes(route?.kind))reviewedGroup='';
     if(!route || (retry && (!state.retryable || !['question','search'].includes(route.kind))))return {state:'error',text:'请重新提交问题。'};
     if(!retry&&!decision&&(!text||[...text].length>(route.kind==='registration'?6000:2000)))return {state:'error',text:'内容为空或超过字数限制。'};
     const userText=retry?route.text:question;
-    const turn={id:crypto.randomUUID(),at:Date.now(),question:route.fileName?userText+' · '+route.fileName:userText,retry},timing=newTiming();
+    const turn={id:crypto.randomUUID(),at:Date.now(),question:route.fileName?userText+' · '+route.fileName:userText,retry,...(route.kind==='direct'?{direct:true}:{})},timing=newTiming();
     let operation=({serverTask:'服务器 PC 任务',registration:'随口登记',decision:'登记确认',reminders:'提醒查询或修改',reminderConsent:'提醒确认',search:'联网查询'})[route.kind]??(retry?route.operation:withScreen?'截图问答':'文字问答');
     if(attachment)operation=attachment.kind==='image'?'图片问答':'文件问答';
+    if(route.kind==='direct')operation='直连对话';
     if(route.kind==='attachmentRegistration')operation='附件登记核对';
     if(!retry)lastRequest={...route,text:userText,turn,operation};
     if(!retry&&!decision&&route.kind!=='registration')supplement='';
     busy=true;const token=++generation;controller=new AbortController();const manual=controller.signal;
-    const plainChat=route.kind==='question' && mode==='auto' && !route.fileName && !(retry?route.withScreen:withScreen) && !matchWeatherQuestion(String(userText??''));
+    const plainChat=route.kind==='direct'||(route.kind==='question' && mode==='auto' && !route.fileName && !(retry?route.withScreen:withScreen) && !matchWeatherQuestion(String(userText??'')));
     const deadline=plainChat?new AbortController():null;
     const signal=deadline?AbortSignal.any([manual,deadline.signal]):manual;
     const withinChat=work=>deadline?untilAbort(work,signal):work;
@@ -297,28 +314,37 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     let cloudStart;
     try{
       signal.throwIfAborted();
-      const snapshotRoute=retry?route.withScreen:withScreen;
-      const weather=route.kind==='question'&&matchWeatherQuestion(String(userText??''));
-      const hint=route.kind==='question'?(snapshotRoute?'screen':weather?'weather':'auto'):route.kind;
-      if(!retry&&!decision&&route.kind==='question')lastRequest.withScreen=withScreen;
-      const calendarReply=hint==='auto'&&mode==='auto'&&!route.fileName&&dateQuestion(String(userText??''),tokyoDay(turn.at));
-      const draft=calendarReply||decision||route.fileName||route.kind==='serverTask'?null:await withinChat(think(String(userText??''),hint,signal,waiting,timing));
-      signal.throwIfAborted();
-      if(draft?.error)await withinChat(recordFailure({at:Date.now(),operation,phase:'本地思索',durationMs:Math.round(timing.localMs),code:draft.error,text:'本地思索未完成。'}));
-      signal.throwIfAborted();
-      if(hint==='auto'&&draft?.kind==='task') {
-        operation='用户指令';
-        if(!retry)lastRequest.operation=operation;
-      }
-      const guide=hint==='auto'&&!route.fileName&&menuGuidance(String(userText??''));
-      const localReply=calendarReply||mode==='auto'&&!retry&&hint==='auto'&&(guide||draft?.kind==='chat'&&draft.reply);
-      if(localReply)result={state:'answer',text:localReply};
-      else if(draft?.error==='LOCAL_CHAT_TIME_LIMIT')result=timedReply;
-      else if(draft?.error==='LOCAL_CHAT_REVIEW_FAILED')result={state:'error',code:draft.error,text:'这次回复经过复核仍有问题。',retryable:true};
-      else {
-        cloudStart=performance.now();
-        if(localModel&&hint==='auto'&&!route.fileName)waiting(draft?.kind==='task'?'已识别任务，正在转交云端…':'正在转交云端模型…');
-        result=await withinChat(runExistingRoute());
+      if(route.kind==='direct'){
+        const previous=latest?.direct&&latest.state==='answer'?{用户:latest.question,绯月:latest.text}:undefined;
+        const response=await withinChat(localModel?.analyze(userText,{hint:'direct',previous,signal,onProgress:waiting,turnStart:timing.start}));
+        timing.localMs=performance.now()-timing.start;
+        result=response?.reply?.trim()?{state:'answer',text:response.reply}:response?.error==='LOCAL_CHAT_TIME_LIMIT'?timedReply:{state:'error',text:'本地直连暂未取得回复。',code:response?.error??'LOCAL_AI_NOT_READY'};
+      }else if(route.kind==='registration'&&/^(?:(?:请|帮我|替我|给我)\s*)*(?:登记|记录)(?:一下)?[。！!吧\s]*$/u.test(text)){
+        result={state:'answer',text:'你想记下什么事？可以直接说“记录”加上内容。'};
+      }else{
+        const snapshotRoute=retry?route.withScreen:withScreen;
+        const weather=route.kind==='question'&&matchWeatherQuestion(String(userText??''));
+        const hint=route.kind==='question'?(snapshotRoute?'screen':weather?'weather':'auto'):route.kind;
+        if(!retry&&!decision&&route.kind==='question')lastRequest.withScreen=withScreen;
+        const calendarReply=hint==='auto'&&mode==='auto'&&!route.fileName&&dateQuestion(String(userText??''),tokyoDay(turn.at));
+        const draft=calendarReply||decision||route.fileName||route.kind==='serverTask'?null:await withinChat(think(String(userText??''),hint,signal,waiting,timing));
+        signal.throwIfAborted();
+        if(draft?.error)await withinChat(recordFailure({at:Date.now(),operation,phase:'本地思索',durationMs:Math.round(timing.localMs),code:draft.error,text:'本地思索未完成。'}));
+        signal.throwIfAborted();
+        if(hint==='auto'&&draft?.kind==='task') {
+          operation='用户指令';
+          if(!retry)lastRequest.operation=operation;
+        }
+        const guide=hint==='auto'&&!route.fileName&&menuGuidance(String(userText??''));
+        const localReply=calendarReply||mode==='auto'&&!retry&&hint==='auto'&&(guide||draft?.kind==='chat'&&draft.reply);
+        if(localReply)result={state:'answer',text:localReply};
+        else if(draft?.error==='LOCAL_CHAT_TIME_LIMIT')result=timedReply;
+        else if(draft?.error==='LOCAL_CHAT_REVIEW_FAILED')result={state:'error',code:draft.error,text:'这次回复经过复核仍有问题。',retryable:true};
+        else {
+          cloudStart=performance.now();
+          if(localModel&&hint==='auto'&&!route.fileName)waiting(draft?.kind==='task'?'已识别任务，正在转交云端…':'正在转交云端模型…');
+          result=await withinChat(runExistingRoute());
+        }
       }
     }catch(error){
       const isRecord=route.kind==='registration'||route.kind==='decision';
@@ -496,7 +522,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   function cancel(){lastRequest=null;generation++;controller?.abort();controller=null;busy=false;panelHeight=260;state={state:'idle',text:'想问我什么？'};servicePromise?.then(api=>api.forget()).catch(()=>{});}
   function hide(){leaveNag('interrupted');if(!draining&&!pendingQuestion)cancel();if(panel&&!panel.isDestroyed()){const closing=panel;panel=null;closing.destroy();}}
   function abandon(){idleDraft=null;supplement='';reviewedGroup='';chainActions=[];hide();}
-  const view=()=>({...state,mode:inputMode,actions:chainActions,canSupplement:Boolean(supplement),
+  const view=()=>({...state,directInput:true,mode:inputMode,actions:chainActions,canSupplement:Boolean(supplement),
     webSearch:true,attachmentInput:true,hasPending:pending(),idleDraft});
   async function decideRegistration(id,approve,photoTarget,images=[]){
       const draft=registrationDraft;
@@ -571,13 +597,15 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   }
   const handlers={
     'screen-qa:attachment-review':(_e,value)=>typeof value?.approve==='boolean'?inquiry.respond(value.id,{action:value.approve?'confirm':'cancel'}):{state:'error',text:'无效的登记操作。'},
-    'screen-qa:image-list':async()=>Promise.all((await images.list()).slice(0,8).map(async row=>{
+    'screen-qa:image-list':async()=>{
+      const [row]=await images.list(state.imageJob??null);
+      if(!row)return [];
       const path=await images.result(row.job);
-      if(!path)return row;
+      if(!path)return [row];
       let preview;
       try{preview=(await electron.nativeImage.createThumbnailFromPath(path,{width:110,height:80})).toDataURL();}catch{}
-      return {...row,preview,canOpen:true};
-    })),
+      return [{...row,preview,canOpen:true}];
+    },
     'screen-qa:image-open':(_e,job)=>openImage(job),
     'screen-qa:state':view,
     'screen-qa:ask':(_e,q)=>ask(q),
@@ -592,6 +620,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   for(const [name,fn]of Object.entries(handlers))ipcMain.handle(name,(event,arg)=>{if(!trusted(event))throw new Error('仅问答窗口可以调用');return fn(event,arg);});
   const dismiss=(event,input)=>{
     if(!trusted(event))return;
+    if(nag&&input?.reason==='idle'&&typeof input.draft?.text==='string'&&input.draft.text.trim())return;
     if(nag?.audit){
       if(input?.reason==='idle'&&busy)return;
       leaveNag(['refuse','later','idle'].includes(input?.reason)?input.reason:'interrupted');hide();return;
@@ -625,11 +654,18 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const today=tokyoDay(Date.now());
     if(!latest||tokyoDay(latest.at)!==today){
       let stored;
-      try{stored=await records.latest?.(today);}catch{}
+      try{
+        stored=await records.latest?.(today);
+        if(stored?.report?.serverTaskId||stored?.serverTaskId){
+          stored=null;
+          stored=(await records.read(today)).find(turn=>!turn.report?.serverTaskId&&!turn.serverTaskId);
+        }
+      }catch{}
       if(panel!==created||created.isDestroyed())return;
       latest=stored??null;
     }
-    if(latest)state={state:latest.state??'answer',question:latest.question,text:latest.text,sources:latest.sources};
+    if(latest)state={state:latest.state??'answer',question:latest.question,text:latest.text,sources:latest.sources,
+      imageJob:latest.imageJob??latest.report?.job};
     if(panel!==created||created.isDestroyed())return;
     try{await created.loadFile(entry);}catch(error){if(panel!==created||created.isDestroyed())return;created.destroy();throw error;}
     if(disposed||panel!==created||created.isDestroyed())return;

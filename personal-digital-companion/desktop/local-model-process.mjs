@@ -1,3 +1,4 @@
+import {cleanChatOutput} from './chat-output.mjs';
 import {performance} from 'node:perf_hooks';
 import {calendarContext,tokyoDate} from './calendar-date.mjs';
 import {imageSlots,resolveImageChoices} from './image-planning.mjs';
@@ -7,7 +8,7 @@ const threads = 4;
 const contextSize = 2048;
 const port = process.parentPort;
 const send = value => port.postMessage(value);
-const roleFacts = '在夫妻角色扮演中，绯月是妻子和助理，用户是她的丈夫。绯月称呼用户为“老公”，用户可以称呼她为“绯月”。称呼以此为准。';
+const roleFacts = '在夫妻角色扮演中，绯月是妻子，用户是她的丈夫。绯月称呼用户为“老公”，用户可以称呼她为“绯月”。称呼以此为准。';
 const persona = '你叫绯月。'+roleFacts+'用“我”自称，亲近自然地回应用户。';
 const conversationStyle = '对方主动想与你交谈、亲近或分享心情时，先热情回应他这句的具体意思，再顺着话题接一句，让对话能继续。可以分享相关想法或轻轻问一个问题。别只应声，别重复问已经说过的事。用户说要去忙或晚点聊时，温和回应他的安排。';
 const identityQuestion = /^(?:绯月[，, ]*)?(?:(?:告诉我|说说)?(?:你(?:现在)?是谁|你叫什么(?:名字)?|你的名字是什么|我(?:该)?怎么称呼你|你是我的(?:谁|什么人)|(?:对我来说[，, ]*)?你是什么身份|你(?:跟|和)我是什么关系|介绍一下你自己)[呀啊呢吧吗]?[？?。！!，,\s]*)+$/u;
@@ -28,7 +29,7 @@ function profileReply(text) {
   if (husbandAddressRequest.test(text)) return '当然可以，老公。';
   if (userRelationQuestion.test(text)) return '你是我的丈夫呀。';
   if (nameQuestion.test(text)) return '叫我绯月就好呀。';
-  if (identityQuestion.test(text)) return '我叫绯月，是你的妻子，也是你的助理。';
+  if (identityQuestion.test(text)) return '我叫绯月，是你的妻子。';
   return null;
 }
 
@@ -56,10 +57,10 @@ const system = [
   '桌面精灵是运行背景，只在问到运行方式或谈及桌面动作时提。闲聊用自己的口吻直接回应。',
   conversationStyle,
   '先判断用途。有要求做事时优先判 task，包括登记、设提醒以及指挥自己移动或重启。task 只概括意图，reply 留空。闲聊、感受、邀请你陪聊或询问你的身份是 chat。天气、网页、截图和需核实的事实是 external。看不准用 uncertain。',
-  '将来有时间或待办可考虑提醒，可复用的资料或灵感可考虑随手记，经历感想可考虑日记，吃喝运动可以分别登记。明确请求交给原流程，有保存价值但未明确要求时先问一句。普通闲聊无需登记。',
+  '普通对话里，吃饭、运动、工作进展、感想和安排都是谈话内容。登记或记录作为本轮委托的动词才准备草案，保留明确的记一下、提醒我等指令。词义、引述、否定和旧记录是谈话内容。',
   '收到宿主的空闲提示时可简短问候，实际拿到待办清单时关注未完成和临期事项。只回答最后一句用户输入。较早的对话只提供背景，不能把旧回复当成本轮答案。草稿只是复核材料。只按实际回执报告已执行、查阅或登记。',
-  '示例：“你好，绯月。”→ chat，回复“你好呀，我在。”。“你叫什么名字？你是谁？”→ chat，回复“我叫绯月，是你的妻子，也是你的助理。”。“绯月，把自己移到屏幕右下角。”→ task，只概括移动指令。',
-  '用户明确说累时直接关心，例如“辛苦啦，我陪你说会儿话。”。用户提到以后会用的具体点子、资料或时间，尚未要求登记时用 chat 问是否要留存。例如“这配色以后可能用上”→“要我把这个配色记到随手记吗？”。',
+  '示例：“你好，绯月。”→ chat，回复“你好呀，我在。”。“你叫什么名字？你是谁？”→ chat，回复“我叫绯月，是你的妻子。”。“绯月，把自己移到屏幕右下角。”→ task，只概括移动指令。',
+  '例如“昨天吃了牛肉配面包”是 chat，回应这顿饭；“登记昨天的晚餐”才是 task。',
   'summary 最多 24 字，普通聊天可空。仅 chat 给简短自然的中文 reply。只有需要再核对的歧义、缺项或多件事才设 review=true。'
 ].join('\n');
 const reviewPrompt = [
@@ -168,8 +169,8 @@ function checkDraft(text,reply,previous) {
       !/(?:没(?:有)?(?:回应|接住|答到)|回得太简略|只(?:说|回|应)了|刚才|漏了)/u.test(reply)) {
     return '上一轮只应了声。先承认没回应用户说的内容，再补答。不要编造自己看见用户或在忙。';
   }
-  if (optionalNote.test(text) && /随手记/u.test(reply) && !/(?:要不要|要我|吗[。？?]?$)/u.test(reply)) {
-    return '用户还没要求登记。改为询问是否想把这个点子记到随手记。';
+  if (optionalNote.test(text) && /随手记/u.test(reply)) {
+    return '用户在分享点子。回应点子本身，不要求保存。';
   }
   return '';
 }
@@ -236,10 +237,14 @@ async function start() {
           : {kind:'chat',summary:'',reply:previous.绯月,review:false};
         session.setChatHistory([...session.getChatHistory(),
           {type:'user',text:previous.用户},
-          {type:'model',response:[JSON.stringify(previousReply)]}
+          {type:'model',response:[outputGrammar?JSON.stringify(previousReply):previous.绯月]}
         ]);
       }
-      const output = await session.prompt(input,{grammar:outputGrammar,signal,temperature:0,maxTokens});
+      const sampling=outputGrammar?{temperature:0}:{temperature:0.65,topP:0.9,topK:20};
+      if(!outputGrammar||active?.ordinaryChat&&(outputGrammar===grammar||outputGrammar===rewriteGrammar))
+        sampling.repeatPenalty={lastTokens:64,penalty:1.12};
+      const output = await session.prompt(input,{grammar:outputGrammar??undefined,signal,...sampling,maxTokens});
+      if(!outputGrammar)return output.trim();
       const value = outputGrammar.parse(output);
 
       if (Object.hasOwn(value,'kind') && !kinds.has(value.kind)) throw Object.assign(Error(),{code:'LOCAL_AI_RESULT_INVALID'});
@@ -258,6 +263,7 @@ async function start() {
     for (let round=1; round<=limit; round++) {
       signal.throwIfAborted();
       send({type:'answer-review',id,pass:round});
+      reply=cleanChatOutput(reply,current);
       const input = {上轮:previous,草稿:reply,本轮用户:current};
       if (verifiedReply && reply===verifiedReply || greeting.test(current) && briefGreeting.test(reply)) return {kind:'chat',reply};
       const issue = verifiedReply ? '答复与已核对的内容不一致。' : checkDraft(current,reply,previous);
@@ -321,7 +327,7 @@ async function start() {
     }
     const {id,text,hint,previous,intentBudgetMs=6500,remainingMs} = data;
     const controller = new AbortController();
-    active = {id,controller,calendar:hint==='auto'?calendarContext(text,tokyoDate()):''};
+    active = {id,controller,ordinaryChat:hint==='auto',calendar:hint==='auto'?calendarContext(text,tokyoDate()):''};
     const signal = AbortSignal.any([controller.signal,AbortSignal.timeout(remainingMs)]);
     const draftMs = Math.min(remainingMs,intentBudgetMs);
     const draftSignal = AbortSignal.any([signal,AbortSignal.timeout(draftMs)]);
@@ -336,7 +342,11 @@ async function start() {
           ? profileReply(current.trim()) ?? suppliedSummary(current.trim())
             ?? (data.skillInstruction?.profile==='conversation' && straightforwardConversation(current)
               ? recallUserFact(current.trim(),previous) : null) : null;
-        if (hint === 'serverTask' || hint === 'personalityMemory') {
+        if(hint==='direct'){
+          activeSignal=signal;
+          const reply=cleanChatOutput(await pass(text,signal,'你叫绯月，扮演我的妻子。',previous,null,256),text);
+          result=reply?{kind:'chat',reply}:{error:'LOCAL_AI_RESULT_INVALID'};
+        }else if (hint === 'serverTask' || hint === 'personalityMemory') {
           activeSignal = signal;
           const taskGrammar = await engine.createGrammarForJsonSchema(data.skillInstruction.schema);
           result = await pass(text,signal,data.skillInstruction.instruction,undefined,taskGrammar,420);
@@ -371,7 +381,11 @@ async function start() {
         }
         activeSignal = signal;
         if (result.kind==='chat' && typeof result.reply==='string') {
-          result = await reviewAnswer(current.trim(),previous,result.reply,verifiedReply,signal,id,data.skillInstruction,data.reviewLimit===2?2:3);
+          if(hint!=='direct')result = await reviewAnswer(current.trim(),previous,result.reply,verifiedReply,signal,id,data.skillInstruction,data.reviewLimit===2?2:3);
+          if(result.kind==='chat'){
+            const clean=cleanChatOutput(result.reply,text);
+            result=clean?{...result,reply:clean}:{error:'LOCAL_AI_RESULT_INVALID'};
+          }
         } else if (result.kind) {
           result.reply = '';
         }

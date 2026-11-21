@@ -19,6 +19,14 @@ test('主站查询按提醒定位计划派发，已登记的小数工时刷新�
   const refreshed=await host.list();
   assert.equal(refreshed.items.length,0);assert.equal(refreshed.recordedHours[0].plannerRecord.actualHours,1.5);
   assert.deepEqual(refreshed.recordedHours[0].plannerRecord,(await host.status(71)).plannerRecord);
+  assert.equal(refreshed.dailyStudyComplete,false,'缺少多邻国记录不能视为完成');
+  sqlite.exec("INSERT INTO reminders VALUES(72,'多邻国一节课','','2026-11-20','中','登记时间',0,NULL,NULL,NULL)");
+  assert.equal((await host.list()).dailyStudyComplete,false);
+  sqlite.exec('UPDATE reminders SET isFinished=1 WHERE seq=72');
+  const both=await host.list();
+  assert.equal(both.dailyStudyComplete,true);assert.deepEqual(both.items,[]);
+  sqlite.exec('UPDATE reminders SET isFinished=0 WHERE seq=71');
+  assert.equal((await host.list()).dailyStudyComplete,false,'当天长期任务未完成');
 });
 
 test('列表仅含“由长期计划管理”时按编号解析主站派发，再登记并读回；拒绝陈旧、里程碑和不支持的接口',async()=>{

@@ -13,6 +13,7 @@ import {createPanelWindow} from './panel-window.mjs';
 import {attachSettings} from './settings-host.mjs';
 import {watchFileChanges,setLiveWarningLog,warnLiveUpdate} from './live-files.mjs';
 import {menuTemplate} from './menu-layout.mjs';
+import {createMenuPopup} from './menu-popup.mjs';
 import {pages,watchDesktopSources} from './source-updates.mjs';
 import {DEFAULT_SOUND,validSound,normalizeSound,SOUND_NODES} from './sound.mjs';
 import {createServerTaskCommand} from './server-task-command.mjs';
@@ -77,7 +78,13 @@ export async function startDesktop(electron,options={}){
     onAutomaticProgress:value=>{taskThought=value;syncActivity();},
     openImage:job=>screenQuestion.openImage(job),
     generateImage:memory?.archiveImageTask&&await hasLocalImageBackend(root)?(prompt,id)=>screenQuestion.generateServerImage(prompt,id):undefined,
-    desktopBusy:()=>quitPending||work||Boolean(localPool?.active)||screenQuestion.hasLocalWork});
+    // 正式工作（docs/FORMAL_WORK_QUEUE.md）：有名额就接，不等空闲；执行前等正在执行的登记批次，并让闲时工作暂停。
+    desktopBusy:()=>quitPending,hasRoom:()=>formalRoom(),
+    beforeExecute:async()=>{while(localPool?.active&&!quitPending)await delay(500);interruptMemory();}});
+  // 本地待处理（正式工作）合计上限 20：未完成的登记批次（暂停的也占名额）加上已接取未结束的本机任务。
+  const FORMAL_LIMIT=20;
+  function formalUsed(){return (localPool?.unfinished()??0)+(tasks.formalCount?.()??0);}
+  function formalRoom(){return formalUsed()<FORMAL_LIMIT;}
   setLiveWarningLog(tasks.traffic?.write);
   if(memory){
     try{await migrateMemory(profile,memory,electron.safeStorage);}
@@ -132,7 +139,9 @@ export async function startDesktop(electron,options={}){
   let farewell=null,nextTicket=0;
   function syncActivity(force=false){
     if(!previousReady||cleaned||farewell)return;
-    const thought=work?null:localPool?.active??taskThought??memoryThought??pollThought;
+    // 思考云标出正式工作与闲时工作。
+    const label=(prefix,value)=>value&&{...value,title:prefix+value.title};
+    const thought=work?null:label('正式 · ',localPool?.active??taskThought)??label('闲时 · ',memoryThought)??pollThought;
     const encoded=JSON.stringify(thought);
     if(force||lastThought!==encoded){
       lastThought=encoded;win.webContents.send('desktop:thought',thought);
@@ -157,7 +166,7 @@ export async function startDesktop(electron,options={}){
   const memoryIdle=()=>!quitPending&&!work&&!localPool?.active&&!screenQuestion.hasLocalWork&&!screenQuestion.panel&&
     !reminderReview?.panel?.isVisible()&&!taskInbox?.panel?.isVisible()&&tasks.activeCount()===0&&(!tasks.canPoll||tasks.canPoll());
   function interruptMemory(){backgroundController?.abort();}
-  async function memoryJob(kind,signal,manual=false){
+  async function memoryJob(kind,signal,manual=false,step){
     if(backgroundJob||!memoryIdle())return {deferred:true};
     backgroundController=new AbortController();
     const combined=AbortSignal.any([signal,backgroundController.signal]);
@@ -173,8 +182,8 @@ export async function startDesktop(electron,options={}){
         try{return await diary.run(kind,combined,progress);}finally{writing=false;}
       }
       if(kind==='diaryAudit')return nags.pollAudit(combined,{manual});
-      if(kind==='nag')return nags.poll(combined,{manual,progress});
-      await nags.flush();
+      if(kind==='nag')return nags.poll(combined,{manual,progress,step});
+      await nags.flush(combined);
       if(kind==='diary'&&!manual){
         const nextAt=(diary.last(kind)??0)+checks.polls().find(p=>p.id===kind).minutes*60000;
         if(nextAt>Date.now())return {detail:'本周期已写过日记',nextAt};
@@ -182,11 +191,16 @@ export async function startDesktop(electron,options={}){
       combined.throwIfAborted();
       writing=true;syncActivity();
       try{
-        const result=await diary.run(kind,combined,progress);diary.mark(kind,Date.now());return result;
+        const result=await diary.run(kind,combined,progress,step);diary.mark(kind,Date.now());return result;
       }finally{writing=false;}
     };
     backgroundKind=kind;backgroundJob=work();
-    try{return await backgroundJob;}catch(error){if(combined.aborted)return {deferred:true};throw error;}
+    try{return await backgroundJob;}catch(error){
+      if(!combined.aborted)throw error;
+      const state=memoryThought;
+      const count=Number.isFinite(state?.done)&&Number.isFinite(state?.total)?'（'+state.done+'/'+state.total+'）':'';
+      return {deferred:true,detail:state?.stage?'中断时进度：'+state.stage+count:undefined};
+    }
     finally{backgroundJob=null;backgroundKind=null;backgroundController=null;memoryThought=null;syncActivity();}
   }
   function contextualAction(kind){
@@ -209,7 +223,7 @@ export async function startDesktop(electron,options={}){
     try{
       const result=await memoryJob(kind,reminderStartup.signal,true);
       if(!quitPending&&!cleaned){
-        const message=typeof result==='string'?result:'这次整理已暂停，可以再从特殊菜单继续。';
+        const message=typeof result==='string'?result:'这次整理已暂停，可以再从「日记与评价」菜单继续。';
         await messages.showMessageBox({type:'info',title,message,buttons:['确定']});
       }
     }
@@ -217,16 +231,17 @@ export async function startDesktop(electron,options={}){
       if(!quitPending&&!cleaned)await messages.showMessageBox({type:'warning',title,message:kind==='diary'?'这次写日记未能完成。':'执行评价尚未补完，稍后可继续。',detail:error.message,buttons:['确定']});
     }
   }
-  const checks=createReminderChecks({profile,check:signal=>checkDueItems(tasks.weatherRequest,signal,day=>{
+  const checks=createReminderChecks({profile,log:tasks.traffic?.write,check:signal=>checkDueItems(tasks.weatherRequest,signal,day=>{
     if(checks.takeEveningPraise(day))contextualAction('praise-idle');
   }),
     lastRun:id=>diary?.last(id==='nag'?'nag-shown':id),
-    handlers:{...(hasMemory?Object.fromEntries(['diary','diaryAudit','nag','review'].map(k=>[k,s=>memoryJob(k,s)])):{}),weather:()=>weather.check(),tasks:()=>{
+    handlers:{...(hasMemory?Object.fromEntries(['diary','diaryAudit','nag','review'].map(k=>[k,(s,step)=>memoryJob(k,s,false,step)])):{}),weather:()=>weather.check(),tasks:()=>{
       if(!tasks.pollOnce)throw Object.assign(Error('任务轮询未连接'),{code:'NO_CONNECTION'});
       return tasks.pollOnce();
     }},
-    isBusy:id=>(['diary','review','nag','diaryAudit'].includes(id)&&(backgroundJob||!memoryIdle()))||quitPending||work||Boolean(localPool?.active)||screenQuestion.hasLocalWork||tasks.activeCount()>0||
-      (id==='tasks'&&tasks.canPoll&&!tasks.canPoll()),
+    // 任务轮询只看有没有名额（canPoll），不因正式工作、问答或开始工作模式顺延；其余轮询判断不变。
+    isBusy:id=>id==='tasks'?quitPending||Boolean(tasks.canPoll&&!tasks.canPoll()):
+      (['diary','review','nag','diaryAudit'].includes(id)&&(backgroundJob||!memoryIdle()))||quitPending||work||Boolean(localPool?.active)||screenQuestion.hasLocalWork||tasks.activeCount()>0,
     changed:()=>{
       screenQuestion.details?.webContents.send('conversation:checks-changed');
       pollSettings.update();
@@ -250,11 +265,11 @@ export async function startDesktop(electron,options={}){
   const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark,recordCheck:checks.record,checks});
   const reminderReview=tasks.reminderReview?attachReminderReview(electron,{bundle,root,flow:tasks.reminderReview}):null;
   const taskInbox=tasks.taskInbox?attachTaskInbox(electron,{bundle,root,flow:{...tasks.taskInbox,
-    local:async()=>[...(localPool?.pending()??[]).map(batch=>({batch,name:batch.title,started_at:batch.created})),...await tasks.taskInbox.local()]}}):null;
+    local:async()=>[...(localPool?.pending()??[]).map(batch=>({batch:localPool.withQueue(batch),name:batch.title,started_at:batch.created})),...await tasks.taskInbox.local()]}}):null;
   if(hasMemory){
     diary=createPersonalityDiary({profile,memory,model:localModel,request:tasks.weatherRequest,weather:checks.weatherDiary});
     nags=createPersonalityNags({store:diary,show:session=>screenQuestion.showNag(session),idle:()=>memoryIdle()&&win.isVisible(),canContinue:()=>!quitPending&&!work&&!localPool?.active&&!localPool?.pending().some(b=>b.state==='queued')&&
-        !screenQuestion.hasOtherTask&&!tasks.activeCount()&&(!tasks.tasksIdle||tasks.tasksIdle()),
+        !screenQuestion.hasOtherTask&&!tasks.activeCount()&&(!tasks.tasksIdle||tasks.tasksIdle({allowPendingRequests:true})),
       changed:()=>{screenQuestion.notifyPending();if(tray&&!cleaned)menu();},onInterrupted:()=>checks.enqueue('nag')});
     if(nags.pending()?.status==='意外中断')checks.enqueue(nags.pending().source==='audit'?'diaryAudit':'nag');
   }
@@ -674,6 +689,20 @@ export async function startDesktop(electron,options={}){
       await messages.showMessageBox({type:'error',title:'恢复任务终端',message:error.message});
     } finally { restoringTerminal=false; }
   }
+  // 正式入口传 htmlMenu：用自绘菜单窗口显示同一个原生 Menu；打不开时退回原生菜单。测试沿用原生菜单。
+  const menuPopup=options.htmlMenu?createMenuPopup(electron,{bundle,root,
+    onClose:()=>currentMenu?.emit?.('menu-will-close')}):null;
+  let currentMenu=null;
+  function openMenu(){
+    resetIdle();
+    if(!menuPopup){tray.popUpContextMenu();return;}
+    menuPopup.hide(); // 已打开时先按关闭结算，再按新一次打开
+    const shown=currentMenu;
+    shown?.emit?.('menu-will-show');
+    menuPopup.show(shown).catch(error=>{
+      warnLiveUpdate('绯月菜单',error);shown?.emit?.('menu-will-close');tray?.popUpContextMenu(shown);
+    });
+  }
   function menu(candidate=layout){
     const attachedCommand=click=>({enabled:windowsReady,click});
     const actions={
@@ -721,7 +750,8 @@ export async function startDesktop(electron,options={}){
     if(loginItem)refreshLoginItem(loginItem);
     contextMenu.on?.('menu-will-show',()=>{if(loginItem)refreshLoginItem(loginItem);menuOpen=true;resetIdle();});
     contextMenu.on?.('menu-will-close',()=>{menuOpen=false;resetIdle();});
-    tray.setContextMenu(contextMenu);
+    if(!menuPopup)tray.setContextMenu(contextMenu);
+    currentMenu=contextMenu;
     layout=candidate;
   }
   // 仅接受布尔/空消息，拖动坐标取自主进程；不接受任意路径、脚本或窗口配置。
@@ -782,7 +812,8 @@ export async function startDesktop(electron,options={}){
   ipcMain.on('desktop:drag-start',onDragStart);ipcMain.on('desktop:drag-end',onDragEnd);
   const icon=nativeImage.createFromPath(resolve(bundle,'tray.png'));
   tray=new Tray(icon);tray.setToolTip('绯月 · 右键打开菜单');
-  win.webContents.on('context-menu',()=>{resetIdle();tray.popUpContextMenu();});
+  win.webContents.on('context-menu',openMenu);
+  if(menuPopup)tray.on('right-click',openMenu);
   tray.on('double-click',()=>{win.isVisible()?hide():show();menu();});
   const readLayout=()=>menu(JSON.parse(readFileSync(layoutFile,'utf8').replace(/^\uFEFF/,'')));
   const stopLayout=watchFileChanges(layoutFile,readLayout);
@@ -861,6 +892,7 @@ export async function startDesktop(electron,options={}){
     ipcMain.removeListener('desktop:action-finished',onActionFinished);
     ipcMain.removeListener('desktop:drag-start',onDragStart);ipcMain.removeListener('desktop:drag-end',onDragEnd);
     for(const event of displayEvents)screen.removeListener(event,handleDisplays);
+    menuPopup?.close();
     if(tray){tray.destroy();tray=null;}
     setLiveWarningLog(undefined);
   }
@@ -972,7 +1004,11 @@ export async function startDesktop(electron,options={}){
           const content=batch.title+' · '+(batch.error??batch.steps.length+' 步已全部核对');
           tray?.displayBalloon?.({title,content,respectQuietTime:true});
         },
-        canWork:()=>!quitPending&&!work&&!backgroundJob&&!pollExecuting&&!taskThought&&!screenQuestion.hasLocalWork&&!tasks.activeCount()});
+        // 登记批次只等正在执行的本机任务（逐个执行）；开工时让闲时工作暂停。问答、生图、轮询、开始工作模式不再阻挡。
+        canWork:()=>!quitPending&&!(tasks.executingCount?.()??0),onStart:()=>interruptMemory(),
+        hasRoom:()=>formalRoom(),
+        queueInfo:()=>({used:formalUsed(),limit:FORMAL_LIMIT,tasks:tasks.formalCount?.()??0,
+          running:localPool?.active?.title??((tasks.executingCount?.()??0)?taskThought?.title??'本机任务':null)})});
       localREST=await openLocalREST({profile,pool:localPool,...options.localAPI});
       localPool.start();
     }catch(error){

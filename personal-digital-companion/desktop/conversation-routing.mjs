@@ -2,7 +2,6 @@ import {requestsResource} from '../agent/assistant/resource-registration.mjs';
 import {isReminderCommand} from './reminder-command.mjs';
 const recordCommand = /^(?:(?:请|绯月|帮我|给我|麻烦你|麻烦)[，,\s]*)*(?:(?:新增|添加|创建|写)(?:一[条篇个份])?(?:提醒|日记|随手记)|(?:记下|记一下|记录一下|登记一下|提醒我|记一笔|记一条)|(?:登记|记录|随手记|日记)[：:\s])/;
 const recordSuffix = /[，,。\s](?:帮我|请)?(?:记一下|记录一下|登记一下|记下来|登记|记录)[吧。！!]?$/;
-const reportedActivity = /^(?:(?:今天|昨天|刚才|刚刚|早上|中午|晚上|早餐|午餐|晚餐|早饭|午饭|晚饭|我|刚|又)\s*)*(?:吃了|喝了|跑了|步行了|运动了|散步了|骑行了|游了泳|跑步了)/;
 const searchCommand = /^(?:(?:绯月|请你?|可以|麻烦你?|能不能|能否|帮我|给我|替我)[，,\s]*)*(?:到网上|在网上|上网|联网|网上|网络|用搜索引擎)(?:帮我)?(?:搜索|搜寻|搜|查找|查询|查|寻找|找|看看|看)(?:一(?:下|查|搜|找)|找|查|搜)?[下：:，,\s]*/;
 const recordRequest = /^(?:(?:请|绯月|麻烦)[，,\s]*)?(?:帮我|给我|替我)(?:记录|登记|记住|记到|记入)|^(?:记录|登记)(?:一下|一条|今天|昨天|刚才|早餐|午餐|晚餐|吃喝|运动|提醒|日记|随手记)|^(?:明天|今天|后天|明早|明晚|每天|周[一二三四五六日天]).{0,14}提醒我/;
 const searchSuffix = /[，,。\s]+(?:请|麻烦)?(?:你)?(?:帮我)?(?:上网|联网|在网上|网上)(?:查查|搜搜|查|搜|找|搜索|查询)(?:一下|一搜|一查)?(?:吧|看看)?[。？！!?]?$/;
@@ -27,8 +26,20 @@ export function suppliedSummaryText(text) {
   return /^(?:请\s*)?(?:帮我\s*)?(?:总结(?:一下)?(?:主要内容|重点)?|提炼(?:一下)?重点)\s*[：:]\s*([\s\S]+)$/u.exec(text)?.[1].trim();
 }
 
+// Quoted examples and the contents of a proposed record are data, not commands.
+function commandWords(text) {
+  return text.trim().replace(/“[^”]*”|「[^」]*」|『[^』]*』|"[^"]*"/gu,'引文');
+}
+const addressed = /^(?:(?:绯月|老婆|请你?|麻烦你?|能不能|能否|可以|帮我|给我|替我|我要|我想要|我想|提前|顺手|顺便|现在|先|再|也)[，,、\s]*)*/u;
+function recordClause(clause) {
+  const words=clause.trim().replace(addressed,'');
+  if (/^(?:记录|登记)(?:片|表|簿|本|员|号|册|仪|器|的|里|中|过|了|着|是否|怎么|如何|有何|有什么|是什么|是什么意思|在哪|有多|让我|很|很难|能|不能|是一|是指|有用)/u.test(words))return false;
+  return /^(?:登记|记录)(?!.*(?:是什么|是什么意思|怎么用)[？?。]*$)/u.test(words)
+    || /^(?:把|将).+?(?:登记|记录)(?:起来|下来|一下|成|为|到|在|进|吧|下|[。！!？?]|$)/u.test(words);
+}
 function requestsRegistration(text) {
   const command = text.replace(/^(?:绯月[，,\s]*)?(?:你)?(?:能不能|能否|可不可以|可以|能)\s*(?=(?:帮我|给我|替我|记|提醒))/u,'');
+  if (text.split(/[，,。！？!?；;\n]/u).some(recordClause))return true;
   if (recordRequest.test(command) || recordCommand.test(command) || recordSuffix.test(text) ||
       /^帮我把[^。！？!?]{1,100}?(?:记到|记进|存到|写进|放进)随手记/u.test(command)) return true;
   return text.split(/[，,。！!？?；;\n]/u).slice(1).some(clause => {
@@ -37,7 +48,6 @@ function requestsRegistration(text) {
   });
 }
 
-const casualReport = /(?:不用|别|不要|不必|暂不).{0,8}(?:登记|记录|记一下|记下|记入)|(?:就|只)(?:是)?想(?:和|跟)你(?:聊|说说)/u;
 
 export const mentionsReminder=text=>/提醒|待办/u.test(text);
 export const refersToPrevious=text=>/^(?:(?:请|帮我|把|将)\s*)*(?:(?:上面|前面|刚才)(?:说的|提到的|的)?(?:那[个条件]|这[个条件]|内容|事项|那件事)|上一(?:条|句)(?:内容)?|(?:这个|那个|这条|那条)(?=请|要|需要|帮我|提交|记|登记|设|存|加|作为))/u.test(text.trim());
@@ -46,6 +56,7 @@ const reminderHelp=/(?:如何|怎么|怎样).{0,15}(?:登记|设置|添加|打�
 const newReminder=/(?:加|添加|建|创建|新增|设|设置)(?:[一1]?[个条项份]|置)?[^，,。！？?]{0,12}(?:提醒|待办)|(?:提交|登记|记|设|存|列)(?:到|入|进|成|作|为)(?:一个|一条)?(?:事项)?(?:提醒|待办)|提醒我/u;
 
 export function conversationRoute(text, mode = 'auto', withScreen = false) {
+  if (mode === 'direct') return {kind:'direct'};
   if (mode === 'registration' || mode === 'supplement') return {kind:'registration'};
   if (mode === 'memory') return {kind:'memory'};
   if (mode === 'web') return {kind:'search',query:requestedSearch(text) ?? text.trim(),summarize:true};
@@ -54,17 +65,19 @@ export function conversationRoute(text, mode = 'auto', withScreen = false) {
   if (/(?:是什么意思|怎么(?:用|操作)|如何使用)[？?。]?$/.test(text) && !searchCommand.test(text) && !simpleSearch.test(text)) return {kind:'question'};
   if (suppliedSummaryText(text)) return {kind:'question'};
   if (mentionsReminder(text)&&(reminderOptOut.test(text)||reminderHelp.test(text)))return {kind:'question'};
+  const raw=text;
+  if (searchCommand.test(raw)||simpleSearch.test(raw))return {kind:'search',query:requestedSearch(raw)};
+  text=commandWords(raw);
+  if (/(?:别|不用|不要|不必|无需|不想|不需要|先不|不准)(?:再|帮我|替我|给我|把[^，,。！？]{0,40})*(?:登记|记录|记下|记住|记一下|提醒)|(?:怎么|怎样|如何|为什么|是否|有没有|什么叫).{0,12}(?:记录|登记)|^(?:记录|登记).{0,15}(?:有何区别|有什么区别|有区别吗|有用吗|重要吗|了吗|过吗)[？?。]*$/u.test(text))return {kind:'question'};
   if (requestsResource(text)) return {kind:'registration'};
   if (requestsRegistration(text)) return {kind:'registration'};
-  const query = requestedSearch(text);
+  const query = requestedSearch(raw);
   if (query !== null) return {kind:'search',query};
   if (/(?:怎么|怎样|如何)(?:打开|进入)[呀呢吗？?。！!]*$/u.test(text))return {kind:'question'};
   if (mentionsReminder(text)&&/^(?:请|帮我|我想|绯月[，, ]*)*(?:查|看|列出|展示|显示|有没有|有哪些|有什么)|(?:登记|设置|添加|提交|记入)(?:过|了)[吗没]/u.test(text))return {kind:'reminders'};
   if (/^(?:多谢|谢谢|感谢).{0,8}提醒[呀啦哦呢。！!]*$/u.test(text))return {kind:'question'};
-  if (newReminder.test(text)&&!/(?:是否|有没有|已经|刚才有没|之前有没).{0,5}(?:登记|添加|设置|创建)|(?:登记|设置|创建|添加).{0,6}(?:了[吗没]|过吗)/u.test(text))return {kind:'registration'};
+  if ((newReminder.test(text)||/(?:作为|设为)(?:事项)?提醒[哦吧。！!]*$/u.test(text))&&!/(?:是否|有没有|已经|刚才有没|之前有没).{0,5}(?:登记|添加|设置|创建)|(?:登记|设置|创建|添加).{0,6}(?:了[吗没]|过吗)/u.test(text))return {kind:'registration'};
   if(isReminderCommand(text))return {kind:'reminders'};
-  if (mentionsReminder(text))return {kind:'registration'};
-  if (!withScreen && reportedActivity.test(text) && !casualReport.test(text) && !/[?？]|吗|能不能|为什么|怎么样|如何|怎么办|多少/.test(text)) return {kind:'registration'};
   return {kind:'question'};
 }
 

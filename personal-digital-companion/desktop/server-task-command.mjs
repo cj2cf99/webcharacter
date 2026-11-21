@@ -1,5 +1,6 @@
 import {requestsResource,resourceParams} from '../agent/assistant/resource-registration.mjs';
 import {serverTaskSteps,explicitRegistration,businessDate} from './server-registration-plan.mjs';
+import {datePattern} from './calendar-date.mjs';
 import {readFile, rename, unlink, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {validateParameters} from '../agent/tasks/parameters.mjs';
@@ -167,12 +168,12 @@ export function createServerTaskCommand({profile,tasks,localModel,dialog,readSki
         if(!plan||plan.error)throw Error('本地模型未能生成任务方案，请稍后再试。');
         if(typeof plan.question==='string'&&plan.question.trim())return {question:plan.question.trim()};
         if(['pc.reminders.move','pc.reminders.create'].includes(plan.type)&&plan.params?.deadline){
-          const date=command.match(/今天|明天|\d{4}-\d{2}-\d{2}|\d{4}年\d{1,2}月\d{1,2}日?/u)?.[0];
-          if(!date)throw Error('请明确提醒的目标日期。');
-          plan.params.deadline=businessDate(date,now);
+          const dates=[...new Set(subject.match(new RegExp(datePattern,'gu'))??[])];
+          if(dates.length!==1)throw Error('请明确提醒的目标日期。');
+          plan.params.deadline=businessDate(dates[0],now);
         }
-        if(plan.type===PC_IMAGE_GENERATE)plan.params={prompt:command.trim()};
         if(plan.type==='pc.resources.create'&&plan.params)plan.params=resourceParams(command,plan.params,true);
+        if(plan.type===PC_IMAGE_GENERATE)plan.params={prompt:command.trim()};
         const template=candidates.find(t=>t.type===plan.type);
         if(!template||!validateParameters(template.parameter_spec,plan.params).valid||(exercise&&plan.params.body!==exercise[1]))
           throw Error('任务方案与已有 PC 模板不匹配，请补充任务名称和所需参数。');

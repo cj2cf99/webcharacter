@@ -19,20 +19,25 @@ export function attachInquiry(electron,{root,bundle,visible=true}){
   async function respond(id,answer){
     if(!reply||view?.id!==id||view.status!=='pending')return {state:'error',text:'此询问已更新，请核对当前内容。'};
     if(!answer||!['confirm','send','cancel'].includes(answer.action))throw Error('无效的询问操作。');
-    const {action,text='',values=[],attachment,photoTarget}=answer;
+    const {action,text='',values=[],attachment,photoTarget,images=[]}=answer;
     if(typeof text!=='string'||text.length>6000||!Array.isArray(values)||values.length>100||
        values.some(v=>typeof v!=='string'||v.length>3500)||attachment!=null&&!validAttachment(attachment))throw Error('输入或附件无效。');
-    const attach=action==='confirm'&&Number.isInteger(photoTarget)&&view.targets.some(t=>t.index===photoTarget)&&(attachment?.kind==='image'||!attachment&&view.photoName);
-    if(photoTarget!=null&&!attach)throw Error('附图目标无效。');
-    if(action==='confirm'&&(!view.canConfirm||text.trim()||attachment&&!attach||values.some(v=>v.trim())))throw Error('请先发送填写的内容。');
-    if(action==='send'&&(values.length!==view.rows.length||!text.trim()&&!values.some(v=>v.trim())&&!attachment))
+    if(!Array.isArray(images)||images.length>3||images.some(file=>file==='source'?!view.sourcePhoto:
+      file?.kind!=='image'||!validAttachment(file)))throw Error('请提供最多 3 张有效图片。');
+    const attaching=action==='confirm'&&images.length>0;
+    if(attaching?(!Number.isInteger(photoTarget)||!view.targets.some(t=>t.index===photoTarget)):photoTarget!=null)
+      throw Error('附图目标无效。');
+    if(attachment!=null&&attachment.kind!=='text'||images.length&&action==='cancel'||
+       action==='send'&&images.length&&(view.targets.length||images.includes('source')))throw Error('图片用途无效。');
+    if(action==='confirm'&&(!view.canConfirm||text.trim()||attachment||values.some(v=>v.trim())))throw Error('请先发送填写的内容。');
+    if(action==='send'&&(values.length!==view.rows.length||!text.trim()&&!values.some(v=>v.trim())&&!attachment&&!images.length))
       throw Error('请填写缺项或提供回答。');
     update(id,'working',action==='confirm'?'正在确认…':'正在处理…');
     try{
-      const result=await reply({action,text:text.trim(),values:values.map(v=>v.trim()),attachment,photoTarget});
+      const result=await reply({action,text:text.trim(),values:values.map(v=>v.trim()),attachment,photoTarget,images});
       if(view?.id===id){
         if(action==='cancel')dismiss();
-        else update(id,result?.state==='error'?'error':'done',result?.text??'已收到回答。');
+        else update(id,result?.retryPhotos?'pending':result?.state==='error'?'error':'done',result?.text??'已收到回答。');
       }
       return result;
     }catch(error){
@@ -47,7 +52,7 @@ export function attachInquiry(electron,{root,bundle,visible=true}){
   }
   async function open(draft,callback){
     view={id:draft.id,prompt:draft.prompt,fields:draft.fields??'',source:draft.input??'',rows:draft.rows??[],
-      canConfirm:draft.canConfirm===true,targets:draft.targets??[],photoName:draft.photo?.name??'',status:'pending',message:''};
+      confirmLabel:draft.confirmLabel??'确认',canConfirm:draft.canConfirm===true,targets:draft.targets??[],parentId:draft.parentId,sourcePhoto:draft.photo?{name:draft.photo.name,data:draft.photo.data}:null,status:'pending',message:''};
     reply=callback;
     if(panel&&!panel.isDestroyed()){
       await loading;

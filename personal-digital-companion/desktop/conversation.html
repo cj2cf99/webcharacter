@@ -1,10 +1,12 @@
 <!doctype html><html lang="zh-CN" class="fy-panel"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src data:"><title>绯月 · 本地复盘</title><link rel="stylesheet" href="feiyue-surface.css"><link rel="stylesheet" href="conversation.css"></head>
-<body><header class="fy-titlebar"><div class="fy-caption"><h1>本地复盘</h1></div></header>
-<main class="fy-scroll"><div class="filters"><div role="group" aria-label="记录类型"><button id="chat">对话</button><button id="tasks">任务复盘</button><button id="checks">提醒检查</button><button id="notices">提醒</button><button id="pending">待确认</button><button id="log">任务日志</button></div><label>东京日期 <input type="date" id="day"></label><button id="refreshLog" hidden>刷新日志</button></div>
-<section id="schedule" hidden><strong id="nextCheck"></strong><span id="remaining"></span><small id="checkState"></small></section>
-<section id="noticeControls" hidden><div role="group" aria-label="提醒筛选"><button data-filter="unread">未读</button><button data-filter="all">全部</button><button data-filter="read">已读</button><button id="readAll">一键已读</button></div><p id="noticeDetail"></p></section>
-<nav id="checkPages" aria-label="检查记录分页" hidden><button id="previousCheck">上一页</button><span id="checkPage"></span><button id="nextCheckPage">下一页</button></nav>
-<p id="status" role="status"></p><section id="turns"></section><button id="older" hidden>加载更早的日志</button></main>
+<body><header class="fy-titlebar"><div class="fy-caption"><h1>本地复盘</h1></div><button id="refreshLog" class="fy-icon" type="button" title="刷新" aria-label="刷新" hidden>↻</button></header>
+<nav class="fy-bar"><div class="fy-seg" role="group" aria-label="记录类型"><button id="chat" data-icon="💬" title="对话"><span>对话</span></button><button id="tasks" data-icon="🧩" title="任务复盘"><span>任务复盘</span></button><button id="checks" data-icon="⏱" title="提醒检查"><span>提醒检查</span></button><button id="notices" data-icon="🔔" title="提醒"><span>提醒</span></button><button id="pending" data-icon="✋" title="待确认"><span>待确认</span></button><button id="log" data-icon="📜" title="任务日志"><span>任务日志</span></button></div><label class="day" title="东京日期"><input type="date" id="day" aria-label="东京日期"></label></nav>
+<main class="fy-scroll">
+<section id="schedule" hidden><span class="pulse" aria-hidden="true"></span><div><strong id="nextCheck"></strong> <span id="remaining" class="fy-chip" data-tone="accent"></span><small id="checkState"></small></div></section>
+<section id="noticeControls" hidden><div class="fy-seg" role="group" aria-label="提醒筛选"><button data-filter="unread">未读</button><button data-filter="all">全部</button><button data-filter="read">已读</button></div><button id="readAll" type="button">✓ 全部已读</button></section>
+<p id="noticeDetail" class="fy-toast"></p>
+<p id="status" role="status"></p><section id="turns" class="fy-list"></section>
+<nav id="checkPages" class="fy-pager" aria-label="分页" hidden><button id="previousCheck" type="button" aria-label="较新一页" title="较新">‹</button><span id="checkPage"></span><button id="nextCheckPage" type="button" aria-label="较早一页" title="较早">›</button></nav></main>
 <dialog id="taskReport" aria-labelledby="reportTitle"><header><h2 id="reportTitle">任务报告</h2><button id="reportClose" type="button">返回</button></header><div id="reportContents"></div></dialog>
 <dialog id="pictureViewer" aria-label="全屏查看任务图片"><nav><button id="pictureScale" type="button">原始大小</button><button id="pictureClose" type="button">退出全屏</button></nav><div id="pictureCanvas"><img id="pictureOriginal" alt="任务结果原图"></div></dialog>
 <script type="module" src="conversation-ui.mjs"></script></body></html>

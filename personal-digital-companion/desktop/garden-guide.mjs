@@ -27,8 +27,8 @@ export function firstUse(repo){
       '按 prepareInput 编写有序请求，原样带入目录的 baseline。制单命令返回一行 JSON {id,file,reviewHash}。file 指向完整清单；用返回的 reviewHash，避免自行哈希格式化文件。基线变化或制单失败时重新查询、检查原因。',
       '先给用户看 file 的整批实际内容：每步序号与 label、scope 中项目和功能的编号与名称、changes 中表及主键、before 和 after 全字段、新增或修改、版本前后值、真实发布结果和时间、noChanges。留存对这份清单及摘要的明确确认。未确认在此停止。',
       '获确认后将 draftDir 的 registration.json 和所有 step-NNN.sql 原样复制到 packageRoot 下以 id 命名的新目录；已有同名目录先查原批次，不覆盖。用 stage、commit、readCommit 取得仅含该包的 40 位 Git 提交号。按项目规则同步 Git。续办须核对替换原目录的文件集。',
-      '使用认证和 routes 中 POST /v1/batches 请求，id、reviewHash 来自 prepare，commit 来自 readCommit，userConfirmed 仅在已留存此次确认后为 true。保存编号、提交和摘要。遇超时或重启先 GET /v1/batches/:id，404 且原确认仍有效才重送同一份。',
-      '按原编号轮询至 done 或 blocked，核对所有步骤、finished 和摘要，保存最终回执。blocked 按 retry 说明处理。服务不可达时保留原包与编号等待恢复。',
+      '使用认证和 routes 中 POST /v1/batches 请求，id、reviewHash 来自 prepare，commit 来自 readCommit，userConfirmed 仅在已留存此次确认后为 true。不必等绯月空闲：本地待处理（正式工作合计上限 20）有名额即入队，429 表示已满，稍后再交。保存编号、提交、摘要和回执中的 queue。遇超时或重启先 GET /v1/batches/:id，404 且原确认仍有效才重送同一份。',
+      '入队后不必等待 done。在发布纪要记下“已入队待回执”及编号。之后任一调用方开工时，先 GET /v1/batches?unacknowledged=1：done 的批次核对所有步骤、finished 和摘要，把最终回执补记到原纪要，再 POST /v1/batches/:id/ack；blocked 的批次按 retry 或 revise 说明处理。服务不可达时保留原包与编号等待恢复。',
     ],
     catalog:{
       project:'resources.projects 按 name 筛选，重名再按 path 或 repo_url 区分，保留实际 id。',

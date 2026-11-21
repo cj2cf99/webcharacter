@@ -1,7 +1,28 @@
 body{margin:0}
-main{padding:0 14px 12px}form,#waiting{padding:10px 0;border-bottom:1px solid var(--fy-line)}
-.heading,.fields{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.heading{justify-content:space-between;margin-bottom:6px}
-h2{margin:0;font-size:1rem}label,small,#empty{font-size:.85rem}small,#empty{color:var(--fy-muted)}
-.fields label{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.fields input{width:4.5em;box-sizing:border-box}
-.state{display:block;margin-top:5px}#queue{padding-left:1.3em}#queue:empty,#feedback:empty{display:none}
-#empty,#queue{margin-block:6px}input[type=checkbox]{accent-color:var(--fy-accent)}#feedback{color:var(--fy-accent)}
+main{padding:10px 12px 12px}
+.intro{margin:0 0 8px;font-size:11.5px;color:var(--fy-muted)}
+#polls{display:grid;gap:6px}
+/* 每个轮询一张卡片：开关在右上，停用时变灰 */
+form{animation-delay:calc(var(--i,0)*40ms)}
+form:has([name=enabled]:not(:checked)){--tone:var(--fy-line)}
+form:has([name=enabled]:checked){--tone:var(--fy-ok)}
+.heading,.fields{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.heading{justify-content:space-between;margin-bottom:5px}
+h2{margin:0;font-size:13px}
+.fields label{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--fy-muted)}
+.fields input{width:4.2em}
+.fields button{margin-left:auto;min-height:25px;padding:1px 12px;font-size:12px}
+.state{display:block;margin-top:4px;font-size:11.5px;color:var(--fy-muted)}
+/* 开关样式的复选框 */
+.switch{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fy-muted);cursor:pointer}
+.switch input{appearance:none;position:relative;width:30px;height:17px;margin:0;border-radius:999px;background:var(--fy-line);cursor:pointer;transition:background .2s}
+.switch input::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:var(--fy-paper);box-shadow:0 1px 2px #0003;transition:transform .2s}
+.switch input:checked{background:var(--fy-ok)}
+.switch input:checked::after{transform:translateX(13px)}
+#waiting{margin-top:4px}
+#waiting:focus{outline:none}#waiting:focus h2{color:var(--fy-accent)}
+#queue{display:grid;gap:4px;margin:0;padding:0;list-style:none;font-size:12px}
+#queue li{padding:4px 10px;border-radius:8px;background:var(--fy-soft)}
+#queue:empty{display:none}
+#empty{margin:0;padding:12px 0}
+#feedback{margin-top:8px}

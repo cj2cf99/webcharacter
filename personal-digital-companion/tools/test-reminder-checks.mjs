@@ -74,6 +74,19 @@ test('真实计时状态、忙时顺延、第三次保留一个任务与重启�
   assert.equal(timers.size,0);
 });
 
+test('晚间学习只接受当日双完成证据，21 点开始，重开后也不重播',async()=>{
+  let at=Date.parse('2026-11-20T20:59:59+09:00');
+  const observed=[],day='2026-11-20',profile=mkdtempSync(join(tmpdir(),'feiyue-study-'));
+  let checks=createReminderChecks({profile,now:()=>at});
+  const inspect=flag=>checkDueItems(async()=>Response.json({items:[],today:day,dailyStudyComplete:flag}),undefined,
+    date=>{if(checks.takeEveningPraise(date))observed.push(date);});
+  await inspect(true);at+=1000;await inspect(false);await inspect(undefined);
+  assert.deepEqual(observed,[]);await inspect(true);checks.close();
+  checks=createReminderChecks({profile,now:()=>at});await inspect(true);
+  assert.equal(checks.takeEveningPraise('2026-11-19'),false);checks.close();
+  assert.deepEqual(observed,[day]);
+});
+
 test('事项实际走只读接口；失败和空清单分别留痕',async()=>{
   const data={today:'2026-11-20',items:[{title:'多邻国一节课',deadline:'2026-11-20'},{title:'周报',deadline:'2026-11-18'}]};
   const result=await checkDueItems(async(path,options)=>{

@@ -29,8 +29,7 @@ h1 {margin:0;color:var(--fy-ink);font:700 23px/1.44 var(--fy-serif);white-space:
 #actions.list {display:grid;grid-template-columns:1fr;justify-content:stretch;max-height:52vh;overflow:auto;scrollbar-width:thin}
 #actions.list button {text-align:left}
 :focus-visible {outline:2px solid var(--fy-gold);outline-offset:2px}
-@media(prefers-reduced-motion:no-preference) {
-  .copy {animation:arrive .16s ease-out}
-  button {transition:border-color .12s,background-color .12s}
-}
-@keyframes arrive {from{opacity:.55;transform:translateY(2px)}}
+.copy {animation:arrive .2s ease-out}
+button {transition:border-color .12s,background-color .12s,transform .1s}
+#actions button:active {transform:scale(.95)}
+@keyframes arrive {from{opacity:.55}}

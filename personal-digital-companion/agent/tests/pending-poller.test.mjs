@@ -188,12 +188,14 @@ test('P05：空闲轮询自动领取，真实线程执行回传，未知类型�
   insert.run('auto', 'mock.unit', identity.device_id, '{"value":"x"}', new Date().toISOString());
   insert.run('unknown', 'not.installed', identity.device_id, '{}', new Date().toISOString());
   let nextTimer,polls=0;
+  const progress=[];
+  const reports=[];
   const reading=Promise.withResolvers(),release=Promise.withResolvers();
-  const runtime = await createDesktopTasks({ profile, request:async(path,options)=>{
+  const runtime = await createDesktopTasks({ profile,onAutomaticProgress:value=>progress.push(value),request:async(path,options)=>{
     if(path.endsWith('/pending'))polls++;
     if(path==='/api/tasks/auto'&&options.method==='GET'){reading.resolve();await release.promise;}
     return request(path,options);
-  }, dialog: { async showMessageBox() { return { response: 0 }; } },
+  }, dialog: { async showMessageBox(options) { reports.push(options);return { response: 0 }; } },
     handlerModule: new URL('./fixtures/thread-handlers.mjs', import.meta.url).href,
     pollerOptions: { setTimer: fn => { nextTimer = fn; return 1; }, clearTimer: () => { nextTimer = null; } } });
   try {
@@ -205,6 +207,9 @@ test('P05：空闲轮询自动领取，真实线程执行回传，未知类型�
     release.resolve();
     for(let i=0;i<400&&!nextTimer;i++)await new Promise(resolve=>setTimeout(resolve,5));
     assert.ok(nextTimer);
+    assert.deepEqual(progress.map(value=>value?.stage??null),['正在领取','正在本机执行',null]);
+    assert.equal(reports.filter(r=>r.title==='绯月 · 自动任务汇报').length,1);
+    assert.match(reports.find(r=>r.title==='绯月 · 自动任务汇报').detail,/云端已确认收到结果/);
     nextTimer();await tick();assert.equal(polls,2);
     assert.equal(sqlite.prepare("SELECT status FROM tasks WHERE task_id='auto'").get().status, 'COMPLETED');
     assert.equal(sqlite.prepare("SELECT status FROM tasks WHERE task_id='unknown'").get().status, 'PENDING');

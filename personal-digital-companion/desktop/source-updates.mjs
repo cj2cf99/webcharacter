@@ -9,6 +9,7 @@ export const pages = {
   'index.html':['style.css','configured-renderer.mjs','renderer.mjs','companion-player.mjs','companion-state.mjs','behavior-controller.mjs','screen-posture.mjs','sound.mjs','window-nodes.mjs'],
   'settings.html':['feiyue-surface.css','settings.css','settings-ui.mjs','effect-preview.mjs','companion-player.mjs','behavior-controller.mjs','window-nodes.mjs'],
   'message-box.html':['feiyue-surface.css','message-box.css','message-box-ui.mjs'],
+  'menu.html':['feiyue-surface.css','menu.css','menu-ui.mjs'],
   'registration.html':['feiyue-surface.css','registration.css','registration-ui.mjs'],
   'registration-review.html':['feiyue-surface.css','registration.css','registration-review-ui.mjs','question-attachment.mjs'],
   'reminder-review.html':['feiyue-surface.css','reminder-review.css','reminder-review-ui.mjs'],

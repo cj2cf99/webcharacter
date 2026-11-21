@@ -71,7 +71,9 @@ async function test(){
   let cloudReads=0,claimed=false,inspected=null,failTasks=false,legacyTasks=false;
   const detailReads=[];
   const inbox=attachTaskInbox(runtime,{...common,flow:{
-    local:()=>[{name:'整理本周计划',attempt_count:1,started_at:created}],
+    local:()=>[{name:'整理本周计划',attempt_count:1,started_at:created},
+      {name:'绯月更新登记',started_at:created,batch:{state:'running',steps:[{label:'功能改善',state:'verified'},{label:'登记版本',state:'applying'}]}},
+      {name:'核对恢复现场',started_at:created,batch:{state:'running',steps:[{label:'核实目标',state:'checking'}]}}],
     tasks:offset=>{
       cloudReads++;
       if(failTasks)throw Error('云端任务读取失败');
@@ -188,6 +190,8 @@ async function test(){
     }
     inbox.panel.setSize(550,440);
     await until(inbox,"document.querySelector('#local-items').textContent.includes('整理本周计划')");
+    assert.match(await testUi(inbox,"document.querySelector('#local-items').textContent"),/绯月更新登记.*1\/2.*功能改善 · 已核对.*登记版本 · 核对写入结果/);
+    assert.match(await testUi(inbox,"document.querySelector('#local-items').textContent"),/核对恢复现场.*0\/1.*核实目标 · 核对基线/);
     assert.equal(cloudReads,0,'首屏只读取本机任务');
     assert.equal(await testUi(inbox,"document.querySelectorAll('[role=tab]').length"),2);
     writeFileSync(join(out,'task-inbox-local.png'),(await inbox.panel.webContents.capturePage()).toPNG());
@@ -210,15 +214,9 @@ async function test(){
     assert.deepEqual(detailReads,['group-1','group-2']);
     assert.equal(await testUi(inbox,`document.querySelector('[data-chain-id="group-2"]').textContent.includes('晚餐吃了乌冬面')`),false);
     assert.equal(await testUi(inbox,`document.querySelector('[data-chain-id="group-1"]').textContent.includes('前置 登记吃喝')`),true);
-    inbox.panel.setSize(550,610);
-    await wait(120);
-    await testUi(inbox,`(()=>{
-      const viewport=document.querySelector('main'),card=document.querySelector('[data-chain-id="group-1"]');
-      viewport.scrollTop+=card.getBoundingClientRect().top-viewport.getBoundingClientRect().top-10;
-    })()`);
+    await testUi(inbox,`document.querySelector('[data-chain-id="group-1"]').scrollIntoView({block:'start'})`);
     await wait(120);
     writeFileSync(join(out,'task-inbox-expanded.png'),(await inbox.panel.webContents.capturePage()).toPNG());
-    inbox.panel.setSize(550,440);
     await testUi(inbox,`document.querySelector('[data-chain-id="group-1"] button').click()`);
     await until(inbox,"!document.querySelector('#chains-items button')?.disabled");
     assert.equal(inspected,'group-1');

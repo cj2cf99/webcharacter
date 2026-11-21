@@ -71,8 +71,37 @@ async function fixture(t, { actions = all, register, fault, pending = [] } = {})
   const savedFile = join(profile, 'registration-submission.json');
   const events=new Map();
   return { db, env, writes, calls, create, call, savedFile,events,
-    desktop: () => createRegistrationFlow({ profile, request: request(),record:event=>events.set(event.key,event) }) };
+    desktop: (options={}) => createRegistrationFlow({ profile, request: request(),record:event=>events.set(event.key,event),...options }) };
 }
+
+test('这周日看手顺书：确认前只有草稿，跨日确认仍只写原日期和完整条件',async t=>{
+  const f=await fixture(t);
+  let now=Date.parse('2026-11-20T18:00:00+09:00');
+  const flow=f.desktop({now:()=>now});
+  const text='宝贝，加个提醒，这周日看手顺书，rene的手顺书工作至少推进3个才行';
+  const expected={deadline:'2026-11-22',title:'看手顺书',content:'rene的手顺书工作至少推进3个才行'};
+  const ui=questionFixture();
+  const host=attachScreenQuestion(ui.electron,{win:ui.win,root:join(import.meta.dirname,'../..'),bundle:'unused',profile:'unused',history:ui.history,registration:flow,visible:false});
+  t.after(()=>host.close());await host.open();
+  const ask=text=>ui.handlers.get('screen-qa:ask')(ui.event(host.panel),{text});
+  const review=await ask(text);
+  assert.ok(review.reviewId);
+  for(const value of Object.values(expected))assert.ok(review.fields.includes(value),review.fields);
+  assert.deepEqual(f.calls,[]);
+  now=Date.parse('2026-11-23T00:01:00+09:00');
+  assert.match((await ask('确认登记')).text,/已登记/);
+  assert.deepEqual(f.writes.map(w=>w.body),[{...expected,level:'中'}]);
+});
+
+test('新增随手记只有确认时提供的图库回执进入业务记录',async t=>{
+  const f=await fixture(t,{actions:[{type:'records.create',params:{body:'测试',category_id:'resource',photos:['https://fixture.test/unconfirmed']}}]});
+  const flow=f.desktop(),plan=await flow.preview('新增随手记');
+  const params=plan.chain.nodes[0].params;
+  assert.equal(params.photos,undefined);
+  params.photos=['https://fixture.test/photos/confirmed.png'];
+  assert.equal((await flow.submitReviewed('新增随手记',plan)).status,'completed');
+  assert.deepEqual(f.writes.map(w=>w.body.photos),[params.photos]);
+});
 
 const node = (key, type = 'hu-shi.event.create', params = {}) => ({ key, type, params, target_device_id: null });
 

@@ -29,12 +29,18 @@ async function read(method,value){
   if(result.error)throw Error(result.error);
   return result.value;
 }
+// 卡片：第一项信息是状态，显示为带色徽标；其余为灰色元信息。
+const tone=text=>/失败|已停止|已取消|已过期/.test(text)?'danger':/暂停|重试|等待|不可/.test(text)?'warn':/完成|已核对|已跳过/.test(text)?'ok':/待领取|核对|排队/.test(text)?'accent':'info';
 function row(title,info,action){
   const item=document.createElement('li'),body=document.createElement('div');
-  const name=document.createElement('strong'),meta=document.createElement('small');
-  name.textContent=title;
-  meta.textContent=info.filter(Boolean).join(' · ');
-  body.append(name,meta);
+  const top=document.createElement('div'),name=document.createElement('strong'),meta=document.createElement('small');
+  const [state,...rest]=info,chip=document.createElement('span');
+  item.className='fy-card';item.dataset.tone=tone(state||'');
+  item.style.setProperty('--i',document.querySelectorAll('li.fy-card').length%8);
+  top.className='fy-head';name.textContent=title;chip.className='fy-chip';chip.textContent=state||'';
+  top.append(name);if(state)top.append(chip);
+  meta.textContent=rest.filter(Boolean).join(' · ');
+  body.append(top,meta);
   item.append(body);
   if(action)item.append(actionButton(action,title));
   return item;
@@ -53,9 +59,22 @@ async function loadLocal(){
   try{
     const tasks=await read('local');
     byId('local-message').textContent=tasks.length?'':'绯月当前没有正在本机执行的任务。';
-    byId('local-items').replaceChildren(...tasks.map(task=>row(task.name||task.type,[
-      task.attempt_count>1?'重试中':'执行中',stamp(task.started_at),
-    ])));
+    const phase={queued:'排队中',running:'执行中',verifying:'整批核对中',archiving:'保存复盘中',blocked:'已暂停'};
+    const stepState={pending:'待执行',checking:'核对基线',applying:'核对写入结果',verified:'已核对'};
+    byId('local-items').replaceChildren(...tasks.map(task=>{
+      const batch=task.batch;
+      if(!batch)return row(task.name||task.type,[task.attempt_count>1?'重试中':'执行中',stamp(task.started_at)]);
+      const done=batch.steps.filter(s=>s.state==='verified').length;
+      // 正式工作队列：排队的批次显示序号，暂停的显示已暂停。
+      const state=batch.state==='queued'&&batch.queue?'排队 #'+batch.queue.position:phase[batch.state];
+      const item=row(task.name,[state,done+'/'+batch.steps.length,stamp(task.started_at),batch.error]);
+      const steps=document.createElement('ol');
+      for(const step of batch.steps){
+        const line=document.createElement('li');line.textContent=step.label+' · '+stepState[step.state];line.dataset.state=step.state;steps.append(line);
+      }
+      item.firstElementChild.append(steps);
+      return item;
+    }));
   }catch(error){
     byId('local-message').textContent=error.message;
   }
@@ -72,7 +91,7 @@ function chainRow(chain){
   const summary=document.createElement('summary'),title=document.createElement('strong');
   const state=document.createElement('span'),created=document.createElement('small');
   const steps=document.createElement('div');
-  item.className='chain-item';
+  item.className='fy-card chain-item';item.dataset.tone='accent';
   card.dataset.chainId=chain.chain_id;
   title.textContent=chain.name||'任务链';
   state.className='chain-state';
@@ -198,7 +217,11 @@ for(const tab of tabs){
     select(target.getAttribute('aria-controls'));target.focus();
   });
 }
-byId('refresh').addEventListener('click',()=>{if(!working.size)putNotice();void refresh();});
+byId('refresh').addEventListener('click',async()=>{
+  const button=byId('refresh');if(!working.size)putNotice();
+  button.setAttribute('aria-busy','true');
+  try{await refresh();}finally{setTimeout(()=>button.removeAttribute('aria-busy'),300);}
+});
 for(const name of Object.keys(lists))byId(name+'-more').addEventListener('click',()=>void loadList(name,true));
 void refresh();
 setInterval(()=>{if(view==='local'&&!document.hidden)void loadLocal();},1500);

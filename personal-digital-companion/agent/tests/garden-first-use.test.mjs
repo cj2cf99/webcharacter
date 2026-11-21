@@ -1,0 +1,68 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {execFile,execFileSync} from 'node:child_process';
+import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {dirname,join} from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
+import {promisify} from 'node:util';
+import {gardenRepo} from '../../desktop/garden-backend.mjs';
+import {openLocalREST} from '../../desktop/local-rest.mjs';
+import {createLocalTaskPool} from '../../desktop/local-task-pool.mjs';
+import {createDesktopTasks} from '../../desktop/task-lifecycle.mjs';
+import {createMemoryArchive} from '../../desktop/memory-archive.mjs';
+
+test('独立调用方仅凭地址与更新描述完成定位、预览、确认、Git、回读及复盘',async t=>{
+  const root=mkdtempSync(join(tmpdir(),'绯月 first use ')),repo=join(root,'garden repo');
+  const profile=join(root,'profile'),callerDir=join(root,'caller');
+  for(const dir of [repo,profile,callerDir])mkdirSync(dir);
+  const database=join(repo,'fixture.sqlite'),db=new DatabaseSync(database);
+  let api,pool,tasks;
+  t.after(async()=>{try{await api?.close();await pool?.close();await tasks?.stop();}finally{db.close();rmSync(root,{recursive:true,force:true});}});
+  db.exec(readFileSync(join(gardenRepo,'migrations/0021_garden.sql'),'utf8'));
+  db.exec(`INSERT INTO garden_project(id,name,created_at) VALUES(17,'其他项目','2026-01-01'),(88,'网页角色组件','2026-01-01');
+    INSERT INTO garden_flower(id,project_id,name,type,created_at) VALUES(5,17,'绯月（桌面精灵）','service','2026-01-01'),(93,88,'绯月（桌面精灵）','service','2026-01-01');
+    INSERT INTO garden_deploy VALUES(7,'2026-01-02T00:00:00Z');
+    INSERT INTO garden_deploy_item VALUES(6,7,88,93,'绯月（桌面精灵）','先前部署','0.0','1.0');`);
+  const model='src/features/garden';
+  mkdirSync(join(repo,model),{recursive:true});
+  for(const file of ['store.mjs','model.mjs'])cpSync(join(gardenRepo,model,file),join(repo,model,file));
+  const shim=join(repo,'node_modules/wrangler/bin/wrangler.js');
+  mkdirSync(dirname(shim),{recursive:true});
+  writeFileSync(join(repo,'package.json'),JSON.stringify({scripts:{'db:sync-schema':'node sync.cjs'}}));
+  writeFileSync(join(repo,'sync.cjs'),"const db=new (require('node:sqlite').DatabaseSync)('fixture.sqlite',{readOnly:true});db.prepare('SELECT revision FROM garden_revision').get();require('node:fs').writeFileSync('schema-checked','ok');");
+  writeFileSync(shim,`const db=new (require('node:sqlite').DatabaseSync)('fixture.sqlite',{readOnly:true});
+    if(!require('node:fs').existsSync('schema-checked'))throw Error('先同步结构');
+    const sql=process.argv.at(-1);
+    if(process.argv.at(-2)!=='--command'||!sql.startsWith('SELECT '))throw Error('演练只允许读取此隔离库');
+    console.log(JSON.stringify([{success:true,results:db.prepare(sql).all()}]));`);
+  const git=(...args)=>execFileSync('git',args,{cwd:repo,windowsHide:true,encoding:'utf8'});
+  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@localhost');git('config','commit.gpgsign','false');
+  const memory=createMemoryArchive(join(root,'memory'));
+  tasks=await createDesktopTasks({profile,memory,request:null});
+  let writes=0;
+  pool=createLocalTaskPool({file:join(profile,'queue.sqlite'),garden:{read:sql=>db.prepare(sql).all(),write(sql){
+    db.exec('BEGIN');try{db.exec(sql);db.exec('COMMIT');writes++;}catch(e){db.exec('ROLLBACK');throw e;}
+  }},record:tasks.recordLocalBatch});
+  api=await openLocalREST({profile,pool,repo,listenPort:0});
+  const run=async(mode,message)=>{
+    const {stdout}=await promisify(execFile)(process.execPath,[join(import.meta.dirname,'fixtures/garden-first-caller.mjs'),api.address,mode,message],{cwd:callerDir,windowsHide:true,timeout:120000});
+    return JSON.parse(stdout);
+  };
+  const intent={project:'网页角色组件',flower:'绯月（桌面精灵）',update:'隔离验收更新',result:'本机隔离版已验收',time:'2026-11-21T04:30:00+09:00'};
+  const {receipt,plan}=await run('preview',JSON.stringify(intent));
+  assert.deepEqual(pool.list(),[]);assert.equal(writes,0);assert.equal(existsSync(join(repo,'database/changes')),false);
+  assert.deepEqual(plan.steps.map(s=>s.changes.map(c=>c.table)),[['improvement'],['deploy','deploy_item']]);
+  assert.ok(plan.steps.every(s=>s.scope.projects[0].id===88&&s.scope.flowers[0].id===93));
+  assert.ok(plan.steps.flatMap(s=>s.changes).every(c=>c.before===null));
+  const detail=plan.steps[1].changes[1].after;
+  assert.equal(detail.version_before,'1.1');assert.match(detail.version_after,/^2\./);
+  assert.equal(plan.result,intent.result);
+  const result=await run('confirmed',receipt.reviewHash);
+  assert.equal(writes,2);assert.equal(result.steps.length,2);
+  assert.ok(result.steps.every(s=>s.state==='verified'));
+  for(const c of plan.steps.flatMap(s=>s.changes))assert.deepEqual({...db.prepare('SELECT * FROM garden_'+c.table+' WHERE id=?').get(c.after.id)},c.after);
+  const day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo'}).format(new Date(result.finished));
+  const count=rows=>rows.filter(r=>r.task_id==='garden-batch:'+receipt.id).length;
+  assert.equal(count(tasks.executor.review.read(day)),1);assert.equal(count(await memory.readTasks(day)),1);
+});
