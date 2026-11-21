@@ -8,14 +8,14 @@ import {createReminderChecks} from '../desktop/reminder-checks.mjs';
 import {tokyoDay} from '../desktop/conversation-history.mjs';
 
 const minute=60_000;
-function fixture(t){
+function fixture(t,ids=['tasks','due','weather']){
   let time=Date.parse('2026-11-20T01:00Z');
   const timers=new Map(),log=[],busy=new Set(),actions={};
   const profile=mkdtempSync(join(tmpdir(),'feiyue-polls-'));
   const options={profile,now:()=>time,isBusy:id=>busy.has(id),
     setTimer(fn,delay){const key=Symbol();timers.set(key,{fn,at:time+delay});return key;},
     clearTimer:key=>timers.delete(key),
-    handlers:Object.fromEntries(['tasks','due','weather'].map(id=>[id,()=>{log.push(id);return actions[id]?.()??'完成';}]))};
+    handlers:Object.fromEntries(ids.map(id=>[id,signal=>{log.push(id);return actions[id]?actions[id](signal):'完成';}]))};
   let store=createReminderChecks(options);
   t.after(()=>store.close());
   return {busy,log,actions,profile,get store(){return store;},get now(){return time;},
@@ -96,4 +96,65 @@ test('已有提醒检查的待执行记录迁入队列一次',t=>{
   });
   assert.equal(f.row('due').queuedAt,f.now);f.set('due',{enabled:false});f.reopen();
   assert.equal(f.store.pending,false);
+});
+
+test('手记质问开始后即使推延、无结果或失败，五小时内也不再启动',async t=>{
+  const f=fixture(t,['diaryAudit']),id='diaryAudit',interval=300*minute;
+  let complete;
+  f.actions[id]=()=>new Promise(done=>{complete=done;});
+  f.store.start();await f.advance(minute);
+  const started=f.now;
+  await f.advance(61_900);complete({deferred:true,detail:'中断时进度：整理资料'});
+  await f.advance(15_000);await f.advance(15_000);
+  assert.deepEqual(f.log,[id]);
+  assert.equal(f.store.pending,false);
+  assert.equal(f.row(id).nextAt,started+interval);
+  f.set(id,{enabled:false});f.set(id,{enabled:true,minutes:10});f.store.enqueue(id);
+  assert.equal(f.row(id).minutes,300);
+  assert.equal(f.row(id).nextAt,started+interval);
+  f.actions[id]=()=>undefined;
+  await f.advance(started+interval-f.now-1);assert.equal(f.log.length,1);
+  await f.advance(1);assert.equal(f.log.length,2);
+  f.actions[id]=()=>{throw Error('模型失败');};
+  await f.advance(interval);assert.equal(f.log.length,3);
+  assert.equal(f.store.read(tokyoDay(f.now)).events[0].status,'查询失败');
+  f.store.enqueue(id);await f.advance(15_000);assert.equal(f.log.length,3);
+});
+
+test('手记质问未启动时可以排队，开始后进程退出仍保留五小时限制',async t=>{
+  const f=fixture(t,['diaryAudit']),id='diaryAudit',interval=300*minute;
+  f.reopen(()=>{
+    const db=new DatabaseSync(join(f.profile,'reminder-checks.sqlite'));
+    db.prepare('UPDATE local_polls SET minutes=60 WHERE id=?').run(id);
+    db.close();
+  });
+  assert.equal(f.row(id).minutes,300);
+  f.busy.add(id);
+  f.store.start();await f.advance(minute);
+  assert.equal(f.log.length,0);assert.equal(f.store.pending,true);
+  let complete;
+  f.actions[id]=()=>new Promise(done=>{complete=done;});
+  f.busy.delete(id);await f.advance(15_000);
+  assert.equal(f.log.length,1);
+  const started=f.now;
+  f.reopen();complete({deferred:true});f.store.enqueue(id);f.store.start();
+  await f.advance(minute);
+  assert.equal(f.log.length,1);assert.equal(f.store.pending,false);
+  assert.equal(f.row(id).nextAt,started+interval);
+  f.actions[id]=()=>'近七天手记没有新的关键疑点';
+  await f.advance(started+interval-f.now);assert.equal(f.log.length,2);
+});
+
+test('闲置十分钟超时仍从手记质问的开始时计满五小时',async t=>{
+  const f=fixture(t,['diaryAudit']),id='diaryAudit',interval=300*minute;
+  f.actions[id]=()=>'近七天手记没有新的关键疑点';
+  f.store.start();await f.advance(minute);
+  f.actions[id]=signal=>new Promise(done=>signal.addEventListener('abort',()=>done({deferred:true}),{once:true}));
+  await f.advance(interval);
+  const started=f.now;
+  await f.advance(10*minute);
+  assert.equal(f.row(id).nextAt,started+interval);
+  assert.equal(f.store.read(tokyoDay(f.now)).events[0].status,'已暂停');
+  f.store.enqueue(id);await f.advance(15_000);
+  assert.equal(f.log.length,2);assert.equal(f.store.pending,false);
 });

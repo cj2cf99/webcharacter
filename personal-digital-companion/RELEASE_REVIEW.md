@@ -674,3 +674,33 @@ Windows 旧 PID 33608 经原生窗口正常退出，安装前备份清单到准�
 - **登记包**：registration.json 与 step-001.sql、step-002.sql 原样提交到主站仓库本地 main：e04060d657fb8d5b43152d688299bd26bbd1af55，只含 database/changes/feiyue-formal-queue-20261121。未推送。
 - **入队**：核对 8765 仍由 PID 36344 监听后 POST /v1/batches，返回 HTTP 202，回执 queue 为 {position:1, used:1, limit:20, running:null}。入队回执在 G:/selftool/WebCharacter/work/feiyue-queue-20261121/enqueue.json。
 - **待回执**：按 v4 流程不等待 done。下次开工时 GET /v1/batches?unacknowledged=1，核对步骤、finished 和摘要后补记到这里，再 POST /v1/batches/feiyue-formal-queue-20261121/ack。
+
+## 2026-11-21 JST · 自动手记质问五小时上限（本机发布前审核）
+
+### 需求及验收
+
+用户要求「如果有这个可能，那么强制5小时只能质疑一次，开始了就算，不管有没有生成实质性结果」，随后指定两轮自检通过后准备更新并提交对应代码。正式资料库只读记录显示，同一个 14:11:48 JST 到期的质问在 14:18:49、14:20:04、14:20:34 JST 实际启动。旧调度会把执行中返回推延的动作重新入队，每 15 秒检查能否重试，共享闲置时限到达时本轮停止。
+
+五小时从每次自动行动开始滚动计算。未开工的忙碌等待可以排队。开工后的推延、失败、超时及无疑点都消耗本次机会。重启、关闭再启用及自动提前入队不突破上限。用户主动续答仍可从「待确认」进入，原来的引文、主篇和追问规则沿用。
+
+### 目标、基线及文件
+
+- 目标是 Windows 正式安装树 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`。准备期间确认 Electron 主进程 16092 使用该树，Git 基线 `39fd098`，核对实际文件摘要。开发来源为 WebCharacter 本子项目，比较基线 `146191a2c799c584282c4f81e53a9661fd9af84a`。无其他来源项目及 Worker 发布。
+- `desktop/poll-scheduler.mjs` 在自动行动开始前持久化下次最早启动时间并消耗当前队列项。开始后返回推延仍记录进度，按五小时调度。恢复、启停与队列入口检查同一时间。正式版候选通过三方合并保留已装版的轮询项目和初始化逻辑。正式版原 SHA-256 为 `4632bdac74cb1aa0a13316b723fedcd43c74ffd9f1c6df43cda6301426dfcb16`，候选为 `c3009f752d198e26c97cc738114fa74731b0bd618c5ec8151c0f8afeb545ea78`。
+- `desktop/poll-settings-ui.mjs` 将手记质问显示为固定 300 分钟，保留启停。正式版原 SHA-256 为 `0dec6d98a7f95c3de13547d76eb4ae166008b90607aef70a3965645660a24245`，候选为 `e0c8216eccd7dce715c1c450ad3ac2c36583e6da6aa2a0589c4fbd1cd267251a`。
+- `tools/test-poll-settings.mjs`、`tools/test-panel-titlebar-electron.mjs` 与需求、开发、审核三份文档留在源码仓库。更新包位于 `output/diary-audit-cooldown-20261121/`，用 `manifest.json` 与 `baseline/desktop`、`candidate/desktop` 比较。所有从正式版复制的支持文件摘要一致。安装只取清单中的两个运行文件。
+
+### 数据、配置与风险
+
+无数据库迁移、历史回填、外部配置变化及云端数据影响。复用本机 `reminder-checks.sqlite` 中的 `idle_poll_resume` 和 `local_polls`。已有手记质问间隔读为 300 分钟，保留启停及现存的最早恢复时刻。旧行动日志保留原样。旧版本在收到推延前已经开始的记录无法统一从检查状态分辨，本次从候选首次实际开工开始持久化上限。
+
+安装前复核目标、登录入口、进程、资料目录、空闲状态、两份原摘要与候选摘要，备份原运行文件并记录手记质问对应的间隔与最早恢复时刻。若发布失败，保留真实回执并在进程退出后恢复两个原文件。若确需取消新规则留下的本机调度数据，核对当前值后只恢复 `diaryAudit` 对应的间隔与最早恢复时刻，保留期间新增的行动、手记及回答。
+
+### 两轮自检
+
+1. 开发树对照原始要求、历史的一小时提醒和本次五小时决定，确认变动覆盖自动入口与自动重试，手动续答沿用现有入口。运行 `node --test tools/test-poll-settings.mjs agent/tests/autonomous-idle.test.mjs agent/tests/diary-audit.test.mjs agent/tests/personality-memory.test.mjs agent/tests/screen-question-host.test.mjs`，53/53。运行 `node tools/build-desktop.mjs` 及 `desktop/node_modules/electron/dist/electron.exe tools/test-panel-titlebar-electron.mjs`，构建及七面板巡检通过。巡检中故意送入错误标题栏配置触发原有警告，随后恢复通过。
+2. 正式基线和候选分别运行 `node --test output/diary-audit-cooldown-20261121/{baseline,candidate}/tools/test-poll-settings.mjs`（按两个路径分别执行）。基线 5/8，三个新场景预期未通过；候选 8/8。使用正式版 Electron 运行 `output/diary-audit-cooldown-20261121/candidate/tools/test-installed-panel.mjs`，实际轮询设置窗口验证固定 300 分钟、启停和其他轮询编辑通过。比对实际候选仅包含两个运行文件。重点复核已启动条件、超时后最早时间、重启、队列、手动续答，以及正式版保留的轮询项目。两轮均以临时资料执行，未发现本次范围内残留问题。
+
+### 发布、核验和确认
+
+用户已授权快速通道准备及提交对应代码。本次正式安装、花园登记意愿及具体清单待明确确认，第三方独立审核未执行。获准后先核验清单并备份，调用应用受控重启流程等待在途任务，再安装两份文件及核对摘要，从原入口启动。核实新进程、快捷方式、登录项和资料目录一致，核验本机 REST 就绪及轮询页面显示 300 分钟；首次真实质问后，从本地任务日志及轮询状态检查开始时间及五小时窗口。正式安装、正式版现场验证、实际运行时间与 Git 远端同步均待执行。安装结束后另记真实结果与 Git 状态；花园仅按另行确认的清单执行。
