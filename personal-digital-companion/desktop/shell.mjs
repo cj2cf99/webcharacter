@@ -270,8 +270,10 @@ export async function startDesktop(electron,options={}){
     diary=createPersonalityDiary({reportOriginals:detail=>messages.showMessageBox({type:'info',title:'绯月 · 异常附件',message:'记录已完成。以下 TXT 超过自动上限，已保存到本机，可自行选择是否添加。',detail,buttons:['确定']}),profile,memory,model:localModel,request:tasks.weatherRequest,weather:checks.weatherDiary});
     nags=createPersonalityNags({store:diary,show:session=>screenQuestion.showNag(session),idle:()=>memoryIdle()&&win.isVisible(),canContinue:()=>!quitPending&&!work&&!localPool?.active&&!localPool?.pending().some(b=>b.state==='queued')&&
         !screenQuestion.hasOtherTask&&!tasks.activeCount()&&(!tasks.tasksIdle||tasks.tasksIdle({allowPendingRequests:true})),
-      changed:()=>{screenQuestion.notifyPending();if(tray&&!cleaned)menu();},onInterrupted:()=>checks.enqueue('nag')});
-    if(nags.pending()?.status==='意外中断')checks.enqueue(nags.pending().source==='audit'?'diaryAudit':'nag');
+      changed:()=>{screenQuestion.notifyPending();if(tray&&!cleaned)menu();},onInterrupted:(id='nag')=>checks.enqueue(id)});
+    if(nags.recoverAudit())checks.enqueue('diaryAudit');
+    const pendingNag=nags.pending();
+    if(pendingNag?.status==='意外中断'&&pendingNag.source!=='audit')checks.enqueue('nag');
   }
   const suspendMemory=()=>{interruptMemory();if(nags?.pending()?.status==='提问中')screenQuestion.hide();};
   const focusMemory=(_event,other)=>{if(other!==win&&other!==screenQuestion.panel)suspendMemory();};

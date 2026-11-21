@@ -2,8 +2,11 @@ import {createHash} from 'node:crypto';
 import {tokyoDay} from './conversation-history.mjs';
 import {cleanMemory} from './personality-diary.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
+import {untilAbort} from './chat-budget.mjs';
 
 const hour=3600000;
+const cooldown=5*hour,auditWindow=3*60_000;
+const timeoutText='三分钟已到，手记核查和质询已结束。';
 const digest=s=>createHash('sha256').update(s).digest('hex');
 const pageKey=p=>p.day+'.'+p.part;
 const open=n=>['提问中','等待回应','意外中断'].includes(n.status);
@@ -40,34 +43,82 @@ function formatQuestion(n){
     n.questions===1?'想搞清楚的问题':'追问 '+(n.questions-1)+' / 2',n.next].join('\n');
 }
 
-export function createDiaryAudit({store,show,idle,canContinue,save,changed,now=Date.now,random=Math.random,loadSkill=()=>readInteractionSkill('diaryAudit')}){
-  let active=null;
-  async function writer(){
-    const skill=await loadSkill();
-    return (stage,data,fields,signal)=>store.think(JSON.stringify(data),skill.localAi[stage],fields,signal,{name:skill.skill,version:skill.version});
+export function createDiaryAudit({store,show,idle,canContinue,save,changed,onInterrupted,now=Date.now,random=Math.random,loadSkill=()=>readInteractionSkill('diaryAudit')}){
+  let active=null,budget=null,working=false,state;
+  function expireQuestion(n){
+    if(!n||!open(n))return;
+    n.status='回合结束';n.afterEvaluation=timeoutText;delete n.notBefore;
+    save(n);
   }
-  async function discover(write,signal){
+  function timerFor(startedAt,n){
+    if(budget?.startedAt===startedAt){
+      if(n)budget.n=n;
+      return budget;
+    }
+    clearTimeout(budget?.timer);
+    const controller=new AbortController();
+    const until=startedAt+auditWindow;
+    const current={startedAt,until,n,signal:controller.signal,
+      expire(){
+        if(controller.signal.aborted)return;
+        controller.abort(new DOMException(timeoutText,'TimeoutError'));
+        if(active?.deadline===current.signal)active=null;
+        expireQuestion(current.n);
+      },
+      check(){
+        if(now()>=until)current.expire();
+        controller.signal.throwIfAborted();
+      }};
+    current.timer=setTimeout(current.expire,Math.max(0,until-now()));
+    current.timer.unref?.();
+    budget=current;
+    return current;
+  }
+  function stopRun(){
+    if(state.run){delete state.run;store.saveAuditState(state);}
+    clearTimeout(budget?.timer);budget=null;
+  }
+  async function writer(limit,signal){
+    const skill=await untilAbort(loadSkill(),signal);
+    return async(stage,data,fields,signal,steps)=>{
+      limit.check();signal.throwIfAborted();
+      const input=JSON.stringify(data),key=steps&&digest(stage+'\n'+input);
+      if(key&&steps[key])return steps[key];
+      const result=await untilAbort(store.think(input,skill.localAi[stage],fields,signal,{name:skill.skill,version:skill.version}),signal);
+      limit.check();signal.throwIfAborted();
+      if(key){steps[key]=result;store.saveAuditState(state);}
+      return result;
+    };
+  }
+  async function discover(write,limit,signal){
     // Reference identity follows the Tokyo day and part even after the diary is appended to.
     const used=new Set(store.nags().flatMap(n=>n.source==='audit'?n.refs.map(r=>r.page):n.source==='diary'?[n.source_id.split('/')[0].replace(/\.0+(?=\d)/u,'.')]:[]));
     const today=tokyoDay(now()),from=tokyoDay(now()-6*24*hour);
-    const pages=store.pages(from).filter(p=>p.day<=today&&!used.has(pageKey(p))&&p.body.trim()&&p.body!=='无所事事的一天');
+    const pages=store.pages(from).filter(p=>p.day<=today&&!used.has(pageKey(p))&&p.body.trim()&&p.body!=='无所事事的一天'&&
+      (state.run?.pages.includes(pageKey(p))||!(state.checked[pageKey(p)]>now()-cooldown)));
     if(!pages.length)return;
-    const scan=digest(JSON.stringify(pages.map(p=>[pageKey(p),p.body])));
-    if(store.auditScan()===scan)return;
+    const run=state.run??={startedAt:limit.startedAt,pages:[],steps:{}};
     const quotes=[];
     for(const p of pages){
+      limit.check();signal.throwIfAborted();
+      const page=pageKey(p);
+      if(!run.pages.includes(page)){
+        run.pages.push(page);state.checked[page]=now();
+        store.saveAuditState(state);
+      }
       const chars=Array.from(p.body);
       for(let i=0;i<chars.length;i+=440){
+        limit.check();signal.throwIfAborted();
         const block=chars.slice(Math.max(0,i-60),i+440).join('');
         let excerpts;
         if(block.length<=100)excerpts=[block];
         else{
-          const v=await write('extract',block,['a','b','c'],signal);
+          const v=await write('extract',block,['a','b','c'],signal,run.steps);
           excerpts=Object.values(v).filter(s=>s&&block.includes(s));
           // Even an unsuccessful extraction must leave real source material for comparison.
           if(!excerpts.length)excerpts=block.match(/[\s\S]{1,90}/gu)??[];
         }
-        for(const quote of excerpts)if(!quotes.some(r=>r.page===pageKey(p)&&r.quote===quote))quotes.push({page:pageKey(p),quote});
+        for(const quote of excerpts)if(!quotes.some(r=>r.page===page&&r.quote===quote))quotes.push({page,quote});
       }
     }
     const terms=quotes.map(q=>words(q.quote)),candidates=[],groups=new Set();
@@ -81,7 +132,7 @@ export function createDiaryAudit({store,show,idle,canContinue,save,changed,now=D
       if(groups.has(key))continue;
       groups.add(key);
       const inputs=indices.map((j,k)=>({no:k+1,...quotes[j]}));
-      const v=await write('compare',inputs,['score','refs','summary','points','question','keywords'],signal);
+      const v=await write('compare',inputs,['score','refs','summary','points','question','keywords'],signal,run.steps);
       if(v.score==='0')continue;
       const refs=v.refs.trim().split(/[，,\s、]+/u).filter(Boolean).map(s=>inputs[Number(s)-1]);
       const ask=question(v.question);
@@ -92,18 +143,17 @@ export function createDiaryAudit({store,show,idle,canContinue,save,changed,now=D
     }
     for(const item of candidates.sort((a,b)=>b.score-a.score)){
       const terms=item.keywords.split(/[，,、\s]+/u).filter(t=>t.length>=2&&t.length<=32).slice(0,3);
-      const context=await store.auditAssociations(terms,signal);
-      const v=await write('verify',{引文:item.refs,矛盾:item.reason,拟问:item.ask,本机线索:context},['keep','question'],signal);
+      limit.check();signal.throwIfAborted();
+      const context=await untilAbort(store.auditAssociations(terms,signal),signal);
+      const v=await write('verify',{引文:item.refs,矛盾:item.reason,拟问:item.ask,本机线索:context},['keep','question'],signal,run.steps);
       if(v.keep==='0')continue;
       const ask=question(v.question)||item.ask;
       if(v.keep!=='1')throw Error('日记复核结果不完整');
-      const source_id=item.refs[0].page,at=new Date(now()).toISOString();
+      const source_id=item.refs[0].page,at=new Date(run.startedAt).toISOString();
       return {source:'audit',source_id,id:'audit-'+digest(source_id),created_at:at,revision:1,title:ask,reason:item.reason,
         refs:item.refs,points:item.points,next:ask,questions:1,interruptions:0,status:'等待回应',mood:'',
         talk:[{who:'绯月',at,text:ask}]};
     }
-    // A local explanation may change. Only memoize a scan that found no initial candidate.
-    if(!candidates.length)store.markAuditScan(scan);
   }
   const line=(n,who,text)=>n.talk.push({who,text,at:new Date(now()).toISOString()});
   function mood(n){
@@ -114,7 +164,8 @@ export function createDiaryAudit({store,show,idle,canContinue,save,changed,now=D
   }
   function pause(n){
     n.status='意外中断';save(n);
-    return {text:'你的回答已记下，等手头的任务结束再接着聊。',done:true};
+    onInterrupted?.();
+    return {text:'你的回答已记下，三分钟内空闲时可以继续核查。',done:true};
   }
   async function advance(n,write,signal){
     if(!canContinue())return pause(n);
@@ -122,7 +173,7 @@ export function createDiaryAudit({store,show,idle,canContinue,save,changed,now=D
     const input={矛盾:n.reason,主问题:n.title,问答:turns};
     const {keywords}=await write('keywords',input,['keywords'],signal);
     const terms=keywords.split(/[，,、\s]+/u).filter(Boolean);
-    const hits=await store.auditAssociations(terms,signal);
+    const hits=await untilAbort(store.auditAssociations(terms,signal),signal);
     signal.throwIfAborted();
     if(hits.length)input.本机线索=hits.slice(0,3);
     if(!canContinue())return pause(n);
@@ -150,59 +201,109 @@ export function createDiaryAudit({store,show,idle,canContinue,save,changed,now=D
     n.status=closingStatus;n.afterEvaluation=v.text;save(n);
     return {text:v.text,done:true};
   }
-  async function poll(signal,{manual=false}={}){
-    if(active||!idle()||!canContinue())return {deferred:true};
-    let n=store.nags().find(open);
-    if(!n&&!manual){
-      await store.refresh(signal);
-      n=store.nags().find(open);
-    }
-    if(n&&n.source!=='audit'||!n&&manual)return '没有待续的手记质问';
-    if(!manual&&n?.notBefore>now())return {detail:'手记质问已留在待确认',nextAt:n.notBefore};
-    const write=await writer();
-    if(!n){
-      n=await discover(write,signal);
-      if(!n)return '近七天手记没有新的关键疑点';
-      signal.throwIfAborted();
-      await store.reserveAudit(n,signal);
-      changed();
-    }
-    if(n.talk.at(-1).who==='你'){
-      const result=await advance(n,write,signal);
-      if(result.done)return result.text;
-    }
-    signal.throwIfAborted();
-    if(!idle()||!canContinue())return {deferred:true};
+  async function showQuestion(n,write,limit,signal){
     const controller=new AbortController();
-    const session={audit:true,signal,prompt:formatQuestion(n),
-      visible(){n.status='提问中';n.notBefore=now()+hour;save(n);},
+    const replySignal=AbortSignal.any([controller.signal,limit.signal]);
+    const session={audit:true,signal,deadline:limit.signal,timeoutText,prompt:formatQuestion(n),
+      visible(){limit.check();n.status='提问中';save(n);},
       leave(reason){
         if(active!==session)return;
         active=null;controller.abort();
+        if(now()>=limit.until){limit.expire();stopRun();return;}
         if(reason==='refuse'){
           mood(n);n.status='用户结束';n.afterEvaluation='我带着'+n.mood+'把这件事记到这里。老公选择不再回答。';
           line(n,'结束记录','拒绝回答');
+          stopRun();
         }else{
           n.status=reason==='later'||reason==='idle'?'等待回应':'意外中断';
-          if(n.status==='等待回应')n.notBefore=now()+hour;
+          if(n.status==='等待回应')n.notBefore=limit.until;
+          else {delete n.notBefore;onInterrupted?.();}
         }
         save(n);
       },
       async reply(raw){
-        if(active!==session)throw Error('这次气泡已关闭');
-        const text=store.nagText?await store.nagText(n,raw,controller.signal):cleanMemory(raw);
-        if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请用 1 至 3000 字文字回答。',invalid:true};
-        line(n,'你',text);delete n.notBefore;save(n);
-        const result=await advance(n,write,controller.signal);
-        if(result.done)active=null;
-        else {n.notBefore=now()+hour;save(n);}
-        return result;
+        try {
+          limit.check();
+          if(active!==session)throw Error('这次气泡已关闭');
+          const text=store.nagText?await untilAbort(store.nagText(n,raw,replySignal),replySignal):cleanMemory(raw);
+          limit.check();replySignal.throwIfAborted();
+          if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请用 1 至 3000 字文字回答。',invalid:true};
+          line(n,'你',text);delete n.notBefore;save(n);
+          const result=await advance(n,write,replySignal);
+          if(result.done){active=null;if(!open(n))stopRun();}
+          return result;
+        }catch(error){
+          if(limit.signal.aborted)return {text:timeoutText,done:true};
+          throw error;
+        }
       }};
     active=session;
     try{
-      if(!await show(session)){if(active===session)active=null;return {deferred:true};}
+      if(!await untilAbort(show(session),signal)){if(active===session)active=null;return {deferred:true};}
     }catch(error){if(active===session)active=null;throw error;}
-    return {detail:'本次质问：'+n.title,nextAt:n.notBefore};
+    limit.check();
+    return {detail:'本次质问：'+n.title};
   }
-  return {poll,close(){active?.leave('interrupted');}};
+  async function poll(outer,{manual=false}={}){
+    if(working||active||!idle()||!canContinue())return {deferred:true};
+    let n=store.nags().find(open);
+    if(n&&n.source!=='audit'||!n&&manual)return '没有待续的手记质问';
+    state=store.auditState();
+    if(!n&&state.run&&state.run.startedAt+auditWindow<=now())stopRun();
+    let limit=timerFor(n?Date.parse(n.created_at):state.run?.startedAt??now(),n);
+    let signal=AbortSignal.any([outer,limit.signal]);
+    working=true;
+    try{
+      limit.check();signal.throwIfAborted();
+      if(!n&&!state.run){
+        await untilAbort(store.refresh(signal),signal);
+        limit.check();
+        n=store.nags().find(open);
+        if(n&&n.source!=='audit'){stopRun();return '没有待续的手记质问';}
+        if(n){
+          limit=timerFor(Date.parse(n.created_at),n);
+          signal=AbortSignal.any([outer,limit.signal]);
+          limit.check();
+        }
+      }
+      if(!manual&&n?.notBefore>now())return {detail:'手记质问已留在待确认'};
+      const write=await writer(limit,signal);
+      if(!n){
+        for(const [key,at] of Object.entries(state.checked))if(at<=now()-cooldown)delete state.checked[key];
+        n=await discover(write,limit,signal);
+        if(!n){stopRun();return '近七天手记没有新的关键疑点';}
+        limit.check();signal.throwIfAborted();
+        await untilAbort(store.reserveAudit(n,signal),signal);
+        limit.n=n;
+        limit.check();
+        changed();
+      }
+      if(n.talk.at(-1).who==='你'){
+        const result=await advance(n,write,signal);
+        if(result.done){
+          if(open(n))return {deferred:true,detail:result.text};
+          stopRun();return result.text;
+        }
+      }
+      limit.check();signal.throwIfAborted();
+      if(!idle()||!canContinue())return {deferred:true};
+      return await showQuestion(n,write,limit,signal);
+    }catch(error){
+      if(limit.signal.aborted){stopRun();return timeoutText;}
+      if(!outer.aborted&&!n)stopRun();
+      throw error;
+    }finally{working=false;}
+  }
+  return {poll,eligible:n=>now()<Date.parse(n.created_at)+auditWindow,
+    recover(){
+      const n=store.nags().find(n=>n.source==='audit'&&open(n));
+      if(n){
+        const limit=timerFor(Date.parse(n.created_at),n);
+        if(now()>=limit.until)limit.expire();
+        return open(n)&&!(n.notBefore>now());
+      }
+      const run=store.auditState().run;
+      return Boolean(run&&run.startedAt+auditWindow>now());
+    },
+    close(){active?.leave('interrupted');clearTimeout(budget?.timer);}};
 }

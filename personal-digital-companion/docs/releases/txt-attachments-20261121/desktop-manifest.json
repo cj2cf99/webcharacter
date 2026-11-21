@@ -1,7 +1,7 @@
 {
   "personality-diary.mjs": {
-    "before": "d55a333c2ff6ab0e90c1882b04dc788907abb1921bea939de816f771cec93606",
-    "candidate": "2729ee670d7d1b209e78286e528c522939e4e8c1d16f6a2526b1929dad229b97"
+    "before": "60c03f766314f5df29f3b10bc19227a0df16bf263b396995c606d4ad824e39f7",
+    "candidate": "5d3d9df35530047b35f661ac7dea6a7980f6b62ce83d8307f7233f84348620a9"
   },
   "long-originals.mjs": {
     "before": null,
@@ -12,19 +12,19 @@
     "candidate": "d32fed91a6e6221802facbb796725d4cee60f19c3c74adbcd9b96c9f0cd5b7de"
   },
   "personality-nags.mjs": {
-    "before": "ddbe214b2d81e40592df5e3afd67b0786d657b6c4c9792042127ecd9e8ff93a4",
-    "candidate": "ffaf07e7bd06119f7f240f416ace771a2891e15f6271012ead544b6021d77b55"
+    "before": "aeae006c89c5bf597073d3641794a59a563640d8939923937a86a85731d41312",
+    "candidate": "fc1c628659530577ae8a9e972b641f27f5bb0f09e53402af8733b117475daef5"
   },
   "diary-audit.mjs": {
-    "before": "3c410a0cc10901eceff66f9a591b87215270b8b05cd43311afa4fa50b483233d",
-    "candidate": "bcdaf8b8e9f770be86dc192f97309b560427e26d76fc560defd05f10a66caf40"
+    "before": "ba40e686c4b6704be92403eef5f5c08c6c8f5178d89ba0a8fc0463fc6db806ad",
+    "candidate": "ccfe86a95513dcd440187c2488ce7f68e0c16b914b581aa7d5dad209bca7f684"
   },
   "shell.mjs": {
-    "before": "c9fcd136db4149ad7300ea867fcae022eadba22b6d9f8cff68fbb0afbd4212c7",
-    "candidate": "6928de45f07ecfb1a586a4873617b24ffc25dd37c325fad752596ded651045e6"
+    "before": "cf4b7b72a19cea16ab3a1530f85db279c57bac26e1ab77a4d6b243cfedb309af",
+    "candidate": "cc02719d00c31ea808a6df4a779d4f6a85683090785375935365d857fa49530c"
   },
   "screen-question-host.mjs": {
-    "before": "d2359145e1ea9c5905c1a64364fb80c5781b33cc42d86e34cfc8bdd486456919",
-    "candidate": "574c7d3ed613b3a0dfe410e3d9d205f32d6269c39ebefc4ed2cb296b1c432c54"
+    "before": "a4cb1ae32974eb0c864e2b1a7e870dbbd81899c9f241de02e96d53c12033a6f2",
+    "candidate": "ad71ba52ae0b05784960708b4e136ba86197006759d3d1f0ee1df955b9c939bd"
   }
 }
