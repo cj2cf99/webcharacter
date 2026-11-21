@@ -10,10 +10,6 @@ function render(rows){
       form.querySelector('h2').textContent=row.name;
       form.elements.enabled.checked=row.enabled;
       if(row.id==='diary')form.elements.minutes.max=720;
-      if(row.id==='diaryAudit'){
-        form.elements.minutes.readOnly=true;
-        form.elements.minutes.labels[0].title='自动质问每五小时最多开始一次，从开始时计';
-      }
       form.elements.minutes.value=row.minutes;form.elements.maximum.value=row.maximum;
       form.onsubmit=async event=>{
         event.preventDefault();

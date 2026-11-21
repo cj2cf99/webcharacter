@@ -99,7 +99,7 @@ async function test(){
   const registration=attachRegistration(runtime,{...common,flow:{resume:async()=>({})}});
   const weather=attachWeather(runtime,{...common,service:{snapshot:()=>({rows:[]}),close(){}}});
   let history,polls;
-  const checkStore=createReminderChecks({profile,isBusy:()=>false,handlers:{tasks:()=>{},due:()=>{},weather:()=>{},diaryAudit:()=>{}},
+  const checkStore=createReminderChecks({profile,isBusy:()=>false,handlers:{tasks:()=>{},due:()=>{},weather:()=>{}},
     changed:()=>{history?.panel?.webContents.send('conversation:checks-changed');polls?.update();}});
   polls=attachPollSettings(runtime,{...common,checks:checkStore});
   checkStore.saveWeather({},{title:'天气提醒',body:'未央区：大风预警'},Date.now());
@@ -230,8 +230,7 @@ async function test(){
     await testUi(inbox,"document.querySelector('#refresh').click()");
     await until(inbox,"document.querySelector('#tasks-title').textContent==='单条任务' && document.querySelector('#tasks-scope').textContent.includes('旧版')");
     console.log('PASS：本机执行中与云端未结束双页签、延迟查询、分页、查看任务链及领取回执。');
-    await until(polls,"document.querySelectorAll('form[data-poll]').length===4");
-    assert.equal(await testUi(polls,"{const f=document.querySelector('[data-poll=diaryAudit]');f.elements.minutes.readOnly && f.elements.minutes.valueAsNumber===300 && !f.elements.enabled.disabled}"),true);
+    await until(polls,"document.querySelectorAll('form[data-poll]').length===3");
     await testUi(polls,"{const f=document.querySelector('[data-poll=tasks]');f.elements.enabled.checked=false;f.elements.minutes.value=10;f.elements.maximum.value=0;f.requestSubmit()}");
     await until(polls,"document.querySelector('#feedback').textContent.includes('已保存')");
     const taskPoll=()=>checkStore.polls().find(row=>row.id==='tasks');

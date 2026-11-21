@@ -69,6 +69,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     CREATE TABLE IF NOT EXISTS drafts(id TEXT PRIMARY KEY,day TEXT,packet TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS pages(id TEXT PRIMARY KEY,day TEXT,json TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS nags(id TEXT PRIMARY KEY, json TEXT NOT NULL, dirty INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS diary_audit_state(id INTEGER PRIMARY KEY CHECK(id=1), json TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS schedule(job TEXT PRIMARY KEY,at INTEGER NOT NULL);`);
   const originals=createOriginalFiles({db,profile,memory,request,report:reportOriginals});
   const rows=(sql,...args)=>db.prepare(sql).all(...args);
@@ -154,6 +155,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     for(const kind of ['diaries','nags']){
       for(let page=0;;page++){
         const list=await api(kind+'?page='+page,undefined,signal);
+        signal?.throwIfAborted();
         let older=false;
         for(const item of list.items){
           if(kind==='diaries'&&item.day<tokyoDay(now()-6*86400000)){older=true;break;}
@@ -161,6 +163,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
           const local=db.prepare(diary?'SELECT json FROM pages WHERE id=?':'SELECT json,dirty FROM nags WHERE id=?').get(id);
           if(local&&(local.dirty||JSON.parse(local.json).revision>=item.revision))continue;
           const full=await api(kind+'/'+encodeURIComponent(id),undefined,signal);
+          signal?.throwIfAborted();
           if(diary)cachePage(full);
           else{
             const current=db.prepare('SELECT json,dirty FROM nags WHERE id=?').get(id);
@@ -217,6 +220,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     for(const day of (await memory.archiveDays?.()??[]).slice().sort().reverse()){
       signal.throwIfAborted();
       for(const t of await memory.read(day))match('本机对话',day,[t.question,t.text].filter(Boolean).join('　'));
+      signal.throwIfAborted();
       for(const t of await memory.readTasks(day))match('本机任务',day,[t.title,t.action,t.detail].filter(Boolean).join('　'));
       if(['本机对话','本机任务'].every(k=>hits.get(k)?.length===3))break;
     }
@@ -239,7 +243,9 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
   async function reserveAudit(n,signal){
     // One online row claims all quoted pages before the first popup can appear.
     const receipt=await api('nags',publishedNag(n),signal);
+    signal.throwIfAborted();
     await verifyNag(n,signal);
+    signal.throwIfAborted();
     if(receipt.id!==n.id||receipt.revision!==n.revision)throw Error('念叨登记回执不符');
     put('INSERT OR IGNORE INTO nags VALUES(?,?,0)',n.id,JSON.stringify(n));
   }
@@ -621,8 +627,8 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
       return {pages:select('pages','day',"day DESC,CAST(json_extract(json,'$.part') AS INTEGER) DESC"),
         nags:select('nags',"json_extract(json,'$.created_at')","julianday(json_extract(json,'$.created_at')) DESC,id DESC")};
     },
-    auditScan:()=>db.prepare("SELECT job FROM schedule WHERE job LIKE 'audit-scan:%' LIMIT 1").get()?.job.slice(11),
-    markAuditScan:key=>transaction(()=>{put("DELETE FROM schedule WHERE job LIKE 'audit-scan:%'");put('INSERT INTO schedule VALUES(?,?)','audit-scan:'+key,now());}),
+    auditState:()=>JSON.parse(db.prepare('SELECT json FROM diary_audit_state WHERE id=1').get()?.json??'{"checked":{}}'),
+    saveAuditState:value=>put('INSERT OR REPLACE INTO diary_audit_state VALUES(1,?)',JSON.stringify(value)),
     saveNag,syncNags,claimThread,handledThread,close:()=>db.close(),
     last:job=>db.prepare('SELECT at FROM schedule WHERE job=?').get(job)?.at,
     mark:(job,at)=>put('INSERT OR REPLACE INTO schedule VALUES(?,?)',job,at)};

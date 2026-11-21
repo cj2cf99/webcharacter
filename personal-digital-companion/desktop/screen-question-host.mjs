@@ -719,6 +719,11 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     await open('auto',session);
     if(session.signal?.aborted||!panel?.isVisible()||!ready||busy)return false;
     nag=session;
+    session.deadline?.addEventListener('abort',()=>{
+      if(nag!==session)return;
+      nag=null;
+      publish({state:'answer',text:session.timeoutText,nagReply:true},generation);
+    },{once:true});
     publish({state:'answer',text:session.prompt,nag:true,nagReply:true,audit:Boolean(session.audit)},generation);
     session.visible();
     return true;
