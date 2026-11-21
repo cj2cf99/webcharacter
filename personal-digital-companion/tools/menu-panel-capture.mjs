@@ -15,7 +15,7 @@ import {attachPollSettings} from '../desktop/poll-settings-host.mjs';
 import {createMessageBoxes} from '../desktop/message-box.mjs';
 
 const root=resolve(import.meta.dirname,'..'),profile=mkdtempSync(join(tmpdir(),'feiyue-menu-qa-'));
-const out=join(root,'output/menu-qa');
+const out=process.env.FEIYUE_MENU_QA_OUTPUT||join(root,'output/menu-qa');
 mkdirSync(join(profile,'desktop'));
 for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','task-inbox-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs','message-box-preload.cjs'])
   copyFileSync(join(root,'desktop',file),join(profile,'desktop',file));

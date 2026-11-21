@@ -10,7 +10,7 @@ const stamp = new Intl.DateTimeFormat('zh-CN', {
 });
 
 export async function fetchNewsBriefing(signal) {
-  const {stdout} = await exec('python', ['-B', script], {signal, windowsHide:true, timeout:55_000, maxBuffer:512_000});
+  const {stdout} = await exec('python', ['-B', script], {signal, windowsHide:true, timeout:55_000, maxBuffer:1_500_000});
   return JSON.parse(stdout);
 }
 
@@ -20,6 +20,17 @@ export function createNewsBriefing(db, now, notify, fetchNews=fetchNewsBriefing)
   const read = db.prepare('SELECT * FROM news_briefing WHERE id=1');
   const seen = db.prepare('SELECT 1 FROM news_seen WHERE key=?');
   const mark = db.prepare('INSERT OR IGNORE INTO news_seen VALUES(?,?)');
+  function edition() {
+    const raw=read.get()?.latest;
+    return raw?JSON.parse(raw):{at:null,items:[]};
+  }
+  function saveChinese(at,url,field,original,translated) {
+    const current=edition();
+    const row=current.items.find(item=>item.url===url);
+    if(current.at!==at||!row||row[field]!==original)return;
+    row.chinese={...row.chinese,[field]:translated};
+    db.prepare('UPDATE news_briefing SET latest=? WHERE id=1').run(JSON.stringify(current));
+  }
   function latest() {
     const raw = read.get()?.latest;
     if (!raw) return {state:'answer', text:'还没有收到关注主题的新报道。'};
@@ -61,5 +72,5 @@ export function createNewsBriefing(db, now, notify, fetchNews=fetchNewsBriefing)
     const detail = failed.length?'；暂时未能读取'+failed.join('、'):'';
     return (fresh.length?'已收录 '+fresh.length+' 条新报道':'本次未收录新报道')+detail;
   }
-  return {latest, poll, last:()=>read.get()?.lastCheck};
+  return {latest, edition, saveChinese, poll, last:()=>read.get()?.lastCheck};
 }

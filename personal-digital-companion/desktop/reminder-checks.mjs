@@ -49,6 +49,8 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
   return {
     start:scheduler.start,enqueue:scheduler.enqueue,polls:scheduler.snapshot,configure:scheduler.configure,
     latestNews:()=>news?.latest()??{state:'answer',text:'当前未启用新闻关注。'},
+    newsEdition:()=>news?.edition()??{at:null,items:[]},
+    saveNewsChinese:(...args)=>news?.saveChinese(...args),
     get pending(){return scheduler.pending;},
     get unread(){return db.prepare('SELECT count(*) AS n FROM notices WHERE seen=0').get().n;},
     weatherDiary(day){

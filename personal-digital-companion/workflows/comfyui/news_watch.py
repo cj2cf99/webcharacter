@@ -69,7 +69,7 @@ def fetch_topic(topic):
             title = title.removesuffix(" - " + row["source"])
         if not relevant(topic, title):
             continue
-        items.append(dict(topic=topic, title=title, url=row["url"], source=row["source"],
+        items.append(dict(topic=topic, title=title, url=row["url"], source=row["source"], excerpt=row.get("excerpt",""), lang=row.get("lang",""),
                           publishedAt=int(date.timestamp()*1000)))
         if len(items) == 8:
             break

@@ -1,5 +1,6 @@
 """Bounded public HTTPS reader. No browser state, JavaScript, form submission or local tools."""
 import http.client
+import html
 import ipaddress
 import json
 import os
@@ -218,8 +219,11 @@ def rss_news(reader, query):
         link=item.findtext("link","")
         title=item.findtext("title","")
         if title and link.startswith("https://"):
+            description = item.findtext("description", "")
+            text = html.unescape(re.sub(r"<[^>]*>", " ", description))
             rows.append(dict(title=title[:200], url=link, source=item.findtext("source",""),
-                             published=item.findtext("pubDate","")))
+                             lang=item.get("{http://www.w3.org/XML/1998/namespace}lang",""),
+                             excerpt=" ".join(text.split())[:900], published=item.findtext("pubDate","")))
     return rows
 
 

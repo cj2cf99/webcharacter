@@ -32,6 +32,7 @@ import {attachScreenQuestion} from './screen-question-host.mjs';
 import {attachWeather} from './weather-host.mjs';
 import {createReminderChecks,checkDueItems} from './reminder-checks.mjs';
 import {attachPollSettings} from './poll-settings-host.mjs';
+import {attachNewsPanel} from './news-panel-host.mjs';
 import {attachReminderReview} from './reminder-review-host.mjs';
 import {attachTaskInbox} from './task-inbox-host.mjs';
 import {desktopModelPath} from './local-model.mjs';
@@ -258,6 +259,7 @@ export async function startDesktop(electron,options={}){
   }),
     lastRun:id=>diary?.last(id==='nag'?'nag-shown':id),
     notifyNews:options.benchmark?undefined:items=>{
+      newsPanel.update();
       const title='绯月 · 新闻简报（'+items.length+' 条）';
       const content=items[0].title+'\n对我说「看新闻简报」可读本期全部标题和出处。';
       if(process.platform==='win32')tray.displayBalloon({title,content,respectQuietTime:true});
@@ -286,9 +288,10 @@ export async function startDesktop(electron,options={}){
     }});
   menuUnread=checks.unread;pendingCheckVisible=checks.pending;
   const pollSettings=attachPollSettings(electron,{root,bundle,checks});
+  const newsPanel=attachNewsPanel(electron,{root,bundle,checks,model:localModel});
   const serverTask=createServerTaskCommand({profile,tasks,localModel,dialog:messages});
   const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,checks,emotion:()=>emotion,topics:()=>topics,onForeground:interruptMemory,auditPending:()=>{const n=nags?.pending();return n?.source==='audit'?{id:n.id,title:n.title,status:n.status}:null;},
-    resumeAudit:()=>memoryJob('diaryAudit',reminderStartup.signal,true),onRegistration:()=>contextualAction('chat-registration'),serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
+    openNews:newsPanel.open,resumeAudit:()=>memoryJob('diaryAudit',reminderStartup.signal,true),onRegistration:()=>contextualAction('chat-registration'),serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
     memory,vision:memory&&(options.vision??localVision(desktopModelPath(app,root))),readTasks:memory?.readTasks??tasks.executor?.review.read,
     readTraffic:tasks.traffic?.readPage,client:options.screenQuestionClient,requestRestart,localModel,log:tasks.traffic?.write});
   const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark,recordCheck:checks.record,checks});
@@ -773,6 +776,7 @@ export async function startDesktop(electron,options={}){
         taskNotice(screenQuestion.open('registration'));
       }},
       today:reminderReview && {click:()=>taskNotice(reminderReview.open())},
+      news:{click:()=>taskNotice(newsPanel.open())},
       tasks:taskInbox&&{click:()=>taskNotice(taskInbox.open())},
       restoreTerminal:electron.dialog?.showOpenDialog&&{click:()=>taskNotice(restoreLocalTerminal())},
       review:{click:()=>taskNotice(screenQuestion.openReview())},
@@ -874,7 +878,7 @@ export async function startDesktop(electron,options={}){
     if(files.includes('tray.png'))tray.setImage(nativeImage.createFromPath(resolve(bundle,'tray.png')));
     for(const [page,panel] of [['index.html',win],['settings.html',pcSettings.panel],['weather.html',weather.panel],
       ['conversation.html',screenQuestion.details],['reminder-review.html',reminderReview?.panel],['poll-settings.html',pollSettings.panel],
-      ['task-inbox.html',taskInbox?.panel],
+      ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],
       ['screen-question.html',screenQuestion.panel],['registration-review.html',screenQuestion.inquiryPanel],['sound-settings.html',settingsWindow],
       ...(messages.panels??[]).map(panel=>['message-box.html',panel])]){
       if(!panel||panel.isDestroyed())continue;
@@ -915,7 +919,7 @@ export async function startDesktop(electron,options={}){
     app.removeListener('browser-window-focus',focusMemory);
     interruptMemory();electron.powerMonitor?.removeListener?.('suspend',suspendMemory);
     electron.powerMonitor?.removeListener?.('lock-screen',lockScene);
-    curiosity?.close();scenePanel?.close();pollSettings.close();checks.close();
+    curiosity?.close();scenePanel?.close();pollSettings.close();newsPanel.close();checks.close();
     stopLayout();
     clearTimeout(refreshTimer);stopSources?.();
     ipcMain.removeListener('desktop:attachment-done',onAttachmentDone);
