@@ -24,6 +24,39 @@ test('辨认纠正上一轮和引用纠正用语',()=>{
   }
 });
 
+test('普通交互默认 Aggressive 9B，显存不足降档，候补用标准 9B，直连仍用 Aggressive',async()=>{
+  const aggressive='Qwen3.5-9B-Uncensored-HauhauCS-Aggressive';
+  let gpu={utilization:10,freeMiB:6656},failAggressive=false;
+  const m=createBalancedLocalModel({modelPath:'models/test.gguf',localFirst:true,readGpu:async()=>gpu,
+    create:({modelPath,device})=>{
+      const name=/Qwen3\.5-.+(?=-Q4_K_M\.gguf$)/u.exec(modelPath)[0];
+      return {start:async()=>{},close(){},snapshot:()=>({state:name===aggressive&&device==='gpu'&&failAggressive?'unavailable':'ready',gpuLayers:device==='gpu'?25:0}),
+        analyze:async()=>({reply:name+' · '+device})};
+    }});
+  const work=async(tier='main',session={})=>(await m.work('普通交互',{tier,session})).reply;
+  const direct=async()=>(await m.analyze('你好',{hint:'direct'})).reply;
+  try{
+    const first={};
+    await m.start();
+    assert.equal(await work('main',first),aggressive+' · gpu');
+    gpu={utilization:10,freeMiB:5000};
+    assert.equal(await work('main',first),aggressive+' · gpu'); // 同一轮生成和复审用同档。
+    assert.equal(await work('upgrade'),'Qwen3.5-9B · cpu');
+    assert.equal(await work(),'Qwen3.5-4B · gpu');
+    assert.equal(await direct(),aggressive+' · cpu');
+    gpu.freeMiB=2500;
+    assert.equal(await work(),'Qwen3.5-2B · gpu');
+    gpu=null;
+    assert.equal(await work(),'Qwen3.5-2B · cpu');
+    gpu={utilization:10,freeMiB:7000};
+    assert.equal(await work('upgrade'),'Qwen3.5-9B · gpu');
+    failAggressive=true;
+    assert.equal(await work(),'Qwen3.5-4B · gpu');
+    failAggressive=false;
+    assert.equal(await direct(),aggressive+' · gpu');
+  }finally{await m.close();}
+});
+
 test('换档保留上轮、等旧进程退出、加载失败降档，重复失败升级',async()=>{
   let active=0,ready=true,fail=false;
   const created=[];

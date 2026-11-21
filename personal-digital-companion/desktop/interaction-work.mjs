@@ -34,7 +34,7 @@ export function createInteractionWork({model,request,log}={}){
           activeSignal?.throwIfAborted();
           return call();
         }),activeSignal);
-        result=value?.error?{error:value.error}:value?{value}:{error:'INVALID_AI_RESPONSE'};
+        result=value?.error?{error:value.error,feedback:value.feedback}:value?{value}:{error:'INVALID_AI_RESPONSE'};
       }catch(error){
         signal?.throwIfAborted();
         result={error:!remote&&ttl.aborted?'LOCAL_AI_TIMEOUT':typeof error?.code==='string'?error.code:error?.name==='TimeoutError'?'TIMEOUT':'AI_UNAVAILABLE'};
@@ -81,7 +81,7 @@ export function createInteractionWork({model,request,log}={}){
         feedback=checked.value?.feedback??mainError;
       }else{
         mainError=draft.error;
-        feedback='上一轮没有取得结构有效的答案，请核对格式和必需字段。原因 '+mainError;
+        feedback=draft.feedback??'上一轮没有取得结构有效的答案，请核对格式和必需字段。原因 '+mainError;
       }
       mainUnavailable=!model?.work||/LOCAL_AI_(?:NOT_READY|MODEL_MISSING|DEPENDENCY|LOAD|START|STOPPED|BUSY|PROCESS_EXITED)/u.test(mainError);
       lastDuration=performance.now()-began;

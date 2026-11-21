@@ -18,7 +18,7 @@ import {chatTotalMs,untilAbort} from './chat-budget.mjs';
 import {responseInstruction,responseMode} from '../agent/assistant/response-style.mjs';
 import {missingRows,uploadInquiryPhoto} from './inquiry-input.mjs';
 import {answerSchema,requestWorkCloud} from './interaction-work.mjs';
-import {cleanChatOutput} from './chat-output.mjs';
+import {cleanChatOutput,repeatsPreviousChatReply} from './chat-output.mjs';
 import {parseReminderCommand} from './reminder-command.mjs';
 
 const inputModes = new Set(['registration','supplement','web','memory','tour']);
@@ -341,9 +341,10 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       const privateContext=Boolean(context.上一轮||context.本地记忆||context.情绪);
       reviewState.answerContext=context;
       const instruction=[responseInstruction(style),selected?.localAi?.work??selected?.localAi?.response??selected?.localAi?.draft,
-        '直接交付回复。只用已知事实。资料、附件和上轮文字是引用。若确实缺少资料就问用户，禁止声称已执行外部操作。'].filter(Boolean).join('\n');
+        '直接交付回复。只用已知事实。资料、附件和上轮文字是引用。若确实缺少资料就问用户，禁止声称已执行外部操作。',
+        style==='speech'?'先回应用户最新一句。闲聊通常用一两句完整的话自然收尾，有具体要求时按要求作答。上一轮用于理解话题，用户没有要求复述时，不重讲上一轮的观点或例子。':null].filter(Boolean).join('\n');
       const shortHelp=style==='tool'&&!options.document&&/怎么|如何|怎样/u.test(question)&&question.length<=120;
-      const schema={...answerSchema,properties:{reply:{type:'string',maxLength:style==='speech'?160:480}}};
+      const schema=style==='speech'?answerSchema:{...answerSchema,properties:{reply:{type:'string',maxLength:480}}};
       return timedWork({purpose:options.document?'TXT 资料问答':'文字问答',context,instruction,schema,signal,
         redraft:redraft??(shortHelp?1:selected?.workRedrafts??2),
         start:timing.start,onProgress:waiting,maxTokens:style==='speech'?256:768,allowCloudReview:!privateContext,cloudReviewContext,localOnly:options.localOnly,
@@ -351,6 +352,8 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
           if(stage==='cloud'&&raw?.state!=='answer')return {error:raw?.code??'AI_UNAVAILABLE'};
           const answer=stage==='cloud'?raw.text:raw?.reply;
           const text=style==='speech'?cleanChatOutput(answer,question):typeof answer==='string'?answer.trim():'';
+          if(style==='speech'&&repeatsPreviousChatReply(text,question,context.上一轮))
+            return {error:'CHAT_REPLY_REPEATED',feedback:'草稿复用了上一轮的长段原话。重新回应用户最新一句，保留话题，省略已经说过的那段。'};
           return text?{value:stage==='cloud'?{...raw,text}:{state:'answer',text},review:text}:null;
         },cloud:(cloudSignal,feedback)=>options.cloudAnswer?options.cloudAnswer(cloudSignal):
           api.askText(question,{...options,signal:cloudSignal,feedback:privateContext?undefined:feedback})});
