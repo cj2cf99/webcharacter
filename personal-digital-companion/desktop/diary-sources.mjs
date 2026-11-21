@@ -15,7 +15,7 @@ export async function readDiarySources(api,day,signal){
         for(const r of page.records){
           if(!r.id||ids.has(r.id))continue;
           ids.add(r.id);
-          let content,at;
+          let content,at,fields;
           if(paylog){
             if(r.spendDate!==day)continue;
             if(r.amount==null||!Number.isFinite(Number(r.amount)))throw Error('消费金额缺失');
@@ -27,7 +27,11 @@ export async function readDiarySources(api,day,signal){
             content=kind==='journal'?[r.title,r.content].filter(Boolean).join('\n'):
               [r.project,r.feature,r.version_before&&r.version_after&&r.version_before+' → '+r.version_after,r.note].filter(Boolean).join(' · ');
           }
-          if(content.trim())items.push({source:kind+':'+r.id,at,content,label});
+          const values=kind==='journal'?[['标题',r.title],['正文',r.content]]:
+            kind==='deploy'?[['项目',r.project],['功能',r.feature],['版本',r.version_before&&r.version_after&&r.version_before+' → '+r.version_after],['发布说明',r.note]]:
+              [['商户',r.merchant],['说明',r.description],['类别',r.category],['金额',r.amount+' 日元'],['来源状态',r.sourceMissing?'同步快照保留，原记录已缺失':'']];
+          if(content.length>500)fields=values;
+          if(content.trim())items.push({...fields&&{fields},source:kind+':'+r.id,at,content,label});
         }
         cursor=page.nextCursor||'';
         if(cursor&&seen.has(cursor))throw Error('分页游标重复');

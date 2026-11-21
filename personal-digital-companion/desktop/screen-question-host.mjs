@@ -159,7 +159,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       if(busy)return {state:'error',text:'正在听你刚才的解释。',nag:true,nagReply:true};
       const session=nag;busy=true;
       try{
-        const reply=await session.reply(text);
+        const reply=await session.reply(args.text);
         const result={state:'answer',question:text,text:reply.text,nag:!reply.done,nagReply:true,audit:Boolean(session.audit&&!reply.done),invalid:reply.invalid};
         if(nag===session){publish(result,generation);reply.shown?.();if(reply.done)nag=null;}
         return result;
@@ -207,7 +207,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(args?.attachment!=null){
       if(!validAttachment(args.attachment))return {state:'error',text:'附件无效，请重新添加。'};
       const attachment=args.attachment;
-      const prompt=text||(attachment.kind==='image'?'请描述这张图片。':'请概括这个文件的内容。');
+      const prompt=text?args.text:(attachment.kind==='image'?'请描述这张图片。':'请概括这个文件的内容。');
       return track(()=>perform(prompt,false,false,'auto',null,attachment));
     }
     if(memory&&args?.withScreen===true||conversationRoute(text,mode,args?.withScreen).kind!=='restart')return track(()=>perform(args?.text,args?.withScreen===true,false,mode));
@@ -253,6 +253,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(!retry&&!decision&&(!text||[...text].length>(route.kind==='registration'?6000:2000)))return {state:'error',text:'内容为空或超过字数限制。'};
     const userText=retry?route.text:question;
     const turn={id:crypto.randomUUID(),at:Date.now(),question:route.fileName?userText+' · '+route.fileName:userText,retry,...(route.kind==='direct'?{direct:true}:{})},timing=newTiming();
+    if(route.fileName)turn.originalQuestion=userText;
     let operation=({serverTask:'服务器 PC 任务',registration:'随口登记',decision:'登记确认',reminders:'提醒查询或修改',reminderConsent:'提醒确认',search:'联网查询'})[route.kind]??(retry?route.operation:withScreen?'截图问答':'文字问答');
     if(attachment)operation=attachment.kind==='image'?'图片问答':'文件问答';
     if(route.kind==='direct')operation='直连对话';

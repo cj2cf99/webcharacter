@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {bucketFixture} from './txt-test-bucket.mjs';
 import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
@@ -15,7 +16,8 @@ const signal=new AbortController().signal;
 async function fixture(t){
   const {DB,sqlite,close}=openTestDatabase();
   sqlite.exec(readFileSync(new URL('../migrations/016-personality-memory.sql',import.meta.url),'utf8'));
-  const req=(path,options)=>personalityMemory(new Request('https://test/api/memory/'+path,options),{DB},'fixture');
+  const myMainStorage=bucketFixture();
+  const req=(path,options)=>personalityMemory(new Request('https://test/api/memory/'+path,options),{DB,myMainStorage},'fixture');
   const post=(path,body)=>req(path,{method:'POST',body:JSON.stringify(body)});
   async function diary(day,body,batch='one'){
     assert((await post('diaries',{day,batch,body,summary:body,mood:'好奇',tags:[],weather:'晴',threads:[]})).ok);
@@ -26,6 +28,7 @@ async function fixture(t){
   const profile=mkdtempSync(join(tmpdir(),'feiyue-audit-'));
   const f={time:start,busy:false,show:true,complete:false,found:true,explained:false,generated:0,calls:[],requests:[]};
   const model={memory:async(input,_prompt,s,_signal,skill)=>{
+    if(skill.name==='original-summary')return {text:input.includes('周一是测试环境')?'周一是测试环境':'回答片段'};
     assert.equal(skill.name,'diary-audit');
     const data=JSON.parse(input);f.calls.push(data);
     if(s.required.includes('score')){
@@ -57,6 +60,7 @@ async function fixture(t){
   f.restart=async()=>{await f.nags.flush();await f.nags.close();f.store.close();init();};
   Object.assign(f,{req,post,diary});
   t.after(async()=>{await f.nags.flush();await f.nags.close();f.store.close();close();rmSync(profile,{recursive:true,force:true});});
+  f.original=async id=>(await req('nags/'+id+'/original')).text();
   return f;
 }
 test('七天多篇引文、单一主对象、关键词只读本机；稍后跨重启，忙时保留回答，两轮结束',async t=>{
@@ -126,6 +130,8 @@ test('长回答中间的解释参与完整度判定，原文保存在同一念�
   assert((await f.session.reply(answer)).done);
   assert(f.calls.some(row=>row.问答?.some(turn=>turn[1]==='周一是测试环境')));
   assert.equal(f.store.nags()[0].talk.at(-1).text,answer);
+  await f.nags.flush();
+  assert((await f.original(f.store.nags()[0].id)).includes(answer));
 });
 test('模型判断尚缺细节却重复原问题，停止追问并如实记录结束原因',async t=>{
   const f=await fixture(t);await f.poll();f.follow=f.nags.pending().title;

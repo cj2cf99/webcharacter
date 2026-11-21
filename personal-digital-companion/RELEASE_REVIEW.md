@@ -1,3 +1,22 @@
+## 2026-11-21 五类记录 TXT 附件 · 绯月 Windows 正式安装版
+
+用户要求五个既有入口支持明确选择的真实 TXT，编码限 UTF-8 或带 BOM 的 UTF-16。绯月日记、唠叨内超过 500 个 Unicode 码点的连续片段按同一记录汇总全段，仅遮蔽凭据命中处。引用采用前 200 字、约 200 字事实摘要、具名文件链接。自动合并后的实际文件大于 1,048,576 字节应完整留本机，按原工作收笔后报告。手选同一文件允许超限。无历史回填。
+
+原始需求及修订见 cloudflaremyapp 的 diary-attachments-source 来源项目 REQUIREMENTS.md、docs/DESIGN.md 与 docs/reviews/TXT_DEVELOPMENT_REVIEW_2026-11-21.md。日记来源提交 b92f7ff，随手记 155b17e，鱼与熊掌 cbd9f83（含已有回执接线），绯月附件来源固定比对 WebCharacter 0518e28。开发复核最后连续两轮无新问题。五类页面和数据分别按既有记录归属处理。
+
+基线为远端正式安装同步分支 codex/feiyue-installed-sync-20261121，59b3e438。用 git diff 59b3e438 -- personal-digital-companion 对照。本机目录 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion，当前安装回执 2026-11-21 14:10:49 JST，准备时本机 REST /infoguide 的 PID 为 16092，资料目录位于该安装的 output/desktop-profile。发布时再次核实运行进程与资料目录。
+
+桌宠安装清单见 docs/releases/txt-attachments-20261121/desktop-manifest.json。七个 desktop 文件含 long-originals.mjs、personality-diary.mjs、diary-sources.mjs、personality-nags.mjs、diary-audit.mjs、screen-question-host.mjs、shell.mjs。逐文件列出旧版和候选的 SHA-256。超长文字先摘录、按记录汇总和校验全文哈希；超过自动上限的原件保存在本机记录目录“异常附件”，工作完成后提示。安装沿用正式版本的提示词、互动流程和任务队列。配套 Worker 来源及测试随 Git 保存；其部署单独执行。本机现有正式版不包含开发版“此刻所想”功能，本次不安装该项独立功能。SQLite 本机业务缓存新增原文索引与报告记录；无需手动迁移。已存日记、模型、技能、令牌和本机资料继续使用原路径。
+
+隔离安装基线与候选分别运行 node --disable-warning=ExperimentalWarning --test agent/tests/*.test.mjs：基线 264 通过、17 失败、2 跳过；候选 271 通过、17 失败、2 跳过。失败用例名称完全相同，涵盖 GPU 选档及超时、退出、图像与日志等，详情见同目录 baseline-failures.txt。7 项新增附件测试通过。另在五处原生文件选择框实际上传及重开通过。发布源码中曾误接入其它分支的质问取消信号，已按安装版签名修复并重新运行。接近 1 MiB 非重复素材的真实推理耗时未测。重点复核凭据局部遮盖、整份大小、本机唯一副本与报告时机。
+
+生产许可后先复核清单旧哈希；等待正式任务收尾，正常退出，备份被替换文件，原子替换、受控启动，再次核实实际加载文件、PID、启动时间和 REST 资料目录。用隔离材料复核安装路径加载结果，不向真实私人日记写测试内容。失败时恢复旧文件及启动方式，保留本机资料和异常附件。实际安装结果与回执补记后同步 Git。
+
+本地隔离验收工作目录为 `C:\Users\asura\AppData\Local\Temp\feiyue-txt-site-24c26fb\myapp`。已复用该项目 node_modules。在 PowerShell 设置 `$env:TXT_API_ROOT='G:\chat\2026-11-20\wo-z\work\txt-api-candidate\api-worker'` 后运行 `node scripts/verify-txt-worker.mjs --serve`。脚本以真实 workerd、隔离 D1、R2 和合成记录启动，打印各入口的本机地址。授权身份在测试夹具注入。去掉 --serve 执行自动验证并退出。线上 Access 交互仍由用户自行确认。
+
+截至准备时，已按用户选择跳过本地手动验收；正式发布、生产业务库变更和本机安装待本次明确许可。花园登记意愿与具体清单已明确确认。核对时花园修订 122。三目标均成功时按单次部署 #63、明细 #134–137、改善 #72–75 登记，主站日记 #3 从 2.0 到 3.0、随手记 #36 从 5.0 到 6.0、鱼与熊掌 #56 从 1.0 到 2.0、绯月 #61 从 12.0 到 13.0。无种子、项目、归属关系修改。提交前重新核对版本及编号，变化时重新确认。实际结果出来后先提交准确 SQL 与清单，再由正式安装的绯月 REST 提交一个批次，查询原编号验证回执。失败不登记成功。Access 受控界面线上效果待用户截图确认。独立第三方审核未执行。
+
+
 # 发布审核记录
 
 ## 2026-11-20 JST　鱼与熊掌资源登记与桌面精灵首次升级

@@ -18,6 +18,20 @@ export const memoryScript=String.raw`
   function failed(container,error,retry){
     container.replaceChildren(node('p',error.message||'读取失败。','empty'),button('重试',retry));
   }
+  function showOriginal(p,text,r,kind,id){
+    const re=/〔附件原文 ([a-f0-9]{32})〕/gu;
+    let pos=0;
+    p.textContent='';
+    for(const match of text.matchAll(re)){
+      p.append(text.slice(pos,match.index));pos=match.index+match[0].length;
+      const index=r.automaticTxt?.ids?.indexOf(match[1])??-1;
+      if(index>=0){
+        const link=node('a','查看原文 '+(index+1)+' · 本条记录.txt');
+        link.href=base+kind+'/'+encodeURIComponent(id)+'/original';link.target='_blank';link.rel='noopener';p.append(link);
+      }
+    }
+    p.append(text.slice(pos));return p;
+  }
   function renderDiary(container,r,focus){
     container.append(node('h2',r.day+' · 第 '+r.part+' 篇'),node('p',r.summary),node('div',[r.mood,r.weather,...r.tags.map(t=>'@#'+t)].join('　'),'badges'));
     const sections=new Map();
@@ -31,7 +45,7 @@ export const memoryScript=String.raw`
         parent=sections.get(label);
         if(!parent){parent=node('section');parent.append(node('h3',label));sections.set(label,parent);container.append(parent);}
       }
-      for(const line of lines)parent.append(node('p',line,line.startsWith('绯月私语：')?'thought':'exchange'));
+      for(const line of lines)parent.append(showOriginal(node('p',null,line.startsWith('绯月私语：')?'thought':'exchange'),line,r,'diaries',r.day+'.'+r.part));
     }
     for(const thread of r.threads){
       const block=node('section',null,'open-thread'+(thread.no===focus?' thread-focus':''));
@@ -87,13 +101,14 @@ export const memoryScript=String.raw`
     try{
       const r=await fetchJson(base+kind+'/'+encodeURIComponent(id));
       if(token!==readToken)return;
-      container.replaceChildren();if(kind==='diaries'){renderDiary(container,r);return;}
+      const files=node('a','TXT 附件');files.href=base+kind+'/'+encodeURIComponent(id)+'/txt';files.target='_blank';files.rel='noopener';
+      container.replaceChildren(files);if(kind==='diaries'){renderDiary(container,r);return;}
       container.append(node('h2',r.title),node('p',[r.status,r.reason,r.stats].filter(Boolean).join('\n')),button(r.source==='audit'?'查看主篇 →':'查看原记录 →',()=>origin(r)));
       if(r.source==='audit'){
         container.append(node('h3','手记原文'),...r.refs.map((v,i)=>node('p',(i+1)+'. '+v.page+'　「'+v.quote+'」')),
           node('h3','矛盾点'),...r.points.map((v,i)=>node('p',(i+1)+'. '+v)));
       }else container.append(node('h3','开口的时候'),node('p',[r.before,r.beforeEvaluation].filter(Boolean).join(' · ')));
-      for(const line of r.talk)container.append(node('p',stamp(line.at)+'　'+line.who+'\n'+line.text,'exchange'));
+      for(const line of r.talk)container.append(showOriginal(node('p',null,'exchange'),stamp(line.at)+'　'+line.who+'\n'+line.text,r,'nags',r.id));
       if(r.afterEvaluation)container.append(node('h3','听完以后'),node('p',r.mood+' · '+r.afterEvaluation));
     }catch(error){if(token===readToken)failed(container,error,()=>read(id,kind));}
   }

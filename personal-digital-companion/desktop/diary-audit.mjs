@@ -190,8 +190,8 @@ export function createDiaryAudit({store,show,idle,canContinue,save,changed,now=D
       },
       async reply(raw){
         if(active!==session)throw Error('这次气泡已关闭');
-        const text=cleanMemory(raw);
-        if(!text||Array.from(text).length>3000)return {text:'请用 1 至 3000 字文字回答。',invalid:true};
+        const text=store.nagText?await store.nagText(n,raw,controller.signal):cleanMemory(raw);
+        if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请用 1 至 3000 字文字回答。',invalid:true};
         line(n,'你',text);delete n.notBefore;save(n);
         const result=await advance(n,write,controller.signal);
         if(result.done)active=null;

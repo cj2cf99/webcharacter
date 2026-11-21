@@ -159,8 +159,8 @@ export function createPersonalityNags({store,show,idle,canContinue=()=>true,onIn
       save(n);if(reason!=='idle')onInterrupted();
     }
     async function reply(input){
-      const text=cleanMemory(input);
-      if(!text||Array.from(text).length>3000)return {text:'请把这次的解释控制在 3000 字以内。'};
+      const text=store.nagText?await store.nagText(n,input,session.controller.signal):cleanMemory(input);
+      if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请把这次的解释控制在 3000 字以内。'};
       talk(n,'你',text);save(n);
       const v=await appraise(n,text,session.controller.signal);
       n.afterEvaluation=v.evaluation;n.mood=v.mood;

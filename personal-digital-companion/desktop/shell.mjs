@@ -267,7 +267,7 @@ export async function startDesktop(electron,options={}){
   const taskInbox=tasks.taskInbox?attachTaskInbox(electron,{bundle,root,flow:{...tasks.taskInbox,
     local:async()=>[...(localPool?.pending()??[]).map(batch=>({batch:localPool.withQueue(batch),name:batch.title,started_at:batch.created})),...await tasks.taskInbox.local()]}}):null;
   if(hasMemory){
-    diary=createPersonalityDiary({profile,memory,model:localModel,request:tasks.weatherRequest,weather:checks.weatherDiary});
+    diary=createPersonalityDiary({reportOriginals:detail=>messages.showMessageBox({type:'info',title:'绯月 · 异常附件',message:'记录已完成。以下 TXT 超过自动上限，已保存到本机，可自行选择是否添加。',detail,buttons:['确定']}),profile,memory,model:localModel,request:tasks.weatherRequest,weather:checks.weatherDiary});
     nags=createPersonalityNags({store:diary,show:session=>screenQuestion.showNag(session),idle:()=>memoryIdle()&&win.isVisible(),canContinue:()=>!quitPending&&!work&&!localPool?.active&&!localPool?.pending().some(b=>b.state==='queued')&&
         !screenQuestion.hasOtherTask&&!tasks.activeCount()&&(!tasks.tasksIdle||tasks.tasksIdle({allowPendingRequests:true})),
       changed:()=>{screenQuestion.notifyPending();if(tray&&!cleaned)menu();},onInterrupted:()=>checks.enqueue('nag')});
