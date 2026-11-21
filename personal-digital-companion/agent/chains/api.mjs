@@ -35,7 +35,7 @@ export async function readChain(DB,id,deviceId,readTasks){
     ...(chain.temporary_registration===1?{temporary_registration:true}:{}),
     held_count:held,nodes,history:history.map(publicOperation),blocked_reasons:blocked};
 }
-async function createChain(body,DB,readTasks,ownerId){
+async function createChain(body,DB,readTasks,ownerId,fromBrowser){
   if(!fields(body,['nodes'],['name','submission_id','temporary_registration','serial_pc'])||!Array.isArray(body.nodes)||!body.nodes.length
     ||(body.temporary_registration!==undefined&&typeof body.temporary_registration!=='boolean')
     ||(body.name!==undefined&&(typeof body.name!=='string'||!body.name.trim()||body.name.length>100)))return fail(400,'INVALID_CHAIN','任务链内容无效');
@@ -44,7 +44,8 @@ async function createChain(body,DB,readTasks,ownerId){
   if(body.serial_pc!==undefined&&(typeof body.serial_pc!=='boolean'||serial&&temporary))return fail(400,'INVALID_CHAIN','串行电脑任务链参数无效');
   if(!temporary&&!serial&&body.nodes.length>MAX_TEMPLATE_NODES)return fail(400,'INVALID_CHAIN','任务模板最多五个节点');
   const submissionId=body.submission_id;
-  if((temporary||serial||submissionId!==undefined)&&!isSubmissionId(submissionId))return fail(400,'INVALID_SUBMISSION_ID','请先获取有效的任务提交号');
+  if((fromBrowser||temporary||serial||submissionId!==undefined)&&!isSubmissionId(submissionId))return fail(400,'INVALID_SUBMISSION_ID','请先获取有效的任务提交号');
+  if(fromBrowser&&(temporary||serial))return fail(400,'INVALID_CHAIN','网页只能新建普通电脑任务链');
   const keys=new Set(body.nodes.map(n=>n?.key));
   if(keys.size!==body.nodes.length)return fail(400,'INVALID_CHAIN','节点key必须唯一');
   const nodes=[];
@@ -99,6 +100,7 @@ async function createChain(body,DB,readTasks,ownerId){
     if(!checked.valid)return fail(400,'INVALID_PARAMS','参数不符合定义');
     if(serial&&definition.executor!=='pc')return fail(400,'INVALID_TARGET','串行电脑任务链只接受电脑任务');
     if(temporary&&definition.executor!=='cloud')return fail(400,'INVALID_TARGET','临时登记只接受云端任务');
+    if(fromBrowser&&definition.executor!=='pc')return fail(400,'INVALID_TARGET','请选择电脑任务模板');
     if(definition.executor==='pc'){
       if(node.target_device_id!=='all'&&(!PC_ID_PATTERN.test(node.target_device_id??'')||!await DB.prepare('SELECT device_id FROM devices WHERE device_id=?').bind(node.target_device_id??'').first()))return fail(400,'INVALID_TARGET','目标必须为已登记PC');
     }else if(node.target_device_id!==null)return fail(400,'INVALID_TARGET','云任务目标必须为空');
@@ -151,17 +153,39 @@ async function operationReceipt(DB,id,body,chainId,readTasks){
 function ownsRegistration(DB,id,ownerId){
   return DB.prepare('SELECT 1 FROM task_submissions WHERE submission_id=? AND owner_id=?').bind(id,ownerId).first();
 }
-export async function handleChainRequest(request,DB,readTasks,ownerId){
+const browserChainOwner = "COALESCE((SELECT s.owner_id=? FROM task_submissions s WHERE s.submission_id=c.chain_id),c.temporary_registration=0)";
+const chainStatusSQL = `CASE WHEN c.stopped_at IS NOT NULL THEN 'STOPPED'
+  WHEN NOT EXISTS(SELECT 1 FROM chain_nodes n JOIN tasks t ON t.task_id=n.current_task_id WHERE n.chain_id=c.chain_id
+    AND t.status<>'COMPLETED' AND (n.skipped_task_id IS NULL OR n.skipped_task_id<>n.current_task_id))
+  THEN 'COMPLETED' ELSE 'ACTIVE' END`;
+async function browserChains(url,DB,ownerId){
+  const params=url.searchParams;
+  const status=params.get('status');
+  const after=params.get('after');
+  if([...params.keys()].some(key=>!['after','status','device_id'].includes(key)||params.getAll(key).length!==1)
+    ||after!==null&&!validId(after)||status!==null&&!['ACTIVE','COMPLETED'].includes(status)){
+    return fail(400,'INVALID_QUERY','无效的任务链筛选或分页参数');
+  }
+  const cursor=after===null?null:await DB.prepare(`SELECT c.created_at FROM chains c WHERE ${browserChainOwner} AND c.chain_id=?`).bind(ownerId,after).first();
+  if(after&&!cursor)return fail(400,'INVALID_CURSOR','分页位置已失效，请刷新列表');
+  const {results}=await DB.prepare(`WITH matching AS (
+      SELECT c.chain_id,c.name,c.created_at,${chainStatusSQL} status FROM chains c WHERE ${browserChainOwner}
+        AND (? IS NULL OR (c.created_at,c.chain_id)<(?,?))
+    ) SELECT * FROM matching WHERE (? IS NULL OR status=?) ORDER BY created_at DESC,chain_id DESC LIMIT 21`).bind(
+    ownerId,cursor?.created_at??null,cursor?.created_at??null,after,status,status).all();
+  const chains=results.slice(0,20);
+  return reply({chains,next_after:results.length>20?chains.at(-1).chain_id:null});
+}
+export async function handleChainRequest(request,DB,readTasks,ownerId,{fromBrowser=false}={}){
   const url=new URL(request.url),path=url.pathname;
   if(path!=='/api/chains'&&!path.startsWith('/api/chains/'))return null;
   if(path==='/api/chains'){
-    if(request.method==='POST'){let body;try{body=await request.json();}catch{return fail(400,'INVALID_JSON','请求必须为JSON');}return createChain(body,DB,readTasks,ownerId);}
+    if(request.method==='POST'){let body;try{body=await request.json();}catch{return fail(400,'INVALID_JSON','请求必须为JSON');}return createChain(body,DB,readTasks,ownerId,fromBrowser);}
     if(request.method!=='GET')return fail(405,'METHOD_NOT_ALLOWED','仅支持GET/POST');
+    if(fromBrowser)return browserChains(url,DB,ownerId);
     const after=url.searchParams.get('after')??'';
     if((after&&!validId(after))||[...url.searchParams.keys()].some(k=>!['after','device_id'].includes(k)))return fail(400,'INVALID_QUERY','分页参数无效');
-    const {results}=await DB.prepare(`SELECT c.chain_id,c.name,c.created_at,CASE WHEN c.stopped_at IS NOT NULL THEN 'STOPPED'
-      WHEN NOT EXISTS(SELECT 1 FROM chain_nodes n JOIN tasks t ON t.task_id=n.current_task_id WHERE n.chain_id=c.chain_id
-        AND t.status<>'COMPLETED' AND (n.skipped_task_id IS NULL OR n.skipped_task_id<>n.current_task_id)) THEN 'COMPLETED' ELSE 'ACTIVE' END status
+    const {results}=await DB.prepare(`SELECT c.chain_id,c.name,c.created_at,${chainStatusSQL} status
       FROM chains c WHERE c.chain_id>? AND (c.temporary_registration=0 OR EXISTS(
         SELECT 1 FROM task_submissions s WHERE s.submission_id=c.chain_id AND s.owner_id=?))
       ORDER BY c.chain_id LIMIT 21`).bind(after,ownerId).all();
@@ -171,6 +195,9 @@ export async function handleChainRequest(request,DB,readTasks,ownerId){
   const match=/^\/api\/chains\/([a-zA-Z0-9_-]+)(?:\/(stop)|\/nodes\/([a-zA-Z0-9_-]+)\/decision)?$/.exec(path);
   if(!match)return fail(404,'NOT_FOUND','接口不存在');
   const id=match[1];
+  if(fromBrowser&&!await DB.prepare(`SELECT 1 FROM chains c WHERE ${browserChainOwner} AND c.chain_id=?`).bind(ownerId,id).first()){
+    return fail(404,'CHAIN_NOT_FOUND','任务组不存在');
+  }
   if(!match[2]&&!match[3]){
     if(request.method!=='GET')return fail(405,'METHOD_NOT_ALLOWED','仅支持GET');
     const chain=await readChain(DB,id,url.searchParams.get('device_id'),readTasks);
@@ -184,9 +211,10 @@ export async function handleChainRequest(request,DB,readTasks,ownerId){
   const registration=chain?.temporary_registration===1;
   if(registration&&!await ownsRegistration(DB,id,ownerId))return fail(404,'CHAIN_NOT_FOUND','任务组不存在');
   const required=stop?['request_id']:['action','expected_task_id','request_id'];
-  if(!registration)required.push('device_id');
+  const needsDevice=!registration&&(!fromBrowser||!stop);
+  if(needsDevice)required.push('device_id');
   if(!fields(body,required,stop?[]:['new_task_id'])||!validId(body.request_id)
-    ||(!registration&&(!PC_ID_PATTERN.test(body.device_id??'')
+    ||(needsDevice&&(!PC_ID_PATTERN.test(body.device_id??'')
       ||!await DB.prepare('SELECT device_id FROM devices WHERE device_id=?').bind(body.device_id??'').first())))return fail(400,'INVALID_DECISION','决定字段或终端无效');
   if(!stop&&(!['skip','continue','force'].includes(body.action)||registration&&body.action==='force'||!validId(body.expected_task_id)
     ||(body.action==='skip'?body.new_task_id!==undefined:!validId(body.new_task_id)||body.new_task_id===body.expected_task_id)))return fail(400,'INVALID_DECISION','决定或新轮ID无效');

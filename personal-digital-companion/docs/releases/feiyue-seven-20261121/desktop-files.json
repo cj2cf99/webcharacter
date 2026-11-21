@@ -1,0 +1,177 @@
+[
+  {
+    "path": "desktop/balanced-local-model.mjs",
+    "before": "c73e3ee97633dce1c3d17b2d7c12a69fc91584451e6c8a2800c3adbae90b4ebf",
+    "after": "25fbe392a697a02f0d556794a0c177db4f6e66c4b1fa44169120b8ded408809c"
+  },
+  {
+    "path": "desktop/conversation-details.mjs",
+    "before": "cdc34845688649dec517b12bc1c8977a3bff14073e82b12d7af27820989e6a09",
+    "after": "fc28662bb4ded7a2527f1adc023d170ac007a7eca371b2aacfbb741a67358e71"
+  },
+  {
+    "path": "desktop/conversation-preload.cjs",
+    "before": "27ce852cb28529c8618bd9005433e7199f84b827a833c02b96e59ab1eefd85e3",
+    "after": "d797e91d143f3dc19b2b2f99c375dd5869ad0f6f7578a07e2c4011dbf0f157e4"
+  },
+  {
+    "path": "desktop/conversation-ui.mjs",
+    "before": "2ee30565add715cf9198ef7318804fbaf9afe71f98011239f9de4dda59a4e0c9",
+    "after": "c2dc575d4a917ce524afa0884c1426dc3be8931cbd0d2e958cb82b170d81d3af"
+  },
+  {
+    "path": "desktop/diary-audit.mjs",
+    "before": null,
+    "after": "3c410a0cc10901eceff66f9a591b87215270b8b05cd43311afa4fa50b483233d"
+  },
+  {
+    "path": "desktop/diary-sources.mjs",
+    "before": null,
+    "after": "cdc6274ad2ff32de6a93084357b11f38a268e55ffb4e442a7a863c14aae073d2"
+  },
+  {
+    "path": "desktop/personality-diary.mjs",
+    "before": "ff1fd75c7f0aafec2fca1446ce818348efd83e6b967e0b082a510fcadd106d3e",
+    "after": "3abb4b2b0deaf32f4f45d2cdd9f553c8665b40e3f2df8ff0bf96a2f1f6c58bc5"
+  },
+  {
+    "path": "desktop/personality-nags.mjs",
+    "before": "c14258bf959769150fb194c3720e27304463b8440ac68de22c4db0a79500f18c",
+    "after": "90ee5f6f000bb640c2c9bd68285a884565a2e33af30f6fb45afedafb777416d9"
+  },
+  {
+    "path": "desktop/poll-scheduler.mjs",
+    "before": "46cb591b4e4d2ebb68907f0836fafe005c1eda1d41776c865b69771f8679fef7",
+    "after": "5c6374a55a6d36fd827d4e50ca9d2321a46012a08339db1582ab84d0993173d8"
+  },
+  {
+    "path": "desktop/screen-question-host.mjs",
+    "before": "1af5ea5a8abb652893e12c85806a96cb27794f88f54296bd89882573d9eda17b",
+    "after": "de88aba9dce28d91f5d1ce71f2cf6c85393c91e755e2fcc0fb08109dc9cf9fc3"
+  },
+  {
+    "path": "desktop/screen-question-preload.cjs",
+    "before": "a64b0bc8462fff64ff968ca18d1e4b71e3b89ce04c1a1470ebe79ccc8da580bd",
+    "after": "d48532565d857bc413103051db901c537501f65e61c3fc3f1a53f86cdb2d7c31"
+  },
+  {
+    "path": "desktop/screen-question-ui.mjs",
+    "before": "1b40c69b33e3223e692b2d0bc560b52e404c44a7088c7c6165734acfb8a2063c",
+    "after": "90efba4ac4c030e892b444d876bf4b244c369d6e341fbc86546f86475607fed7"
+  },
+  {
+    "path": "desktop/screen-question.css",
+    "before": "1399c7f3b8facb1764093a8ed95f0daf2e9c0c0f4bcde149201467b68b7d2c77",
+    "after": "fc9e05bc470b1c6e1e1923a5d32f7afc3da2611a7e524e6574c0913d4d308504"
+  },
+  {
+    "path": "desktop/screen-question.html",
+    "before": "0ed70ef66af60f6045a787a6b2de19869ff9c0593c13a4ff81c2902fede2a88f",
+    "after": "13ac5aede5da1b2643c9b0313fbe464ed807b60edb029079318e13f8b9c26eff"
+  },
+  {
+    "path": "desktop/shell.mjs",
+    "before": "848eb80c1b6d76ad5d026b19d401e5569e689a8d96f34f869e854afe1ddf0e7c",
+    "after": "04daff032146e80362f5530c9df5fb6c33dd821ac9775544a998422512104be3"
+  },
+  {
+    "path": "desktop/task-lifecycle.mjs",
+    "before": "295a6cfd2278f8e9b12cf3a4463559c8cd9b5201abe6099b9bc88b257f1d7f4e",
+    "after": "5d5a39cb877388af188b57ee4bdc0dd1dcadeee5a0dece7fcce0e32834c294e4"
+  },
+  {
+    "path": "skills/diary-writing/latest.json",
+    "before": null,
+    "after": "e707a0950f5e1f262d727c70a4758140d3dee0a87a63a30112f3e0cdb717f308"
+  },
+  {
+    "path": "skills/diary-writing/source/local-ai.json",
+    "before": null,
+    "after": "8147ac261d1bf5974e9db5205f0e09eb11d88b5b8119e4b2b7c18192efd5d223"
+  },
+  {
+    "path": "skills/diary-writing/source/SKILL.md",
+    "before": null,
+    "after": "07fb46329f7f00e2ff14e02616f81f5fdba8ce4ada399bbb8f1d718dde9f0490"
+  },
+  {
+    "path": "skills/diary-writing/versions/diary-writing-v1-0/local-ai.json",
+    "before": null,
+    "after": "8147ac261d1bf5974e9db5205f0e09eb11d88b5b8119e4b2b7c18192efd5d223"
+  },
+  {
+    "path": "skills/diary-writing/versions/diary-writing-v1-0/SKILL.md",
+    "before": null,
+    "after": "b55a9b8f68be8dad784873cdd1fd50ea997fdda3de262862f1cc127be1184a8f"
+  },
+  {
+    "path": "skills/diary-audit/latest.json",
+    "before": null,
+    "after": "9fa019fe9d4b66203648df04a1c54435034942b528403d05526520a4bd4686a8"
+  },
+  {
+    "path": "skills/diary-audit/source/local-ai.json",
+    "before": null,
+    "after": "9766e514d4f6cdbc161874babc794fa708ac1240127c552c742cde86ea0db3ed"
+  },
+  {
+    "path": "skills/diary-audit/source/SKILL.md",
+    "before": null,
+    "after": "502bee24a344566832d3595e26728574173d97bb6b5e74f5ef209accc7a01717"
+  },
+  {
+    "path": "skills/diary-audit/versions/diary-audit-v1-4/local-ai.json",
+    "before": null,
+    "after": "9766e514d4f6cdbc161874babc794fa708ac1240127c552c742cde86ea0db3ed"
+  },
+  {
+    "path": "skills/diary-audit/versions/diary-audit-v1-4/SKILL.md",
+    "before": null,
+    "after": "a24978bdca4f1e1592fe86b0e9b918d5fa290f6a5bca45cb3ef1d0a0ce56a5f1"
+  },
+  {
+    "path": "skills/feiyue-interaction/latest.json",
+    "before": "2999598cdff21593b704c9d5038aac9a50986984069232749cc38c1e9f87f4eb",
+    "after": "577917133c94f415c5dc0976babcb9943c2d2b39d20f1532d7518446cc19ba4f"
+  },
+  {
+    "path": "skills/feiyue-interaction/source/routes.json",
+    "before": "e0f7f5b5f0d7782683721f96c4b26cace1cc18cb5941147b09c009d582503f5a",
+    "after": "8edcbda626fbbc85ee5edcb913835f59cbceeec2d05a7c0362bc1ebe119aee8e"
+  },
+  {
+    "path": "skills/feiyue-interaction/source/SKILL.md",
+    "before": "68972676f902fe6e74bdbffbee1b78ad59bb3b7a629c03d8bb83ac60c929f475",
+    "after": "8f37b8dbe3191064986f973843213c771bc3ec10f74980fbdc698d251f7e1945"
+  },
+  {
+    "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-1/routes.json",
+    "before": null,
+    "after": "8edcbda626fbbc85ee5edcb913835f59cbceeec2d05a7c0362bc1ebe119aee8e"
+  },
+  {
+    "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-1/SKILL.md",
+    "before": null,
+    "after": "6edb43d83f5ca23e18737e3be049f17d100b6a1fd12afd5114949519189dc8e3"
+  },
+  {
+    "path": "output/desktop-bundle/conversation-ui.mjs",
+    "before": "2ee30565add715cf9198ef7318804fbaf9afe71f98011239f9de4dda59a4e0c9",
+    "after": "c2dc575d4a917ce524afa0884c1426dc3be8931cbd0d2e958cb82b170d81d3af"
+  },
+  {
+    "path": "output/desktop-bundle/screen-question-ui.mjs",
+    "before": "1b40c69b33e3223e692b2d0bc560b52e404c44a7088c7c6165734acfb8a2063c",
+    "after": "90efba4ac4c030e892b444d876bf4b244c369d6e341fbc86546f86475607fed7"
+  },
+  {
+    "path": "output/desktop-bundle/screen-question.css",
+    "before": "1399c7f3b8facb1764093a8ed95f0daf2e9c0c0f4bcde149201467b68b7d2c77",
+    "after": "fc9e05bc470b1c6e1e1923a5d32f7afc3da2611a7e524e6574c0913d4d308504"
+  },
+  {
+    "path": "output/desktop-bundle/screen-question.html",
+    "before": "0ed70ef66af60f6045a787a6b2de19869ff9c0593c13a4ff81c2902fede2a88f",
+    "after": "13ac5aede5da1b2643c9b0313fbe464ed807b60edb029079318e13f8b9c26eff"
+  }
+]

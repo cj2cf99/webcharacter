@@ -43,13 +43,14 @@ function receipt(value) {
 }
 
 // 归属校验仍在开发Bearer之后；device_id不是设备认证凭据。
-export async function handleTaskAction(request, DB, id, action, readTask, verifyBusinessReceipt) {
+export async function handleTaskAction(request, DB, id, action, readTask, verifyBusinessReceipt, {standaloneOnly = false} = {}) {
   let body;
   try { body = await request.json(); } catch { return fail(400, 'INVALID_JSON', '请求必须是有效JSON'); }
   if (action === 'cancel') {
     if (!exact(body, [])) return fail(400, 'INVALID_CANCEL', '取消请求仅接受空JSON对象');
     const existing = await readTask(DB, id);
     if (!existing) return fail(404, 'TASK_NOT_FOUND', '任务不存在');
+    if (standaloneOnly && existing.chain) return fail(409,'TASK_IN_CHAIN','请在任务链中处理该任务');
     if (existing.status === 'CANCELLED') return reply({ cancelled: true, task: existing });
     if (existing.status !== 'PENDING') return fail(409, 'TASK_NOT_PENDING', '只能取消未领取任务');
     await DB.prepare("UPDATE tasks SET status = 'CANCELLED' WHERE task_id = ? AND status = 'PENDING'").bind(id).run();

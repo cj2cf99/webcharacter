@@ -221,6 +221,15 @@ function renderPending(data,explicit){
     });
     s.append(head('绯月的手记质问',chip(data.audit.status,'accent')),element('p',data.audit.title,'fy-clamp'),resume);sections.push(s);
   }
+  if(data.audit){
+    const s=element('section','');s.className='event';
+    const resume=button('继续回答',async()=>{
+      resume.disabled=true;
+      try{status.textContent=await api.resumeAudit(data.audit.id);}catch(error){status.textContent=error.message;}
+      finally{resume.disabled=false;}
+    });
+    s.append(element('h2','绯月的手记质问'),element('p',data.audit.title),element('small',data.audit.status+'　'),resume);sections.push(s);
+  }
   for(const choice of data.choices){
     const s=section('要修改哪些事项？',choice.expires),selected=new Set();
     s.append(element('p',choice.question));

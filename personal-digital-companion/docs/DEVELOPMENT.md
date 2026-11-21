@@ -149,6 +149,8 @@ Chrome 以 1280 和 390 像素宽度检查雅致、赛博主题，以及翻页�
 
 ## 2026-11-20 JST · 文字提醒登记确认
 
+2026-11-20：云端自动轮询恢复 Gemini，BigModel 中国站继续暂停。启用或更换 Gemini 密钥前，须确认它来自未关联 Cloud Billing 结算账号的免费项目。
+
 依据 REQUIREMENT_CHANGES.md 中的原句和确认要求，沿用 TASK_TEMPLATE_PREVIEW.md 的备忘录索引、全局 FRAMEWORK_PREFERENCES.md 和已有登记气泡。普通对话提到新提醒优先使用 record-submission，引用上一条用户原文准备业务字段。桌面先请求只读计划，展示日期或「不设日期」，用户确认后才按同一份计划提交。换题、取消及重复确认不会执行旧草案。文字和附件共用现有按钮、提交号及业务回执，无新增存储表。
 
 隔离验证包括两句原话、查询和用法分流、取消、重复确认以及无日期字段。执行 agent/tests/screen-question-host.test.mjs、unified-conversation.test.mjs、registration-flow.test.mjs，通过 20 项；另在隐藏 Electron 窗口运行 tools/test-screen-question-electron.mjs --skill-review 及 tools/test-panel-titlebar-electron.mjs，验证实际按钮、回执文字和布局。未向业务库补录截图事项。
@@ -739,6 +741,19 @@ Qwen 会话通过 local-model-process.mjs 中的 systemPrompt 加载绯月人设
 ### 2026-11-21 JST · 七项更新发布前自审
 
 候选、逐文件摘要、数据库单行更新及回滚、复测日志见 G:/selftool/WebCharacter/work/feiyue-seven-20261121/RELEASE_REVIEW.md。主站 843 项、API 34 项、子项目专项 69 项、技能 6 项通过。已对齐正式图库配置与线上 KV 绑定，并以 03:59 安装后的复盘为桌宠基线完成 Electron 回归。当前为候选准备阶段，生产切换及本次花园意愿待确认。
+## 绯月任务管理页面
+
+任务链、单条任务、模板统一用主站菜单页管理，旧链链接兼容。来源接线、验收命令及任务操作边界见 [绯月任务管理页](TASK_WORKSPACE.md)。
+## 绯月任务双页签
+
+托盘和角色右键的「任务 → 绯月任务管理」打开双页签。本机页自动刷新实际正在本进程执行的任务，云端页按需读取未结束清单。运行主进程更新后加载，复用原终端身份、任务 SQLite 和云端连接。需求与验收记录见 [桌面任务生命周期交接](DESKTOP_TASK_LIFECYCLE_HANDOFF.md#绯月任务窗口)。
+
+云端页将单条任务和任务链分开显示。任务链可原地展开，显示云端名称、状态、前置和提交内容。现有设备任务接口支持可选的独立任务筛选。使用旧 Worker 时客户端显示兼容提示。
+
+
+## 绯月手记发布候选
+
+日记、悬念与念叨已接入隔离主站和 API。真实本地 4B、只读入口、消费和悬念回链通过。现有普通对话模型沿用桌宠发布分支的配置。当前处于部署前确认阶段。[本次发布记录](../RELEASE_REVIEW.md)
 
 ### 2026-11-21 JST · 七项实际发布与绯月花园回执
 
