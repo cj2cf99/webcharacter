@@ -491,3 +491,39 @@ Git 代码回执：发布提交 e10f7b32a86f220b14b50a8dadc1c4856d3b1bb4 已推�
 
 
 花园登记回执（2026-11-21 19:41:52 JST）：用户确认批次 feiyue-local-first-release-20261121。部署 #71、明细 #149 已登记为发布成功，归属网页角色组件 #16 → 绯月（桌面精灵）#61，版本 20.0 → 21.0。绯月回读 done，1/1 步骤 verified，花园修订 141 → 142。清单提交 e57cbebfd0d9633fbbb5e98c8023c3c7eeb223d5，确认摘要 f544f3d0afdeeb4226e2206ba1d065318427119854c17048d7ba06517218169e。
+
+## 2026-11-21 JST · 绯月对话明细与模型档位 Windows 发布审核
+
+### 用户需求、范围和基线
+
+用户要求修正明细断句及发言重复，普通交互默认 Aggressive 9B，显存紧张时用 4B 或 2B，升级候补为标准 Qwen3.5-9B，直连不变。随后要求更新 Windows 正式绯月，并登记一条版本号不变的桌面精灵部署。验收核对完整回复能归档、旧长段和独立的问题回显不会重复出现、上一轮上下文及复述请求可继续使用、模型降档和直连行为与要求一致。详见[需求](REQUIREMENTS.md#2026-11-21-jst--对话明细与模型档位)和[开发复核](docs/reviews/CHAT_DETAIL_MODEL_REVIEW_2026-11-21.md)。
+
+目标为 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，保留原 `output/desktop-profile`。准备时监听 PID 34580，19:33:09 JST 启动，回环 REST v4 和桌面快捷方式、登录启动项及实际进程命令行均指向同一安装。参考上次发布源 `e10f7b3`，以实际安装文件的 SHA-256 为最终前像。用开发提交 `2e215d2` 与其父提交计算本次差异，三方合入 Windows 安装基线，保留问答宿主原有独立修改和七日新闻路由。候选复测发现独立问题回显，补丁及回归在当前工作区的 `desktop/chat-output.mjs` 和 `agent/tests/local-first-interaction.test.mjs`。候选共 12 项程序和技能文件，完整前后散列见[安装清单](docs/reviews/CHAT_DETAIL_WINDOWS_RELEASE_MANIFEST_2026-11-21.json)。清单 SHA-256 为 `6384a329c293ecbd88ffd01f6657463d52d3156a2e75f52c5dfbf9ac3827762d`。
+
+### 文件与行为
+
+| 变更 | 原行为 | 候选行为 |
+| --- | --- | --- |
+| `desktop/screen-question-host.mjs`、`desktop/chat-output.mjs`、`desktop/interaction-work.mjs` | 普通口语字段上限 160 字，生成可在句中结束。旧长段或新问题回显可进入复审和归档。 | 使用模型输出预算及完整 JSON 校验。旧长段复用触发重写。单独成段的逐字问题回显可移除，后续回答保留。用户明确要求复述时保留原话。 |
+| `desktop/balanced-local-model.mjs` | 普通交互优先 2B，资源不足可选 0.8B。升级候补使用 Aggressive 9B。 | 主力优先 Aggressive 9B、4B、2B，GPU 忙或不可用可选 CPU 2B。升级候补用标准 Qwen3.5-9B。直连沿用 Aggressive 9B 原路径。 |
+| `skills/feiyue-interaction` 与 `skills/personal-conversation` 下的两份源说明、两份索引与四份快照文件 | 引导版本 2.8，对话版本 1.6。 | 引导版本 2.9，对话版本 1.7。与现有七日新闻转接和直连模型指令兼容。 |
+
+数据库迁移、历史回填、配置变更、Cloudflare 或主站程序发布均为无。保留既有资料、资源、模型、账户、原档案、快捷方式和开机项。历史归档已缺失的句尾无法由此次更新补写。内置技能用自身版本维护历史，花园的功能版本单独由花园计算。
+
+### 检测、风险及待验证
+
+- 在隔离候选执行 `node tools/build-desktop.mjs` 通过。当地 `node --test --test-reporter=spec agent/tests/local-first-interaction.test.mjs agent/tests/balanced-local-model.test.mjs agent/tests/memory-archive.test.mjs` 通过 25 项。另加正式基线保留的 `screen-question-host.test.mjs` 时，候选有 3 项旧断言失败。隔离旧基线按同名复跑，图像确定性、网络摘要及旧登记时序 3 项均复现，详见候选与基线测试日志。技能用 `PYTHONPATH=G:/selftool/WebCharacter/tools` 执行 `python -B tools/test-skills.py` 通过该基线的 4 项。
+- 第一次真实隔离试跑加载 CPU 2B 和标准 9B，发现 2B 偶尔会在回答之前独立重述本轮问题。先报告，再补本轮输出处理和回归。终轮通过 `electron.exe tools/run-electron-check.mjs output/chat-model-smoke.mjs` 重放合成问答。CPU 2B 的最终回复不含开头的问题回显，完整归档并通过复审。标准 CPU 9B 正确读取合成材料中的暗号。开发树终轮 `node --test --test-reporter=spec 'agent/tests/*.test.mjs'` 393 项通过、3 项可选契约跳过。未改界面文件。显存分档和直连行为由专项回归核对，正式实例实际重启待许可。
+- 风险重点为当轮生成与复审一致、候补换档、正式版独立问答接线和既有新闻入口。正式进程、自然对话效果和用户界面须在授权安装后另外核对。未执行第三方独立审核。
+
+### 安装、回退及版本登记
+
+1. 收到针对本清单的明确许可后，再核验 PID、正在执行的正式任务和实际文件前像。只备份和替换清单中的文件及审核纪要。通过正常退出流程等待对话和在途任务处理完毕，确认旧 PID 退出及端口释放，从原快捷方式参数启动新进程。逐项验证 SHA-256、PID 和启动时间、原资料目录、REST v4、历史批次及隔离对话。若失败，按清单恢复原文件并移除本次新增项，再从原入口恢复并核验。完成后补记实际时间、结果和 Git 同步状态。
+2. 花园登记意愿已经确认。线上结构同步成功，新增结构对象 0。授权只读核对修订 142，网页角色组件 #16 下唯一目标绯月（桌面精灵）#61，当前版本 21.0，最后部署 #71、明细 #149。现有花园 `store.mjs` 以实际关联部署次数计算主版本。正常新增一条会算成 22.0，仅让明细版本前后相等也会改变功能显示版本。已确认目前没有不计版本的新部署字段。保留 21.0，未制备会升版的写入包，也未提交 SQL 或调用写入接口。后续如获得能同时满足新增记录与版本不变的方案，须按实际安装结果重新制单并取得具体内容确认。种子、功能定义、改善、Bug 和既有部署均无需更改。
+3. 用户查看候选审核后回复「提交」。按此前更新指令执行本机正式安装及受控重启，花园保持 21.0。已执行线上结构同步和只读核对。生产记录写入尚未执行。第三方审核未执行。
+
+### 本次实际安装与验收
+
+2026-11-21 21:02:52 JST，正式绯月从原应用路径启动。旧 PID 20312 正常退出并释放回环端口，新 PID 11896 使用原资料目录。21:02:52.987 JST 核对 12 项程序和技能、两份审核文件、快捷方式、登录启动入口、回环 REST v4、原轮询配置与 16 条历史批次。任务资料只读完整性检查为 ok。程序前像及原审核纪要在 `G:/selftool/WebCharacter/personal-digital-companion/output/chat-detail-release-20261121/install-backup-20261121-210243`，本机回执和复测日志同在该发布工作目录。
+
+以同一 Electron 及实际安装目录调用隔离模型测试。CPU 2B 接续回答并复审，归档无开头的逐字问题回显。标准 CPU Qwen3.5-9B 从合成材料准确给出暗号。从上一正式源码 `8d78eb2` 单独准备本次发布分支，25 项交互、模型分档及归档回归全部通过。自然对话和用户日常使用效果待观察。此次仅发布 Windows 桌宠，无 Cloudflare 发布和数据库迁移。花园未写入或增加部署记录。完整保持版本和新增关联部署的方案仍待花园支持。

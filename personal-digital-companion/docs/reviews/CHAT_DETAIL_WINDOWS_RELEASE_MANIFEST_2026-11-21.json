@@ -1,0 +1,71 @@
+{
+  "target": "G:\\selftool\\.release-feiyue-handbook-desktop-20261120\\personal-digital-companion",
+  "source": "2e215d2ab2b968817956abbadac9ac21d70ff6f0",
+  "files": [
+    {
+      "path": "desktop/balanced-local-model.mjs",
+      "before": "67fb756132fd1274b957cf95594547a28c585ca614168c433bc6d40e9b64758d",
+      "after": "4baf8ac6e3b5d7bb90279f16ff67655b9dee772235de9c7f6c35a1630b90774e"
+    },
+    {
+      "path": "desktop/chat-output.mjs",
+      "before": "4164bc998e4e5983338ebcbbc2589d436f482040ee2624786ec9f688480b8cf7",
+      "after": "e7fa74c41ec5991d4a5b0ad89561bc566592e6a044fe16598edad185459fc799"
+    },
+    {
+      "path": "desktop/interaction-work.mjs",
+      "before": "29a3275dbc1ada4e017a5c7dd9aedf54a19a69ecf7dde7defa57ecd408fc253c",
+      "after": "9048c98063e0e9435919be639c3cd981f70e133d68b2329e8a78fe129b3da393"
+    },
+    {
+      "path": "desktop/screen-question-host.mjs",
+      "before": "fe633dbc71824534a3dd4aedf031f147da19d6c8002a189fbfe80a2a93a46db2",
+      "after": "cb769a62fca2d1bad6345ea19f867c49a4994ba1c20c3744910b6dabd5313aa9"
+    },
+    {
+      "path": "skills/feiyue-interaction/source/SKILL.md",
+      "before": "34370184d916aada9ff9d8e9299138cf976c2f2337330048b2ec0b3f2d6f7efd",
+      "after": "e676d9fce12d55db2f6dbfac5239fa6ebf45ff126762e850dff7f4dd804b795f"
+    },
+    {
+      "path": "skills/feiyue-interaction/latest.json",
+      "before": "5c036ea8d906f7f69c9bfb853b18a1f21acfea7df69ce640c7c9f68f7cebb59c",
+      "after": "296a95da109d311f743dc96cff23f316f00b86bf073684f2e740bc76cd892d1d"
+    },
+    {
+      "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-9/routes.json",
+      "before": null,
+      "after": "9e78d6d4fb450f03e1288ffb82731f8d2db5a7ae19f0d84cb734723425af44bd"
+    },
+    {
+      "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-9/SKILL.md",
+      "before": null,
+      "after": "d77ec67e4d151a353508ad5dfe0577f88801441c073ee07860bd08dabf817ea6"
+    },
+    {
+      "path": "skills/personal-conversation/source/SKILL.md",
+      "before": "fbe13836d05edcdd5e1044ae415531731cde85042cbf53b6cb565718258e4d6e",
+      "after": "ad3934d830991c90a78dcfbf508cab7adfc53fd7b2cce95bd7849dd2141902a2"
+    },
+    {
+      "path": "skills/personal-conversation/latest.json",
+      "before": "a2318c7a36268b1ef58d758d7759ec2ae38e8672f2c14aec4d846ed5cd5555f8",
+      "after": "716368008f26b5d88b345ea1dfc3464fc8a1698d1d33b24483b392d6b333c193"
+    },
+    {
+      "path": "skills/personal-conversation/versions/personal-conversation-v1-7/local-ai.json",
+      "before": null,
+      "after": "44d3030c5273e4d90bdd6a9f46ecbd01ed4c7902ca3216b36022cedc6e653a06"
+    },
+    {
+      "path": "skills/personal-conversation/versions/personal-conversation-v1-7/SKILL.md",
+      "before": null,
+      "after": "e90643da20e9a3c6380061365c894ad6554c71c3b23cadd03602ce269ea7a7ce"
+    }
+  ],
+  "candidateFollowup": {
+    "runtime": "desktop/chat-output.mjs",
+    "test": "agent/tests/local-first-interaction.test.mjs",
+    "testSha256": "4cdbb13a449ebe8f1920d456bdcb7c3d275fcffd127ad669df2b2ef109e077c6"
+  }
+}
