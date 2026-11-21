@@ -157,8 +157,9 @@ test('普通聊天保留上一轮上下文，拦截长段复述并完整归档�
       return {selected:1,feedback:''};
     }
     drafts.push(data);
-    const reply=data.原始输入.用户请求==='把上一轮的话原样复述一遍。'?freshReply
-      : data.复审反馈?freshReply:copiedReply;
+    const question=data.原始输入.用户请求;
+    const reply=question==='把上一轮的话原样复述一遍。'?freshReply
+      : data.复审反馈?question+'\n\n'+freshReply:copiedReply;
     const limit=schema.properties.reply.maxLength;
     return {reply:limit?reply.slice(0,limit):reply};
   }}});

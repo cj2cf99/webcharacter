@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>绯月 · 专聊预览</title>
+  <link rel="stylesheet" href="preview.css">
+</head>
+<body>
+  <main>
+    <header class="page-head">
+      <div><h1>绯月 · 专聊预览</h1><p>专聊文字用 CPU，语音用 GPU。固定台词可试听，其余为流程演示。</p></div>
+      <button id="theme" type="button" aria-pressed="false">浅色</button>
+    </header>
+    <div class="panels">
+      <div id="waiting" class="sources" aria-label="待聊入口">
+        <section class="panel" aria-labelledby="menu-title">
+          <h2 id="menu-title">绯月菜单</h2>
+          <button class="waiting" data-accept type="button"><img src="../../assets/desktop-media/feiyue-faces/waiting-b.png" alt="">老公我在等你哦</button>
+        </section>
+        <section class="panel" aria-labelledby="pending-title">
+          <h2 id="pending-title">待处理</h2>
+          <button class="waiting" data-accept type="button"><img src="../../assets/desktop-media/feiyue-faces/waiting-b.png" alt="">老公我在等你哦</button>
+        </section>
+      </div>
+      <section class="bubble" aria-label="绯月对话">
+        <header class="bubble-head"><strong>绯月</strong><span id="state" role="status">邀请</span></header>
+        <div id="message" class="message" aria-live="polite">老公，有空吗，我想和你说说话嘛</div>
+        <form id="reply" hidden>
+          <label class="sr" for="input">你的回复</label>
+          <textarea id="input" rows="2" placeholder="说说你的想法…" required></textarea>
+          <button type="submit" class="primary">发送</button>
+        </form>
+        <footer>
+          <button id="listen" type="button">试听邀请</button>
+          <button id="accept" class="primary" data-accept type="button">现在可以</button>
+          <button id="stop" type="button" hidden>我要忙，你先去自己玩</button>
+          <button id="reset" type="button" hidden>重新预览</button>
+        </footer>
+        <p id="audio-status" class="sr" role="status"></p>
+      </section>
+    </div>
+  </main>
+  <script src="preview.js" defer></script>
+</body>
+</html>

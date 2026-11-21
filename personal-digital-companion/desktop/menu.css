@@ -12,7 +12,17 @@ body {padding:12px;font:13px/1.4 var(--fy-sans);color:var(--fy-ink)}
 }
 body.show #menu {animation:menu-in .16s ease-out}
 @keyframes menu-in {from{opacity:0}}
-.brand {display:flex;align-items:center;gap:7px;padding:4px 7px 6px;margin-bottom:3px;border-bottom:1px solid var(--fy-line)}
+.brand {position:relative;display:flex;align-items:center;gap:7px;padding:4px 7px 6px;margin-bottom:3px;border-bottom:1px solid var(--fy-line)}
+.brand-avatar {position:relative;display:grid;place-items:center;width:22px;height:22px;border-radius:50%}
+.brand-avatar:focus-visible {outline:1px solid var(--fy-accent);outline-offset:2px}
+.brand-avatar img {object-fit:contain}
+.brand-avatar [hidden] {display:none}
+.cycle-tip {
+  position:absolute;z-index:2;right:7px;top:50%;transform:translateY(-50%);min-width:max-content;padding:3px 7px;
+  border:1px solid var(--fy-line);border-radius:7px;background:var(--fy-paper);color:var(--fy-ink);
+  box-shadow:0 2px 6px #21132133;visibility:hidden;pointer-events:none;
+}
+.brand-avatar[tabindex]:is(:hover,:focus-visible) ~ .cycle-tip {visibility:visible}
 .moon {
   display:grid;place-items:center;width:20px;height:20px;border-radius:50%;
   color:#f1d7a8;background:#5c354b;border:1px solid #986f72;font:14px/1 Georgia,serif;
@@ -25,6 +35,7 @@ body.show #menu {animation:menu-in .16s ease-out}
   transition:background-color .12s,color .12s;
 }
 .item .icon {text-align:center;font-size:14px;line-height:1}
+.item .menu-face {width:21px;height:21px;object-fit:cover;vertical-align:middle;border-radius:50%}
 .item .label {overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item .tail {color:var(--fy-muted);font-size:12px}
 .item:is(:hover,:focus-visible):not(:disabled) {outline:none;background:var(--fy-soft);color:var(--fy-accent)}

@@ -1,4 +1,6 @@
 import {readAttachment} from './question-attachment.mjs';
+import {bindDictation,dictating} from './dictation-ui.mjs';
+import {bindReplyVoice} from './bubble-voice-ui.mjs';
 const host=window.screenQuestion;
 const byId=id=>document.getElementById(id);
 const form=byId('questionForm'),question=byId('question'),answer=byId('answer'),reply=byId('reply');
@@ -28,7 +30,7 @@ let displayed='',expanded=false,lastView=null;
 
 const resetIdle=()=>{
   clearTimeout(idleTimer);
-  if(busy||composing||reading||expanded||audit)return;
+  if(busy||composing||reading||expanded||audit||dictating()||speech.active)return;
   idleTimer=setTimeout(()=>{
     if(draftReady&&host.idleClose){
       host.idleClose({text:question.value,mode:mode.value,withScreen:withScreen.checked,attachment,references});
@@ -51,8 +53,17 @@ function updateMode(value){
   const [placeholder, label]=modes[selected]??modes.auto;
   question.placeholder=audit?'写下你对这件事的解释…':placeholder;
   send.textContent=label;
-  send.disabled=busy||reading||selected==='memory'||(selected==='web'&&webMode.disabled);
+  send.disabled=busy||reading||dictating()||selected==='memory'||(selected==='web'&&webMode.disabled);
+  microphone.update();speech.update();
 }
+function fitBubble(){
+  const requiredHeight=Math.ceil(innerHeight-reply.getBoundingClientRect().height+replyContent.getBoundingClientRect().height);
+  host.fit(Math.min(640,Math.max(260,requiredHeight)));
+}
+const voiceChanged=()=>{updateMode();resetIdle();fitBubble();};
+let speech;
+const microphone=bindDictation(question,{button:byId('recordVoice'),status:byId('voiceStatus'),changed:voiceChanged,blocked:()=>busy||reading||speech?.active});
+speech=bindReplyVoice(host.voice,{button:byId('speakReply'),status:byId('speakStatus'),changed:voiceChanged,blocked:()=>busy||dictating()});
 function showAttachment(value,extra=[]){
   attachment=value;
   references=extra;
@@ -119,7 +130,13 @@ function render(value){
   reply.dataset.state=value.state;reply.setAttribute('aria-busy',String(busy));
   byId('asked').hidden=!value.question;
   byId('asked').textContent=value.question??'';
+  const scene=byId('nagContext');
+  scene.hidden=!value.sceneImage;
+  if(value.sceneImage){
+    if(scene.getAttribute('src')!==value.sceneImage)scene.src=value.sceneImage;
+  }else scene.removeAttribute('src');
   const full=value.text??'';
+  speech.setReply(value.state==='answer'?full:'',value.voiceReply);
   lastView=value;
   if(displayed!==full){displayed=full;expanded=false;}
   const chars=[];
@@ -172,8 +189,7 @@ function render(value){
     };
     return button;
   }));
-  const requiredHeight=Math.ceil(innerHeight-reply.getBoundingClientRect().height+replyContent.getBoundingClientRect().height);
-  host.fit(Math.min(640,Math.max(260,requiredHeight)));
+  fitBubble();
 }
 async function invoke(run){
   if(busy)return;
@@ -189,13 +205,15 @@ form.onsubmit=async event=>{
   const text=question.value;if((!text.trim()&&!attachment&&mode.value!=='tour')||send.disabled)return;
   const direct=directActive();
   const value=await invoke(()=>host.ask(text,withScreen.checked,direct?'direct':mode.value,attachment,references));
-  if(value?.state==='answer'&&!value.invalid){question.value='';showAttachment(null);attachmentError();updateMode('auto');question.focus();}
+  if(value?.state==='answer'&&!value.invalid){
+    question.value='';showAttachment(null);attachmentError();updateMode(value.keepRegistrationMode?'registration':'auto');question.focus();
+  }
 };
 question.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();form.requestSubmit();}};
 for(const event of ['keydown','input','pointerdown','change']){
   document.addEventListener(event,resetIdle,{capture:true,passive:true});
 }
-document.addEventListener('wheel',event=>{if(!event.target.closest?.('#imageResults,#reply'))event.preventDefault();},{capture:true,passive:false});
+document.addEventListener('wheel',event=>{if(!event.target.closest?.('#imageResults,#reply,#question'))event.preventDefault();},{capture:true,passive:false});
 question.addEventListener('compositionstart',()=>{composing=true;resetIdle();});
 question.addEventListener('compositionend',()=>{composing=false;resetIdle();});
 retry.onclick=async()=>{const value=await invoke(()=>host.retry());if(attachment&&value?.state==='answer'){question.value='';showAttachment(null);attachmentError();}};

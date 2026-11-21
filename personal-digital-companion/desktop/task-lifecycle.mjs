@@ -27,7 +27,7 @@ export function interruptionDetail(task) {
   return `任务：${task.metadata?.name||task.type} (${task.task_id})\n参数：${JSON.stringify(task.params)}\n最后记录：${last?`第${last.attempt_no}次 ${last.status}`:task.status}，${time} JST\n结果未知，可能已产生部分操作。重做可能重复原操作。`;
 }
 export async function createDesktopTasks({profile,dialog,request,handlerModule,pollerOptions={},memory,generateImage,openImage,desktopBusy=()=>false,onAutomaticProgress=()=>{},
-  hasRoom=()=>true,beforeExecute=async()=>{}}={}) {
+  hasRoom=()=>true,beforeExecute=async()=>{},registrationMayStart=()=>true}={}) {
   // 正式工作队列（docs/FORMAL_WORK_QUEUE.md）：hasRoom 为本地待处理是否还有名额；beforeExecute 在每个任务开始执行前等待正在执行的登记批次并让闲时工作暂停。
   const identity=await getDeviceIdentity(profile);
   let configurationError=null, connection;
@@ -132,7 +132,7 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     // 复盘已落盘但日记归档前进程退出时，补写同一天的快照。
     if(memory)await (latestArchive===previous?archiveDay(event.at):latestArchive);
   }
-  const registration=createRegistrationFlow({profile,request,canEnter:canStart,canStart:()=>!checking&&!stopped,
+  const registration=createRegistrationFlow({profile,request,canEnter:()=>canStart()&&registrationMayStart(),canStart:()=>!checking&&!stopped,
     pauseChain:id=>defer('registration',id),log:traffic.write,record});
   const reminderReview=createReminderReviewFlow({request,canStart,waitForStart:()=>gate,
     pauseItem:item=>defer('reminder',item.id,item),record});

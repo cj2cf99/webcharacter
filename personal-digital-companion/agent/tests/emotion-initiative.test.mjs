@@ -70,6 +70,42 @@ test('负五时先分享已选成果，只有没有具体行动时才整理一�
     }finally{store.close();await rm(root,{recursive:true,force:true});}
   }
 });
+test('主动分享分支想要用户回答时，只登记一个本机确认事项',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'feiyue-initiative-question-')),store=createEmotionStore(root);
+  const questions=[];
+  try{
+    store.accept({key:'chat/book',kind:'chat',user:'今天提前去了书店。'});
+    const runner=createInitiative({root,emotion:{store,expression:()=>({word:'关心'})},load:async()=>({localAi:{}}),
+      speak:()=>assert.fail('要回答的问题不直接弹出'),queueClarification:item=>{questions.push(item);return true;},
+      model:{memory:async(_i,_p,schema)=>schema.properties.entries?
+        {act:true,entries:[{source:0,type:'clarify',sin:1,want:'想弄清行程',condition:'听到解释'}]}:
+        {action:'speak',conclusion:'想核实临时调整',message:'今天为什么提前出门呢？',next:'等他有空解释'}}});
+    assert.match((await runner.choose([],new AbortController().signal,()=>true)).detail,/加入待确认/);
+    assert.equal(questions.length,1);assert.equal(questions[0].ref,'chat/book');
+    assert.equal(store.pool.recent().status,'done');assert.equal(store.pool.feedback(),undefined);
+  }finally{store.close();await rm(root,{recursive:true,force:true});}
+});
+test('私人话题问句进入专聊，具体事实核实沿用待确认',async()=>{
+  for(const type of ['company','clarify']){
+    const root=await mkdtemp(join(tmpdir(),'feiyue-private-initiative-')),store=createEmotionStore(root);
+    const plans=[],questions=[];
+    try{
+      store.accept({key:'chat/book',kind:'chat',user:'今天提前去了书店。'});
+      const runner=createInitiative({root,emotion:{store,expression:()=>({word:'关心'})},load:async()=>({localAi:{}}),
+        speak:()=>assert.fail('专聊要先询问是否接受'),
+        queueConversation:item=>{plans.push(item);return true;},
+        queueClarification:item=>{questions.push(item);return true;},
+        model:{memory:async(_i,_p,schema)=>schema.properties.entries?
+          {act:true,entries:[{source:0,type,sin:1,want:'聊聊书店',condition:'听到回应'}]}:
+          {action:'speak',conclusion:'想和他聊聊',message:'周末要不要一起去书店？',next:'等他有空'}}});
+      await runner.choose([],new AbortController().signal,()=>true);
+      assert.equal(plans.length,Number(type==='company'));
+      assert.equal(questions.length,Number(type==='clarify'));
+      if(plans.length)assert.equal(plans[0].topics[0],'周末要不要一起去书店？');
+      assert.equal(store.pool.recent().status,'done');
+    }finally{store.close();await rm(root,{recursive:true,force:true});}
+  }
+});
 test('并发轮询晚返回的一轮不展示也不累计候选',async()=>{
   const root=await mkdtemp(join(tmpdir(),'feiyue-parallel-')),store=createEmotionStore(root),signal=new AbortController().signal;
   let shown=0;

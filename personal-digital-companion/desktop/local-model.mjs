@@ -9,8 +9,9 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
   const modelName=basename(modelPath).replace(/-Q4_K_M\.gguf$/i,'');
   let status = {state: 'idle'};
   let child, loading, finishLoad, request, loadTimer, exited;
-  const write = (stage, start, error, skill) => {
+  const write = (stage, start, error, skill, timing) => {
     void log?.({direction:'local',route:'本地 AI',stage,model:modelName,duration_ms:Math.round(performance.now()-start),error,
+      ...timing,...(skill?.name==='memory-refinement'&&skill.stage?{refinement_phase:skill.stage}:{}),
       ...(skill?.name&&skill.version?{skill:skill.name,skill_version:skill.version}:{})});
   };
 
@@ -69,12 +70,12 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
 
   async function analyze(text, {hint, previous, signal, onProgress, imageSkill,skillInstruction,replyMode,reviewLimit=3,revision} = {}) {
     const started = performance.now();
-    const budgetMs = hint==='personalityMemory'?120000:['image-plan','serverTask'].includes(hint) ? Math.max(16000,intentBudgetMs) : ['auto','direct','interactionWork'].includes(hint) ? chatTotalMs : intentBudgetMs;
+    const budgetMs = hint==='personalityMemory'||skillInstruction?.name==='conversation-transcription'?120000:['image-plan','serverTask'].includes(hint) ? Math.max(16000,intentBudgetMs) : ['auto','direct','interactionWork'].includes(hint) ? chatTotalMs : intentBudgetMs;
     const deadline = AbortSignal.timeout(budgetMs);
     const wait = signal ? AbortSignal.any([signal,deadline]) : deadline;
     signal?.throwIfAborted();
     onProgress?.('本地思索 · 理解输入…');
-    let result;
+    let result,timing;
     if (status.state === 'loading') {
       await new Promise(resolve => {
         const done = () => {wait.removeEventListener('abort',done);resolve();};
@@ -88,20 +89,30 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
     else result = await new Promise(resolve => {
       const id = crypto.randomUUID();
       const worker = child;
+      const retainAfterCancel = skillInstruction?.name === 'memory-refinement';
+      let cancelTimer;
       const finish = value => {
         if (request?.id !== id) return;
+        clearTimeout(cancelTimer);
         wait.removeEventListener('abort',abort);
         request = null;
         resolve(value);
       };
       const abort = () => {
-        try {worker.postMessage({type:'cancel',id});} catch {}
-        finish({error:'LOCAL_AI_TIMEOUT'});
+        if (retainAfterCancel) {
+          // Wait for the stopped generation to release the sequence before reusing it.
+          cancelTimer = setTimeout(() => void close(),1000);
+          cancelTimer.unref?.();
+        }
+        try {worker.postMessage({type:'cancel',id});}
+        catch {if (retainAfterCancel) void close();}
+        if (!retainAfterCancel) finish({error:'LOCAL_AI_TIMEOUT'});
       };
       request = {id,finish,message(value) {
         if (value.type === 'review') onProgress?.(`本地思索 · 复核 ${value.pass}/2…`);
         if (value.type === 'answer-review') onProgress?.(`本地思索 · 回复自审 ${value.pass}/${reviewLimit}…`);
         if (value.type === 'answer-rewrite') onProgress?.(`本地思索 · 按反馈重写 ${value.pass}/${reviewLimit}…`);
+        if (value.type === 'refinement-timing') timing=value.timing;
         if (value.type === 'result') finish(value.result);
       }};
       wait.addEventListener('abort',abort,{once:true});
@@ -112,10 +123,10 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
       }
     });
     if (signal?.aborted) {
-      write('思索取消',started,undefined,skillInstruction);
+      write('思索取消',started,undefined,skillInstruction,timing);
       signal.throwIfAborted();
     }
-    write(result?.error ? '思索后继续处理' : '思索完成', started, result?.error,skillInstruction);
+    write(result?.error ? '思索后继续处理' : '思索完成', started, result?.error,skillInstruction,timing);
     return result ?? {error:'LOCAL_AI_RESULT_INVALID'};
   }
 

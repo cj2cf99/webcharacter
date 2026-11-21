@@ -66,7 +66,7 @@ test('同一悬念遇到多条新事实只比对一次；下个东京日继续�
   assert.match(results[0].join(' '),/悬念跟进.*2026-11-19\.1\/1.*未解/);
 });
 
-test('日记与待续念叨共用篇号和序号；重启与东京零点',async t=>{
+test('悬念质问续答不受旧的逐日处理标记影响',async t=>{
   let at=Date.parse('2026-11-21T23:59:59+09:00');
   const profile=mkdtempSync(join(tmpdir(),'fy-thread-day-'));
   const options={profile,now:()=>at},source='2026-11-19.1/2';
@@ -79,19 +79,18 @@ test('日记与待续念叨共用篇号和序号；重启与东京零点',async 
   t.after(async()=>{await nags.close();diary.close();rmSync(profile,{recursive:true,force:true});});
   const signal=new AbortController().signal;
   await nags.poll(signal);assert.equal(shown,0);
-  assert(diary.claimThread('2026-11-19.1/3'));
+  await nags.resume('fixture',signal);assert.equal(shown,1);
   at+=1000;await nags.poll(signal);assert.equal(shown,1);
-  assert.equal(diary.claimThread(source),false);
-  await nags.poll(signal);assert.equal(shown,1);
+  await nags.resume('fixture',signal);assert.equal(shown,2);
 });
 
 test('排队的日记与整理共用十分钟，超时等待正式轮询；任务日志可回读目标、实际耗时和子动作',async t=>{
-  const profile=mkdtempSync(join(tmpdir(),'fy-idle-round-')),timers=new Map();
+  const profile=mkdtempSync(join(tmpdir(),'fy-idle-round-')),timers=new Map(),receipts=[];
   let at=Date.parse('2026-11-21T11:00:00+09:00'),busy=false,complete,started=0,aborted=false;
   const traffic=createTaskTrafficLog(profile,{clock:()=>at});
-  const options={profile,now:()=>at,isBusy:()=>busy,log:traffic.write,
+  const options={profile,now:()=>at,isBusy:()=>busy,log:traffic.write,onIdleResult:result=>receipts.push(result),
     setTimer(fn,ms){const key=Symbol();timers.set(key,{fn,at:at+ms});return key;},clearTimer:key=>timers.delete(key),
-    handlers:{diary:async(_s,step)=>{busy=true;await step('悬念跟进','比对悬念 1',async()=>'尚无下文');
+    handlers:{diary:async(_s,step,goal)=>{assert.match(goal,/整理未入册的素材/);busy=true;await step('悬念跟进','比对悬念 1',async()=>'尚无下文');
       await new Promise(ok=>{complete=ok;});busy=false;return '已核对一条';},
     review:async signal=>{started++;busy=true;await new Promise(ok=>signal.addEventListener('abort',ok,{once:true}));aborted=true;busy=false;return {deferred:true};}}};
   async function advance(ms){
@@ -109,6 +108,8 @@ test('排队的日记与整理共用十分钟，超时等待正式轮询；任�
   assert(lines.every(r=>r.category==='绯月自主行动'&&r.goal&&r.started_at));
   const pause=lines.find(r=>r.route==='补行动评价'&&r.stage==='已暂停');
   assert.equal(pause.duration_ms,345000);assert.match(pause.result,/10 分钟/);
+  assert.deepEqual(receipts,[{id:'diary',status:'已检查',detail:'已核对一条',durationMs:240000},
+    {id:'review',status:'已暂停',detail:pause.result,durationMs:pause.duration_ms}]);
   const child=lines.find(r=>r.route==='悬念跟进'&&r.stage==='完成');
   assert.equal(child.result,'尚无下文');
   assert(lines.some(r=>r.action_id===child.parent_id&&r.stage==='已检查'&&r.duration_ms===240000));

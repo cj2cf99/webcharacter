@@ -43,7 +43,7 @@ async function run(){try{
     const bubble=code=>host.panel.webContents.executeJavaScript(code);
     const details=code=>host.details.webContents.executeJavaScript(code);
     async function display(){
-      const showing=host.showNag({audit:true,signal:new AbortController().signal,prompt:question,
+      const showing=host.showNag({id:item.id,audit:true,signal:new AbortController().signal,prompt:question,
         visible(){actions.push('shown');},
         leave(reason){actions.push(reason);if(reason==='refuse')pending=false;host.notifyPending();},
         async reply(text){actions.push(text);return {text:'哪天收到确认？'};}
@@ -54,7 +54,7 @@ async function run(){try{
       return '已打开质问';
     }
     host=attachScreenQuestion(electron,{win:pet,profile,bundle:resolve(root,'output/desktop-bundle'),root,visible:false,
-      auditPending:()=>pending?item:null,resumeAudit:display});
+      auditPending:()=>pending?[item]:[],resumeAudit:display});
     await display();
     await wait(()=>bubble("!document.querySelector('#auditActions').hidden && document.querySelector('#answer').textContent.includes('正式发布')"));
     assert(await bubble("document.querySelector('#mode').disabled && document.querySelector('#withScreen').disabled"));
@@ -75,7 +75,7 @@ async function run(){try{
     })()`),0,'正在阅读或输入的质询窗口不启动闲置关闭计时');
     await bubble("document.querySelector('#later').click()");
     await wait(()=>!host.panel);await host.openReview('pending');
-    await wait(()=>details("document.querySelector('#turns')?.innerText.includes('继续回答')"));
+    await wait(()=>details("document.querySelector('#turns')?.innerText.includes('回答')"));
     await details("document.querySelector('#turns button').click()");
     await wait(()=>host.panel?.webContents.executeJavaScript("document.querySelector('#later')?.offsetWidth>0"));
     await bubble("document.querySelector('#question').value='周五下午。';document.querySelector('#questionForm').requestSubmit()");

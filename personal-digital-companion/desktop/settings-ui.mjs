@@ -1,5 +1,6 @@
 import {EffectPreview} from './effect-preview.mjs';
 import {WINDOW_NODES} from './window-nodes.mjs';
+import {bindDictation,cancelDictation,dictating} from './dictation-ui.mjs';
 
 const $=id=>document.getElementById(id);const states=[['idle','☾','基础待机'],['special','✧','特殊待机'],['hover','♡','悬停'],['click','✦','点击'],['work','✎','工作'],['drag','↗','拖拽'],['walk','➜','行走'],...Object.entries(WINDOW_NODES).map(([id,node])=>[id,'',node.label])];
 const host=window.desktopHost;
@@ -65,7 +66,13 @@ screenLock.onchange=async()=>{
 };
 function saveSound(){const data=payload();soundQueue=soundQueue.then(async()=>{try{const result=await host.saveSettings(data,'sound');saved=result.config;$('toast').textContent='声音已保存 · 本地 PC';}catch(e){for(const id of Object.keys(config))config[id].sound=structuredClone(saved.states[id].sound);$('masterOn').checked=saved.master.enabled;$('masterVolume').value=saved.master.volume;draw();$('toast').textContent='声音保存失败：'+e.message;}});}
 async function importResource(kind){try{const result=await host.importResource(kind);if(result){catalogs(result);draw();library();audioLibrary();$('toast').textContent='已导入本地 PC 媒体目录';}}catch(e){$('toast').textContent='导入失败：'+e.message;}}
-async function editName(id,label,name){const input=document.createElement('input');input.type='text';input.value=name;input.maxLength=80;label.replaceChildren(input);input.focus();let done=false;const save=async()=>{if(done)return;done=true;try{const result=await host.renameResource(id,input.value);catalogs(result);draw();library();audioLibrary();}catch(e){label.textContent=name;$('toast').textContent='重命名失败：'+e.message;}};input.onkeydown=e=>{if(e.key==='Enter')save();if(e.key==='Escape'){done=true;label.textContent=name;}};input.onblur=save;}
+async function editName(id,label,name){
+  const input=document.createElement('input');input.type='text';input.value=name;input.maxLength=80;label.replaceChildren(input);input.focus();
+  const voice=bindDictation(input);let done=false;
+  const save=async()=>{if(done||dictating())return;done=true;voice.close();try{const result=await host.renameResource(id,input.value);catalogs(result);draw();library();audioLibrary();}catch(e){label.textContent=name;$('toast').textContent='重命名失败：'+e.message;}};
+  input.onkeydown=e=>{if(e.key==='Enter')void save();if(e.key==='Escape'){done=true;voice.close();label.textContent=name;}};
+  input.onblur=event=>{if(!input.parentElement?.contains(event.relatedTarget))void save();};
+}
 $('import').onclick=()=>importResource('video');$('audioImport').onclick=()=>importResource('audio');
 $('save').onclick=async()=>{const button=$('save');button.disabled=true;try{await soundQueue;const result=await host.saveSettings(payload(),'animation');saved=result.config;dirty=false;void applyPageUpdate();$('dirty').textContent='已保存到本地 PC';$('toast').textContent='已通知桌面精灵应用';}catch(e){$('toast').textContent='保存失败：'+e.message;}finally{button.disabled=false;}};
 $('reset').onclick=async()=>{effect.stop();await soundQueue;const result=await host.getSettings();catalogs(result);saved=result.config;config=structuredClone(saved.states);$('masterOn').checked=saved.master.enabled;$('masterVolume').value=saved.master.volume;$('delay').value=saved.idleSpecialDelaySeconds;screenLock.checked=saved.confineToScreen;dirty=false;void applyPageUpdate();$('dirty').textContent='已重新读取本地 PC 配置';draw();library();audioLibrary();};
@@ -76,7 +83,8 @@ $('effectPlay').onclick=()=>effect.start();$('effectFinish').onclick=()=>effect.
 document.addEventListener('visibilitychange',()=>{if(document.hidden)effect.stop('预览已暂停，点击重播');});
 $('masterOn').checked=saved.master.enabled;$('masterVolume').value=saved.master.volume;$('delay').value=saved.idleSpecialDelaySeconds;draw();library();audioLibrary();
 
-function workspace(resources){stopResources();effect.stop();$('nodeWorkspace').hidden=resources;$('resourceWorkspace').hidden=!resources;$('tabNodes').classList.toggle('active',!resources);$('tabResources').classList.toggle('active',resources);if(resources){resourceLibrary('video');resourceLibrary('audio');}}
+function workspace(resources){cancelDictation();stopResources();effect.stop();$('nodeWorkspace').hidden=resources;$('resourceWorkspace').hidden=!resources;$('tabNodes').classList.toggle('active',!resources);$('tabResources').classList.toggle('active',resources);if(resources){resourceLibrary('video');resourceLibrary('audio');}}
 $('tabNodes').onclick=()=>workspace(false);$('tabResources').onclick=()=>workspace(true);
-function resourceTab(audio){stopResources();$('videoLibrary').hidden=audio;$('audioLibrary').hidden=!audio;$('tabVideos').classList.toggle('active',!audio);$('tabAudios').classList.toggle('active',audio);resourceLibrary(audio?'audio':'video');}
+function resourceTab(audio){cancelDictation();stopResources();$('videoLibrary').hidden=audio;$('audioLibrary').hidden=!audio;$('tabVideos').classList.toggle('active',!audio);$('tabAudios').classList.toggle('active',audio);resourceLibrary(audio?'audio':'video');}
 $('tabVideos').onclick=()=>resourceTab(false);$('tabAudios').onclick=()=>resourceTab(true);$('audioSearch').oninput=audioLibrary;
+for(const id of ['search','audioSearch'])bindDictation($(id));

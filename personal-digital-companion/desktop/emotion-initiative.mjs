@@ -18,7 +18,7 @@ const philosophy={ref:'personality/philosophy',title:'绯月自身的兴趣：�
 const publicInterests=[['identity','个人同一性 自我与记忆'],['time','时间知觉'],['choice','自由意志与选择'],['meaning','意义与日常生活']]
   .map(([id,publicTerm])=>({ref:philosophy.ref+'/'+id,title:'绯月自身的公开兴趣：'+publicTerm,publicTerm}));
 const text=(s,n)=>typeof s==='string'&&s.trim().length>0&&s.length<=n;
-export function createInitiative({emotion,root,speak,memory,localNags,topics,search=searchInitiative,now=Date.now,model,load=readInteractionSkill}){
+export function createInitiative({emotion,root,speak,memory,localNags,topics,queueClarification,queueConversation,conversationPlanned,search=searchInitiative,now=Date.now,model,load=readInteractionSkill}){
   const store=emotion.store,pool=store.pool;
   async function choose(nags,signal,idle,threads,step){
     await topics?.ready;signal.throwIfAborted();
@@ -26,20 +26,21 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,sea
     const uncertain=pool.unsettled();
     if(uncertain){
       const {id,decision:d,observation}=uncertain,day=tokyoDay(observation.at);
-      const nag=d.action==='ask'&&localNags?.().find(n=>n.localInitiativeRound===id&&n.talk?.some(t=>t.who==='绯月'));
-      let receipt=nag?.id;
-      if(d.action==='speak'){
+      const nag=['ask','speak'].includes(d.action)&&localNags?.().find(n=>n.localInitiativeRound===id&&n.talk?.some(t=>t.who==='绯月'));
+      const planned=d.action==='speak'&&conversationPlanned?.(id);
+      let receipt=nag?.id??(planned?'已加入专聊待处理':null);
+      if(d.action==='speak'&&!receipt){
         for(const date of new Set([day,tokyoDay(observation.at+86400000)])){
           receipt=(await memory.read(date)).find(t=>t.id===id&&t.initiative)?.id;
           if(receipt)break;
         }
-      }else if(d.action!=='ask')receipt=topics?.decisionReceipt(id);
+      }else if(!['ask','speak'].includes(d.action))receipt=topics?.decisionReceipt(id);
       const interruptedLookup=!receipt&&lookupActions.includes(d.action);
       if(!receipt&&!interruptedLookup)return {detail:'上次主动行动等待核实'};
       if(interruptedLookup)receipt='上次公开查询中断，没有本机保存回执';
-      if(d.topicShare)await topics.announced(d.topicShare.id,d.topicShare.revision);
+      if(d.topicShare&&!planned)await topics.announced(d.topicShare.id,d.topicShare.revision);
       const answered=nag&&(['用户结束','已解释','回合结束'].includes(nag.status)||nag.talk.some(t=>t.who==='你'));
-      const adopt=['ask','speak'].includes(d.action)&&!answered;
+      const adopt=['ask','speak'].includes(d.action)&&!answered&&!planned&&!(d.action==='speak'&&nag);
       const status=interruptedLookup?'deferred':uncertain.trigger&&adopt?'feedback':'done';
       const path=join(root,'决策复盘',day,id+'.json'),raw=await optional(readFile(path,'utf8'));
       const audit=raw?JSON.parse(raw):{id,observation,decision:d};
@@ -168,7 +169,8 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,sea
       if(action==='web')input.publicLookup={topic:fact.publicTerm,choices:initiativeSearchLabels};
       const allowedDecision=structuredClone(decision);allowedDecision.properties.action={enum:actions};
       const lookupGuide=action==='web'?' 按用途选来源：普通人对某事的看法用 x，媒体社论用 editorial，视觉参考用 images，事实与背景资料用 web。只查给定公开主题。':'';
-      const d=await analyze(input,loop.localAi.nextStep+' '+skill.localAi.decide+' 具体行动优先。情绪影响表达，现实条件不具备才等待。ask/speak 的 message 是一句实际要说的话，整理写有出处的摘记。'+lookupGuide,allowedDecision);
+      const clarificationGuide=queueClarification?' 想请他核实事实时，message 写成只有一个问号的具体问题；分享只表达自己的见闻或感受。':'';
+      const d=await analyze(input,loop.localAi.nextStep+' '+skill.localAi.decide+' 具体行动优先。情绪影响表达，现实条件不具备才等待。ask/speak 的 message 是一句实际要说的话，整理写有出处的摘记。'+lookupGuide+clarificationGuide,allowedDecision);
       signal.throwIfAborted();audit.decision=d;audit.decisionInput=input;
       if(!actions.includes(d.action)||!text(d.conclusion,180)||!text(d.next,180)||typeof d.message!=='string'||d.message.length>180)throw Error('决定缺少依据或超出可用动作');
 
@@ -180,14 +182,28 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,sea
       if(!pool.dispatch(id,chosen.id,forced?.trigger,topicShare?{...d,topicShare}:d))throw Error('主动名额已占用');
       dispatched=true;
       audit.status='dispatching';await save();if(signal.aborted||!idle()){pool.finish(id,'deferred','派发前中断');dispatched=false;signal.throwIfAborted();return {detail:'前台已占用名额'};}
-      const finish=async(ok,detail)=>{
-        const adopt=ok&&['ask','speak'].includes(d.action);
+      const finish=async(ok,detail,{queuedQuestion=false}={})=>{
+        const adopt=ok&&!queuedQuestion&&['ask','speak'].includes(d.action);
         pool.finish(id,ok?(forced&&adopt?'feedback':'done'):'deferred',detail,{adopt});
         const settled=pool.record(id);
         audit.status=settled.status;audit.receipt=settled.result;audit.endedAt=now();await save();
       };
       if(d.action==='ask')return {roundId:id,source:fact.ask,message:d.message,evaluation:d.conclusion,finish};
       if(d.action==='speak'){
+        if(queueClarification&&!fact.share&&(chosen.type==='clarify'||!queueConversation&&/[？?]\s*$/u.test(d.message))){
+          const queued=queueClarification({ref:fact.ref,title:d.message,roundId:id});
+          const detail=queued?'已加入待确认':'这项确认已登记或留待下轮';
+          await finish(queued,detail,{queuedQuestion:true});
+          return {detail};
+        }
+        if(queueConversation){
+          const followups=entries.filter(entry=>entry.source!==chosen.source&&['share','company','history'].includes(entry.type))
+            .map(entry=>entry.want+'：'+(refs.get(entry.source)?.title??''));
+          const queued=queueConversation({id,topicShare,topics:[fact.share?fact.share.summary:d.message,...followups]});
+          const detail=queued?'已更新专聊待处理':'专聊留待下轮';
+          await finish(queued,detail,{queuedQuestion:true});
+          return {detail,nextAt:at+7200000};
+        }
         const shown=await speak(id,fact.share?fact.share.summary:d.message,signal);
         if(shown&&topicShare)await topics.announced(topicShare.id,topicShare.revision);
         await finish(shown,shown?'已展示':'未展示');

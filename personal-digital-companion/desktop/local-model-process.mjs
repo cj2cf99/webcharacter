@@ -229,7 +229,7 @@ async function start() {
   const rewriteGrammar = await engine.createGrammarForJsonSchema(rewriteSchema);
   const wrapper = new QwenChatWrapper({variation:'3.5',thoughts:'discourage'});
 
-  async function pass(input, signal, systemPrompt, previous, outputGrammar=grammar, maxTokens=160, promptContext=context) {
+  async function pass(input, signal, systemPrompt, previous, outputGrammar=grammar, maxTokens=160, promptContext=context, timing) {
     signal.throwIfAborted();
     const sequence = promptContext.getSequence();
     const session = new LlamaChatSession({contextSequence:sequence,chatWrapper:wrapper,systemPrompt:[systemPrompt,active?.calendar].filter(Boolean).join('\n')});
@@ -245,7 +245,14 @@ async function start() {
       const sampling=outputGrammar?{temperature:0}:{temperature:0.65,topP:0.9,topK:20};
       if(!outputGrammar||active?.ordinaryChat&&(outputGrammar===grammar||outputGrammar===rewriteGrammar))
         sampling.repeatPenalty={lastTokens:64,penalty:1.12};
-      const output = await session.prompt(input,{grammar:outputGrammar??undefined,signal,...sampling,maxTokens});
+      const started=timing&&performance.now();
+      let first;
+      const measured=timing?{onToken(tokens){first??=performance.now();timing.output_tokens+=tokens.length;}}:{};
+      const output = await session.prompt(input,{grammar:outputGrammar??undefined,signal,...sampling,maxTokens,...measured});
+      if(timing&&first!==undefined){
+        timing.first_token_ms=Math.round(first-started);
+        timing.decode_ms=Math.round(performance.now()-first);
+      }
       if(!outputGrammar)return output.trim();
       const value = outputGrammar.parse(output);
 
@@ -344,15 +351,22 @@ async function start() {
           const instructions=[responseInstruction(mode,{direct}),data.skillInstruction?.response].filter(Boolean).join('\n');
           const reply=await pass(text,signal,instructions,previous,null,mode==='speech'||mode==='judgment'?256:512);
           result=reply?{kind:'chat',reply}:{error:'LOCAL_AI_RESULT_INVALID'};
-        }else if(hint==='interactionWork'){
+        }else if(hint==='interactionWork'||hint==='personalityMemory'&&data.skillInstruction?.name==='memory-refinement'){
           const {instruction,schema,maxTokens=512}=data.skillInstruction;
-          const required=model.tokenize(text).length+model.tokenize(instruction).length+maxTokens+256;
+          const setup=performance.now();
+          const inputTokens=model.tokenize(text).length+model.tokenize(instruction).length;
+          const required=inputTokens+maxTokens+256;
           if(required>16384)
             throw Object.assign(Error('本轮交互资料超出本地上下文'),{code:'LOCAL_AI_CONTEXT_BUDGET'});
           const workGrammar=await engine.createGrammarForJsonSchema(schema);
           const workContext=required>contextSize?await model.createContext({contextSize:Math.ceil(required/1024)*1024,threads}):context;
-          try{result=await pass(text,signal,instruction,undefined,workGrammar,maxTokens,workContext);}
-          finally{if(workContext!==context)await workContext.dispose();}
+          const timing=data.skillInstruction.name==='memory-refinement'?
+            {input_tokens:inputTokens,output_tokens:0,setup_ms:Math.round(performance.now()-setup)}:undefined;
+          try{result=await pass(text,signal,instruction,undefined,workGrammar,maxTokens,workContext,timing);}
+          finally{
+            if(workContext!==context)await workContext.dispose();
+            if(timing)send({type:'refinement-timing',id,timing});
+          }
         }else if (hint === 'serverTask' || hint === 'personalityMemory') {
           if(hint==='personalityMemory'&&['emotion-appraisal','initiative-decision','topic-memory'].includes(data.skillInstruction.name)){
             const used=model.tokenize(text).length+model.tokenize(data.skillInstruction.instruction).length;
@@ -404,7 +418,9 @@ async function start() {
       } finally {
         active = null;
       }
-      if (!controller.signal.aborted) send({type:'result',id,result});
+      if (!controller.signal.aborted || data.skillInstruction?.name==='memory-refinement'){
+        send({type:'result',id,result});
+      }
     })();
   });
   send({type:'ready',backend:engine.gpu || 'cpu',gpuLayers:model.gpuLayers,vramMiB:Math.floor(model.memoryUsage.vram/2**20)});

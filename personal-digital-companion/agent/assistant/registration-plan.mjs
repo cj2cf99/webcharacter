@@ -62,7 +62,14 @@ export async function planRegistration(request, env, ownerId, createAiClient, lo
   }
   if (!catalog.length) return fail(503, 'REGISTRATION_NOT_CONFIGURED', '登记模板尚未配置');
   try {categories=await loadCategories(env);}catch {categoriesAvailable=false;}
-  if(isCatalog)return reply({catalog,categories,categoriesAvailable});
+  if(isCatalog){
+    let resourceCategories=[];
+    try{
+      if(env.mymaindb)resourceCategories=(await env.mymaindb.prepare('SELECT id,name FROM rl_categories ORDER BY name,id').all()).results;
+      else if(env.COMPANION_HOST?.resourceCategories)resourceCategories=await env.COMPANION_HOST.resourceCategories();
+    }catch{/* 单个分类目录暂不可用时仍返回其他已验证的模板。 */}
+    return reply({catalog,categories,categoriesAvailable,resourceCategories});
+  }
 
   const context=registrationContext({...input,catalog,categories,categoriesAvailable});
   const {dates,tasklist}=context;

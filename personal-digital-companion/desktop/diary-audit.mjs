@@ -3,18 +3,11 @@ import {tokyoDay} from './conversation-history.mjs';
 import {cleanMemory} from './personality-diary.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
 import {untilAbort} from './chat-budget.mjs';
+import {isPendingQuestion,pendingLimit,questionTarget,questionText as question} from './pending-questions.mjs';
 
-const hour=3600000;
-const cooldown=5*hour,auditWindow=3*60_000;
-const timeoutText='手记问题准备超过三分钟，本轮未发起质询。';
+const dayMs=86400000;
 const digest=s=>createHash('sha256').update(s).digest('hex');
 const pageKey=p=>p.day+'.'+p.part;
-const open=n=>['提问中','等待回应','意外中断'].includes(n.status);
-const question=s=>{
-  const text=s?.trim();
-  if(!text||/[\n]/u.test(text)||/[？?]./u.test(text))return '';
-  return text.replace(/[。？！!?]+$/u,'')+'？';
-};
 const segmenter=new Intl.Segmenter('zh',{granularity:'word'});
 const words=s=>new Set([...segmenter.segment(s.toLowerCase())].filter(w=>w.isWordLike&&w.segment.length>1).map(w=>w.segment));
 async function answerContext(n,write,signal){
@@ -43,20 +36,8 @@ function formatQuestion(n){
     n.questions===1?'想搞清楚的问题':'追问 '+(n.questions-1)+' / 2',n.next].join('\n');
 }
 
-export function createDiaryAudit({emotion,store,show,idle,canContinue,save,changed,onInterrupted,now=Date.now,random=Math.random,loadSkill=()=>readInteractionSkill('diaryAudit')}){
+export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,random=Math.random,loadSkill=()=>readInteractionSkill('diaryAudit')}){
   let active=null,working=false,state;
-  function preparationLimit(startedAt){
-    const controller=new AbortController();
-    const until=startedAt+auditWindow;
-    const expire=()=>controller.abort(new DOMException(timeoutText,'TimeoutError'));
-    const timer=setTimeout(expire,Math.max(0,until-now()));
-    timer.unref?.();
-    return {startedAt,signal:controller.signal,
-      check(){
-        if(now()>=until)expire();
-        controller.signal.throwIfAborted();
-      },close:()=>clearTimeout(timer)};
-  }
   function stopRun(){
     if(state.run){delete state.run;store.saveAuditState(state);}
   }
@@ -65,42 +46,38 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
     store.saveAuditState(state);
   }
   function preparationFailure(reason){
-    const {pages,stage,question}=state.run?.attempt??{pages:state.run?.pages??[],stage:'同步待核查资料'};
+    const {pages,stage,question}=state.run?.attempt??{pages:[],stage:'同步待核查资料'};
     const failure=Error(`质询准备失败 · ${stage} · 对象：${pages.join('、')||'尚未确定'} · 质问：${question||'尚未生成'} · 原因：${reason}`);
     stopRun();
     return failure;
   }
-  async function writer(signal,limit){
+  async function writer(signal){
     const skill=await untilAbort(loadSkill(),signal);
     return async(stage,data,fields,signal,steps)=>{
-      limit?.check();signal.throwIfAborted();
+      signal.throwIfAborted();
       const input=JSON.stringify(data),key=steps&&digest(stage+'\n'+input);
       if(key&&steps[key])return steps[key];
-      const result=await untilAbort(store.think(input,skill.localAi[stage],fields,signal,{name:skill.skill,version:skill.version}),signal);
-      limit?.check();signal.throwIfAborted();
+      const prompt=skill.localAi[stage]+(stage==='compare'?' refs 的第一项必须是「主篇可选」为 true 的材料，其余可作为旁证。':'');
+      const result=await untilAbort(store.think(input,prompt,fields,signal,{name:skill.skill,version:skill.version}),signal);
+      signal.throwIfAborted();
       if(key){steps[key]=result;store.saveAuditState(state);}
       return result;
     };
   }
-  async function discover(write,limit,signal){
-    // Reference identity follows the Tokyo day and part even after the diary is appended to.
-    const used=new Set(store.nags().flatMap(n=>n.source==='audit'?n.refs.map(r=>r.page):n.source==='diary'?[n.source_id.split('/')[0].replace(/\.0+(?=\d)/u,'.')]:[]));
-    const today=tokyoDay(now()),from=tokyoDay(now()-6*24*hour);
-    const pages=store.pages(from).filter(p=>p.day<=today&&!used.has(pageKey(p))&&p.body.trim()&&p.body!=='无所事事的一天'&&
-      (state.run?.pages.includes(pageKey(p))||!(state.checked[pageKey(p)]>now()-cooldown)));
-    if(!pages.length)return;
-    const run=state.run??={startedAt:limit.startedAt,pages:[],steps:{}};
+  async function discover(write,signal){
+    const used=new Set(store.nags().map(questionTarget));
+    const today=tokyoDay(now()),from=tokyoDay(now()-6*dayMs);
+    const pages=store.pages(from).filter(p=>p.day<=today&&p.body.trim()&&p.body!=='无所事事的一天');
+    if(!pages.some(p=>!used.has('audit/'+pageKey(p))))return;
+    const run=state.run;
     const quotes=[];
     for(const p of pages){
-      limit.check();signal.throwIfAborted();
+      signal.throwIfAborted();
       const page=pageKey(p);
-      if(!run.pages.includes(page)){
-        run.pages.push(page);state.checked[page]=now();
-      }
       recordAttempt([page],'提取手记线索');
       const chars=Array.from(p.body);
       for(let i=0;i<chars.length;i+=440){
-        limit.check();signal.throwIfAborted();
+        signal.throwIfAborted();
         const block=chars.slice(Math.max(0,i-60),i+440).join('');
         let excerpts;
         if(block.length<=100)excerpts=[block];
@@ -123,7 +100,9 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
       const key=indices.slice().sort((a,b)=>a-b).join(',');
       if(groups.has(key))continue;
       groups.add(key);
-      const inputs=indices.map((j,k)=>({no:k+1,...quotes[j]}));
+      const inputs=indices.map(j=>({...quotes[j],主篇可选:!used.has('audit/'+quotes[j].page)}))
+        .sort((a,b)=>Number(b.主篇可选)-Number(a.主篇可选)).map((r,k)=>({no:k+1,...r}));
+      if(!inputs[0].主篇可选)continue;
       recordAttempt(inputs.map(r=>r.page),'比对手记');
       const v=await write('compare',inputs,['score','refs','summary','points','question','keywords'],signal,run.steps);
       if(v.score==='0')continue;
@@ -131,6 +110,7 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
       const ask=question(v.question);
       if(ask)recordAttempt(refs.length&&refs.every(Boolean)?refs.map(r=>r.page):inputs.map(r=>r.page),'核对拟问依据',ask);
       if(!/^[1-5]$/u.test(v.score)||!refs.length||refs.some(r=>!r)||!ask||!v.summary||!v.points)throw Error('质问缺少有效的原文依据，留待重核');
+      if(used.has('audit/'+refs[0].page))continue;
       const points=v.points.split(/\n|[；;]/u).map(s=>s.replace(/^\s*\d+[.、)）]\s*/u,'').trim()).filter(Boolean);
       if(!points.length)throw Error('质问缺少矛盾点');
       candidates.push({score:Number(v.score),refs:[...new Set(refs)].map(({page,quote})=>({page,quote})),points,ask,reason:v.summary,keywords:v.keywords});
@@ -138,14 +118,14 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
     for(const item of candidates.sort((a,b)=>b.score-a.score)){
       const terms=item.keywords.split(/[，,、\s]+/u).filter(t=>t.length>=2&&t.length<=32).slice(0,3);
       recordAttempt(item.refs.map(r=>r.page),'验证拟问',item.ask);
-      limit.check();signal.throwIfAborted();
+      signal.throwIfAborted();
       const context=await untilAbort(store.auditAssociations(terms,signal),signal);
       const v=await write('verify',{引文:item.refs,矛盾:item.reason,拟问:item.ask,本机线索:context},['keep','question'],signal,run.steps);
       if(v.keep==='0')continue;
       const ask=question(v.question)||item.ask;
       if(v.keep!=='1')throw Error('日记复核结果不完整');
       const source_id=item.refs[0].page,at=new Date(run.startedAt).toISOString();
-      return {source:'audit',source_id,id:'audit-'+digest(source_id),created_at:at,revision:1,title:ask,reason:item.reason,
+      return {source:'audit',source_id,id:'audit-'+digest(source_id),created_at:at,revision:0,title:ask,reason:item.reason,priority:item.score,
         refs:item.refs,points:item.points,next:ask,questions:1,interruptions:0,status:'等待回应',mood:'',
         talk:[{who:'绯月',at,text:ask}]};
     }
@@ -159,8 +139,7 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
   }
   function pause(n){
     n.status='意外中断';save(n);
-    onInterrupted?.();
-    return {text:'你的回答已记下，空闲时可以继续核查。',done:true};
+    return {text:'回答已留在本机，可以从「待确认」继续。',done:true};
   }
   async function advance(n,write,signal){
     if(!canContinue())return pause(n);
@@ -188,18 +167,20 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
         }
       }
     }
-    mood(n);save(n);
-    const v=await write('write',{主问题:n.title,问答:turns,情绪:n.mood,结束方式:closingStatus},['text'],signal);
-    signal.throwIfAborted();
-    if(!canContinue())return pause(n);
-    if(!v.text)throw Error('念叨收笔尚未完成');
-    n.status=closingStatus;n.afterEvaluation=v.text;save(n);
-    return {text:v.text,done:true};
+    mood(n);
+    const answers=Array.from(n.talk.filter(t=>t.who==='你').map(t=>cleanMemory(t.text)).join('\n'));
+    const closing=closingStatus==='回合结束'?'\n还有细节待确认。':'';
+    const feeling='\n我带着这份'+n.mood+'把这件事记在这里。';
+    const room=600-Array.from('你说「」'+closing+feeling).length;
+    const excerpt=answers.length>room?'…'+answers.slice(1-room).join(''):answers.join('');
+    const text='你说「'+excerpt+'」'+closing+feeling;
+    n.status=closingStatus;n.afterEvaluation=text;save(n);
+    return {text,done:true};
   }
   async function showQuestion(n,signal){
     const controller=new AbortController();
     const replySignal=controller.signal;
-    const session={audit:true,signal,prompt:formatQuestion(n),
+    const session={id:n.id,audit:true,signal,prompt:formatQuestion(n),
       visible(){delete n.notBefore;n.status='提问中';save(n);},
       leave(reason){
         if(active!==session)return;
@@ -207,12 +188,8 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
         if(reason==='refuse'){
           mood(n);n.status='用户结束';n.afterEvaluation='我带着'+n.mood+'把这件事记到这里。老公选择不再回答。';
           line(n,'结束记录','拒绝回答');
-        }else{
-          n.status=reason==='later'?'等待回应':'意外中断';
-          if(reason==='later')n.notBefore=now()+hour;
-        }
+        }else n.status=reason==='later'?'等待回应':'意外中断';
         save(n);
-        if(n.status==='意外中断')onInterrupted?.();
       },
       async reply(raw){
         if(active!==session)throw Error('这次气泡已关闭');
@@ -221,7 +198,6 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
         if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请输入文字回答。',invalid:true};
         line(n,'你',text);save(n);
         const result=await advance(n,await writer(replySignal),replySignal);
-        if(result.text&&!result.invalid)emotion?.chat({id:n.id+'/'+n.talk.length,state:'answer',at:now(),question:text,text:result.text});
         if(result.done)active=null;
         return result;
       }};
@@ -231,67 +207,52 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
     }catch(error){if(active===session)active=null;throw error;}
     return {detail:'本次质问：'+n.title};
   }
-  async function prepareQuestion(outer){
-    const limit=preparationLimit(state.run?.startedAt??now());
-    const signal=AbortSignal.any([outer,limit.signal]);
-    try{
-      limit.check();
-      signal.throwIfAborted();
-      if(!state.run){
-        await untilAbort(store.refresh(signal),signal);
-        limit.check();
-        const pending=store.nags().find(open);
-        if(pending)return {n:pending};
-      }
-      const write=await writer(signal,limit);
-      for(const [key,at] of Object.entries(state.checked))if(at<=now()-cooldown)delete state.checked[key];
-      const n=await discover(write,limit,signal);
-      if(!n){stopRun();return {detail:'近七天手记没有新的关键疑点'};}
-      limit.check();signal.throwIfAborted();
-      limit.close();
-      recordAttempt(n.refs.map(r=>r.page),'登记待确认质问',n.title);
-      await untilAbort(store.reserveAudit(n,outer),outer);
-      stopRun();changed();
-      return {n};
-    }catch(error){
-      if(outer.aborted)throw error;
-      throw preparationFailure(limit.signal.aborted?timeoutText:error.message);
-    }finally{limit.close();}
-  }
-  async function poll(outer,{manual=false}={}){
+  async function prepare(signal){
     if(working||active||!idle()||!canContinue())return {deferred:true};
-    let n=store.nags().find(open);
-    if(n&&n.source!=='audit'||!n&&manual)return '没有待续的手记质问';
     state=store.auditState();
+    delete state.checked;
     working=true;
     try{
-      outer.throwIfAborted();
-      if(!n){
-        const result=await prepareQuestion(outer);
-        if(!result.n)return result.detail;
-        n=result.n;
+      signal.throwIfAborted();
+      if(!state.run){
+        state.run={startedAt:now(),steps:{},refresh:true};
+        recordAttempt([],'同步待核查资料');
       }
-      if(n.source!=='audit')return '没有待续的手记质问';
+      if(state.run.refresh){
+        try{await untilAbort(store.refresh(signal),signal);}
+        catch(error){
+          signal.throwIfAborted();
+          if(!store.pages(tokyoDay(now()-6*dayMs)).length)throw error;
+        }
+        delete state.run.refresh;
+        store.saveAuditState(state);
+      }
+      if(store.nags().filter(isPendingQuestion).length>=pendingLimit)return {detail:'待确认已满'};
+      const n=await discover(await writer(signal),signal);
       stopRun();
-      if(!manual&&n.notBefore>now())return {detail:'手记质问已留在待确认'};
-      if(n.talk.at(-1).who==='你'){
-        const result=await advance(n,await writer(outer),outer);
+      return n?{n}:{detail:'近七天手记没有新的关键疑点'};
+    }catch(error){
+      if(signal.aborted)throw error;
+      throw preparationFailure(error.message);
+    }finally{working=false;}
+  }
+  async function resume(n,signal){
+    if(working||active||!idle()||!canContinue())return {deferred:true};
+    working=true;
+    try{
+      signal.throwIfAborted();
+      if(n.talk.at(-1)?.who==='你'){
+        const result=await advance(n,await writer(signal),signal);
         if(result.done){
-          if(open(n))return {deferred:true,detail:result.text};
+          if(isPendingQuestion(n))return {deferred:true,detail:result.text};
           return result.text;
         }
       }
-      outer.throwIfAborted();
+      signal.throwIfAborted();
       if(!idle()||!canContinue())return {deferred:true};
-      return await showQuestion(n,outer);
+      return await showQuestion(n,signal);
     }finally{working=false;}
   }
-  return {poll,
-    recover(){
-      const n=store.nags().find(n=>n.source==='audit'&&open(n));
-      if(n)return !(n.notBefore>now());
-      const run=store.auditState().run;
-      return Boolean(run);
-    },
+  return {prepare,resume,recover:()=>Boolean(store.auditState().run),get active(){return Boolean(active);},
     close(){active?.leave('interrupted');}};
 }

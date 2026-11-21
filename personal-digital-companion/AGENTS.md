@@ -6,6 +6,8 @@
 
 修改后运行 `tools/test-panel-titlebar-electron.mjs`，核对浅深色、窄窗口、标题栏数量和按钮避让。
 
+新增或修改菜单弹窗时，按[开发注意点](docs/DEVELOPMENT.md#windows-重启后菜单弹窗首击可见性)复用主动显示逻辑，并从正式自绘菜单做冷启动首击验证。
+
 右键菜单（自绘窗口，`menu-layout.json` 的 `icon` / `tone`）、面板组件（`.fy-panel` 的卡片、页签、徽标、分页等）、记录列表分页与动效规则见 [桌宠界面开发说明](docs/DESKTOP_UI_GUIDE.md)；新增或修改菜单和面板时先读它，改完用 `tools/capture-menu-panels-electron.mjs` 截浅深色图对照。
 
 ## 本机桌宠功能更新

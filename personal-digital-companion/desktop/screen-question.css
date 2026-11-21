@@ -90,7 +90,7 @@ button { cursor: pointer; }
 #answer { min-width: 0; margin: 0; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap;
   display: block; }
 #reply[data-state=error] .response { color: var(--warning); }
-#retry, #full {
+#retry, #full, #speakReply {
   flex: none;
   border: 0;
   background: transparent;
@@ -130,12 +130,14 @@ form.dragging { outline: 2px dashed var(--rose); background: var(--soft); }
 #attachmentName { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 #removeAttachment { border: 0; background: transparent; }
 #attachmentError { display: block; color: var(--warning); }
+#voiceStatus { display: block; color: var(--fy-muted); font-size: 11px; }
+#voiceStatus[data-error=true] { color: var(--warning); }
 textarea {
   display: block;
   width: 100%;
   height: 42px;
   resize: none;
-  overflow: hidden;
+  overflow-y: auto;
   border: 0;
   background: transparent;
   outline: none;
@@ -158,6 +160,18 @@ footer { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
 .capture input { width: 12px; height: 12px; margin: 0; accent-color: var(--rose); }
 #mode { field-sizing: content; min-width: 0; max-width: 100%; }
 #hint { margin-left: auto; color: var(--fy-muted); font-size: 10px; white-space: nowrap; }
+#recordVoice {
+  flex: none;
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--fy-muted);
+  background: transparent;
+}
+#recordVoice:hover, #recordVoice[aria-pressed=true] { color: var(--rose); background: var(--soft); border-color: var(--rose); }
+#recordVoice[data-recording=true] { animation: pulse .9s ease-in-out infinite alternate; }
 #send {
   flex: none;
   white-space: nowrap;
@@ -183,7 +197,7 @@ button:disabled, select:disabled { cursor: default; opacity: .55; }
   .bubble { padding-inline: 8px; }
   .bubble header.fy-titlebar { gap: 2px; }
   #hint { position: absolute; clip-path: inset(50%); }
-  #send { margin-left: auto; }
+  #recordVoice, #recordVoice[hidden] + #send { margin-left: auto; }
 }
 @media (max-width: 285px) {
   footer { flex-wrap: wrap; }
@@ -192,3 +206,4 @@ button:disabled, select:disabled { cursor: default; opacity: .55; }
 .bubble .fy-compact #close[data-nag=true] { width:auto; padding:3px 6px; font-size:12px; color:var(--fy-ink); }
 #reply[data-nag=true] { overflow-y:auto; }
 #reply[data-nag=true] #answer { display:block; overflow:visible; max-height:none; white-space:pre-wrap; }
+#nagContext { max-width: 100%; max-height: 110px; object-fit: contain; border-radius: var(--fy-radius); margin-top: 5px; }

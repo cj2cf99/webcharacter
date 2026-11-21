@@ -4,5 +4,5 @@ contextBridge.exposeInMainWorld('feiyueMenu',{
   size:height=>ipcRenderer.send('menu:size',height),
   choose:path=>ipcRenderer.send('menu:choose',path),
   close:()=>ipcRenderer.send('menu:close'),
-  onShow:fn=>ipcRenderer.on('menu:show',()=>fn()),
+  onShow:fn=>ipcRenderer.on('menu:show',(_event,cycle)=>fn(cycle)),
 });

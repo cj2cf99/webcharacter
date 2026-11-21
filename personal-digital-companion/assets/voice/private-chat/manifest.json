@@ -1,0 +1,64 @@
+{
+  "format": 1,
+  "model": "GPT-SoVITS V5 Turbo",
+  "language": "zh",
+  "startup": ["accepted", "acceptedAlt", "acceptedHere", "acceptedGuess", "acceptedWife", "acceptedCount", "acceptedTail"],
+  "lines": {
+    "invite": {
+      "file": "invite.wav",
+      "text": "老公，有空吗，我想和你说说话嘛",
+      "seconds": 3.3,
+      "sampleRate": 48000,
+      "sha256": "abeb5141fdc0b90b6694e7cc9cd424d7f568a0730731682ef6f103de4a1aa560"
+    },
+    "accepted": {
+      "file": "accepted.wav",
+      "text": "亲爱的，等我一下哦，我这就来找你啦",
+      "seconds": 3.38,
+      "sampleRate": 48000,
+      "sha256": "d29ee69781d88f10a8935224254bf428fe3784dc08736dea4bd7b82e4097cc5c"
+    },
+    "acceptedAlt": {
+      "file": "accepted-alt.wav",
+      "text": "宝贝，我想你了嘛，来陪陪我好不好？",
+      "seconds": 2.838,
+      "sampleRate": 48000,
+      "sha256": "176f42f9790d6ff57d4647677854ca73d8373ee52e3b57c68eb538dc4393e17b"
+    },
+    "acceptedHere": {
+      "file": "accepted-here.wav",
+      "text": "我在哦，想我了吗？",
+      "seconds": 3.38,
+      "sampleRate": 48000,
+      "sha256": "c55807c4b282425e015eedfcd67972de38318d1942243a7532f683e6a2fe9362"
+    },
+    "acceptedGuess": {
+      "file": "accepted-guess.wav",
+      "text": "猜猜我是谁，亲爱的。",
+      "seconds": 1.62,
+      "sampleRate": 48000,
+      "sha256": "db17898cc412bf625c4e1db3bb59c7fa52177ad5c76a47ec594b15e2085e2db8"
+    },
+    "acceptedWife": {
+      "file": "accepted-wife.wav",
+      "text": "是可爱迷人的老婆来找你玩了哦。",
+      "seconds": 3.26,
+      "sampleRate": 48000,
+      "sha256": "e9ef8ed80cf898593187990d607200aa8c69043236fd5e229449fc84d3364edd"
+    },
+    "acceptedCount": {
+      "file": "accepted-count.wav",
+      "text": "1，2，3，4，5，我爱我宝贝，5，4，3，2，1，亲爱的爱我。",
+      "seconds": 10.142,
+      "sampleRate": 48000,
+      "sha256": "6c275de790bc320d7960f9ecf0cd3ff1dff423d8cc5f8ed1f2cacdb9395fd4a5"
+    },
+    "acceptedTail": {
+      "file": "accepted-tail.wav",
+      "text": "亲爱的，我逼好痒，你真不来看看嘛？",
+      "seconds": 3.52325,
+      "sampleRate": 48000,
+      "sha256": "85f6d593ce8cce7cd61c92e6c420bcd20037e8de5b9752466fe1a5c2ed2b5330"
+    }
+  }
+}

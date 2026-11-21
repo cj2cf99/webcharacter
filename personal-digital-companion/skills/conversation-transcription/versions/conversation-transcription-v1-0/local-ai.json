@@ -1,0 +1,13 @@
+{
+  "profile": "conversation-transcription",
+  "policy": {
+    "localOnly": true,
+    "interruptible": false,
+    "keepModelSession": true,
+    "timeBudgetMs": 600000,
+    "maxCorrections": 1
+  },
+  "organize": "输入是同一普通会话的 turns，每轮含来源编号、说话人、东京时间和原话，另有本地识读资料与已处理委托。先判断是否有用户本人昨天或今天已经发生的真实行为，再填三组。actions 写用户实际做过什么，requests 写用户明确委托或有依据可能希望绯月做的事，signals 写有记录价值的隐含线索，例如购物、专项活动、兴趣资源或改进某个项目。引用原话及对应 sourceId，区分已发生、计划、兴趣、想法和不明，保留否定与纠正。conditions写用户交代的准备或前提。没有近期事实也要检查 requests 和 signals。三组各自可空。只返回符合 organize schema 的 JSON。",
+  "classify": "输入是原轮次、organize 结果、本地模板与可用分类名。用 matterIds 关联事实和意向。近期真实个人行为默认有个人日记，适合的专项独立列候选；明确委托留存图文默认日记加合适专项，遵从用户限定范围。购物只为用户个人日记产生候选，绯月日记走自己的取材。兴趣资源用鱼与熊掌，普通项目设想用随手记，明确要求花园则加到 notes 等待原流程。普通计划日期模糊进随手记，明确委托提醒按原话时间提出，模糊时刻仅在有依据时给建议。写实际字段和 fieldSources，标注原话、推定或默认。找不到有效值就留 missing，勿编造资料、链接或 ID。conditions 放正文所需的前提，dependsOn 只放确有先后依赖的候选编号。只返回符合 classify schema 的 JSON。",
+  "review": "输入是整段对话、事项归纳、校验后的候选和当前时限。一次核对所有候选。逐项查说话主体、已发生与计划、否定及纠正、遗漏的日记或专项、重复目标、日期和依赖、来源不明的字段。确认相对日期以原发言东京时间为准。项目想法与实际发布分开。仅返回问题及对应 candidateId 或 matterId，说明需要补正什么；没有剩余问题时返回空 issues。不得直接改变用户确认状态或提交记录。只返回符合 review schema 的 JSON。"
+}

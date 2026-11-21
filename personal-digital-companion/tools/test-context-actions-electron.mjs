@@ -49,7 +49,9 @@ async function test(){
   async function cloudState(){
     return shell.win.webContents.executeJavaScript(`(()=>{
       const cloud=document.querySelector('#thought'),bar=cloud.querySelector('progress');
-      return {hidden:cloud.hidden,text:cloud.innerText,counted:bar.hasAttribute('value'),
+      const summary=cloud.querySelector('small');
+      return {hidden:cloud.hidden,text:cloud.innerText,counted:bar.hasAttribute('value'),barHidden:bar.hidden,
+        timeHidden:cloud.querySelector('time').hidden,summaryFits:summary.scrollHeight===summary.clientHeight,
         clearOfHead:cloud.getBoundingClientRect().bottom<document.querySelector('#character').getBoundingClientRect().top,
         clickThrough:getComputedStyle(cloud).pointerEvents==='none'};
     })()`);
@@ -63,8 +65,22 @@ async function test(){
   await delay(40);
   const waiting=await cloudState();
   assert.match(waiting.text,/正在查询/);assert.equal(waiting.counted,false);
+  send('desktop:thought',{title:'闲时 · 核对手记',goal:'我想核对近七天的手记，找出待确认的疑点'});
+  await delay(40);
+  const goal=await cloudState();
+  assert.match(goal.text,/我想核对近七天的手记，找出待确认的疑点/);
+  assert.ok(goal.summaryFits&&goal.clearOfHead&&goal.timeHidden&&!goal.barHidden);
+  send('desktop:thought',{title:'闲时 · 核对手记',stage:'近七天手记没有新的关键疑点',durationMs:12500});
+  await delay(40);
+  const outcome=await cloudState();
+  assert.match(outcome.text,/近七天手记没有新的关键疑点\s+用时 12\.5 秒/);
+  assert.ok(outcome.summaryFits&&outcome.clearOfHead&&outcome.clickThrough&&outcome.barHidden&&!outcome.timeHidden);
+  send('desktop:thought',{title:'正式 · 处理任务',stage:'步骤',done:1,total:2});
+  await delay(40);
+  const formal=await cloudState();
+  assert.ok(formal.counted&&formal.timeHidden&&!formal.barHidden);
   send('desktop:thought',null);await delay(40);assert.equal((await cloudState()).hidden,true);
-  console.log('PASS 联想云真实页面的头顶位置、点击穿透、计数、等待与收起');
+  console.log('PASS 联想云位置、点击穿透、开工目的、结果与耗时、正式进度与收起');
   send('desktop:idle-context','diary-review-idle');
   await waitFor('diary-review-idle');
   let start=events.length;

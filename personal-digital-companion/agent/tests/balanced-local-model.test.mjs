@@ -1,6 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {EventEmitter} from 'node:events';
+import {fileURLToPath} from 'node:url';
 import {createBalancedLocalModel,correctionTurn,modelChoices} from '../../desktop/balanced-local-model.mjs';
+import {createLocalModel} from '../../desktop/local-model.mjs';
+
+test('转录持有同一模型，阶段之间普通推理和换档排队',async()=>{
+  const calls=[],starts=[],signal=AbortSignal.timeout(1000);
+  const first=Promise.withResolvers(),resume=Promise.withResolvers();
+  const model=createBalancedLocalModel({modelPath:'models/test.gguf',readGpu:async()=>({utilization:5,freeMiB:7000}),
+    create:({modelPath})=>({start:async()=>{starts.push(modelPath);},close:async()=>{},
+      snapshot:()=>({state:'ready',gpuLayers:20}),async analyze(text){calls.push(text);return {reply:text};}})});
+  try{
+    const job=model.withWorkSession('job',signal,async query=>{
+      await query('归纳',{});first.resolve();await resume.promise;
+      await query('拟稿',{});await query('复核',{});
+    });
+    await first.promise;
+    assert.equal(await model.suspend(),false);
+    const competing=model.work('新请求',{tier:'upgrade',session:{},signal});
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.deepEqual(calls,['归纳']);assert.equal(starts.length,1);
+    resume.resolve();await job;await competing;
+    assert.deepEqual(calls,['归纳','拟稿','复核','新请求']);assert.equal(starts.length,2);
+  }finally{resume.resolve();await model.close();}
+});
 
 test('按 GPU 双指标挑选档位，读数缺失或繁忙时用 CPU',()=>{
   const first=(utilization,freeMiB,correcting,resident=0)=>modelChoices({utilization,freeMiB},correcting,resident)[0];
@@ -99,4 +123,75 @@ test('三轮未通过时转交原草稿及反馈，改进模型上限两轮，�
       {error:'LOCAL_CHAT_REVIEW_FAILED'});
     assert.deepEqual(calls.slice(2).map(c=>c.limit),[3,2]);
   }finally{await m.close();}
+});
+
+test('修订按显存选 4B 或 2B GPU，显卡繁忙用 2B CPU，空闲超过一分钟仍复用模型',async context=>{
+  context.mock.timers.enable({apis:['setTimeout']});
+  for(const [gpu,device,size] of [[{utilization:32,freeMiB:5900},'gpu','4'],
+    [{utilization:32,freeMiB:3000},'gpu','2'],[{utilization:72,freeMiB:5900},'cpu','2']]){
+    const selections=[];
+    const model=createBalancedLocalModel({modelPath:'models/test.gguf',readGpu:async()=>gpu,
+      create:({modelPath,device})=>{
+        selections.push([modelPath,device]);
+        return {start:async()=>{},close(){},snapshot:()=>({state:'ready',gpuLayers:device==='gpu'?25:0}),
+          analyze:async()=>({result:'ok'})};
+      }});
+    const signal=new AbortController().signal;
+    try{
+      await model.memory('手记原稿','核对',{},signal,{name:'memory-refinement'});
+      context.mock.timers.tick(61_000);
+      await model.memory('待修段落','拟稿',{},signal,{name:'memory-refinement'});
+      assert.equal(selections.length,1);
+      assert(selections[0][0].endsWith(`Qwen3.5-${size}B-Q4_K_M.gguf`));
+      assert.equal(selections[0][1],device);
+      await model.memory('普通手记','整理',{},signal,{name:'diary-writing'});
+      assert.match(selections[1][0],/9B-Uncensored-HauhauCS-Aggressive/u);
+      assert.equal(selections[1][1],'cpu');
+    }finally{await model.close();}
+  }
+});
+
+test('修订取消后等模型停止，正常停止继续复用，无响应才重启',async context=>{
+  context.mock.timers.enable({apis:['setTimeout']});
+  const workers=[];
+  let acknowledge=true;
+  let started=Promise.withResolvers();
+  const utilityProcess={fork(){
+    const worker=new EventEmitter();
+    worker.postMessage=message=>{
+      if(message.type==='cancel'){
+        if(acknowledge)worker.emit('message',{type:'result',id:message.id,result:{error:'LOCAL_AI_TIMEOUT'}});
+      }else if(message.text==='耗时推理'){
+        started.resolve();
+      }else{
+        worker.emit('message',{type:'result',id:message.id,result:{text:'已拟稿'}});
+      }
+    };
+    worker.kill=()=>worker.emit('exit');
+    workers.push(worker);
+    queueMicrotask(()=>worker.emit('message',{type:'ready',backend:'cpu',gpuLayers:0,vramMiB:0}));
+    return worker;
+  }};
+  const modelPath=fileURLToPath(import.meta.url);
+  const model=createBalancedLocalModel({utilityProcess,modelPath,readGpu:async()=>null,
+    create:options=>createLocalModel({...options,modelPath})});
+  const ask=(text,signal=new AbortController().signal)=>model.memory(text,'拟稿',{},signal,{name:'memory-refinement'});
+  try{
+    for(const responded of [true,false]){
+      acknowledge=responded;
+      started=Promise.withResolvers();
+      const abort=new AbortController();
+      const request=ask('耗时推理',abort.signal);
+      const stopped=assert.rejects(request,{name:'TimeoutError'});
+      await started.promise;
+      abort.abort(new DOMException('推理超时','TimeoutError'));
+      if(!responded){
+        assert(model.isBusy());
+        context.mock.timers.tick(1000);
+      }
+      await stopped;
+      assert.deepEqual(await ask('补做段落'),{text:'已拟稿'});
+      assert.equal(workers.length,responded?1:2);
+    }
+  }finally{await model.close();}
 });

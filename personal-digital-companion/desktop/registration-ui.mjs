@@ -1,3 +1,5 @@
+import {bindDictation,dictating} from './dictation-ui.mjs';
+
 const byId = id => document.getElementById(id);
 const entry = byId('entry');
 const text = byId('text');
@@ -21,6 +23,7 @@ const tokyoTime = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Tokyo', mon
 const receiptCharacters = new Intl.Segmenter('zh-CN', { granularity: 'grapheme' });
 let active = false;
 let chainPending = false;
+bindDictation(text,{blocked:()=>active});
 window.addEventListener('companion-page-update',event=>{
   if(active||chainPending||text.value||receipts.childElementCount||pending.childElementCount)event.preventDefault();
 });
@@ -96,7 +99,7 @@ function render(result) {
 }
 
 async function run(action) {
-  if (active) return;
+  if (active||dictating()) return;
   active = true;
   const message = { submit: '正在理解并登记…', resume: '正在查询原链…', continue: '正在继续…', skip: '正在跳过…', stop: '正在停止…' };
   status.textContent = message[action];

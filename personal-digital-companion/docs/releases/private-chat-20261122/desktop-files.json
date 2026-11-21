@@ -1,0 +1,271 @@
+{
+  "installed": "G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion",
+  "candidate": "G:\\selftool\\WebCharacter\\personal-digital-companion\\output\\private-chat-release-20261122\\candidate-OaWg4Q",
+  "files": [
+    {
+      "path": "assets/desktop-media/feiyue-faces/waiting-b.png",
+      "before": null,
+      "after": "8196a26f21e93793cf73194a460ee2dddd7e16b67904334430b249c3c30b15c3"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted-alt.wav",
+      "before": null,
+      "after": "176f42f9790d6ff57d4647677854ca73d8373ee52e3b57c68eb538dc4393e17b"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted-count.wav",
+      "before": null,
+      "after": "6c275de790bc320d7960f9ecf0cd3ff1dff423d8cc5f8ed1f2cacdb9395fd4a5"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted-guess.wav",
+      "before": null,
+      "after": "db17898cc412bf625c4e1db3bb59c7fa52177ad5c76a47ec594b15e2085e2db8"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted-here.wav",
+      "before": null,
+      "after": "c55807c4b282425e015eedfcd67972de38318d1942243a7532f683e6a2fe9362"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted-tail.wav",
+      "before": null,
+      "after": "85f6d593ce8cce7cd61c92e6c420bcd20037e8de5b9752466fe1a5c2ed2b5330"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted-wife.wav",
+      "before": null,
+      "after": "e9ef8ed80cf898593187990d607200aa8c69043236fd5e229449fc84d3364edd"
+    },
+    {
+      "path": "assets/voice/private-chat/accepted.wav",
+      "before": null,
+      "after": "d29ee69781d88f10a8935224254bf428fe3784dc08736dea4bd7b82e4097cc5c"
+    },
+    {
+      "path": "assets/voice/private-chat/invite.wav",
+      "before": null,
+      "after": "abeb5141fdc0b90b6694e7cc9cd424d7f568a0730731682ef6f103de4a1aa560"
+    },
+    {
+      "path": "assets/voice/private-chat/manifest.json",
+      "before": null,
+      "after": "95b577b660e574406a61a4e7ee8e856959fe354fb5116e8d305858311c45a21c"
+    },
+    {
+      "path": "desktop/balanced-local-model.mjs",
+      "before": "4baf8ac6e3b5d7bb90279f16ff67655b9dee772235de9c7f6c35a1630b90774e",
+      "after": "e8f24d19a09829a44dd36b6ddfa0593200368ae9317398bd8b83d302678f87ee"
+    },
+    {
+      "path": "desktop/bubble-voice-worker.py",
+      "before": "a117f96cceed1351b7f7c427b6946aa444ce9f296e64c17ec294e0f89c6ad99a",
+      "after": "90233ce036da45adae9b461b1f09bc7e53bf733d921422f066af98b0fa963f3b"
+    },
+    {
+      "path": "desktop/bubble-voice.mjs",
+      "before": "db5b105f41ed2b61a07642885d5abd4e1d72982199d363f1d77abcad4a4fb5a8",
+      "after": "35928255f26d2d96191c5b257038da728500090097ac0cc2b9ba3e63a7486004"
+    },
+    {
+      "path": "desktop/conversation-ui.mjs",
+      "before": "c300a19647c70b84753e098d084915fca6120c860a4b37eaaf7e4c926f4e1bc6",
+      "after": "5e8ea25422ca7e19c4aca9c3929f1c4098d7d66f380638151253cc81162675ef"
+    },
+    {
+      "path": "desktop/conversation.css",
+      "before": "07eb526d75e516163b53266bd7001cf8c880011cbbf7cf1576dd8afdca97dc91",
+      "after": "45a1a03d03e57254e92803de7f66c48c50929ea2d412c86f8cac58a9b8c9023d"
+    },
+    {
+      "path": "desktop/conversation.html",
+      "before": "57100021de6e2eeebe28844a55061fc7c9d75ce30b2fa717b19552e0d25213d8",
+      "after": "53178ba81d0ff7f09973191949727e193f86148c59e415bd85a5f11ca6a694f0"
+    },
+    {
+      "path": "desktop/dictation-host.mjs",
+      "before": "3810752fa1f0dfefba5e4706185b0ceb4409f9b770fa579fd2a3a8d7f35bdf07",
+      "after": "e0c98143740e939ba137c3c6c305e3da7d509d6840ada7d3749b0692a0b3e073"
+    },
+    {
+      "path": "desktop/emotion-initiative.mjs",
+      "before": "bf09fa1993d25dea7f3b3f642a24f4a58d15f0c75b5149b5913b436db5195be6",
+      "after": "29884669e747a4d060d69b29a798c93a405f5ba5bc47b4631edec5ff2864c693"
+    },
+    {
+      "path": "desktop/menu-layout.json",
+      "before": "fb1b7e3bbaa21e960d71b29005cda3a89a19b68f4c55f4d3860e085008286bd3",
+      "after": "02dc9a812b5ffec58c285393ff9c308866cf587dd6188369718e147527297c0b"
+    },
+    {
+      "path": "desktop/menu-popup.mjs",
+      "before": "300d58e45022329385b2a1c96c0041b1e764e86d4ecf59f678d71781718b0b7c",
+      "after": "6452769dbef325da057ddfefd2609617a8c2adf1d08beebe6fb25668b59adb6f"
+    },
+    {
+      "path": "desktop/menu-ui.mjs",
+      "before": "caaef4fd04025ea29ce4f52a23ed8d98aa7c1c30c6ace3ebf7fb06c1d516bc95",
+      "after": "e34b370a55fcf6f384efa52c1f70dd59d5f470d34541382e449914673730e6c3"
+    },
+    {
+      "path": "desktop/menu.css",
+      "before": "19b99f4b7894da11775a377261873dd20ad255db41cc9ff8b57518c9457ae41c",
+      "after": "6d6923d5c20840d8087eb5e1cb4911d804407c498bec95c2fbedd97c88d3d3da"
+    },
+    {
+      "path": "desktop/menu.html",
+      "before": "c86a7abbeacbfa846a7bcdae533ea6caab5ee8cccf8a8bcdb003fa09d2672e36",
+      "after": "e30f24895af792e4de32bca2fe7f5dd6eb38a0439f7f1e3ff11afb5f098bf820"
+    },
+    {
+      "path": "desktop/panel-window.mjs",
+      "before": "017fcd5781f390fe11f10485270adecfc24ec683641485ec6be5e8f1cb426638",
+      "after": "3607709fc532a1e3fd1ce6df0663ac2f5b43f942741878d71026f80ebf5b9ae1"
+    },
+    {
+      "path": "desktop/private-chat-panel.mjs",
+      "before": null,
+      "after": "9c07fc6cab37d078435915c07949eaf1680f6e0afba77c88b55675a5c5c82b1f"
+    },
+    {
+      "path": "desktop/private-chat-preload.cjs",
+      "before": null,
+      "after": "1f6b800477c5bacf887bfd318c59e6ffc6f4f166f8a4f42814645ba84cee606b"
+    },
+    {
+      "path": "desktop/private-chat-ui.mjs",
+      "before": null,
+      "after": "c30d530e830c2afc5d0be853d544387c282f4a391cc2535404102e0d04892bd2"
+    },
+    {
+      "path": "desktop/private-chat.css",
+      "before": null,
+      "after": "cb1d9000bbac7b6d9c8a59072c2c4506bd816b0bc727ab87c2241b1018262c73"
+    },
+    {
+      "path": "desktop/private-chat.html",
+      "before": null,
+      "after": "4667fbd7b003650db66fb0c91f66a3a62cb54ac910e93e1a24989b0a5b198585"
+    },
+    {
+      "path": "desktop/private-chat.mjs",
+      "before": null,
+      "after": "5a72e9deb53c5cefc32302f855324c0845390b45312bdf518bad180bb62604b2"
+    },
+    {
+      "path": "desktop/reminder-review-host.mjs",
+      "before": "fb1f9a1b1b0ddb48ec4c015297478984711ba1bba2b7fb659452ffcad5439a7c",
+      "after": "21ff3566ab844db4b7c13032fa68dc7771f1899b7567d174cd59e7cd2305ed47"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "before": "af45546dd2101644bb904f1b0a6f937ed4ac0202ab36e992fbe067f5fdef0a9d",
+      "after": "5189f1f79625b492581ab4370c81e4460b9d554467c674dfa2e4414f196ee67b"
+    },
+    {
+      "path": "desktop/source-updates.mjs",
+      "before": "d3daedf334e6bbf576a025c1a1b4b98ba00b6472abe65c3eaaa5faff341f601b",
+      "after": "adbaac2405a62beefb6cf0efef790494f8a891b4df7363c24292b78dfc07ddb4"
+    },
+    {
+      "path": "desktop/weather-host.mjs",
+      "before": "94c1d4df5aba19e27eb2681a93a1db6e0236c4c7b3a831124a4036e9f5441078",
+      "after": "50d7725786d4b09b747743915208c06f0a0f7d9b2689c897c645f37cad6a3e8b"
+    },
+    {
+      "path": "output/desktop-bundle/conversation-ui.mjs",
+      "before": "c300a19647c70b84753e098d084915fca6120c860a4b37eaaf7e4c926f4e1bc6",
+      "after": "5e8ea25422ca7e19c4aca9c3929f1c4098d7d66f380638151253cc81162675ef"
+    },
+    {
+      "path": "output/desktop-bundle/conversation.css",
+      "before": "07eb526d75e516163b53266bd7001cf8c880011cbbf7cf1576dd8afdca97dc91",
+      "after": "45a1a03d03e57254e92803de7f66c48c50929ea2d412c86f8cac58a9b8c9023d"
+    },
+    {
+      "path": "output/desktop-bundle/conversation.html",
+      "before": "57100021de6e2eeebe28844a55061fc7c9d75ce30b2fa717b19552e0d25213d8",
+      "after": "53178ba81d0ff7f09973191949727e193f86148c59e415bd85a5f11ca6a694f0"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-faces/waiting-b.png",
+      "before": null,
+      "after": "8196a26f21e93793cf73194a460ee2dddd7e16b67904334430b249c3c30b15c3"
+    },
+    {
+      "path": "output/desktop-bundle/menu-ui.mjs",
+      "before": "caaef4fd04025ea29ce4f52a23ed8d98aa7c1c30c6ace3ebf7fb06c1d516bc95",
+      "after": "e34b370a55fcf6f384efa52c1f70dd59d5f470d34541382e449914673730e6c3"
+    },
+    {
+      "path": "output/desktop-bundle/menu.css",
+      "before": "19b99f4b7894da11775a377261873dd20ad255db41cc9ff8b57518c9457ae41c",
+      "after": "6d6923d5c20840d8087eb5e1cb4911d804407c498bec95c2fbedd97c88d3d3da"
+    },
+    {
+      "path": "output/desktop-bundle/menu.html",
+      "before": "c86a7abbeacbfa846a7bcdae533ea6caab5ee8cccf8a8bcdb003fa09d2672e36",
+      "after": "e30f24895af792e4de32bca2fe7f5dd6eb38a0439f7f1e3ff11afb5f098bf820"
+    },
+    {
+      "path": "output/desktop-bundle/private-chat-ui.mjs",
+      "before": null,
+      "after": "c30d530e830c2afc5d0be853d544387c282f4a391cc2535404102e0d04892bd2"
+    },
+    {
+      "path": "output/desktop-bundle/private-chat.css",
+      "before": null,
+      "after": "cb1d9000bbac7b6d9c8a59072c2c4506bd816b0bc727ab87c2241b1018262c73"
+    },
+    {
+      "path": "output/desktop-bundle/private-chat.html",
+      "before": null,
+      "after": "4667fbd7b003650db66fb0c91f66a3a62cb54ac910e93e1a24989b0a5b198585"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted-alt.wav",
+      "before": null,
+      "after": "176f42f9790d6ff57d4647677854ca73d8373ee52e3b57c68eb538dc4393e17b"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted-count.wav",
+      "before": null,
+      "after": "6c275de790bc320d7960f9ecf0cd3ff1dff423d8cc5f8ed1f2cacdb9395fd4a5"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted-guess.wav",
+      "before": null,
+      "after": "db17898cc412bf625c4e1db3bb59c7fa52177ad5c76a47ec594b15e2085e2db8"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted-here.wav",
+      "before": null,
+      "after": "c55807c4b282425e015eedfcd67972de38318d1942243a7532f683e6a2fe9362"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted-tail.wav",
+      "before": null,
+      "after": "85f6d593ce8cce7cd61c92e6c420bcd20037e8de5b9752466fe1a5c2ed2b5330"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted-wife.wav",
+      "before": null,
+      "after": "e9ef8ed80cf898593187990d607200aa8c69043236fd5e229449fc84d3364edd"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/accepted.wav",
+      "before": null,
+      "after": "d29ee69781d88f10a8935224254bf428fe3784dc08736dea4bd7b82e4097cc5c"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/invite.wav",
+      "before": null,
+      "after": "abeb5141fdc0b90b6694e7cc9cd424d7f568a0730731682ef6f103de4a1aa560"
+    },
+    {
+      "path": "output/desktop-bundle/voice/private-chat/manifest.json",
+      "before": null,
+      "after": "95b577b660e574406a61a4e7ee8e856959fe354fb5116e8d305858311c45a21c"
+    }
+  ]
+}

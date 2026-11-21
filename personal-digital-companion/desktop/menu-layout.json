@@ -1,7 +1,8 @@
 [
   {"action":"question","label":"问绯月","icon":"💬"},
+  {"action":"privateChat","tone":"hot"},
   {"action":"notices","icon":"🔔","tone":"hot"},
-  {"action":"continueNag","label":"接着解释上次的事","icon":"💭","tone":"hot"},
+  {"action":"continueNag","label":"待确认","icon":"💭","tone":"hot"},
   "-",
   {"action":"today","label":"今日任务","icon":"📋"},
   {"action":"weather","label":"三地天气","icon":"⛅"},

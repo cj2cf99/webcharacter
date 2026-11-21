@@ -4,14 +4,14 @@ import {pathToFileURL} from 'node:url';
 // 自绘右键菜单：仍由主进程的原生 Menu 提供条目、勾选状态和点击逻辑，这里只负责显示。
 // 菜单项按下标路径回传，主进程调用对应 MenuItem.click()，勾选项的切换与原生菜单一致。
 const SHADOW=12,WIDTH=262; // 透明边距留给阴影
-export function createMenuPopup(electron,{bundle,root,onOpen=()=>{},onClose=()=>{}}){
+export function createMenuPopup(electron,{bundle,root,readCycle=()=>null,onOpen=()=>{},onClose=()=>{}}){
   const {BrowserWindow,screen}=electron;
   const page=resolve(bundle,'menu.html'),url=pathToFileURL(page).href;
   let win=null,loading=null,menu=null,anchor=null,shown=false,pending=false;
   const own=event=>win&&!win.isDestroyed()&&event.senderFrame===win.webContents.mainFrame;
   function items(list){
     return list.filter(item=>item.visible!==false).map(item=>item.type==='separator'?{type:'separator'}:{
-      label:item.label,icon:item.fyIcon||'',tone:item.fyTone||'',type:item.type,enabled:item.enabled!==false,checked:Boolean(item.checked),
+      label:item.label,icon:item.fyIcon||'',image:item.fyImage||'',tone:item.fyTone||'',type:item.type,enabled:item.enabled!==false,checked:Boolean(item.checked),
       submenu:item.submenu?items(item.submenu.items):undefined,
     });
   }
@@ -76,7 +76,7 @@ export function createMenuPopup(electron,{bundle,root,onOpen=()=>{},onClose=()=>
       await loading;
       if(shown){shown=false;win.hide();onClose();}
       pending=true;
-      win.webContents.send('menu:show');
+      win.webContents.send('menu:show',readCycle());
     },
     hide,
     close(){if(win&&!win.isDestroyed())win.destroy();},

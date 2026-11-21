@@ -1,4 +1,23 @@
 const api=window.feiyueMenu,box=document.getElementById('items'),menu=document.getElementById('menu');
+const avatar=document.getElementById('cycle-avatar'),face=document.getElementById('cycle-face');
+const moon=document.getElementById('menu-moon'),tip=document.getElementById('cycle-tip');
+const portraits=new Map([
+  ['贪婪','greed'],['色欲','lust'],['傲慢','pride'],['暴怒','wrath'],['嫉妒','envy'],['怠惰','sloth'],['暴食','gluttony'],
+]);
+function renderAvatar(cycle){
+  const portrait=portraits.get(cycle?.inclination),strength=Math.abs(cycle?.grade);
+  if(!portrait||!Number.isInteger(strength)||strength<1||strength>5){
+    face.hidden=true;moon.hidden=false;tip.textContent='';
+    avatar.removeAttribute('tabindex');avatar.removeAttribute('aria-describedby');avatar.removeAttribute('aria-label');
+    return;
+  }
+  const level=strength>=4?'高':strength===3?'中':'低';
+  tip.textContent=level+'强度'+cycle.inclination;
+  avatar.tabIndex=0;avatar.setAttribute('aria-label','本周倾向');avatar.setAttribute('aria-describedby',tip.id);
+  face.src='./feiyue-faces/sins/'+portrait+'.png';
+  face.hidden=false;moon.hidden=true;
+}
+face.addEventListener('error',()=>renderAvatar(null));
 function element(tag,className,text=''){const node=document.createElement(tag);node.className=className;node.textContent=text;return node;}
 // path 是在可见条目中的下标路径，主进程据此找回原生 MenuItem。
 function render(list,path=[]){
@@ -7,7 +26,9 @@ function render(list,path=[]){
     if(item.type==='separator'){fragment.append(element('div','sep'));return;}
     const button=element('button','item'),here=[...path,index];
     button.type='button';button.disabled=!item.enabled;
-    button.title=item.label;button.append(element('span','icon',item.icon),element('span','label',item.label));
+    const icon=element('span','icon',item.icon);
+    if(item.image){const image=element('img','menu-face');image.src=item.image;image.alt='';icon.append(image);}
+    button.title=item.label;button.append(icon,element('span','label',item.label));
     if(item.tone)button.classList.add(item.tone);
     if(item.submenu){
       button.classList.add('group');button.setAttribute('aria-expanded','false');button.append(element('span','tail','›'));
@@ -48,8 +69,10 @@ document.addEventListener('keydown',event=>{
   event.preventDefault();
 });
 new ResizeObserver(()=>api.size(menu.getBoundingClientRect().height)).observe(menu);
-api.onShow(async()=>{
+api.onShow(async cycle=>{
   document.body.classList.remove('show');
+  if(document.activeElement===avatar)avatar.blur();
+  renderAvatar(cycle);
   box.replaceChildren(render(await api.read()));
   void document.body.offsetWidth;document.body.classList.add('show');
   api.size(menu.getBoundingClientRect().height);

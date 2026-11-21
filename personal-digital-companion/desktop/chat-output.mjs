@@ -22,7 +22,12 @@ export function cleanChatOutput(reply, input='') {
   if(typeof reply!=='string')return '';
   const value=reply.trim();
   if (/```/u.test(value)||/(?:代码|正则|原样|逐字|复述|翻译|重复输出|输出符号|写.{0,3}(?:小说|对白|台词))/u.test(input))return value;
-  const text=value.replace(brokenTail,'').trim();
+  let text=value.replace(brokenTail,'').trim();
+  const question=input.trim();
+  if(question&&text.startsWith(question)&&!repeatRequest.test(question)){
+    const remainder=text.slice(question.length);
+    if(/^\s*\n/u.test(remainder)&&remainder.trim())text=remainder.trimStart();
+  }
   if(!text)return '';
   const clauses=text.match(/[^，,。！？!?；;\n]+[，,。！？!?；;\n]*|[，,。！？!?；;\n]+/gu)??[];
   const kept=clauses.filter(clause=>!completedWrite.test(clause.trim()));

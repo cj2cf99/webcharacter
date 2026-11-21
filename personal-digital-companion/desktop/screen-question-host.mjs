@@ -20,6 +20,7 @@ import {missingRows,uploadInquiryPhoto} from './inquiry-input.mjs';
 import {answerSchema,requestWorkCloud} from './interaction-work.mjs';
 import {cleanChatOutput,repeatsPreviousChatReply} from './chat-output.mjs';
 import {parseReminderCommand} from './reminder-command.mjs';
+import {createBubbleVoice} from './bubble-voice.mjs';
 
 const inputModes = new Set(['registration','supplement','web','memory','tour']);
 function searchSummaryPrompt(query, sources) {
@@ -42,9 +43,11 @@ export function questionBounds(pet,area,preferredHeight=260){
   return {bounds:{x,y,width,height},tail,tailX:Math.max(20,Math.min(width-60,pet.x+pet.width/2-x-20))};
 }
 
-export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,checks,reminderRequest,requestRestart,localModel,interactionWork,log,emotion=()=>null,topics=()=>null,auditPending=()=>null,resumeAudit,openNews,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,visible=true}={}){
+export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,checks,reminderRequest,requestRestart,localModel,interactionWork,transcription,log,emotion=()=>null,topics=()=>null,auditPending=()=>[],resumeAudit,openNews,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,visible=true,voice=createBubbleVoice({root,profile})}={}){
+  const sessions=new WeakMap();
   const {ipcMain,screen,desktopCapturer}=electron;
   let panel=null,servicePromise=null,controller=null,busy=false,disposed=false,generation=0,panelHeight=260,state={state:'idle',text:'想问我什么？'};
+  const entry=resolve(bundle,'screen-question.html'),entryUrl=pathToFileURL(entry).href;
   const records=history??memory??createConversationHistory(profile,electron.safeStorage);
   let details,reviewedGroup='',nag=null;
   function leaveNag(reason){const session=nag;nag=null;session?.leave(reason);}
@@ -69,13 +72,13 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       details?.panel?.webContents.send('conversation:pending-changed');
       if(panel&&!panel.isDestroyed())panel.webContents.send('screen-qa:pending-changed',pending());
     }});
-  const pending=()=>edits?.hasPending()===true||Boolean(auditPending());
+  const pending=()=>edits?.hasPending()===true||auditPending().length>0;
   function notifyPending(){details?.panel?.webContents.send('conversation:pending-changed');panel?.webContents.send('screen-qa:pending-changed',pending());}
   details=attachConversationDetails(electron,{root,profile,bundle,visible,history:records,memory,readTasks,readTraffic,checks,edits,auditPending,
-    resumeAudit:async()=>{
-      if(nag?.audit){panel?.focus();return '已打开质问气泡。';}
-      if(panel)return '请先收起当前对话，再继续回答手记质问。';
-      const result=await resumeAudit?.();
+    resumeAudit:async id=>{
+      if(nag?.id===id){panel?.focus();return '已打开这条质问。';}
+      if(panel)return '请先收起当前气泡，再回答这条质问。';
+      const result=await resumeAudit?.(id);
       return result?.deferred?'绯月正在忙，质问保留在这里。':result?.detail??result;
     },onReview:token=>{reviewedGroup=token;}});
   let latest=null,lastRequest=null,inputMode='auto',supplement='',chainActions=[],ready=false,idleDraft=null;
@@ -178,17 +181,18 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       return {state:'error',text:'请只填写一个目的地，或留空让绯月选择。'};
     const text=mode==='tour'?'绯月环球之旅'+(input?'：'+input:''):input;
     onForeground();
+    if(nag?.audit&&(!text||direct||mode!=='auto'||args?.withScreen||args?.attachment||args?.references?.length))return {state:'error',text:'请用文字回答这条质问。',audit:true,nag:true,nagReply:true};
     if(direct){
       if(args?.withScreen||args?.attachment||args?.references?.length)return {state:'error',text:'直连仅支持文字对话。'};
       return track(()=>perform(args?.text,false,false,'direct'));
     }
-    if(nag?.audit&&(!text||mode!=='auto'||args?.withScreen||args?.attachment||args?.references?.length))return {state:'error',text:'请用文字回答这条质问。',audit:true,nag:true,nagReply:true};
     if(nag&&text&&mode==='auto'&&!args?.withScreen&&!args?.attachment){
       if(busy)return {state:'error',text:'正在听你刚才的解释。',nag:true,nagReply:true};
       const session=nag;busy=true;
       try{
         const reply=await session.reply(args.text);
-        const result={state:'answer',question:text,text:reply.text,nag:!reply.done,nagReply:true,audit:Boolean(session.audit&&!reply.done),invalid:reply.invalid};
+        const result={state:'answer',question:text,text:reply.text,nag:!reply.done,nagReply:true,audit:Boolean(session.audit&&!reply.done),
+          sceneImage:!reply.done?session.sceneImage:undefined,invalid:reply.invalid};
         if(nag===session){publish(result,generation);reply.shown?.();if(reply.done)nag=null;}
         return result;
       }catch{if(nag===session)leaveNag('interrupted');return {state:'error',text:'解释已留在本机，稍后接着聊。'};}
@@ -284,6 +288,22 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const reviewState=retry?route.reviewState??{}:{};
     const inputAt=retry?route.inputAt??route.turn.at:Date.now();
     const turn={id:crypto.randomUUID(),at:Date.now(),question:route.fileName?userText+' · '+route.fileName:userText,retry,...(route.kind==='direct'?{direct:true}:{})},timing=newTiming();
+    const session=sessions.get(panel);
+    const bareRegistration=/^(?:(?:请|绯月|帮我|替我|给我)[，,\s]*)*(?:登记|记录)(?:一下)?[。！!吧\s]*$/u.test(text);
+    const registrationNeedsText=emptyDiaryRequest(text)||bareRegistration;
+    const explicitRegistration=mode==='registration'&&!retry;
+    const deferRegistration=Boolean(transcription&&session&&!decision&&!withScreen&&!attachment&&route.kind==='registration'&&
+      (mode==='auto'&&!emptyDiaryRequest(text)||explicitRegistration&&!registrationNeedsText));
+    const transcriptId=retry?route.turn?.transcriptId:transcription&&session&&
+      (deferRegistration||!decision&&['auto','direct'].includes(mode)&&['question','direct'].includes(route.kind))?turn.id:null;
+    if(transcriptId){
+      turn.transcriptId=transcriptId;
+      if(!retry)try{transcription.turn(session,{id:transcriptId,at:inputAt,text:userText,...(explicitRegistration?{registration:true}:{})});}
+      catch{
+        void log?.({direction:'local',route:'对话内容转录',error:'TRANSCRIPTION_STORE_FAILED'});
+        if(explicitRegistration)return {state:'error',code:'TRANSCRIPTION_STORE_FAILED',text:'登记内容未能保存，请保留原文并重试。'};
+      }
+    }
     if(route.fileName)turn.originalQuestion=userText;
     let operation=({serverTask:'服务器 PC 任务',registration:'随口登记',decision:'登记确认',reminders:'提醒查询或修改',reminderConsent:'提醒确认',search:'联网查询'})[route.kind]??(retry?route.operation:withScreen?'截图问答':'文字问答');
     if(attachment)operation=attachment.kind==='image'?'图片问答':'文件问答';
@@ -421,11 +441,17 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         const response=await withinChat(localModel?.analyze(userText,{hint:'direct',previous,signal,onProgress:waiting,replyMode:style,skillInstruction,turnStart:timing.start}));
         timing.localMs=performance.now()-timing.start;
         result=response?.reply?.trim()?{state:'answer',text:response.reply}:response?.error==='LOCAL_CHAT_TIME_LIMIT'?timedReply:{state:'error',text:'本地直连暂未取得回复。',code:response?.error??'LOCAL_AI_NOT_READY'};
+      }else if(deferRegistration){
+        if(explicitRegistration)onRegistration();
+        result=explicitRegistration?{state:'answer',keepRegistrationMode:true,text:'关窗后我会整理出个人日记和其他适合登记的事项，给你逐项确认。'}:
+          {state:'answer',text:'我会在你关窗后整理这件事，再给你确认。'};
+      }else if(explicitRegistration&&transcription&&registrationNeedsText){
+        result={state:'answer',keepRegistrationMode:true,text:'你想记下什么事？直接输入正文就好。'};
       }else if(route.kind==='registration'&&emptyDiaryRequest(text)){
         if(!registration?.preview||!registration.submitReviewed)throw Error('当前实例未载入登记核对，请重启绯月。');
         if(registration.hasSaved?.())throw Error('已有登记链待处理，请先恢复原链。');
         result=offerRegistration(text,{pending:[{type:'diaries.create',field:'content',question:'请填写日记正文'}]},'','你想记下什么事？');
-      }else if(route.kind==='registration'&&/^(?:(?:请|绯月|帮我|替我|给我)[，,\s]*)*(?:登记|记录)(?:一下)?[。！!吧\s]*$/u.test(text)){
+      }else if(route.kind==='registration'&&bareRegistration){
         result={state:'answer',text:'你想记下什么事？可以直接说“记录”加上内容。'};
       }else if(interactionWork){
         const plain=route.kind==='question'&&!route.fileName&&!(retry?route.withScreen:withScreen);
@@ -633,6 +659,8 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         httpStatus:Number.isInteger(result.httpStatus)?result.httpStatus:undefined,text:result.text});
     }
     const completed={...turn,...(stale?{emotionSkip:true}:{}),state:result.state,text:result.text+(result.fields?'\n'+result.fields:''),sources:result.sources,answeredAt,failures:failures.length?failures:undefined};
+    if(transcriptId&&result.state==='answer')try{transcription.reply(session,transcriptId,result.text);}
+    catch{void log?.({direction:'local',route:'对话内容转录',error:'TRANSCRIPTION_STORE_FAILED'});}
     if(!stale)latest=completed;
     let unsaved=false;
     const saveCompleted=async()=>{await pendingWrite;try{await records.save(completed);emotion()?.chat(completed);}catch{unsaved=true;unsavedReplies.set(turn.id,completed);}};
@@ -657,9 +685,9 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     return display;
   }
   function cancel(){lastRequest=null;generation++;controller?.abort();controller=null;busy=false;panelHeight=260;state={state:'idle',text:'想问我什么？'};servicePromise?.then(api=>api.forget()).catch(()=>{});}
-  function hide(){leaveNag('interrupted');if(!draining&&!pendingQuestion)cancel();if(panel&&!panel.isDestroyed()){const closing=panel;panel=null;closing.destroy();}}
+  function hide(){voice.stopSpeaking();leaveNag('interrupted');if(!draining&&!pendingQuestion)cancel();if(panel&&!panel.isDestroyed()){const closing=panel;panel=null;closing.destroy();}}
   function abandon(){idleDraft=null;supplement='';reviewedGroup='';chainActions=[];hide();}
-  const view=()=>({...state,directInput:true,mode:inputMode,actions:chainActions,canSupplement:Boolean(supplement),
+  const view=()=>({...state,directInput:true,voiceReply:voice.enabled,mode:inputMode,actions:chainActions,canSupplement:Boolean(supplement),
     webSearch:true,attachmentInput:true,hasPending:pending(),idleDraft});
   async function decideRegistration(id,approve,photoTarget,images=[]){
       const draft=registrationDraft;
@@ -742,6 +770,9 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(error)throw Error(error);
   }
   const handlers={
+    'screen-qa:voice-synthesize':(_event,text)=>state.state==='answer'&&!draining
+      ?voice.render(text):{error:'当前没有可朗读的回复。'},
+    'screen-qa:voice-stop-reading':()=>{voice.stopSpeaking();},
     'screen-qa:attachment-review':(_e,value)=>typeof value?.approve==='boolean'?inquiry.respond(value.id,{action:value.approve?'confirm':'cancel'}):{state:'error',text:'无效的登记操作。'},
     'screen-qa:image-list':async()=>{
       const [row]=await images.list(state.imageJob??null);
@@ -758,7 +789,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     'screen-qa:retry':()=>track(()=>perform(null,false,true)),
     'screen-qa:details':(_e,full)=>details.open(full===true?latest:null),
     'screen-qa:pending':(_event,empty)=>{
-      if(empty===true&&auditPending()&&!nag&&!busy&&!registrationDraft&&!pendingQuestion&&!draining)hide();
+      if(empty===true&&auditPending().length&&!nag&&!busy&&!registrationDraft&&!pendingQuestion&&!draining)hide();
       return details.open(null,'pending');
     },
     'screen-qa:decision':(_e,action)=>['resume','continue','skip','stop'].includes(action)?track(()=>perform(({resume:'恢复原链',continue:'继续登记',skip:'跳过登记',stop:'停止后续登记'})[action],false,false,'auto',action)):null,
@@ -794,9 +825,15 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const created=createPanelWindow(electron,{width:360,height:260,show:false,frame:false,transparent:true,resizable:false,hasShadow:false,skipTaskbar:true,alwaysOnTop:true,title:'绯月 · 提问',
       webPreferences:{preload:resolve(root,'desktop/screen-question-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,offscreen:!visible}},root);
     ready=false;
-    panel=created;const entry=resolve(bundle,'screen-question.html'),url=pathToFileURL(entry).href;
-    created.webContents.setWindowOpenHandler(()=>({action:'deny'}));created.webContents.on('will-navigate',(event,target)=>{if(target!==url)event.preventDefault();});
-    created.on('closed',()=>{if(panel===created){leaveNag('interrupted');panel=null;idleDraft=null;if(!draining)cancel();}});
+    panel=created;
+    const session=!forNag?crypto.randomUUID():null;
+    if(session)sessions.set(created,session);
+    created.webContents.setWindowOpenHandler(()=>({action:'deny'}));created.webContents.on('will-navigate',(event,target)=>{if(target!==entryUrl)event.preventDefault();});
+    created.webContents.on('did-start-loading',()=>{if(panel===created)voice.stopSpeaking();});
+    created.on('closed',()=>{
+      if(session)try{transcription?.seal(session);}catch{void log?.({direction:'local',route:'对话内容转录',error:'TRANSCRIPTION_STORE_FAILED'});}
+      if(panel===created){voice.stopSpeaking();leaveNag('interrupted');panel=null;idleDraft=null;if(!draining)cancel();}
+    });
     const today=tokyoDay(Date.now());
     if(!latest||tokyoDay(latest.at)!==today){
       let stored;
@@ -829,7 +866,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     await open('auto',session);
     if(session.signal?.aborted||!panel?.isVisible()||!ready||busy)return false;
     nag=session;
-    publish({state:'answer',text:session.prompt,nag:true,nagReply:true,audit:Boolean(session.audit)},generation);
+    publish({state:'answer',text:session.prompt,nag:true,nagReply:true,audit:Boolean(session.audit),sceneImage:session.sceneImage},generation);
     session.visible();
     return true;
   }
@@ -848,6 +885,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     get hasLocalWork(){return Boolean(nag)||this.executing||Boolean(registrationDraft)||edits?.hasPending()===true;},
     async drainForRestart(){
       draining=true;
+      voice.stopSpeaking();
       const results=await Promise.allSettled([edits?.drainForRestart(),...activeCommands]);
       // 在途问答收尾时可能刚登记了最后一笔归档写入。
       await Promise.allSettled([...activeCommands]);

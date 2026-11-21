@@ -1003,3 +1003,212 @@ Git 代码回执：发布提交 e10f7b32a86f220b14b50a8dadc1c4856d3b1bb4 已推�
 
 
 花园登记回执（2026-11-21 19:41:52 JST）：用户确认批次 feiyue-local-first-release-20261121。部署 #71、明细 #149 已登记为发布成功，归属网页角色组件 #16 → 绯月（桌面精灵）#61，版本 20.0 → 21.0。绯月回读 done，1/1 步骤 verified，花园修订 141 → 142。清单提交 e57cbebfd0d9633fbbb5e98c8023c3c7eeb223d5，确认摘要 f544f3d0afdeeb4226e2206ba1d065318427119854c17048d7ba06517218169e。
+
+## 2026-11-21 JST · 绯月对话明细与模型档位 Windows 发布审核
+
+### 用户需求、范围和基线
+
+用户要求修正明细断句及发言重复，普通交互默认 Aggressive 9B，显存紧张时用 4B 或 2B，升级候补为标准 Qwen3.5-9B，直连不变。随后要求更新 Windows 正式绯月，并登记一条版本号不变的桌面精灵部署。验收核对完整回复能归档、旧长段和独立的问题回显不会重复出现、上一轮上下文及复述请求可继续使用、模型降档和直连行为与要求一致。详见[需求](REQUIREMENTS.md#2026-11-21-jst--对话明细与模型档位)和[开发复核](docs/reviews/CHAT_DETAIL_MODEL_REVIEW_2026-11-21.md)。
+
+目标为 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，保留原 `output/desktop-profile`。准备时监听 PID 34580，19:33:09 JST 启动，回环 REST v4 和桌面快捷方式、登录启动项及实际进程命令行均指向同一安装。参考上次发布源 `e10f7b3`，以实际安装文件的 SHA-256 为最终前像。用开发提交 `2e215d2` 与其父提交计算本次差异，三方合入 Windows 安装基线，保留问答宿主原有独立修改和七日新闻路由。候选复测发现独立问题回显，补丁及回归在当前工作区的 `desktop/chat-output.mjs` 和 `agent/tests/local-first-interaction.test.mjs`。候选共 12 项程序和技能文件，完整前后散列见[安装清单](docs/reviews/CHAT_DETAIL_WINDOWS_RELEASE_MANIFEST_2026-11-21.json)。清单 SHA-256 为 `6384a329c293ecbd88ffd01f6657463d52d3156a2e75f52c5dfbf9ac3827762d`。
+
+### 文件与行为
+
+| 变更 | 原行为 | 候选行为 |
+| --- | --- | --- |
+| `desktop/screen-question-host.mjs`、`desktop/chat-output.mjs`、`desktop/interaction-work.mjs` | 普通口语字段上限 160 字，生成可在句中结束。旧长段或新问题回显可进入复审和归档。 | 使用模型输出预算及完整 JSON 校验。旧长段复用触发重写。单独成段的逐字问题回显可移除，后续回答保留。用户明确要求复述时保留原话。 |
+| `desktop/balanced-local-model.mjs` | 普通交互优先 2B，资源不足可选 0.8B。升级候补使用 Aggressive 9B。 | 主力优先 Aggressive 9B、4B、2B，GPU 忙或不可用可选 CPU 2B。升级候补用标准 Qwen3.5-9B。直连沿用 Aggressive 9B 原路径。 |
+| `skills/feiyue-interaction` 与 `skills/personal-conversation` 下的两份源说明、两份索引与四份快照文件 | 引导版本 2.8，对话版本 1.6。 | 引导版本 2.9，对话版本 1.7。与现有七日新闻转接和直连模型指令兼容。 |
+
+数据库迁移、历史回填、配置变更、Cloudflare 或主站程序发布均为无。保留既有资料、资源、模型、账户、原档案、快捷方式和开机项。历史归档已缺失的句尾无法由此次更新补写。内置技能用自身版本维护历史，花园的功能版本单独由花园计算。
+
+### 检测、风险及待验证
+
+- 在隔离候选执行 `node tools/build-desktop.mjs` 通过。当地 `node --test --test-reporter=spec agent/tests/local-first-interaction.test.mjs agent/tests/balanced-local-model.test.mjs agent/tests/memory-archive.test.mjs` 通过 25 项。另加正式基线保留的 `screen-question-host.test.mjs` 时，候选有 3 项旧断言失败。隔离旧基线按同名复跑，图像确定性、网络摘要及旧登记时序 3 项均复现，详见候选与基线测试日志。技能用 `PYTHONPATH=G:/selftool/WebCharacter/tools` 执行 `python -B tools/test-skills.py` 通过该基线的 4 项。
+- 第一次真实隔离试跑加载 CPU 2B 和标准 9B，发现 2B 偶尔会在回答之前独立重述本轮问题。先报告，再补本轮输出处理和回归。终轮通过 `electron.exe tools/run-electron-check.mjs output/chat-model-smoke.mjs` 重放合成问答。CPU 2B 的最终回复不含开头的问题回显，完整归档并通过复审。标准 CPU 9B 正确读取合成材料中的暗号。开发树终轮 `node --test --test-reporter=spec 'agent/tests/*.test.mjs'` 393 项通过、3 项可选契约跳过。未改界面文件。显存分档和直连行为由专项回归核对，正式实例实际重启待许可。
+- 风险重点为当轮生成与复审一致、候补换档、正式版独立问答接线和既有新闻入口。正式进程、自然对话效果和用户界面须在授权安装后另外核对。未执行第三方独立审核。
+
+### 安装、回退及版本登记
+
+1. 收到针对本清单的明确许可后，再核验 PID、正在执行的正式任务和实际文件前像。只备份和替换清单中的文件及审核纪要。通过正常退出流程等待对话和在途任务处理完毕，确认旧 PID 退出及端口释放，从原快捷方式参数启动新进程。逐项验证 SHA-256、PID 和启动时间、原资料目录、REST v4、历史批次及隔离对话。若失败，按清单恢复原文件并移除本次新增项，再从原入口恢复并核验。完成后补记实际时间、结果和 Git 同步状态。
+2. 花园登记意愿已经确认。线上结构同步成功，新增结构对象 0。授权只读核对修订 142，网页角色组件 #16 下唯一目标绯月（桌面精灵）#61，当前版本 21.0，最后部署 #71、明细 #149。现有花园 `store.mjs` 以实际关联部署次数计算主版本。正常新增一条会算成 22.0，仅让明细版本前后相等也会改变功能显示版本。已确认目前没有不计版本的新部署字段。保留 21.0，未制备会升版的写入包，也未提交 SQL 或调用写入接口。后续如获得能同时满足新增记录与版本不变的方案，须按实际安装结果重新制单并取得具体内容确认。种子、功能定义、改善、Bug 和既有部署均无需更改。
+3. 用户查看候选审核后回复「提交」。按此前更新指令执行本机正式安装及受控重启，花园保持 21.0。已执行线上结构同步和只读核对。生产记录写入尚未执行。第三方审核未执行。
+
+### 本次实际安装与验收
+
+2026-11-21 21:02:52 JST，正式绯月从原应用路径启动。旧 PID 20312 正常退出并释放回环端口，新 PID 11896 使用原资料目录。21:02:52.987 JST 核对 12 项程序和技能、两份审核文件、快捷方式、登录启动入口、回环 REST v4、原轮询配置与 16 条历史批次。任务资料只读完整性检查为 ok。程序前像及原审核纪要在 `G:/selftool/WebCharacter/personal-digital-companion/output/chat-detail-release-20261121/install-backup-20261121-210243`，本机回执和复测日志同在该发布工作目录。
+
+以同一 Electron 及实际安装目录调用隔离模型测试。CPU 2B 接续回答并复审，归档无开头的逐字问题回显。标准 CPU Qwen3.5-9B 从合成材料准确给出暗号。从上一正式源码 `8d78eb2` 单独准备本次发布分支，25 项交互、模型分档及归档回归全部通过。自然对话和用户日常使用效果待观察。此次仅发布 Windows 桌宠，无 Cloudflare 发布和数据库迁移。花园未写入或增加部署记录。完整保持版本和新增关联部署的方案仍待花园支持。
+
+### Git 同步与花园回读
+
+发布源码提交 `5aacfe8f04be6695fe846f2665faf84c7caa2bdd` 已推送并回读 `origin/codex/feiyue-chat-detail-windows-20261121`。提交中的 12 项程序与技能与安装候选逐项核对一致，Git 按仓库配置规范化两份技能索引的换行。发布后独立只读回查花园修订 142，绯月 #61 仍有 21 次部署，最新 #71。本次无花园写入、SQL 提交或登记批次。
+
+## 2026-11-21 JST · Windows 绯月持续听写、自动校正和手动朗读发布审核
+
+状态为隔离候选验收完成。用户回复「安装」，已授权本机正式安装及受控重启。第三方审核未执行。用户同意准备花园登记，实际清单和写入待确认。
+
+### 需求和验收标准
+
+原始要求包含「使用gpt-sovits就行，加载到绯月的气泡上，语音播报不用自动生效。语音录入放按钮就行」及「语音录入要加在所有允许我输入超过20个字以上的输入框上。且输入后需要自动进行ai修正，矫正明显的错字和无意义或者连续的嗯，啊，这个，哪个之类的口语停顿词」。完整原文及范围见 [BUBBLE_VOICE.md](docs/BUBBLE_VOICE.md)。验收包括按按钮持续录音、音频依次处理、停下自动整理、手输文字与有效指代和数字保留、录音与播放仅发生在用户操作后、稿件仍可编辑并由用户提交。覆盖气泡、随口登记、补充与确认的固定和动态字段、此刻所想、设置的搜索和资源改名。朗读使用本机 GPT-SoVITS，回复旁点击才按自然停顿接续朗读。
+
+### 目标与基线
+
+待发布项目为绯月桌宠 Windows 本机正式版。桌面快捷方式内嵌目标、登录脚本和正式进程均指向 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/desktop`。核对时运行进程 PID 为 11896，启动时间为 21:02:49 JST。Electron 二进制为已有 WebCharacter 桌面依赖。候选来源为本仓库 `personal-digital-companion` 在 `067bfd5` 之上的语音改动，算法来源为已验收的 `voice-chat-lab`。复制实际正式安装的源文件和已构建资源，排除正式资料库，链接现有只读使用的 GGUF 和运行依赖。候选修改前 12 个既有源文件逐字比较与正式安装一致。以 [voice-release-files.json](voice-release-files.json) 的逐文件安装前和候选 SHA-256 为精确差异，新增文件的旧摘要为 `null`。完整清单为 21 项源码和 13 项构建资源。
+
+### 实际改动与影响
+
+- `desktop/dictation-host.mjs`、`dictation-preload.cjs` 和 `dictation-ui.mjs` 提供公共听写。原方框可键入，此后长文本框有麦克风按钮，以信任的本机主框架及点击开启的录音会话控制麦克风。停止后用已有本机交互模型校对本次听写，检查数字和可信文本变化，失败时保留收齐的原听写。已有草稿和手动提交语义延续。
+- `desktop/bubble-voice-capture.mjs`、`bubble-voice-processor.mjs`、`bubble-voice-segments.mjs`、`bubble-voice.mjs` 和 `bubble-voice-worker.py` 从试验保留停顿和 8 秒以内的音频分段。Paraformer 配套本机标点与 VAD，GPT-SoVITS V5 Turbo 生成 30～50 字一段的朗读，保持短句边界以应对长文本。播放当前段时预取下一段。Python 进程按点击加载，朗读结束后释放。
+- `screen-question-host.mjs`、`screen-question-preload.cjs`、`screen-question-ui.mjs`、`screen-question.html`、`screen-question.css` 和 `bubble-voice-ui.mjs` 负责气泡轻量按钮、回复全文、仅手动朗读和停止。`registration-ui.mjs`、`registration-review-ui.mjs`、`scene-ui.mjs`、`settings-ui.mjs`、`feiyue-surface.css` 接入其它文字字段并保持面板样式。`shell.mjs` 和 `source-updates.mjs` 接入生命周期和构建分发，已生成运行页所需的 13 个资源文件。
+- 业务数据库迁移、历史回填、云端及 Access 配置、自动启动参数、云端 API、花园 REST 路由变化均无。使用既有本机 `GPT-SoVITS-v5-20261006` Python 和中文参考音色。新建可重建的本机资料子目录 `voice-runtime/` 存放推理设置。用户没有配置麦克风时有状态反馈。Windows 实体麦克风及扬声器由用户正式版试用确认。
+
+### 实际检测与复核
+
+- `node work/prepare-feiyue-voice-candidate.mjs` 构建隔离候选成功，运行模板依赖注册同步。`node --check`、Python 语法检查和 `git diff --check` 通过。开发区 `node --test agent/tests/screen-question-host.test.mjs` 11/11 通过。
+- `work/feiyue-voice-candidate/voice-check.mjs` 在隔离真实 Electron 运行。无点击许可时麦克风拒绝，摄像头拒绝。气泡以模拟麦克风调用真实 Paraformer 并边录边回填，停止后真实本机模型自动整理。纠正样例由「嗯嗯，啊，那个，我想参加明天早上9点的会意，这个，嗯嗯，我先记下来。」得到「我想参加明天早上 9 点的会议，我先记下来。」。手输前缀保持。回复出现后保持安静，点击后实际 GPT-SoVITS 播放并接续两段，第二次点击停止。逐窗核对一个气泡输入、一个登记框、四个固定及动态补充框、一个场景回复、两个搜索框及 80 字动态改名框。
+- 首轮发现气泡录音依赖初始化顺序错误，已修复并由实际录音复测。后检补充选中文本遇空听写的保护。最终 `voice-check.mjs --selection-qa` 验证空听写完整保留选择前原文。内联断言通过，覆盖数字变化的拒绝、有意义指代文本的保护、空填充词和明显错字。按停止规则无语音功能待修问题。
+- 旧安装随包的 `screen-question-host.test.mjs` 三条失败在未改动的安装基线逐条复现：旧菜单路径、网查提示、旧登记路由期望。旧标题栏脚本在候选和未改动基线均因将 `menu.html` 当常规单标题栏窗而失败。旧 `test-desktop-shell.mjs` 在两者均依赖已改名的「特殊菜单」而停止。开发区同名 shell 脚本另有既有「新闻简报」菜单清单期望差异。用开发区当前 `test-panel-titlebar-electron.mjs` 在候选执行，七个面板、深浅色、窄屏原生标题栏、状态与热加载通过。以上基线失败列作已知问题，未计作通过。
+
+### 风险、回退和安装后验证
+
+首次模型加载耗时，录音分段先留在内存，校正遇本机模型不可用或输出校验失败时保留已识别结果并显示状态。长时间录音的实体环境、不同音色与识别质量以用户试用为准。朗读资源不足时按测试采用 CPU，停止或关闭释放工作进程。
+
+授权后复核实际进程、路径、版本及 34 项前值 SHA-256。若任何旧值漂移，重核差异后再请求变化范围的确认。确认正式绯月无在途任务和录音，沿其受控重启机制等待收尾并备份将被替换的文件。只安装清单里的 34 个运行文件，并保留发布审核历史。安装完成后确认新 PID、加载路径、快捷方式、登录目标和文件摘要。核对实际气泡语音输入、停止后校正、回复默认安静和手动朗读，再看其余文本框按钮。问题发生时停新进程，恢复旧文件并移除本批新增运行文件，重启原入口并核对相同摘要，保留现有用户资料。
+
+本次安装已授权。线上结构同步通过，只读确认花园修订 142，归属项目 #16、功能 #61，当前 21.0、最近部署 #71，未匹配到重复记录。发布后按实际结果制单并交由用户确认。实际版本、完成时间、正式验收、Git 提交、推送及花园回执待后续记录。
+
+### 2026-11-21 JST · 忠实听写校对增补
+
+用户补充「我需要你再整理我的发言时，会主动矫正我没提到的口语常见录音问题并尽量保留我的措辞和内容前提下去除发音记录的问题」。本次验收以修正明显口语记录问题、保留说话人原词和内容为准。只修改清单中的 `desktop/dictation-host.mjs` 和候选说明。既有安装目标、流程、权限、业务数据与回滚方式沿用本节前文。增强后的 SHA-256 见同一 `voice-release-files.json`。
+
+- 先针对明确的孤立停顿音、代词头部重字和「会意纪要」的明确搭配做少量修正，再调用现有本机 AI 检查其它明显问题。模型校对的范围包括无意义重复、同音误识、错误断句及跨段断行。数字及时间写法、否定、估计程度和明确引用均参与短段校验。有歧义时保留原话，模型不可用时保留可用听写。
+- 第一轮实际本机 2B 太保守，漏修三例。第二轮加入前置清理后保留了指代和有意强调，也清除了重起与停顿，但仍漏改「会意纪要」。第三轮增加明确搭配和引用保护，并在只针对本次修改的范围内复测。
+- 使用候选的 Electron 执行 `work/feiyue-voice-candidate/dictation-cleanup-check.mjs`，实际 CPU 2B 的五条样例均通过。例如「我我先看一下会意纪要，嗯嗯，下午三点再发给你。」整理为「我先看一下会议纪要，下午三点再发给你。」。其它样例验证断行合并、保留「特别特别」、「这个文件」「哪个版本」「先别发」「大概」、「会意一笑」和明确引用的「会意纪要」。Node 内联断言检查 16 组合成守卫或回退案例，覆盖数字和时间变更、明确引用、意义上的重复、单独的「嗯？」和「哈哈。」以及模型不可用。`node --check`、`git diff --check` 通过。
+- 模型和确定性规则依据有限样例验证，个别同音词或语意不明的情况会留在输入框供人复核。Windows 正式安装和用户录音的语料验证待执行。用户已授权安装。花园具体内容授权待实际结果及完整清单。
+- 重建时剥离同行工作区的其它修改，恢复此前语音候选的精确文件；正式基线与候选共 34 项逐一通过清单摘要复核。
+
+安装清单 SHA-256 为 `39238f4d0de2ad913af7bc409c13b6daf65b833bf26c6f8b4c4bc1b840c923e2`。回退备份包含原有运行文件及审核文件，不复制资料或令牌。配套发布证据包含审核记录、同根目录清单和语音说明。
+
+### 实际安装、功能复核与花园回执
+
+2026-11-21 23:43:08.593 JST，Windows 正式绯月从原入口受控重启，PID 11896 → 15148。23:43:11 JST 核对 34 项运行文件 SHA-256、3 项审核资料、快捷方式、登录项、回环 REST v4、原资料目录及 16 条历史批次。任务数据库只读完整性校验通过，轮询配置一致。版本标识 39238f4d0de2，安装前文件备份位于工作区 work/feiyue-voice-candidate/install-backup-20261121-234255。无业务数据库迁移与 Cloudflare 部署。
+
+隔离 Electron 从正式安装目录加载模块。首轮模拟麦克风 35 秒内未回填，复测定位首次 Paraformer 推理约 90.3 秒，热态每段约 0.84～0.98 秒。随后验证录音中分段回填、停止后自动整理、手输前缀保留及无点击时麦克风拒绝。最新例句「我我先看一下会意纪要，嗯嗯，下午三点再发给你。」得到「我先看一下会议纪要，下午三点再发给你。」。另一例中模型漏改「会意」并保留部分停顿词。实体麦克风和扬声器待用户试用。
+
+用户已确认 #72 与 #150 的花园清单。批次 feiyue-windows-voice-20261121，SQL 提交 fe679dfd8881d35ebfeab0ee38289d45575e72b5，审核摘要 43afda26b96cfb587b2315b4870a72b7d435a6629d8022e6bdc2926a1c1950ee。2026-11-21 23:49:44.410 JST 绯月回执 done，步骤 verified，线上修订 143。部署 #72、明细 #150 归属项目 #16 及功能 #61，版本由 21.0 更新为 22.0。发布登记元数据免做整库备份。第三方审核未执行。
+
+从正式安装目录单独复测 GPT-SoVITS，收到回复时未启动播放，点击后实际生成并接续播放两段，再点击停止。气泡、随口登记、补充与确认、此刻所想和设置面板的长输入入口均经隔离检查。未在正式资料中发送测试对话。
+
+独立回读线上 #72 与 #150 的完整字段一致，绯月于 2026-11-21 23:51:23.953 JST 签收批次。花园主仓库 844 项测试及 Wrangler dry-run 均通过，SQL 提交 fe679dfd8881d35ebfeab0ee38289d45575e72b5 已推送并回读远端 main。
+
+绯月语音源码 b0ac380c29a9e54d878d078d571ba562ff45e860 已推送并回读专用分支 codex/feiyue-windows-voice-20261121。21 项运行源码与正式文件在 Git 换行规范化后逐项一致。
+
+发布回执提交 e2a54b01d35be265320e53039d7816df695a2673 已回读同一远端分支。
+
+## 2026-11-22 JST · Windows 主动专聊与菜单弹窗首击修复
+
+### 范围与验收
+
+用户要求绯月提前准备话题，在 GPU 利用率低于 40% 时发邀请，接受后让文字固定走 CPU、GPT-SoVITS 语音固定走 GPU。完整首段就绪后按自然停顿接续播放，正文每次 50～200 字，支持麦克风和打字，最多十轮，退出后恢复任务。用户要求七条已试听接话都加入，每场随机一条只播一次。另要求核对重启后菜单弹窗首击不显示，并明确选择把「今日任务」「三地天气」的修复纳入这一候选。见 [原始需求与验收](REQUIREMENTS.md#2026-11-22-jst--绯月主动专聊)及[开发注意点](docs/DEVELOPMENT.md#windows-重启后菜单弹窗首击可见性)。
+
+### 目标、基线与变更
+
+目标仅为 Windows 正式绯月 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`。Git 底座 `39fd098e40ebf7c2c82dd5a6f9944ae98055566e` 加实际安装补丁。已核对正式应用参数和登录项，回环 REST v4 的 PID 为 34600，启动时间 2026-11-22 01:14:50.745 JST，资料目录仍为该安装树的 `output/desktop-profile`。候选以实际安装文件为基线，仅合入 WebCharacter 开发树 `067bfd5` 上本次相关差异。候选位于 `output/private-chat-release-20261122/candidate-OaWg4Q`。
+
+| 范围 | 变更与涉及文件 |
+| --- | --- |
+| 专聊调度与模型 | `desktop/shell.mjs`、`emotion-initiative.mjs`、`balanced-local-model.mjs`、`private-chat.mjs` 增加待聊、同场随机一次、显卡门槛、两进程复用及任务占用。此前正式版无专聊入口。 |
+| 语音与气泡 | `desktop/private-chat-*`、`private-chat.html`、`private-chat.css`、`bubble-voice.mjs`、`bubble-voice-worker.py`、`dictation-host.mjs` 接入专聊气泡、计时、播放和同场听写。普通气泡仍沿用原入口。 |
+| 菜单与待处理 | `desktop/menu-layout.json`、`menu-*` 和 `conversation.*` 接入专聊动作及对应入口。构建登记由 `desktop/source-updates.mjs` 更新。 |
+| 冷启动首击 | `desktop/panel-window.mjs`、`reminder-review-host.mjs`、`weather-host.mjs` 复用 Windows 可见性补救。之前页面已加载却仍隐藏，候选在同一点击中根据可见性补一次显示。 |
+| 资源 | `assets/voice/private-chat` 的固定邀请、七条接话及清单，`assets/desktop-media/feiyue-faces/waiting-b.png` 与构建副本。只合入专聊入口所需头像。 |
+
+逐文件核对采用 [desktop-files.json](docs/releases/private-chat-20261122/desktop-files.json) 中的安装前和候选 SHA-256，共 53 项，其中替换 24 项、新增 29 项。清单摘要为 `96e5b9924c6c0cc1ccc3fd8e826096aed84623845db3959925a4e2662a49dce5`。同期关窗转录及七罪周期菜单头不在本候选。数据库迁移、回填、生产配置、主站或 Worker 部署均无。首次产生待聊时按需写入本机资料目录的 `private-chat.json`，保留既有模型、任务和连接配置。
+
+### 实际检测与待完成项
+
+- 基线隔离复现了今日任务、三地天气首击后 `did-finish-load` 已触发但 `isVisible()` 为假，两处第二击才可见。本地复盘现有补救仍生效。覆盖补丁后，两入口各通过自然冷启动和模拟首次显示仍隐藏的复测。完整候选从两处正式自绘菜单首击可见。
+- 隔离候选执行 `node tools/build-desktop.mjs`、`node --check desktop/shell.mjs`、`node --test tools/test-private-chat.mjs`，构建和五项专聊单测通过。开发树的主动行为、轮询和真实任务等待专项 31 项通过。
+- 候选运行真实 Electron 的 `tools/test-private-chat-electron.mjs`，覆盖两条接话单次播放、较长接话播完再播正文、菜单连点、听写和崩溃退出。标题栏使用当前测试工具复验通过，覆盖七面板及深浅色。旧版标题栏测试曾把自绘菜单误当带标题栏的普通面板，在加载数据前失败。
+- 正式基线与候选各执行 `node --test --test-force-exit agent/tests/balanced-local-model.test.mjs`，各 1 通过、同名 3 失败。原三套旧测试合跑未完成，两个运行日志均已观察到旧任务轮询和模型断言失败，因此本轮没有全量通过结论。候选的专聊和窗体专项通过。开发阶段曾真实验证 CPU 与 CUDA 两轮并驻。本次候选 Electron 使用语音替身，正式重启、真实设备及自然邀请仍待验收。独立第三方审核未执行。
+
+### 发布、恢复与花园预核
+
+用户批准将两处首击修复纳入候选，已表示本次愿意登记花园。实际安装、重启及最终登记清单仍待确认。获准后复核 PID、快捷方式、登录项、53 项前值和候选摘要。确认无正在录音或执行的业务工作，按原桌宠受控重启流程等待收尾。逐项备份旧文件，安装清单后按原入口启动，核实新 PID、应用和资料目录、回环 REST、语音摘要及今日任务和天气单次打开。真实专聊应确认 GPU 门槛、接话只播一次、正文衔接和结束恢复。需要恢复时先正常退出新进程，再恢复本批备份并逐项移除本批新增资产，随后按原方式启动。避免改变原资料目录和凭据。显卡读数无效或余量低时继续待聊。
+
+按正式 REST v4 指引执行 `npm.cmd run db:sync-schema` 和只读 `inspect`，同步新增结构对象 0。核对线上修订 144，归属「网页角色组件」#16 →「绯月（桌面精灵）」#61，版本 23.0，最新部署 #73、明细 #151。本地演算得到成功分支预计新增部署 #74 和明细 #152，版本 23.0 → 24.0，仅登记本次桌宠专聊及两处首击修复。项目、种子、功能改善和独立缺陷条目无需新增。草案在 `output/private-chat-release-20261122`，演算时间不作为正式部署时间。发布后根据真实结果和当时基线生成准确清单与 SQL，给用户确认后先提交 SQL，再向重启后的正式 REST 提交一个批次并回读。未安装、未写生产花园、未执行发布提交或推送。
+
+用户在看到本次发布范围后选择「暂缓安装」。保留可追溯候选、审核和花园预核清单。正式实例、生产花园和 Git 发布状态均未改变。
+
+## 2026-11-22 JST · Windows 绯月与转录登记合并发布审核
+
+### 需求与范围
+
+用户要求汇集合并现有未部署内容并登记花园。按实际正式安装逐项核对后，合并主动专聊及七条随机接话、七罪周期菜单头像、闲时工作反馈、普通对话关窗转录与确认，以及「今日任务」「三地天气」冷启动首击修复。普通语音和原待确认联合更新已发布。两段推理优化、语音模型预热试验及独立原型仍沿开发记录。需求和验收基准见 [REQUIREMENTS.md](REQUIREMENTS.md)、[开发纪要](docs/DEVELOPMENT.md) 和 [转录稳定性复核](docs/reviews/CONVERSATION_TRANSCRIPTION_STABILITY_REVIEW_2026-11-22.md)。
+
+| 改动 | 旧行为与候选验收 | 主要文件 |
+| --- | --- | --- |
+| 主动专聊 | 独立待聊、低负载邀请。开始后 CPU 文字和 GPU GPT-SoVITS，首段音频完整后开窗。每轮正文 50–200 字，30–50 字自然分段，最多十轮。七条承接句抽一句、只播一次。支持主动结束和异常释放工作位。 | `desktop/private-chat*`、`bubble-voice*`、`dictation-host.mjs`、`emotion-initiative.mjs`、`shell.mjs`、`assets/voice/private-chat/` |
+| 七罪头像 | 菜单标题从月印改为本次东京周期头像，悬停或键盘焦点显示真实强度，缺档或缺图时回到月印。保留 A、B 和情绪资产。 | `desktop/menu-*`、`menu.css`、`menu.html`、`shell.mjs`、`assets/desktop-media/feiyue-faces/` |
+| 闲时工作反馈 | 显示开工目的和实际完成、暂停、失败结果及耗时。正式工作优先，同一结果可在自主行动日志回查。 | `desktop/{autonomous-audit,configured-renderer,poll-scheduler,reminder-checks,personality-nags,shell}.mjs`、`index.html`、`style.css` |
+| 关窗转录 | 普通对话关窗后生成可恢复本机作业。三段同一模型，候选按来源展示并逐条确认。有标题的记录统一为 `[十字以内摘要]绯月助记-YYYY-MM-DD HH:mm:ss`，沿用同一次拟稿。有正文的记录使用固定栏目和尾部红心。确认前不写用户业务记录，确认后以原提交号和已保存的预览参数提交。 | `desktop/conversation-transcription.mjs`、`conversation-history.mjs`、`screen-question-host.mjs`、`task-inbox*`、`task-lifecycle.mjs`、`registration-flow.mjs`、`balanced-local-model.mjs`、`skills/conversation-transcription` 1.7、`skills/feiyue-interaction` 3.1 |
+| 首击可见 | 页面已加载但 Windows 第一次 `show()` 仍隐藏时，在同一次点击补显。同一窗实例只加载一次业务数据。 | `desktop/panel-window.mjs`、`reminder-review-host.mjs`、`weather-host.mjs`、`private-chat-panel.mjs`，详见[开发注意点](docs/DEVELOPMENT.md#windows-重启后菜单弹窗首击可见性) |
+
+### 目标、基线及数据库
+
+- Windows 正式树 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，Git 底座 `39fd098e40ebf7c2c82dd5a6f9944ae98055566e`，含已发布安装补丁，上次源码回读 `00c09cd`。实查 PID 34600、回环 REST v4、原快捷方式、登录项及资料目录。开发来源 `067bfd5` 加工作区选定差异。以实际安装文件 SHA-256 为前值，叠入隔离候选后构建。`output/combined-release-20261122/windows-files.json` 共 129 项，75 新增、54 替换，摘要 `b767af5df02701559a1894168de66b279e0d75fcf673fb430c76f417ac15833c`。本机首次使用时创建加密转录 SQLite，原资料库无改表或回填。用户资料、语音模型和凭据不进包。
+- 主站 `myapp` 生产版本 `b86d1843-b706-4bdf-b7ec-9742a0180d65`（源码 `b643509`），订阅 API `subscriptions-api` 生产版本 `ba9388dc-a2f1-4766-81a2-824a07d668a0`（源码 `0cd714a`），均已在控制面按时间核对为 100%。候选在 `output/combined-release-20261122/workers/`，以这两个版本的实际发布树为底。子项目先完成分类读取和提醒适配，再同步到主站私有 `CompanionHost.resourceCategories()` 和 API 的登记目录、提醒适配器、种子定义。`worker-files.json` 共五个 Worker 源文件及五份 SQL，摘要 `86e7acc0e136c0240f51da8945913e7c0b864cc25ba97a647341dfc651350727`。配置、已有绑定、依赖、凭据变化均无。
+- 生产只读核对 `feiyue-companion.tasklist` 的 `reminders.create` 仅接受日期。`02-feiyue-companion.sql` 仅更新该行且要求确切旧值，增加可选 JST `HH:mm`，保留仅日期用法。`stockanalysis` 的 `ra_categories` 和 `rl_categories` 均缺少用户指定的「AI登记内容」，且 `ai-registration` 未占用。`05-stockanalysis.sql` 各新增一条，已有 ID 或名称时跳过并根据 `04-stockanalysis-check.sql` 核查兼容性。变更含两份业务库的种子数据，结构变化和已有业务记录回填均无。实际提交前核对结构、指纹和受影响行，先将精确业务 SQL 提交 Git 并更新数据库总账。对两库事先做加密快照、推送、远端恢复验证，再按先数据库后代码执行。花园登记元数据单独适用既有备份豁免。
+
+### 已执行检查
+
+- 候选 `node tools/build-desktop.mjs` 与桌面壳验证通过。候选 Electron 复测专聊接话、连点单播、首段后续接、模拟话筒与异常关闭，复测闲时头顶反馈和日志，以及标题栏和深浅色。菜单真实七种主题头像、强度工具提示和回退通过。「今日任务」「三地天气」隔离冷启动从自绘菜单点击一次均可见。普通对话关窗模拟流程完成，确认后只通过一条登记链执行勾选项并收到隔离回执。专聊整体候选复测使用样本音频，既往真实 2B CPU + SoVITS GPU 的开发记录在原纪要内。
+- 合并 Node 回归最终 124 项通过。隔离手记测试初跑混用了旧 Worker 布局，且合成 TXT 存储未注入正式 API 使用的 `myR2` 绑定。换用同版 Worker 测试模块、给同一个测试存储提供该绑定后复跑通过，改动限于隔离夹具。两 Worker 的 `wrangler deploy --dry-run` 通过。`node worker-check.mjs` 用两个实际候选 Worker 模块、模拟认证及隔离 D1 验证 RPC 分类目录，新增分类各一行、提醒模板更新一行、重放不新增、提醒模板恢复与原有访问限制。`git diff --check` 通过。Windows 只读预检确认当时 PID 34600、129 项前后摘要、2 个伴随审核文件、18 条历史批次，等待或执行的本机任务为 0。正式执行前再次检查。
+- 加入固定版式后，合并专项 Node 回归 126 项通过。检查七类字段、原话条件、缺项与上限、去除重复署名和尾心。Windows 最新候选隔离 Electron 复测从关窗开工到勾选登记。模型只给日记正文时，宿主补标题且只有一条个人日记。清单显示及隔离业务提交的运动正文逐字一致。此次版式变更只涉及桌面候选，无新增 Worker 或数据库差异。既有生产 Worker 与 D1 仍待本批发行确认。
+- Skill 1.7 标题专项纳入本次候选。126 项合并回归通过。隔离 Electron 从关窗经原有三次模型调用生成清单，校验个人日记标题的东京年月日时分秒、正文与模拟业务写入逐字一致。单测另覆盖资源摘要十字上限、标题重复标记清理、提醒缺标题回退及一键事件。
+- 本地 Worker 验收从目录 `output/combined-release-20261122` 执行 `node worker-check.mjs --serve`，只使用内存数据和模拟身份，拟监听 `127.0.0.1:8798`。常驻验收尚未获启动指令。真实生产手记、实际用户输入和扬声器听感待发布后确认，受 Access 控制的线上页面由用户截图确认。独立第三方审核未执行。
+
+### 发布顺序与恢复
+
+用户已要求合并并表示登记意愿，三个目标的新范围与两个业务 SQL 变更尚待明确部署确认。获准后复核活跃进程、候选摘要、两个生产版本、两库旧值和备份回执；先提交业务 SQL 和总账，再应用 SQL 并回读实际影响行；先主站提供私有 RPC，再切换订阅 API，最后按原入口受控重启绯月。验证资源目录、日期与时分兼容、窗口首击、启动路径、资料、任务库、历史批次与新 REST 实例。失败时逐目标记录真实结果，按前一版本回滚 Worker。Windows 由逐项备份恢复。提醒模板如需恢复按确切新值回滚；分类若有后续业务引用则保留，只有核实无引用才可以处理。已有业务记录和资料不覆盖。实际发布后补记三个版本、回执与 Git 推送实况。
+
+### 花园预核
+
+已执行 `npm.cmd run db:sync-schema`，结构新增为 0。现有网页角色组件 #16 → 绯月（桌面精灵）#61 版本 23.0，最后部署 #73、明细 #151，基线修订 144。成功分支演算为新增部署 #74 与明细 #152，版本 23.0 → 24.0，原记录不改，项目和功能归属、种子、独立改善、独立缺陷及其他关系无更新。三个目标一并登记，批次 `feiyue-combined-release-20261122`。拟清单在 `output/combined-release-20261122/garden-preview/registration.json`。正式实际结果明确后复核基线并生成精确清单，失败按「发布中」记实际情况，保留成功版本。精确清单由用户确认后先提交 Git，再由新正式实例接手一次登记、核验并取回回执。目前无生产写入、安装、部署、Git 发布或花园入队。
+
+### 绯月合并发布与花园最终回执
+
+2026-11-22 JST，用户明确批准合并发布及花园部署 #74、明细 #152 的实际清单。
+
+- Windows b767af5df027 于 2026-11-22 04:44:10 JST 从原入口受控重启，PID 34600 → 27708。129 项安装件、2 个审核文件及 18 条历史批次已核对。正式安装目录的独立临时资料冷启动验证「今日任务」「三地天气」首击均可见。
+- 主站 f46a9f75-745d-4625-882d-5dbc97407bbe 于 2026-11-22 04:43:30 JST 发布。订阅 API 8526fb2e-7f62-4938-a2bb-54114c75bc24 于 2026-11-22 04:43:39 JST 发布。两端 100% 生产流量、原有绑定逐字段一致。Access 受控页面效果待用户截图确认。
+- 提醒模板更新一条并可接受 JST 时分，随手记及鱼与熊掌各新增一个「AI登记内容」分类，生产已回读。两库的加密备份 stockanalysis cc189caa51bf（远端恢复 118/118）、feiyue-companion 2c5c77703bb9（远端恢复 18/18）。业务 SQL 提交 27086a60bdc879e5dde94a7b6d9449f4c614303c。
+- 部署 #74、明细 #152，网页角色组件 #16 → 绯月（桌面精灵）#61，23.0 → 24.0。登记先提交精确 SQL 22dbb3aad4df3bce028edba26b2e82b16b71169a，期间仅通过正式绯月 REST 提交一批 feiyue-combined-release-20261122。绯月于 2026-11-22 04:49:49 JST 返回 done，唯一步骤 verified。生产独立复核修订 144 → 145，两个目标行与清单相符，发布标记一次。签收于 2026-11-22 04:50:08 JST。
+- 三个已发布代码提交均已推送并回读：myapp 19f3cb76f29598439c03ebe91ee88069d884139a、api-worker df21190d209dbf6f772d1b31e722d7c993e2ee16、windows 311efb6e3b51b24e5879d2675338b9e90cf2b44b。
+
+## 2026-11-22 JST · Windows 纯文字登记入口修正候选
+
+用户报告相同文字在「自动」模式正确解析，但「登记」模式进入旧缺项窗。最新要求是登记与自动复用解析逻辑，登记意愿明确时必须提供个人日记候选。验收对照 REQUIREMENTS.md C16 与 docs/DESIGN.md「登记模式复用关窗清单」。文字登记关闭后补一篇保留原文的日记，专项检测沿用现有转录，按用户逐项确认写入。空登记命令提示补充文字，保持模式。附件核对和旧草案的补充与恢复入口保留。
+
+Windows 目标为 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，已安装基线标识 `b767af5df027`，远端发布回执 `eb770325`。来源工作区 `067bfd5` 加本次特定差异，按实际安装字节前后比对。`output/registration-entry-20261122/windows-files.json` 固定四项 SHA-256，清单摘要 `8f54a4222ec444208054c04310c31f2b1144aaf174a9be93c367ea761e413a9e`。`desktop/screen-question-host.mjs` 建立登记窗口的本机转录会话并标出有明确登记意愿的发言。`desktop/conversation-transcription.mjs` 用这些发言保证一篇日记，并保留共同清单及依赖。`desktop/screen-question-ui.mjs` 和对应构建文件保留输入模式。配置、依赖、数据库迁移、历史回填和 Worker 更新均无。新标记存在既有加密作业负载内，旧记录和旧任务可读。
+
+执行 `node tools/build-desktop.mjs`、`node tools/test-desktop-shell.mjs` 和 `node --test --test-force-exit --test-timeout=45000 tools/test-conversation-transcription.mjs agent/tests/local-first-interaction.test.mjs agent/tests/registration-flow.test.mjs agent/tests/task-template-preview.test.mjs`，46 项通过。隔离 Electron 的 `test-conversation-transcription-electron.mjs --mock`、`--mock --registration` 和 `test-panel-titlebar-electron.mjs` 均通过。真实模型 `test-conversation-transcription-electron.mjs --registration` 使用 Qwen3.5-4B Vulkan，合成会话关窗约 29.7 秒后产生四类，确认前无登记读写，选择后隔离 Worker 回执通过。检查日记全文、重复、准备条件、已存草稿及普通模式回归。正式资料验收和独立第三方审核未执行。
+
+待本次 Windows 部署明确许可。安装前再核对进程、登录与快捷方式、原资料目录、四项摘要和在途工作。沿受控重启流程备份四个旧文件、覆盖清单、按原入口启动。失败则正常退出候选，恢复四个原文件后回读原版本。发布后用隔离临时资料从正式菜单按「登记」打开气泡并核对关窗清单，同时核验新 PID 和历史任务。花园登记意愿与精确清单在本次实际发布流程分别确认。未安装、未写生产数据、未推送本轮源码。
+
+## 2026-11-22 JST · Windows 拖拽保持动作单圈替换
+
+用户确认单圈动图并要求替换现有持续拖拽动画。验收为按住时以原速重复完整一次侧摆和回摆，松开仍按原逻辑转入退出。安装目标为 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion。预检主进程 PID 25184、桌面快捷方式的应用参数及登录启动脚本均指向该树，实际配置为 dragIn / dragLoop / dragOut。安装仓库底座 39fd098e40ebf7c2c82dd5a6f9944ae98055566e，来源为 WebCharacter/personal-digital-companion 开发仓库 3830b6069d1c442ce51f9f8496ea8dbfa03fb483 加已确认的两档媒体。比较以实际六个文件的 SHA-256 为准。
+
+**安装差异**。分别在 assets/desktop-media 和 output/desktop-bundle 下替换 clips/drag-loop-speed.webm、clips-compact/drag-loop-speed.webm，逐份更新 RESOURCE_MANIFEST.json 的这两个条目。旧为每轮 72 帧约 3 秒，新为旧片零基帧 39～62 共 24 帧约 1 秒。两份清单各自以现场文件为底，分别保留其余 32 和 25 个条目。普通档散列 784a0e23 → fbf47761，紧凑档 d72ec27e → c9876ad5，两张清单 c9ce8fe0 → 26edd1ed、0e78dbd7 → 0a06e8ed。六项完整哈希与候选位于开发项目 output/drag-cycle-release-20261122/windows-files.json 及同级 candidate/，清单 SHA-256 为 cf0970cb8568b8ebaacd8a63959e5e6472915eda7576dbe8a992bcad09e65f7d。开发仓库重做切点可查 tools/prepare-animation-speed.mjs，原型时长可查 prototype/settings.html。安装范围为上述六个媒体相关文件和发布留痕。数据库迁移、回填、配置、依赖和云端发布影响均无。既有素材 ID、路径、画布、透明通道、帧率兼容。
+
+**检测及审核关注点**。已执行 node tools/prepare-animation-speed.mjs、node tools/build-desktop.mjs，普通与紧凑两个构建件均逐帧匹配原片同一段。按安装目录清单在隔离目录组装候选，用 tools/media.mjs 的 inspect 加 libvpx-vp9 解码四个候选视频，均为 24 帧，末帧结束时间约 0.999 秒。核对清单仅两项变化。复跑 node tools/test-pc-settings.mjs、node tools/test-desktop-priority.mjs、node tools/test-player-resources.mjs、node tools/test-desktop-shell.mjs 均通过。审核重点为实际 dragLoop 映射、两档接缝、构建和安装资源一致、两张清单其余条目完整。
+
+**发布与恢复**。安装前复核六个旧值、实际应用目录和在途任务，按原路径备份六项，受控退出并等待应用就绪后切换六项，从原入口启动。启动失败或部分替换时恢复该次备份并回读旧值后按原入口启动。发布后核对新 PID、启动目标、六项新摘要与槽位；从安装媒体解码确认时长，长按与释放的正式观感待用户验证。用户已确认预览效果并明确本次不登记花园。安装、受控重启及安装后验收待本次发布确认。独立第三方审核未执行，本次尚未提交或推送。
+
+2026-11-22 06:48:34 JST 已在 Windows 正式安装版启用经用户确认的拖拽单圈。用户批准本次安装及受控重启，并选择不登记花园。原进程 25184 正常退出，新进程 26308 从原安装入口启动，六项 SHA-256 与候选一致。由原资料的 dragLoop 映射回读运行包，普通和紧凑两档均实际解码为 24 帧约 1 秒；原快捷方式、登录项及轮询已核验。未代用户进行实际长按拖动。
+
+Git 留痕：本机独立发布分支 codex/feiyue-drag-cycle-20261122 的提交为 2eff23471f8273cebcc4183ce9b46ae415db340f。自动审批在运行 git push 前拒绝向 GitHub 的 cj2cf99/webcharacter 发送本次素材、代码与发布记录，要求该具体目的地与内容的明确外传授权。当前仅本机提交，远端未同步。
+
+Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循环动画、制作脚本及发布记录。codex/feiyue-drag-cycle-20261122 已推送，git ls-remote 回读 2eff23471f8273cebcc4183ce9b46ae415db340f，与本机发布提交一致。

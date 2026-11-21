@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import worker from '../worker.mjs';
@@ -10,6 +10,7 @@ import { getDeviceIdentity } from '../devices/identity.mjs';
 import { createTaskExecutor } from '../execution/runner.mjs';
 import { createTaskPoller } from '../../desktop/task-poller.mjs';
 import { createDesktopTasks } from '../../desktop/task-lifecycle.mjs';
+import { createPrivateChat } from '../../desktop/private-chat.mjs';
 import { createReminderChecks } from '../../desktop/reminder-checks.mjs';
 import { tokyoDay } from '../../desktop/conversation-history.mjs';
 
@@ -245,6 +246,63 @@ test('P05：空闲轮询自动领取，真实线程执行回传，未知类型�
     assert.equal(sqlite.prepare('SELECT computer_name FROM devices WHERE device_id=?').get(identity.device_id).computer_name, identity.computer_name);
     assert.equal(runtime.executor.getTask('auto').attempt_count, 1);
   } finally { release.resolve();await runtime.stop(); assert.equal(nextTimer, null); rmSync(profile, { recursive: true }); }
+});
+
+test('正式任务先收尾，专聊期间仍可领取，取消后执行且忽略迟到首段', {timeout:8000}, async t => {
+  const {sqlite,request}=fixture(t);
+  const profile=mkdtempSync(join(tmpdir(),'companion-chat-queue-'));
+  const identity=await getDeviceIdentity(profile);
+  sqlite.prepare('INSERT INTO devices VALUES (?,?,NULL,?)').run(identity.device_id,'TEST-PC',new Date().toISOString());
+  const insert=sqlite.prepare(`INSERT INTO tasks(task_id,type,target_device_id,params_json,status,created_at)
+    VALUES (?,'mock.unit',?,'{"value":"example"}','PENDING',?)`);
+  const add=id=>insert.run(id,identity.device_id,new Date().toISOString());
+  const state=id=>sqlite.prepare('SELECT status FROM tasks WHERE task_id=?').get(id).status;
+  const firstClaimed=Promise.withResolvers(),finishFirst=Promise.withResolvers();
+  const laterClaimed=Promise.withResolvers(),finishChat=Promise.withResolvers();
+  const generating=Promise.withResolvers(),lateWav=Promise.withResolvers();
+  let chat,first=true;
+  const rendered=[];
+  const runtime=await createDesktopTasks({profile,request,dialog:{async showMessageBox(){return {response:0};}},
+    handlerModule:new URL('./fixtures/thread-handlers.mjs',import.meta.url).href,
+    async beforeExecute(){
+      if(first){first=false;firstClaimed.resolve();await finishFirst.promise;}
+      else if(chat.active){laterClaimed.resolve();await finishChat.promise;}
+    }});
+  chat=createPrivateChat({profile,readGpu:async()=>({utilization:39,freeMiB:4200}),idle:()=>runtime.activeCount()===0,
+    prepare:()=>true,resume:()=>finishChat.resolve(),view:{
+      show(data){rendered.push(data.phase);return true;},update(data){rendered.push(data.phase);},close(){},focus(){},
+    },createModel:()=>({start(){},close(){},snapshot:()=>({state:'ready',backend:'cpu',gpuLayers:0}),
+      analyze:async()=>({reply:'周末一起去公园走走吧，回来喝一杯热茶。路上如果看到好看的树，我想站一会儿，听听风吹树叶的声音，再和你商量晚饭吃什么。',done:false})}),
+    createVoice:()=>({render(){generating.resolve();return lateWav.promise;},close(){}}),
+  });
+  t.after(async()=>{finishFirst.resolve();finishChat.resolve();await chat.close();await runtime.stop();});
+  chat.plan({id:'chat-one',topics:['周末散步','茶','做饭']});
+  const {id}=chat.waiting;
+  add('before');
+  const earlier=runtime.runTask('before');
+  await firstClaimed.promise;
+  assert.equal(state('before'),'RUNNING');
+  assert.ok((await chat.accept(id)).error);
+  finishFirst.resolve();
+  await earlier;
+  assert.equal(state('before'),'COMPLETED');
+  assert.deepEqual(await chat.accept(id),{});
+  await generating.promise;
+  assert.ok(runtime.canPoll());
+  add('after');
+  await runtime.pollOnce();
+  await laterClaimed.promise;
+  assert.equal(state('after'),'RUNNING');
+  assert.equal(runtime.executingCount(),0);
+  assert.ok(chat.active);
+  await chat.stop();
+  await runtime.settled();
+  assert.equal(state('after'),'COMPLETED');
+  assert.equal(runtime.executor.getTask('after').attempt_count,1);
+  lateWav.resolve({wav:Uint8Array.from(readFileSync(new URL('../../assets/voice/private-chat/accepted.wav',import.meta.url)))});
+  await tick();
+  assert.deepEqual(rendered,['preparing']);
+  assert.equal(chat.waiting.id,id);
 });
 
 test('P06：自动获取不能绕过中断重做的继续执行选择，无配置不启动网络', async t => {

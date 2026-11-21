@@ -6,19 +6,21 @@ import {watchChanges,warnLiveUpdate} from './live-files.mjs';
 // 构建与热加载使用同一份页面依赖。每次只更新受影响的窗口。
 export const pages = {
   'news-panel.html':['feiyue-surface.css','news-panel.css','news-weekly.css','news-layout.mjs','news-panel-ui.mjs'],
-  'scene.html':['feiyue-surface.css','scene.css','scene-ui.mjs'],
+  'scene.html':['feiyue-surface.css','scene.css','scene-ui.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
   'poll-settings.html':['feiyue-surface.css','poll-settings.css','poll-settings-ui.mjs'],
   'index.html':['style.css','configured-renderer.mjs','renderer.mjs','companion-player.mjs','companion-state.mjs','behavior-controller.mjs','screen-posture.mjs','sound.mjs','window-nodes.mjs'],
-  'settings.html':['feiyue-surface.css','settings.css','settings-ui.mjs','effect-preview.mjs','companion-player.mjs','behavior-controller.mjs','window-nodes.mjs'],
+  'settings.html':['feiyue-surface.css','settings.css','settings-ui.mjs','effect-preview.mjs','companion-player.mjs','behavior-controller.mjs','window-nodes.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
   'message-box.html':['feiyue-surface.css','message-box.css','message-box-ui.mjs'],
   'menu.html':['feiyue-surface.css','menu.css','menu-ui.mjs'],
-  'registration.html':['feiyue-surface.css','registration.css','registration-ui.mjs'],
-  'registration-review.html':['feiyue-surface.css','registration.css','registration-review-ui.mjs','question-attachment.mjs'],
+  'registration.html':['feiyue-surface.css','registration.css','registration-ui.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
+  'registration-review.html':['feiyue-surface.css','registration.css','registration-review-ui.mjs','question-attachment.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
   'reminder-review.html':['feiyue-surface.css','reminder-review.css','reminder-review-ui.mjs'],
   'task-inbox.html':['feiyue-surface.css','task-inbox.css','task-inbox-ui.mjs'],
   'sound-settings.html':['feiyue-surface.css','sound-settings.css','sound-settings.mjs','sound.mjs'],
   'conversation.html':['feiyue-surface.css','conversation-ui.mjs','conversation.css'],
-  'screen-question.html':['feiyue-surface.css','screen-question.css','question-attachment.mjs','screen-question-ui.mjs'],
+  'private-chat.html':['feiyue-surface.css','private-chat.css','private-chat-ui.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
+  'screen-question.html':['feiyue-surface.css','screen-question.css','question-attachment.mjs','screen-question-ui.mjs',
+    'bubble-voice-ui.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs','bubble-voice-segments.mjs'],
   'weather.html':['feiyue-surface.css','weather.css','weather-ui.mjs'],
 };
 export const desktopFiles = [...new Set(Object.entries(pages).flatMap(([page,files])=>[page,...files]))]

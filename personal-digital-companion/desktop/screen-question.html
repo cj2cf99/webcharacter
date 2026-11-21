@@ -27,7 +27,10 @@
           <p id="answer">想聊什么，或记点什么？</p>
           <button id="retry" type="button" hidden>重试</button>
         </div>
+        <img id="nagContext" alt="绯月提问时看到的场景" hidden>
         <button class="quiet" id="full" aria-controls="answer" hidden>展开全文</button>
+        <button class="quiet" id="speakReply" type="button" hidden>朗读</button>
+        <small id="speakStatus" class="fy-dictation-note" role="status" hidden></small>
         <button class="quiet" id="sources" hidden>查看来源</button>
         <span id="unsaved" hidden>记录未保存</span>
       </div>
@@ -42,6 +45,7 @@
         <button id="removeAttachment" type="button" aria-label="移除附件">×</button>
       </div>
       <small id="attachmentError" role="status" hidden></small>
+      <small id="voiceStatus" role="status" hidden></small>
       <label class="sr" for="question">你的问题</label>
       <textarea id="question" rows="2" placeholder="问绯月，或记点什么…" aria-describedby="hint"></textarea>
       <footer>
@@ -49,6 +53,7 @@
         <label class="capture" title="仅普通文字聊天直连本地模型" hidden id="directOption"><input id="directChat" type="checkbox">直连</label>
         <select id="mode" aria-label="输入用途"><option value="auto">自动</option><option value="tour">绯月环球之旅</option><option value="registration">登记</option><option value="web" disabled>查询网络（待重启）</option><option value="memory" disabled>查询记忆（未开放）</option></select>
         <span id="hint">Ctrl+Enter</span>
+        <button id="recordVoice" type="button" aria-label="开始语音录入" title="开始语音录入" hidden>🎙</button>
         <button id="send" type="submit">发送 ↗</button>
       </footer>
     </form>

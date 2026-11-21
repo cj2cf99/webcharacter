@@ -30,8 +30,9 @@ const operations = {
     path: '/api/reminders',
     body: ({ title, content = '', deadline, level = '中' }) => {
       if (deadline !== undefined) {
-        const day = new Date(`${deadline}T00:00:00Z`);
-        if (!Number.isFinite(day.getTime()) || day.toISOString().slice(0, 10) !== deadline) {
+        const date=typeof deadline==='string'&&/^(\d{4}-\d{2}-\d{2})(?:T(?:[01]\d|2[0-3]):[0-5]\d)?$/u.exec(deadline);
+        const day=new Date(date?.[1]+'T00:00:00Z');
+        if (!date||!Number.isFinite(day.getTime())||day.toISOString().slice(0,10)!==date[1]) {
           throw new Error('提醒日期无效');
         }
       }

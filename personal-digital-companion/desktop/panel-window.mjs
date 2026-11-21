@@ -2,6 +2,12 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {watchFileChanges,warnLiveUpdate} from './live-files.mjs';
 
+export function showPanel(panel){
+  panel.show();
+  // Windows 隐藏启动可能吞掉第一次显示请求，页面已经就绪时补一次。
+  if(process.platform==='win32'&&!panel.isVisible())panel.show();
+}
+
 function readOverlay(file){
   const data=JSON.parse(readFileSync(file,'utf8').replace(/^\uFEFF/,''));
   const color=value=>typeof value==='string'&&/^#[\da-f]{6}([\da-f]{2})?$/i.test(value);

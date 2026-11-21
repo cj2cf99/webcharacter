@@ -1,0 +1,20 @@
+[hidden]{display:none!important}
+html.fy-panel,html.fy-panel body{margin:0;background:transparent}
+main{position:relative;display:flex;flex:1;flex-direction:column;min-height:0;margin:4px;
+  border:1px solid var(--fy-line);border-radius:17px;overflow:hidden;background:var(--fy-paper)}
+main[data-phase="invite"]{background:var(--fy-soft)}
+header.fy-titlebar.fy-compact{min-height:43px;padding:5px 12px}
+.fy-caption,.buttons{display:flex;align-items:center;gap:7px}
+.fy-caption img{width:32px;height:32px;border-radius:50%;object-fit:cover}
+#round,#status,#mic-status{color:var(--fy-muted);font-size:12px}
+#line{margin:0;padding:9px 12px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;font-size:14px}
+footer,#reply{padding:5px 12px 8px}
+footer .buttons{justify-content:flex-end}
+#status{display:block;margin-bottom:4px}
+#status:empty{display:none}
+#reply textarea{box-sizing:border-box;display:block;width:100%;height:65px;resize:none}
+#reply .buttons{justify-content:flex-end;margin-top:5px}
+#mic-status{flex:1;min-width:0}
+button{padding:5px 9px;white-space:nowrap;cursor:pointer}
+#accept{color:var(--fy-on-accent);background:var(--fy-accent)}
+#mic[data-recording="true"]{color:var(--fy-danger)}

@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRegistrationFlow } from '../../desktop/registration-flow.mjs';
+import { prepareConversationBatch } from '../../desktop/conversation-transcription.mjs';
 import {createInteractionWork} from '../../desktop/interaction-work.mjs';
 import {attachScreenQuestion} from '../../desktop/screen-question-host.mjs';
 import {fixture as questionFixture} from './screen-question-fixture.mjs';
@@ -105,6 +106,28 @@ test('新增随手记只有确认时提供的图库回执进入业务记录',asy
 });
 
 const node = (key, type = 'hu-shi.event.create', params = {}) => ({ key, type, params, target_device_id: null });
+
+test('转录作业按自己的提交号恢复，已完成批次重放不会重复写入',async t=>{
+  const f=await fixture(t);
+  const {plan,missing}=await prepareConversationBatch([
+    {id:'1-1',type:'hu-shi.exercise.create',params:{body:'昨天跑了五公里'},dependsOn:[]},
+    {id:'1-2',type:'reminders.create',params:{title:'交材料',deadline:'2099-05-12T15:00',content:'先核对发票。',level:'中'},dependsOn:[]},
+  ],async path=>{
+    const response=await f.call(path);
+    return Response.json(response.body,{status:response.status});
+  });
+  assert.deepEqual(missing,[]);
+  assert.equal(f.writes.length,0);
+  let submission;
+  const issued=id=>{submission=id;};
+  assert.equal((await f.desktop().submitBatch('transcription',plan,undefined,issued)).status,'completed');
+  assert.ok(submission);
+  assert.equal((await f.desktop().submitBatch('transcription',plan,submission,issued)).status,'completed');
+  assert.equal(f.calls.filter(call=>call.path==='/api/task-submissions').length,1);
+  assert.deepEqual(f.writes.map(({path})=>path),['/api/records/hu-shi/exercise/entries','/api/reminders']);
+  assert.equal(f.writes[0].body.body,'昨天跑了五公里');
+  assert.deepEqual(f.writes[1].body,{title:'交材料',deadline:'2099-05-12T15:00',content:'先核对发票。',level:'中'});
+});
 
 test('日记登记从气泡在本机生成并复审，云端只读模板，确认后登记一次',async t=>{
   const f=await fixture(t);

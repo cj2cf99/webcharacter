@@ -1,5 +1,11 @@
 # WebCharacter 开发指南
 
+2026-11-21 JST，[本机语音对话](http://127.0.0.1:8792/)改为持续录音、分段回填听写，取消旧的 25 秒自动停止。使用同一份 34.20 秒模拟麦克风音频验证了录音中出字、手动停止收齐尾段、两套识别和重转写。[复核记录](reviews/VOICE_STREAMING_MIC_REVIEW_2026-11-21.md)
+
+2026-11-21 JST，语音实验台的[本机分段朗读](http://127.0.0.1:8792/read/)按用户最新要求改为 30～50 字一段。粘贴文字后可选 MeloTTS 或 GPT-SoVITS，按自然停顿切分，当前段播放时生成下一段。沿用同一启动命令和本机语音接口。[运行说明](../voice-chat-lab/README.md)
+
+2026-11-21 JST，独立的[绯月语音对比实验台](../voice-chat-lab/README.md)可在 `http://127.0.0.1:8792/` 试用。页面切换 Paraformer＋GPT-SoVITS V5 Turbo 和 SenseVoiceSmall＋MeloTTS，两套共用绯月的本机直连。实际 Chromium 验证了同段听写、模拟麦克风、同句双音色和窄屏布局。[复核与耗时](reviews/VOICE_CHAT_LAB_REVIEW_2026-11-21.md)。
+
 2026-11-21 JST，绯月桌宠的人格与记忆开发接入本机 Aggressive 9B。情绪和欲望的状态、专题文件及测试入口见[桌宠开发指南](../personal-digital-companion/docs/DEVELOPMENT.md#绯月人格与本机模型)。本条记录开发工作区的进度。
 
 2026-11-20 JST，本机 AI 代理可通过 `tools/comfy_job.py` 提交离线 ComfyUI 生图和图生图作业。已在 RTX 4060 Laptop 上用本地 SDXL Turbo 验证提交返回后后台继续、并发提交串行占用 GPU、512×512 PNG 交付、同名保护和后端退出。[命令与任务回执](COMFY_JOBS.md)

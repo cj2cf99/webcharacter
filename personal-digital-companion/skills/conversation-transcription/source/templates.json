@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "templates": {
+    "diaries.create": {
+      "label": "个人日记",
+      "useWhen": ["短期个人事实", "真实购物", "明确委托留存图文"],
+      "required": ["title", "content"],
+      "suggested": ["title", "content"],
+      "format": {"title": true, "titleLimit": 300, "bodyField": "content", "bodyLabel": "记录", "bodyLimit": 100000},
+      "extensions": {"photos": {"capability": "diaryPhotos", "source": "confirmedAttachment"}}
+    },
+    "hu-shi.food.create": {
+      "label": "吃喝",
+      "useWhen": ["用户实际吃喝", "明确委托登记吃喝"],
+      "required": ["body"],
+      "suggested": ["body"],
+      "format": {"bodyField": "body", "bodyLabel": "吃喝", "bodyLimit": 4000},
+      "optionalFromSource": ["reflection"]
+    },
+    "hu-shi.exercise.create": {
+      "label": "运动",
+      "useWhen": ["用户实际运动", "明确委托登记运动"],
+      "required": ["body"],
+      "suggested": ["body"],
+      "format": {"bodyField": "body", "bodyLabel": "运动", "bodyLimit": 4000},
+      "optionalFromSource": ["reflection"]
+    },
+    "hu-shi.event.create": {
+      "label": "撸管",
+      "useWhen": ["用户真实发生且可核实的相应个人行为"],
+      "required": [],
+      "fixedParams": {},
+      "previewNote": "发生时间来自原话，业务记录保存实际登记时间。"
+    },
+    "records.create": {
+      "label": "随手记",
+      "useWhen": ["日期模糊的短期计划", "项目功能设想", "适合随手记的图文"],
+      "required": ["body", "category_id"],
+      "suggested": ["body"],
+      "format": {"bodyField": "body", "bodyLabel": "事项", "bodyLimit": 4000},
+      "catalogDefaults": {"category_id": "AI登记内容"}
+    },
+    "reminders.create": {
+      "label": "事项提醒",
+      "useWhen": ["有日期的短期计划", "明确委托未来提醒"],
+      "required": ["title", "deadline"],
+      "optional": ["content", "level"],
+      "suggested": ["title", "content", "deadline"],
+      "format": {"title": true, "titleLimit": 300, "bodyField": "content", "bodyLabel": "事项", "bodyLimit": 30000},
+      "defaults": {"level": "中"},
+      "extensions": {"deadlineTime": {"capability": "reminderTime", "parameter": "deadline", "fallback": "pending"}}
+    },
+    "resources.create": {
+      "label": "鱼与熊掌",
+      "useWhen": ["用户明确有兴趣的技术、市场变动或网站"],
+      "required": ["title", "body", "category_id"],
+      "suggested": ["title", "body"],
+      "format": {"title": true, "titleLimit": 200, "bodyField": "body", "bodyLabel": "资源说明", "bodyLimit": 2000},
+      "optionalFromSource": ["url"],
+      "catalogDefaults": {"category_id": "AI登记内容"}
+    }
+  }
+}

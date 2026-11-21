@@ -22,6 +22,9 @@ export function createRegistrationDataGateway(db, handle) {
     async categories() {
       return (await db.prepare('SELECT id,name FROM ra_categories ORDER BY name,id').all()).results;
     },
+    async resourceCategories() {
+      return (await db.prepare('SELECT id,name FROM rl_categories ORDER BY name,id').all()).results;
+    },
     async lookup(key, path) {
       if (!validKey(key) || !targets.has(path)) return null;
       const row = await find(key);

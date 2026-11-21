@@ -14,7 +14,7 @@ async function test(){
   const js=code=>w.webContents.executeJavaScript(code);
   const requests=[];
   w.webContents.session.webRequest.onBeforeRequest((d,cb)=>{requests.push(new URL(d.url).pathname);cb({});});
-  async function wait(code){for(let i=0;i<100;i++){if(await js(code))return;await new Promise(r=>setTimeout(r,35));}throw Error(code+" "+JSON.stringify(await js("({width: innerWidth, open: document.querySelector('#reader')?.open})")));}
+  async function wait(code){for(let i=0;i<100;i++){if(await js(code))return;await new Promise(r=>setTimeout(r,35));}throw Error(code+" "+JSON.stringify(await js("({width: innerWidth, article: document.querySelector('#article')?.textContent, origin: document.querySelector('#originBody')?.textContent})")));}
   for(const width of [1280,768,375]){
     w.setContentSize(width,850);
     await w.loadURL(url.href);
@@ -66,7 +66,7 @@ async function test(){
       return icon.naturalWidth > 0;
     })()`), '手记页面应能加载共用搜索图标');
     assert(!requests.some(p=>/memory\/diaries\/2026/.test(p)),'首屏只加载索引');
-    await js("document.querySelector('.entry').click()");
+    await js("Array.from(document.querySelectorAll('.entry')).find(row=>row.innerText.includes('记下书名')).click()");
     await wait("document.querySelector('#reader').open && document.querySelector('#article').textContent.includes('买的是散文集。') && document.querySelector('#article').textContent.includes('绯月私语：这个答案我记住了。')");
     assert.deepEqual(await js("Array.from(document.querySelectorAll('#article section h3'),n=>n.textContent)"),['你的日记']);
     await js("document.querySelector('#reader [data-dismiss]').click()");
@@ -89,6 +89,17 @@ async function test(){
     assert(!requests.some(p=>p.endsWith('/diaries/2026-11-18.1')),'附引篇目只显示快照');
     await js("document.querySelector('#returnOrigin').click()");
     await js("document.querySelector('#reader [data-dismiss]').click()");
+    await js("const f=document.querySelector('#filter'); f.value='nag'; f.dispatchEvent(new Event('change'))");
+    await wait("document.querySelectorAll('.entry').length===1 && document.querySelector('.entry').innerText.includes('唠叨追问')");
+    const requestStart=requests.length;
+    await js("document.querySelector('.entry').click()");
+    await wait("document.querySelector('#article').innerText.includes('已经读完了。')");
+    await js("document.querySelector('#article button').click()");
+    await wait("document.querySelector('#originBody').innerText.includes('是一本散文集。')");
+    assert(requests.slice(requestStart).includes('/api/companion/memory/nags/preview-0'));
+    assert(!requests.slice(requestStart).some(p=>p.startsWith('/api/v1/expenses')),'唠叨追问的原记录不读取消费快照');
+    await js("document.querySelector('#returnOrigin').click()");
+    await js("document.querySelector('#reader [data-dismiss]').click()");
     await js("document.querySelector('.theme-toggle').click()");
     assert(await js("document.documentElement.scrollWidth<=innerWidth"));
     await w.loadURL(new URL('/',url).href);
@@ -98,6 +109,6 @@ async function test(){
     assert(requests.includes('/assets/icons/anim/feiyue-journal-sweep.svg'));
     requests.length=0;
   }
-  w.destroy();console.log('PASS 桌面及手机，两种主题，列表、打开日记核对正文与私语、三类念叨来源、主篇唯一回链及返回。');
+  w.destroy();console.log('PASS 桌面及手机，两种主题，列表、日记正文、四类念叨回链与返回。');
 }
 test().then(()=>electron.app.exit(0),error=>{console.error(error);electron.app.exit(1);});

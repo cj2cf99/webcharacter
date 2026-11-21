@@ -202,3 +202,12 @@ details[open]>summary .fy-caret {transform:rotate(90deg)}
 @keyframes fy-spin {to{transform:rotate(360deg)}}
 @keyframes fy-float {50%{transform:translateY(-3px)}}
 @keyframes fy-pulse {50%{opacity:.35;transform:scale(.8)}}
+
+.fy-dictation-field{display:block;position:relative;min-width:0}
+.fy-dictation-field :is(input,textarea){width:100%;padding-inline-end:2rem!important}
+.fy-dictation-button{position:absolute;inset-block-start:2px;inset-inline-end:3px;z-index:1;width:26px;height:25px;
+  padding:0!important;border:1px solid transparent!important;border-radius:6px;background:transparent!important;color:var(--fy-muted);cursor:pointer}
+.fy-dictation-button[aria-pressed=true],.fy-dictation-button:hover{color:var(--fy-accent);background:var(--fy-soft)!important}
+.fy-dictation-note{display:block;color:var(--fy-muted);font-size:11px;overflow-wrap:anywhere}
+.fy-dictation-note[data-error=true]{color:var(--fy-warn)}
+.fy-dictation-button[hidden],.fy-dictation-note[hidden]{display:none!important}

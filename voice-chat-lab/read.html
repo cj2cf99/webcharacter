@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#15111d">
+  <title>绯月 · 分段朗读</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/read.mjs"></script>
+</head>
+<body>
+  <main class="reader">
+    <header>
+      <div class="moon" aria-hidden="true"></div>
+      <div><h1>分段朗读</h1><p>每段 30～50 字 · 边播边加载</p></div>
+      <a class="local" href="/">语音对话</a>
+    </header>
+    <form id="read-form">
+      <fieldset class="schemes">
+        <legend>选择声音</legend>
+        <label><input type="radio" name="engine" value="sense" checked><span><strong>MeloTTS</strong><small>中文音色</small></span></label>
+        <label><input type="radio" name="engine" value="gpt"><span><strong>GPT-SoVITS</strong><small>本机参考音色</small></span></label>
+      </fieldset>
+      <label for="read-text">朗读文字</label>
+      <textarea id="read-text" rows="7" placeholder="把想听的文字贴在这里…"></textarea>
+      <div class="actions">
+        <button id="read-start" type="submit" class="primary" disabled>开始朗读</button>
+        <button id="read-stop" type="button" class="subtle" disabled>停止</button>
+      </div>
+      <p id="read-status" class="reader-status" role="status" aria-live="polite">按句末和自然停顿分段。</p>
+    </form>
+    <section id="read-playback" class="reader-playback" aria-label="朗读进度" hidden>
+      <div class="reader-progress"><span id="read-current">准备朗读</span><span id="read-next"></span></div>
+      <progress id="read-progress" value="0" max="1" aria-label="已播放段数"></progress>
+      <p id="read-excerpt"></p>
+    </section>
+  </main>
+</body>
+</html>

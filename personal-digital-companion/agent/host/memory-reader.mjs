@@ -65,7 +65,18 @@ export const memoryScript=String.raw`
     }
     showTxtFiles(container,r,'diaries',r.day+'.'+r.part);
   }
-  const sourceName=s=>({curiosity:'此刻所想',audit:'手记质问',diary:'悬念',paylog:'消费'})[s]??s;
+  const sourceName=s=>({curiosity:'此刻所想',audit:'手记质问',diary:'悬念',paylog:'消费',nag:'唠叨追问'})[s]??s;
+  function renderNag(container,r,id,linkOrigin=true){
+    container.append(node('h2',r.title),node('p',[r.status,r.reason,r.stats].filter(Boolean).join('\n')));
+    if(linkOrigin&&r.source!=='curiosity')container.append(button(r.source==='audit'?'查看主篇 →':'查看原记录 →',()=>origin(r)));
+    if(r.source==='audit'){
+      container.append(node('h3','手记原文'),...r.refs.map((v,i)=>node('p',(i+1)+'. '+v.page+'　「'+v.quote+'」')),
+        node('h3','矛盾点'),...r.points.map((v,i)=>node('p',(i+1)+'. '+v)));
+    }else container.append(node('h3','开口的时候'),node('p',[r.before,r.beforeEvaluation].filter(Boolean).join(' · ')));
+    for(const line of r.talk)container.append(showOriginal(node('p',null,'exchange'),stamp(line.at)+'　'+line.who+'\n'+line.text,r,'nags',id));
+    if(r.afterEvaluation)container.append(node('h3','听完以后'),node('p',r.mood+' · '+r.afterEvaluation));
+    showTxtFiles(container,r,'nags',id);
+  }
   async function origin(n){
     const token=++originToken,box=el('originBody'),dialog=el('origin');
     if(!dialog.open)dialog.showModal();
@@ -81,6 +92,10 @@ export const memoryScript=String.raw`
         if(token!==originToken)return;
         if(!r.threads.some(t=>t.no===Number(sequence)))throw Error('原篇中找不到这个悬念序号。');
         box.replaceChildren();renderDiary(box,r,Number(sequence));return;
+      }
+      if(n.source==='nag'){
+        const id=n.source_id,r=await fetchJson(base+'nags/'+encodeURIComponent(id));
+        if(token===originToken){box.replaceChildren();renderNag(box,r,id,false);}return;
       }
       // 优先定位当时的消费日。若账目后来改期，按同一个源编号查当前快照。
       for(const sourceDay of [...new Set([n.source_day,''])]){
@@ -113,15 +128,7 @@ export const memoryScript=String.raw`
       const r=await fetchJson(base+kind+'/'+encodeURIComponent(id));
       if(token!==readToken)return;
       container.replaceChildren();if(kind==='diaries'){renderDiary(container,r);return;}
-      container.append(node('h2',r.title),node('p',[r.status,r.reason,r.stats].filter(Boolean).join('\n')));
-      if(r.source!=='curiosity')container.append(button(r.source==='audit'?'查看主篇 →':'查看原记录 →',()=>origin(r)));
-      if(r.source==='audit'){
-        container.append(node('h3','手记原文'),...r.refs.map((v,i)=>node('p',(i+1)+'. '+v.page+'　「'+v.quote+'」')),
-          node('h3','矛盾点'),...r.points.map((v,i)=>node('p',(i+1)+'. '+v)));
-      }else container.append(node('h3','开口的时候'),node('p',[r.before,r.beforeEvaluation].filter(Boolean).join(' · ')));
-      for(const line of r.talk)container.append(showOriginal(node('p',null,'exchange'),stamp(line.at)+'　'+line.who+'\n'+line.text,r,'nags',r.id));
-      if(r.afterEvaluation)container.append(node('h3','听完以后'),node('p',r.mood+' · '+r.afterEvaluation));
-      showTxtFiles(container,r,kind,id);
+      renderNag(container,r,id);
     }catch(error){if(token===readToken)failed(container,error,()=>read(id,kind));}
   }
   let month=localDay(new Date().toISOString()).slice(0,7),knownDays=new Set();
@@ -150,7 +157,7 @@ export const memoryScript=String.raw`
       const data=await fetchJson(base+kind+'?'+params);
       if(token!==listToken)return;
       rows.replaceChildren();total=data.total;knownDays=new Set(data.items.map(r=>diary?r.day:localDay(r.created_at)));calendar();
-      const choices=diary?[...new Set([filter,...data.items.flatMap(r=>r.tags)].filter(Boolean))]:['paylog','diary','audit','curiosity'];
+      const choices=diary?[...new Set([filter,...data.items.flatMap(r=>r.tags)].filter(Boolean))]:['paylog','diary','audit','nag','curiosity'];
       el('filter').replaceChildren(new Option(diary?'全部标签':'全部来源',''),...choices.map(v=>new Option(diary?v:sourceName(v),v)));
       el('filter').value=filter;
       el('archiveSummary').textContent=diary?'日记':'小唠叨';

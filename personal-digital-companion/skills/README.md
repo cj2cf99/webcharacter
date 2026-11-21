@@ -14,6 +14,7 @@
 | 图片、文件或所选屏幕 | evidence-reading | 问答或提取待核对的登记字段 |
 | 鱼与熊掌资源登记 | resource-registration | 标题概括资源，正文保留原文，默认其他，单独提取网址后确认 |
 | 吃喝、运动、一键事件、随手记、日记、新提醒 | record-submission | 使用现有六类模板，逐条回执 |
+| 普通会话关窗后的登记意向 | [conversation-transcription](conversation-transcription/source/SKILL.md) | 关窗后触发本地转录，完成提醒用户核对，按勾选交给登记链 |
 | 今日任务、已有提醒的查询和修改 | reminder-review | 使用现有列表和整组修改审批 |
 | 联网搜索、三地天气 | public-lookup、weather-lookup | 各自调用已有查询接口 |
 | 云端任务、服务器任务 | server-pc-task | 在「问绯月」输入「服务器任务：具体事项」。本机按已有 PC 模板提案，确认后在服务器创建；“派给 all”由任意一台支持模板的空闲电脑领取，默认由当前 PC 领取；单发关键词查看可用模板。 |
@@ -21,6 +22,7 @@
 | 动作、依附、设置、显示、连接、重启、退出 | desktop-controls | 对话或菜单中已存在的入口 |
 | 对话与任务复盘、日志、归档 | activity-review | 已有日期复盘和日志视图 |
 | 绯月手记和行动评价 | [diary-writing](diary-writing/source/SKILL.md) | 手动与定时共用一个版本，按东京日期取材，先定情绪，再写叙述与私语 |
+| 已保存的绯月日记与唠叨 | [memory-refinement](memory-refinement/source/SKILL.md) | 闲时逐条核对、拟稿和复核，本机保留修订前后版本和备注 |
 | 本机生图、重绘、局部指令编辑、高清放大 | image-task-chain、comfy-image-workflows | 按步骤保存中间图并返回最终 PNG |
 
 ## 更新和查找
@@ -28,6 +30,10 @@
 更新绯月手记范本时，同时核对 diary-writing/source/SKILL.md 的成篇范例和同目录 local-ai.json 的六个阶段。每轮手记或补评通过 diaryWriting 读取一次技能快照，Aggressive 9B 按阶段接收短指令，推理日志记录技能名和版本。手动「看绯月写日记」与定时手记沿用同一入口。
 
 手记质问走 `diaryAudit`，使用 `diary-audit` 的摘录、比对、本机关键词联想、回答完整度判定和收笔指令。引文可以跨篇，线上唯一主篇排在引文首位。
+
+绯月记录修订走 `memoryRefinement`。同一条日记或唠叨固定使用一个 Skill 版本，核对、每段稿件和复核依次保存。离线或中断时继续原单条任务，后台复核通过且本机备份落盘后才提交最新版。`python -B skills/catalog.py memoryRefinement` 可检查实际装载的阶段提示与输出结构。
+
+在绯月项目目录执行 `python -B skills/catalog.py conversationTranscription` 可读取同版本的转录提示、固定输出结构和本地草稿模板。草稿模板字段由既有业务模板校验。转录执行段独占同一在线模型会话，待确认清单只保存候选和来源。关窗触发、模型会话占用和批量提交已接入桌面开发版。
 
 编辑对应稳定目录内的 `source/`。下次解析此 skill 时比较全部源文件的内容；内容有变化就生成新的快照并原子更新 `latest.json`。版本按 1.0、1.1、…、1.9、2.0 递增。重复读取相同内容保持同一版本。历史快照位于 `versions/<稳定标识>-v<主版>-<小版>/`，每份 SKILL.md 的名称和标题都带版本号。已发布快照作为历史保留。
 

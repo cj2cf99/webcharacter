@@ -23,8 +23,8 @@ export function createConversationHistory(profile, safeStorage) {
       return row?decode(row):null;
     },
     async save(turn) {
-      const {id,at,question,text,sources,state,retry,answeredAt,failures,imageJob,serverTaskId} = turn;
-      const bytes = await safeStorage.encryptStringAsync(JSON.stringify({question,text,sources,state,retry,answeredAt,failures,imageJob,serverTaskId}));
+      const {id,at,question,text,sources,state,retry,answeredAt,failures,imageJob,serverTaskId,transcriptId} = turn;
+      const bytes = await safeStorage.encryptStringAsync(JSON.stringify({question,text,sources,state,retry,answeredAt,failures,imageJob,serverTaskId,transcriptId}));
       database().prepare('INSERT INTO turns VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').run(id,tokyoDay(at),at,bytes);
     },
     read(day) {

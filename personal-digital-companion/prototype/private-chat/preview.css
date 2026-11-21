@@ -1,0 +1,50 @@
+:root {
+  color-scheme: dark;
+  font-family: 'Microsoft YaHei UI', 'Noto Sans SC', sans-serif;
+  --canvas: #1a131d;
+  --surface: #2a202d;
+  --inset: #362938;
+  --text: #f8eaf1;
+  --muted: #c9afc0;
+  --line: #674a60;
+  --accent: #ecb4cc;
+  --accent-text: #321722;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+  --canvas: #f7eff3;
+  --surface: #fff9fc;
+  --inset: #f4e5ed;
+  --text: #402539;
+  --muted: #73556a;
+  --line: #b291a9;
+  --accent: #993c68;
+  --accent-text: #fff7fb;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--canvas); color: var(--text); }
+main { max-width: 790px; margin: 0 auto; padding: clamp(18px, 5vw, 48px); }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 18px; }
+h1 { margin: 0; font-size: clamp(20px, 5vw, 26px); }
+p { margin: 5px 0 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.panels { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 12px; }
+.sources { flex: 0 1 215px; min-width: 195px; display: grid; gap: 8px; }
+.panel, .bubble { background: var(--surface); border: 1px solid var(--line); border-radius: 17px; }
+.panel { padding: 9px; }
+h2 { margin: 0 0 6px 5px; font-size: 13px; color: var(--muted); font-weight: 500; }
+.bubble { flex: 1 1 290px; padding: 12px 14px; }
+.bubble-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+#state { color: var(--muted); font-size: 13px; }
+.message { padding: 13px 0; min-height: 75px; line-height: 1.7; }
+button, textarea { font: inherit; color: var(--text); background: var(--inset); border: 1px solid var(--line); border-radius: 9px; }
+button { padding: 7px 11px; cursor: pointer; min-height: 36px; }
+button:is(:hover,:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.waiting { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 8px; text-align: left; }
+.waiting img { width: 26px; height: 26px; object-fit: contain; }
+.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; }
+footer, form { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+form { margin-bottom: 8px; align-items: flex-end; }
+textarea { flex: 1; min-width: 145px; padding: 8px; resize: vertical; }
+.sr { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 585px) { .sources { flex: 1 1 100%; grid-template-columns: repeat(auto-fit,minmax(155px,1fr)); } }

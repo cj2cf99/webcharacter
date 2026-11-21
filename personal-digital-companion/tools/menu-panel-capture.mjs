@@ -70,6 +70,9 @@ async function main(){
     text:'明天福冈白天多云转小雨，降水概率 60%，建议带一把折叠伞。\n周末两天以晴为主，适合出门。'.repeat(i%2+1)}));
   const taskEvents=Array.from({length:12},(_,i)=>({at:now-i*900_000,task_id:'job'+(i%5),title:titles[i%5],action:['提交','执行中','完成'][i%3],detail:i%2?'绯月已在本机完成':''}));
   const history=attachConversationDetails(runtime,{...common,visible:true,history:{read:async()=>turns},readTasks:async()=>taskEvents,
+    auditPending:()=>[{id:'1',kind:'手记质问',status:'等待回应',title:'那天临时调整了计划，后来顺利吗？'},
+      {id:'2',kind:'悬念',status:'意外中断',title:'后来找到那本一直在找的书了吗？'},
+      {id:'3',kind:'消费记录',status:'等待回应',title:'这笔预算调整会影响之后的安排吗？'}],
     checks:{notices:(...a)=>checkStore.notices(...a),markRead:id=>checkStore.markRead(id),
       read:(_d,page)=>({nextAt:now+8*60_000,first:false,running:false,pending:true,page:page??0,pages:2,
         events:Array.from({length:12},(_,i)=>({at:now-i*600_000,due:now-i*600_000,project:['到期事项','天气','任务轮询'][i%3],status:i%4?'已检查':'未执行',detail:i%4?'没有新事项':'绯月忙 · 连续第 2 次'}))})},

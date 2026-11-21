@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self' blob:; worker-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>绯月 · 专聊</title>
+  <link rel="stylesheet" href="feiyue-surface.css">
+  <link rel="stylesheet" href="private-chat.css">
+</head>
+<body>
+  <main>
+    <header class="fy-titlebar fy-compact">
+      <div class="fy-caption"><img src="./feiyue-faces/waiting-b.png" alt=""><strong>绯月</strong></div>
+      <span id="round"></span>
+    </header>
+    <p id="line" class="fy-scroll" aria-live="polite"></p>
+    <form id="reply" hidden>
+      <textarea id="draft" aria-label="回复绯月" maxlength="4000" placeholder="回复绯月…"></textarea>
+      <div class="buttons">
+        <button id="mic" type="button" hidden></button>
+        <small id="mic-status" role="status" hidden></small>
+        <button id="send" type="submit">发送</button>
+      </div>
+    </form>
+    <footer>
+      <small id="status" role="status"></small>
+      <div class="buttons">
+        <button id="dismiss" type="button"></button>
+        <button id="accept" type="button" hidden>现在可以</button>
+      </div>
+    </footer>
+  </main>
+  <script type="module" src="private-chat-ui.mjs"></script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+{
+  "$defs": {
+    "ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "lines": {"type": "array", "items": {"type": "string"}},
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sourceId", "quote"],
+        "properties": {"sourceId": {"type": "string", "minLength": 1}, "quote": {"type": "string", "minLength": 1}}
+      }
+    },
+    "matter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "summary", "subject", "state", "intent", "timeText", "conditions", "evidence"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "summary": {"type": "string", "minLength": 1},
+        "subject": {"enum": ["user", "other", "unknown"]},
+        "state": {"enum": ["occurred", "planned", "interest", "idea", "uncertain"]},
+        "intent": {"enum": ["explicit", "inferred", "none"]},
+        "timeText": {"type": "string"},
+        "conditions": {"$ref": "#/$defs/lines"},
+        "evidence": {"$ref": "#/$defs/evidence"}
+      }
+    },
+    "matters": {"type": "array", "items": {"$ref": "#/$defs/matter"}},
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "matterIds", "params", "fieldSources", "conditions", "dependsOn", "missing"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "type": {"enum": ["diaries.create", "hu-shi.food.create", "hu-shi.exercise.create", "hu-shi.event.create", "records.create", "reminders.create", "resources.create"]},
+        "matterIds": {"$ref": "#/$defs/ids", "minItems": 1},
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": {"type": "string"}, "body": {"type": "string"}, "content": {"type": "string"},
+            "reflection": {"type": "string"}, "deadline": {"type": "string"}, "url": {"type": "string"},
+            "level": {"enum": ["高", "中", "低"]}
+          }
+        },
+        "categoryLabel": {"type": "string"},
+        "fieldSources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["field", "kind", "basis"],
+            "properties": {
+              "field": {"type": "string", "minLength": 1},
+              "kind": {"enum": ["explicit", "inferred", "default"]},
+              "basis": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "conditions": {"$ref": "#/$defs/lines"},
+        "dependsOn": {"$ref": "#/$defs/ids", "maxItems": 1},
+        "missing": {"$ref": "#/$defs/lines"}
+      }
+    }
+  },
+  "organize": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["summary", "actions", "requests", "signals", "recentFactIds"],
+    "properties": {
+      "summary": {"type": "string", "minLength": 1, "maxLength": 220},
+      "actions": {"$ref": "#/$defs/matters"}, "requests": {"$ref": "#/$defs/matters"},
+      "signals": {"$ref": "#/$defs/matters"}, "recentFactIds": {"$ref": "#/$defs/ids"}
+    }
+  },
+  "recover": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["kind", "title", "body"],
+    "properties": {
+      "kind": {"enum": ["fact", "food", "exercise", "event", "reminder", "note", "resource", "skip"]},
+      "title": {"type": "string", "maxLength": 60},
+      "body": {"type": "string", "maxLength": 200}
+    }
+  },
+  "classify": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["candidates", "notes"],
+    "properties": {
+      "candidates": {"type": "array", "items": {"$ref": "#/$defs/candidate"}},
+      "notes": {"$ref": "#/$defs/lines"}
+    }
+  },
+  "review": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["issues"],
+    "properties": {
+      "issues": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["target", "id", "kind", "detail"],
+          "properties": {
+            "target": {"enum": ["matter", "candidate"]}, "id": {"type": "string", "minLength": 1},
+            "kind": {"enum": ["missing", "wrong-type", "unsupported", "duplicate", "dependency"]},
+            "detail": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    }
+  }
+}
