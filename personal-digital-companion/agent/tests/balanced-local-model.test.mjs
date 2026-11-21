@@ -7,10 +7,12 @@ test('按 GPU 双指标挑选档位，读数缺失或繁忙时用 CPU',()=>{
   assert.deepEqual(first(49,2304,false),{size:'2',device:'gpu'});
   assert.deepEqual(first(50,7000,false),{size:'0.8',device:'gpu'});
   assert.deepEqual(first(10,6000,true,656),{size:'9',device:'gpu'});
-  assert.deepEqual(first(79,4000,true),{size:'4',device:'gpu'});
-  assert.deepEqual(first(80,8000,true),{size:'4',device:'cpu'});
+  const aggressive={size:'9',file:'Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf'};
+  assert.deepEqual(first(79,6656,true),{...aggressive,device:'gpu'});
+  assert.deepEqual(first(79,4000,true),{...aggressive,device:'cpu'});
+  assert.deepEqual(first(80,8000,true),{...aggressive,device:'cpu'});
   assert.deepEqual(first(0,1200,false),{size:'0.8',device:'cpu'});
-  assert.deepEqual(modelChoices(null,true),[{size:'4',device:'cpu'}]);
+  assert.deepEqual(modelChoices(null,true),[{...aggressive,device:'cpu'}]);
 });
 
 test('辨认纠正上一轮和引用纠正用语',()=>{
@@ -29,21 +31,21 @@ test('换档保留上轮、等旧进程退出、加载失败降档，重复失�
   const m=createBalancedLocalModel({modelPath:'models/test.gguf',readGpu:async()=>({utilization:10,freeMiB:7200}),
     create:({modelPath,device})=>{
       assert.equal(active++,0);
-      const size=/Qwen3.5-([\d.]+)B/u.exec(modelPath)[1];created.push(size);
+      const size=modelPath.includes('HauhauCS-Aggressive')?'Aggressive':/Qwen3.5-([\d.]+)B/u.exec(modelPath)[1];created.push(size);
       return {start:async()=>{},close:async()=>{await new Promise(r=>setImmediate(r));active--;},
         snapshot:()=>({state:size==='9'&&!ready?'unavailable':'ready',gpuLayers:device==='gpu'?25:0}),
         analyze:async(text,options)=>{assert.equal(options.previous,previous);return fail?{error:'LOCAL_AI_INFERENCE_FAILED'}:{kind:'chat',reply:size};}};
     }});
   const ask=s=>m.analyze(s,{hint:'auto',previous});
   try{
-    const warm=m.start();assert.equal((await ask('你好')).reply,'2');await warm;
+    const warm=m.start();assert.equal((await ask('你好')).reply,'Aggressive');await warm;
     assert.equal((await ask('你理解错了')).reply,'9');await new Promise(r=>setImmediate(r));assert.equal(active,0);
     ready=false;
-    assert.equal((await ask('你理解错了')).reply,'4');await new Promise(r=>setImmediate(r));assert.equal(active,0);
+    assert.equal((await ask('你理解错了')).reply,'Aggressive');await new Promise(r=>setImmediate(r));assert.equal(active,0);
     fail=true;await ask('同一问题');await ask('同一问题');fail=false;
-    assert.equal((await ask('同一问题')).reply,'4');
-    assert.deepEqual(created,['2','9','9','4','2','9','4']);
-    assert.equal((await ask('另一件事')).reply,'2');
+    assert.equal((await ask('同一问题')).reply,'Aggressive');
+    assert.deepEqual(created,['Aggressive','9','9','Aggressive','Aggressive','9','Aggressive']);
+    assert.equal((await ask('另一件事')).reply,'Aggressive');
   }finally{await m.close();}
 });
 
@@ -58,7 +60,10 @@ test('三轮未通过时转交原草稿及反馈，改进模型上限两轮，�
     assert.deepEqual(calls.map(c=>c.limit),[3,2]);
     assert.deepEqual(calls[1].revision,revision);
     assert.equal(calls[0].text,calls[1].text);
-    assert.deepEqual(await m.analyze('过期的问题',{hint:'auto',turnStart:performance.now()-31000}),{error:'LOCAL_CHAT_TIME_LIMIT'});
+    assert.deepEqual(await m.analyze('过期的问题',{hint:'auto',turnStart:performance.now()-61000}),{error:'LOCAL_CHAT_TIME_LIMIT'});
     assert.equal(calls.length,2);
+    assert.deepEqual(await m.analyze('已花了三十五秒的问题',{hint:'auto',turnStart:performance.now()-35000}),
+      {error:'LOCAL_CHAT_REVIEW_FAILED'});
+    assert.deepEqual(calls.slice(2).map(c=>c.limit),[3,2]);
   }finally{await m.close();}
 });

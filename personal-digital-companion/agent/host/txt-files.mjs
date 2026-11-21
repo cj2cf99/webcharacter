@@ -46,6 +46,11 @@ export async function validateTxt(file, automatic = false) {
   return encoding;
 }
 
+export async function listTxtFiles(db, subject) {
+  const {results}=await db.prepare('SELECT id,name,bytes FROM txt_record_files WHERE subject=? ORDER BY rowid').bind(subject).all();
+  return results;
+}
+
 // The caller checks the record owner's identity and the record's current write permission.
 export async function manualTxt(request, {db,bucket,subject,editable=true}) {
   const url = new URL(request.url);
@@ -88,9 +93,9 @@ export async function manualTxt(request, {db,bucket,subject,editable=true}) {
       if(!obj)throw fail(404,'附件不存在。');
       return new Response(obj.body,{headers:{...headers,'Content-Type':'text/plain; charset='+row.charset,'Content-Disposition':"inline; filename*=UTF-8''"+encodeURIComponent(row.name),'Content-Security-Policy':"default-src 'none'; sandbox"}});
     }
-    const {results}=await stmt('SELECT id,name,bytes FROM txt_record_files WHERE subject=? ORDER BY rowid').all();
+    const results=await listTxtFiles(db,subject);
     const links=results.map(r=>'<li><a href="?file='+encodeURIComponent(r.id)+'">'+esc(r.name)+'</a> · '+r.bytes+' 字节</li>').join('');
     const picker=editable?'<form method="post" enctype="multipart/form-data"><input type="hidden" name="uploadId" value="'+crypto.randomUUID()+'"><label>选择 TXT <input required type="file" name="file" accept=".txt"></label> <button>添加附件</button></form>':'';
-    return new Response('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TXT 附件</title><main><h1>TXT 附件</h1>'+picker+(links?'<ul>'+links+'</ul>':'<p>暂无附件</p>')+'</main></html>',{headers:{...headers,'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'self'"}});
+    return new Response('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TXT 附件</title><link rel="stylesheet" href="/assets/styles/theme.css"><main class="txt-file-page"><h1>TXT 附件</h1>'+picker+(links?'<ul>'+links+'</ul>':'<p>暂无附件</p>')+'</main></html>',{headers:{...headers,'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'self'"}});
   }catch(error){return response({error:error.status?error.message:'附件处理失败，可重试。'},error.status??500);}
 }

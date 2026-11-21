@@ -487,3 +487,7 @@ Windows 旧 PID 33608 经原生窗口正常退出，安装前备份清单到准�
 ## 2026-11-21 16:37 JST · 三端实际发布与花园最终回执
 
 三端已发布，桌宠覆盖 112 个文件并重启；花园回读确认绯月 18.1。详见 [发布回执](releases/emotion-news-20261121/release-receipt.json) 和项目根目录 RELEASE_REVIEW.md。
+
+## 2026-11-21 JST · 非报纸功能联合发布
+
+Windows 正式安装已更新问答语气、气泡、手记质问与公开查阅额度，配套两个 Worker 已发布。具体回执、版本、范围和恢复方式见根目录 RELEASE_REVIEW.md。

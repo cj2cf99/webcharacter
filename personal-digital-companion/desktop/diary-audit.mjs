@@ -6,7 +6,7 @@ import {untilAbort} from './chat-budget.mjs';
 
 const hour=3600000;
 const cooldown=5*hour,auditWindow=3*60_000;
-const timeoutText='三分钟已到，手记核查和质询已结束。';
+const timeoutText='手记问题准备超过三分钟，本轮未发起质询。';
 const digest=s=>createHash('sha256').update(s).digest('hex');
 const pageKey=p=>p.day+'.'+p.part;
 const open=n=>['提问中','等待回应','意外中断'].includes(n.status);
@@ -44,48 +44,40 @@ function formatQuestion(n){
 }
 
 export function createDiaryAudit({emotion,store,show,idle,canContinue,save,changed,onInterrupted,now=Date.now,random=Math.random,loadSkill=()=>readInteractionSkill('diaryAudit')}){
-  let active=null,budget=null,working=false,state;
-  function expireQuestion(n){
-    if(!n||!open(n))return;
-    n.status='回合结束';n.afterEvaluation=timeoutText;delete n.notBefore;
-    save(n);
-  }
-  function timerFor(startedAt,n){
-    if(budget?.startedAt===startedAt){
-      if(n)budget.n=n;
-      return budget;
-    }
-    clearTimeout(budget?.timer);
+  let active=null,working=false,state;
+  function preparationLimit(startedAt){
     const controller=new AbortController();
     const until=startedAt+auditWindow;
-    const current={startedAt,until,n,signal:controller.signal,
-      expire(){
-        if(controller.signal.aborted)return;
-        controller.abort(new DOMException(timeoutText,'TimeoutError'));
-        if(active?.deadline===current.signal)active=null;
-        expireQuestion(current.n);
-      },
+    const expire=()=>controller.abort(new DOMException(timeoutText,'TimeoutError'));
+    const timer=setTimeout(expire,Math.max(0,until-now()));
+    timer.unref?.();
+    return {startedAt,signal:controller.signal,
       check(){
-        if(now()>=until)current.expire();
+        if(now()>=until)expire();
         controller.signal.throwIfAborted();
-      }};
-    current.timer=setTimeout(current.expire,Math.max(0,until-now()));
-    current.timer.unref?.();
-    budget=current;
-    return current;
+      },close:()=>clearTimeout(timer)};
   }
   function stopRun(){
     if(state.run){delete state.run;store.saveAuditState(state);}
-    clearTimeout(budget?.timer);budget=null;
   }
-  async function writer(limit,signal){
+  function recordAttempt(pages,stage,question=''){
+    state.run.attempt={pages:[...new Set(pages)],stage,question};
+    store.saveAuditState(state);
+  }
+  function preparationFailure(reason){
+    const {pages,stage,question}=state.run?.attempt??{pages:state.run?.pages??[],stage:'同步待核查资料'};
+    const failure=Error(`质询准备失败 · ${stage} · 对象：${pages.join('、')||'尚未确定'} · 质问：${question||'尚未生成'} · 原因：${reason}`);
+    stopRun();
+    return failure;
+  }
+  async function writer(signal,limit){
     const skill=await untilAbort(loadSkill(),signal);
     return async(stage,data,fields,signal,steps)=>{
-      limit.check();signal.throwIfAborted();
+      limit?.check();signal.throwIfAborted();
       const input=JSON.stringify(data),key=steps&&digest(stage+'\n'+input);
       if(key&&steps[key])return steps[key];
       const result=await untilAbort(store.think(input,skill.localAi[stage],fields,signal,{name:skill.skill,version:skill.version}),signal);
-      limit.check();signal.throwIfAborted();
+      limit?.check();signal.throwIfAborted();
       if(key){steps[key]=result;store.saveAuditState(state);}
       return result;
     };
@@ -104,8 +96,8 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
       const page=pageKey(p);
       if(!run.pages.includes(page)){
         run.pages.push(page);state.checked[page]=now();
-        store.saveAuditState(state);
       }
+      recordAttempt([page],'提取手记线索');
       const chars=Array.from(p.body);
       for(let i=0;i<chars.length;i+=440){
         limit.check();signal.throwIfAborted();
@@ -132,10 +124,12 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
       if(groups.has(key))continue;
       groups.add(key);
       const inputs=indices.map((j,k)=>({no:k+1,...quotes[j]}));
+      recordAttempt(inputs.map(r=>r.page),'比对手记');
       const v=await write('compare',inputs,['score','refs','summary','points','question','keywords'],signal,run.steps);
       if(v.score==='0')continue;
       const refs=v.refs.trim().split(/[，,\s、]+/u).filter(Boolean).map(s=>inputs[Number(s)-1]);
       const ask=question(v.question);
+      if(ask)recordAttempt(refs.length&&refs.every(Boolean)?refs.map(r=>r.page):inputs.map(r=>r.page),'核对拟问依据',ask);
       if(!/^[1-5]$/u.test(v.score)||!refs.length||refs.some(r=>!r)||!ask||!v.summary||!v.points)throw Error('质问缺少有效的原文依据，留待重核');
       const points=v.points.split(/\n|[；;]/u).map(s=>s.replace(/^\s*\d+[.、)）]\s*/u,'').trim()).filter(Boolean);
       if(!points.length)throw Error('质问缺少矛盾点');
@@ -143,6 +137,7 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
     }
     for(const item of candidates.sort((a,b)=>b.score-a.score)){
       const terms=item.keywords.split(/[，,、\s]+/u).filter(t=>t.length>=2&&t.length<=32).slice(0,3);
+      recordAttempt(item.refs.map(r=>r.page),'验证拟问',item.ask);
       limit.check();signal.throwIfAborted();
       const context=await untilAbort(store.auditAssociations(terms,signal),signal);
       const v=await write('verify',{引文:item.refs,矛盾:item.reason,拟问:item.ask,本机线索:context},['keep','question'],signal,run.steps);
@@ -165,7 +160,7 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
   function pause(n){
     n.status='意外中断';save(n);
     onInterrupted?.();
-    return {text:'你的回答已记下，三分钟内空闲时可以继续核查。',done:true};
+    return {text:'你的回答已记下，空闲时可以继续核查。',done:true};
   }
   async function advance(n,write,signal){
     if(!canContinue())return pause(n);
@@ -201,110 +196,102 @@ export function createDiaryAudit({emotion,store,show,idle,canContinue,save,chang
     n.status=closingStatus;n.afterEvaluation=v.text;save(n);
     return {text:v.text,done:true};
   }
-  async function showQuestion(n,write,limit,signal){
+  async function showQuestion(n,signal){
     const controller=new AbortController();
-    const replySignal=AbortSignal.any([controller.signal,limit.signal]);
-    const session={audit:true,signal,deadline:limit.signal,timeoutText,prompt:formatQuestion(n),
-      visible(){limit.check();n.status='提问中';save(n);},
+    const replySignal=controller.signal;
+    const session={audit:true,signal,prompt:formatQuestion(n),
+      visible(){delete n.notBefore;n.status='提问中';save(n);},
       leave(reason){
         if(active!==session)return;
         active=null;controller.abort();
-        if(now()>=limit.until){limit.expire();stopRun();return;}
         if(reason==='refuse'){
           mood(n);n.status='用户结束';n.afterEvaluation='我带着'+n.mood+'把这件事记到这里。老公选择不再回答。';
           line(n,'结束记录','拒绝回答');
-          stopRun();
         }else{
-          n.status=reason==='later'||reason==='idle'?'等待回应':'意外中断';
-          if(n.status==='等待回应')n.notBefore=limit.until;
-          else {delete n.notBefore;onInterrupted?.();}
+          n.status=reason==='later'?'等待回应':'意外中断';
+          if(reason==='later')n.notBefore=now()+hour;
         }
         save(n);
+        if(n.status==='意外中断')onInterrupted?.();
       },
       async reply(raw){
-        try {
-          limit.check();
-          if(active!==session)throw Error('这次气泡已关闭');
-          const text=store.nagText?await untilAbort(store.nagText(n,raw,replySignal),replySignal):cleanMemory(raw);
-          limit.check();replySignal.throwIfAborted();
-          if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请输入文字回答。',invalid:true};
-          line(n,'你',text);delete n.notBefore;save(n);
-          const result=await advance(n,write,replySignal);
-          if(result.text&&!result.invalid)emotion?.chat({id:n.id+'/'+n.talk.length,state:'answer',at:now(),question:text,text:result.text});
-          if(result.done){active=null;if(!open(n))stopRun();}
-          return result;
-        }catch(error){
-          if(limit.signal.aborted)return {text:timeoutText,done:true};
-          throw error;
-        }
+        if(active!==session)throw Error('这次气泡已关闭');
+        const text=store.nagText?await untilAbort(store.nagText(n,raw,replySignal),replySignal):cleanMemory(raw);
+        replySignal.throwIfAborted();
+        if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请输入文字回答。',invalid:true};
+        line(n,'你',text);save(n);
+        const result=await advance(n,await writer(replySignal),replySignal);
+        if(result.text&&!result.invalid)emotion?.chat({id:n.id+'/'+n.talk.length,state:'answer',at:now(),question:text,text:result.text});
+        if(result.done)active=null;
+        return result;
       }};
     active=session;
     try{
       if(!await untilAbort(show(session),signal)){if(active===session)active=null;return {deferred:true};}
     }catch(error){if(active===session)active=null;throw error;}
-    limit.check();
     return {detail:'本次质问：'+n.title};
+  }
+  async function prepareQuestion(outer){
+    const limit=preparationLimit(state.run?.startedAt??now());
+    const signal=AbortSignal.any([outer,limit.signal]);
+    try{
+      limit.check();
+      signal.throwIfAborted();
+      if(!state.run){
+        await untilAbort(store.refresh(signal),signal);
+        limit.check();
+        const pending=store.nags().find(open);
+        if(pending)return {n:pending};
+      }
+      const write=await writer(signal,limit);
+      for(const [key,at] of Object.entries(state.checked))if(at<=now()-cooldown)delete state.checked[key];
+      const n=await discover(write,limit,signal);
+      if(!n){stopRun();return {detail:'近七天手记没有新的关键疑点'};}
+      limit.check();signal.throwIfAborted();
+      limit.close();
+      recordAttempt(n.refs.map(r=>r.page),'登记待确认质问',n.title);
+      await untilAbort(store.reserveAudit(n,outer),outer);
+      stopRun();changed();
+      return {n};
+    }catch(error){
+      if(outer.aborted)throw error;
+      throw preparationFailure(limit.signal.aborted?timeoutText:error.message);
+    }finally{limit.close();}
   }
   async function poll(outer,{manual=false}={}){
     if(working||active||!idle()||!canContinue())return {deferred:true};
     let n=store.nags().find(open);
     if(n&&n.source!=='audit'||!n&&manual)return '没有待续的手记质问';
     state=store.auditState();
-    if(!n&&state.run&&state.run.startedAt+auditWindow<=now())stopRun();
-    let limit=timerFor(n?Date.parse(n.created_at):state.run?.startedAt??now(),n);
-    let signal=AbortSignal.any([outer,limit.signal]);
     working=true;
     try{
-      limit.check();signal.throwIfAborted();
-      if(!n&&!state.run){
-        await untilAbort(store.refresh(signal),signal);
-        limit.check();
-        n=store.nags().find(open);
-        if(n&&n.source!=='audit'){stopRun();return '没有待续的手记质问';}
-        if(n){
-          limit=timerFor(Date.parse(n.created_at),n);
-          signal=AbortSignal.any([outer,limit.signal]);
-          limit.check();
-        }
-      }
-      if(!manual&&n?.notBefore>now())return {detail:'手记质问已留在待确认'};
-      const write=await writer(limit,signal);
+      outer.throwIfAborted();
       if(!n){
-        for(const [key,at] of Object.entries(state.checked))if(at<=now()-cooldown)delete state.checked[key];
-        n=await discover(write,limit,signal);
-        if(!n){stopRun();return '近七天手记没有新的关键疑点';}
-        limit.check();signal.throwIfAborted();
-        await untilAbort(store.reserveAudit(n,signal),signal);
-        limit.n=n;
-        limit.check();
-        changed();
+        const result=await prepareQuestion(outer);
+        if(!result.n)return result.detail;
+        n=result.n;
       }
+      if(n.source!=='audit')return '没有待续的手记质问';
+      stopRun();
+      if(!manual&&n.notBefore>now())return {detail:'手记质问已留在待确认'};
       if(n.talk.at(-1).who==='你'){
-        const result=await advance(n,write,signal);
+        const result=await advance(n,await writer(outer),outer);
         if(result.done){
           if(open(n))return {deferred:true,detail:result.text};
-          stopRun();return result.text;
+          return result.text;
         }
       }
-      limit.check();signal.throwIfAborted();
+      outer.throwIfAborted();
       if(!idle()||!canContinue())return {deferred:true};
-      return await showQuestion(n,write,limit,signal);
-    }catch(error){
-      if(limit.signal.aborted){stopRun();return timeoutText;}
-      if(!outer.aborted&&!n)stopRun();
-      throw error;
+      return await showQuestion(n,outer);
     }finally{working=false;}
   }
-  return {poll,eligible:n=>now()<Date.parse(n.created_at)+auditWindow,
+  return {poll,
     recover(){
       const n=store.nags().find(n=>n.source==='audit'&&open(n));
-      if(n){
-        const limit=timerFor(Date.parse(n.created_at),n);
-        if(now()>=limit.until)limit.expire();
-        return open(n)&&!(n.notBefore>now());
-      }
+      if(n)return !(n.notBefore>now());
       const run=store.auditState().run;
-      return Boolean(run&&run.startedAt+auditWindow>now());
+      return Boolean(run);
     },
-    close(){active?.leave('interrupted');clearTimeout(budget?.timer);}};
+    close(){active?.leave('interrupted');}};
 }

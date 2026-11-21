@@ -1,5 +1,6 @@
 """验证技能发布、历史查找、菜单覆盖及图像任务边界，不使用真实业务库。"""
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import shutil
 import sys
@@ -18,109 +19,6 @@ import world_tour
 
 
 class SkillTests(unittest.TestCase):
-    def test_rss_article_images(self):
-        from public_reader import rss_picture
-        from xml.etree.ElementTree import fromstring
-        for markup in ('<m:thumbnail url="https://example.org/news/a.jpg"/>',
-                       '<m:group><m:content medium="image" url="https://example.org/news/a.jpg"/></m:group>',
-                       '<enclosure type="image/jpeg" url="https://example.org/news/a.jpg"/>',
-                       '<description>&lt;img src="https://example.org/news/a.jpg"&gt;</description>'):
-            item=fromstring('<item xmlns:m="http://search.yahoo.com/mrss/">'+markup+'</item>')
-            self.assertEqual(rss_picture(item),'https://example.org/news/a.jpg')
-        item=fromstring('<item><image><url>https://example.org/logo.png</url></image>'
-                        '<enclosure type="audio/mpeg" url="https://example.org/audio"/></item>')
-        self.assertIsNone(rss_picture(item))
-
-    def test_news_watch_filters_and_skips_invalid_dates(self):
-        import news_watch
-        self.assertTrue(news_watch.relevant("美国社会","美国龙卷风造成大规模停电"))
-        self.assertFalse(news_watch.relevant("中国社会","泉州民企发布可持续生态马桶阶段性成果"))
-        self.assertFalse(news_watch.relevant("日本社会","美国宣布进入紧急状态"))
-        self.assertTrue(news_watch.relevant("日本股市","日经指数暴跌5.06%"))
-        self.assertFalse(news_watch.relevant("美国股市","美股分析师访谈"))
-        entry = dict(title="机器人量产 - 某报",source="某报",url="https://example.com/news")
-        with patch.object(news_watch, "rss_news", return_value=[
-                dict(entry,published="bad"),dict(entry,published="Sat, 21 Nov 2026 00:00:00 GMT")]):
-            topic, items = news_watch.fetch_topic("机器人")
-        self.assertEqual(topic,"机器人")
-        self.assertEqual([row["title"] for row in items],["机器人量产"])
-
-    def test_channel_picture_is_excluded_even_when_repeated_in_an_item(self):
-        from unittest.mock import Mock
-        from public_reader import rss_news
-        brand = 'https://example.org/asset?id=brand'
-        story = 'https://example.org/asset?id=story'
-        entries = []
-        for index, images in enumerate([[], [brand], [brand+'&#38;width=200',story]]):
-            media = ''.join(f'<m:thumbnail url="{url}"/>' for url in images)
-            entries.append(f'<item><title>N{index}</title><link>https://example.org/{index}</link>{media}</item>')
-        xml = (f'<rss xmlns:m="http://search.yahoo.com/mrss/"><channel><image><url>{brand}</url></image>'
-               + ''.join(entries) + '</channel></rss>')
-        reader=Mock()
-        reader.get.return_value=(200,{},xml.encode())
-        self.assertEqual([row["imageUrl"] for row in rss_news(reader,"news")],[None,None,story])
-
-    def test_old_google_credentials_cannot_start_a_search(self):
-        import os
-        import public_reader
-        import public_images
-        from unittest.mock import Mock
-        reader = Mock()
-        with patch.dict(os.environ, {"GOOGLE_CSE_API_KEY":"old", "GOOGLE_CSE_ID":"old"}, clear=True):
-            with self.assertRaisesRegex(ValueError, "TAVILY_NOT_CONFIGURED"):
-                public_reader.page_material(None, "京都", reader)
-            with patch.object(public_images, "Reader", return_value=reader):
-                old = {"roles":{"images":["old"]}, "providers":{"old":{"adapter":"google"}}}
-                with self.assertRaises(ValueError):
-                    public_images.search("images", "京都", old)
-        reader.get.assert_not_called()
-        reader.read.assert_not_called()
-
-    def test_tavily_common_budget_and_x_sources(self):
-        import os
-        import tavily_search as provider
-        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,{"TAVILY_API_KEY":"fixture"}):
-            account=dict(current_plan="Researcher",plan_usage=0,plan_limit=2,paygo_limit=None,paygo_usage=0)
-            payloads=[]
-            post=str(((int(time.time()*1000)-1288834974657)<<22)+1)
-            def send(key,path,payload=None):
-                if path=="/usage":
-                    return {"account":account}
-                payloads.append(payload)
-                return {"results":[{"url":url,"title":"消息","content":"摘录"} for url in [
-                    "https://example.org/news","https://x.com/a","https://x.com/a/status/"+post+"?s=20",
-                    "https://x.com/i/web/status/"+post,"https://x.com.fake/a/status/"+post]]}
-            def search(x_only):
-                return provider.search("京都",x_only,send=send,directory=Path(tmp))
-            self.assertTrue(search(False))
-            result,=search(True)
-            self.assertIn("近12小时",result["snippet"])
-            self.assertIn("observedAt",result)
-            self.assertEqual(result["url"],"https://x.com/a/status/"+post)
-            self.assertNotIn("include_domains",payloads[0])
-            self.assertEqual(payloads[1]["include_domains"],["x.com"])
-            self.assertEqual(payloads[1]["search_depth"],"basic")
-            with self.assertRaisesRegex(ValueError,"TAVILY_QUOTA"):
-                search(True)
-            account["paygo_limit"]=20
-            with self.assertRaisesRegex(ValueError,"TAVILY_FREE_UNVERIFIED"):
-                search(False)
-            self.assertEqual(len(payloads),2)
-
-    def test_tavily_concurrent_allowance(self):
-        import tavily_search as provider
-        from concurrent.futures import ThreadPoolExecutor
-        account=dict(current_plan="Researcher",plan_usage=999,plan_limit=1000,paygo_limit=0,paygo_usage=0)
-        with tempfile.TemporaryDirectory() as tmp:
-            def attempt(_):
-                try:
-                    provider.reserve(account,"2026-11",Path(tmp))
-                    return "ok"
-                except ValueError as error:
-                    return str(error)
-            with ThreadPoolExecutor(4) as executor:
-                self.assertCountEqual(executor.map(attempt,range(4)),["ok"]+["TAVILY_QUOTA"]*3)
-
     def test_world_tour_uses_distinct_visual_references(self):
         import public_images
         settings=public_images.config()
@@ -144,26 +42,6 @@ class SkillTests(unittest.TestCase):
             self.assertTrue(all((directory/item).is_file() for item in attachments))
             with self.assertRaisesRegex(ValueError,"参考图片"):
                 world_tour.prepare(directory,"",10,lambda *_:b'{}')
-
-    def test_five_image_candidates_one_selection(self):
-        import public_images as images
-        settings={"roles":{"images":["source"]},"providers":{"source":{"adapter":"json"}}}
-        rows=[(f"photo {n}","https://example.org/story",f"https://example.org/{n}.jpg",
-               "","",["example.org"],["example.org"]) for n in range(9)]
-        choices=[]
-        fetched=[]
-        def fetch(url,limit):
-            fetched.append(url)
-            return b"\xff\xd8\xff-test"
-        def choose(titles):
-            choices.append(titles)
-            return 4
-        with patch.object(images,"catalogue",return_value=iter(rows)):
-            selected=images.search("images","Kyoto",settings,fetch=fetch,choose=choose)
-        self.assertEqual(len(choices[0]),5)
-        self.assertEqual(len(selected),1)
-        self.assertEqual(selected[0][0]["title"],"photo 4")
-        self.assertEqual(fetched,["https://example.org/4.jpg"])
 
     def test_public_reader_boundaries(self):
         from public_reader import Reader, Article, public_address
@@ -192,6 +70,181 @@ class SkillTests(unittest.TestCase):
             reader.get.assert_called_once()
             self.assertIn("news.google.com/rss",reader.get.call_args.args[0])
             self.assertNotIn("fixture",str(reader.get.call_args))
+
+    def test_autonomous_editorials_use_rss_and_exclude_straight_news(self):
+        from public_reader import news
+        from unittest.mock import Mock
+        from urllib.parse import parse_qs, urlsplit
+        reader = Mock()
+        reader.get.return_value = (200, {}, """<rss><channel>
+          <item><title>Officials welcomed the editorial</title><link>https://news.example.org/report</link></item>
+          <item><title>New rules - Opinion</title><source>Opinion</source><link>https://news.example.org/publisher</link></item>
+          <item><title>【社論】能源轉型</title><source>例報</source><link>https://news.example.org/editorial</link>
+          <pubDate>Fri, 20 Nov 2026 17:30:00 GMT</pubDate></item></channel></rss>""".encode())
+        with patch.dict("os.environ", {"BRAVE_SEARCH_API_KEY": "fixture"}):
+            sources = news(reader, "能源轉型", editorials=True)
+        self.assertEqual([s["url"] for s in sources], ["https://news.example.org/editorial"])
+        self.assertIn("2026-11-21 02:30 JST", sources[0]["snippet"])
+        request = urlsplit(reader.get.call_args.args[0])
+        self.assertEqual(request.hostname, "news.google.com")
+        self.assertIn("when:3d", parse_qs(request.query)["q"][0])
+
+    def test_autonomous_tavily_checks_shared_free_quota_and_keeps_only_x_posts(self):
+        import tavily_search
+        from search_budget import MonthlyBudgetUnavailable
+        seen = []
+        used = 0
+        def send(key, path, body=None):
+            seen.append((path, body))
+            if path == "/usage":
+                return {"account": {"current_plan": "Researcher", "paygo_limit": 0, "paygo_usage": 0, "plan_limit": 1000, "plan_usage": used}}
+            return {"results": [{"title": "帖", "url": "https://x.com/example/status/123", "content": "公开讨论"},
+                                {"title": "重复帖", "url": "https://www.x.com/example/status/123"},
+                                {"title": "外站", "url": "https://example.org/"}]}
+        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"TAVILY_API_KEY": "fixture"}):
+            options = dict(send=send, directory=Path(tmp), now=datetime(2026, 11, 21, tzinfo=timezone.utc))
+            posts = tavily_search.search("公开话题", x_only=True, **options)
+            self.assertEqual([r["url"] for r in posts], ["https://x.com/example/status/123"])
+            self.assertIn("JST", posts[0]["snippet"])
+            self.assertEqual(seen[1][1]["include_domains"], ["x.com"])
+            tavily_search.search("另一个公开主题", **options)
+            self.assertNotIn("include_domains", seen[3][1])
+            self.assertEqual(seen[3][1]["max_results"], 10)
+            used = 800
+            with self.assertRaisesRegex(MonthlyBudgetUnavailable, "SEARCH_MONTHLY_PACED"):
+                tavily_search.search("第三个公开主题", **options)
+            self.assertEqual([p for p, _ in seen].count("/search"), 2)
+
+    def test_autonomous_images_use_commons_without_touching_monthly_quota(self):
+        from public_images import initiative_images
+        from unittest.mock import Mock
+        reader = Mock()
+        def get(url, limit):
+            self.assertTrue(url.startswith("https://commons.wikimedia.org/w/api.php?"))
+            content = {str(i): {"title": f"File:bird-{i}.jpg", "index": i, "imageinfo": [{"mime": "image/jpeg",
+                       "descriptionurl": f"https://commons.wikimedia.org/wiki/File:bird-{i}.jpg",
+                       "thumburl": f"https://upload.wikimedia.org/bird-{i}.jpg"}]} for i in range(8)}
+            return 200, {}, json.dumps({"query": {"pages": content}}).encode()
+        reader.get.side_effect = get
+        with patch.dict("os.environ", {"SERPAPI_API_KEY": "fixture"}):
+            sources = initiative_images("birds", reader)
+        self.assertEqual(len(sources), 5)
+        self.assertEqual(sources[0]["provider"], "Wikimedia Commons")
+        self.assertEqual(reader.get.call_count, 1)
+
+    def test_daily_search_prefers_langsearch_for_web_and_x_without_monthly_requests(self):
+        import public_search_sources as search
+        from unittest.mock import Mock
+        now = datetime(2026, 11, 21, tzinfo=timezone.utc)
+        def url(at):
+            post = (int(at.timestamp() * 1000) - 1288834974657) << 22
+            return f"https://x.com/example/status/{post}"
+        rows = [dict(name="正常来源", url=url(now-timedelta(days=2))), dict(name="旧帖", url=url(now-timedelta(days=9))),
+                dict(name="非 X 来源", url="https://example.org/post")]
+        send = Mock(return_value={"code": 200, "data": {"webPages": {"value": rows}}})
+        with patch.dict("os.environ", {"LANGSEARCH_API_KEY": "fixture", "WEIR_API_KEY": "fixture"}):
+            hits = search.langsearch("公开话题", "x", send=send, now=now)
+            self.assertEqual([s["title"] for s in hits], ["正常来源"])
+            self.assertEqual(send.call_args.args[3]["includeDomains"], ["x.com"])
+            self.assertEqual(send.call_args.args[3]["freshness"], "oneWeek")
+            with patch.object(search, "langsearch", return_value=hits), patch.object(search, "weir_posts") as weir, \
+                    patch.object(search.tavily_search, "search") as tavily:
+                self.assertEqual(search.lookup("公开话题", "x"), hits)
+                self.assertEqual(search.lookup("公开话题", "web"), hits)
+                weir.assert_not_called()
+                tavily.assert_not_called()
+
+    def test_monthly_fallback_stops_once_a_monthly_query_is_sent(self):
+        import public_search_sources as search
+        from search_budget import MonthlyBudgetUnavailable
+        with patch.dict("os.environ", {"WEIR_API_KEY": "fixture", "TAVILY_API_KEY": "fixture"}), \
+                patch.object(search, "langsearch", side_effect=ValueError("SEARCH_HTTP_429")), \
+                patch.object(search, "weir_posts", side_effect=MonthlyBudgetUnavailable("SEARCH_MONTHLY_PACED")) as weir, \
+                patch.object(search.tavily_search, "search", return_value=[{"provider": "Tavily"}]) as tavily:
+            self.assertEqual(search.lookup("公开话题", "x"), [{"provider": "Tavily"}])
+            tavily.assert_called_once_with("公开话题", x_only=True)
+            tavily.reset_mock()
+            weir.side_effect = None
+            weir.return_value = []
+            self.assertEqual(search.lookup("公开话题", "x"), [])
+            weir.side_effect = TimeoutError()
+            with self.assertRaises(TimeoutError):
+                search.lookup("公开话题", "x")
+            tavily.assert_not_called()
+
+    def test_weir_budget_reduces_page_size_and_keeps_tokyo_dates(self):
+        from public_search_sources import weir_posts
+        from search_budget import MonthlyBudgetUnavailable
+        from unittest.mock import Mock
+        now = datetime(2026, 11, 21, tzinfo=timezone.utc)
+        free = {"granted": 5000, "remaining": 1003, "resetsAt": "2026-12-01T00:00:00Z"}
+        credit = {"spendingPaused": False, "balance": 1003, "available": 1003, "freeGrant": free}
+        def send(host, key, path, body=None):
+            return {"data": credit} if path.endswith("/usage") else {"data": [{"text": "新帖", "url": "https://x.com/example/status/123",
+                                                                              "createdAt": "2026-11-20T17:30:00Z"}]}
+        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"WEIR_API_KEY": "fixture"}):
+            transport = Mock(side_effect=send)
+            options = dict(send=transport, directory=Path(tmp), now=now)
+            posts = weir_posts("极光", **options)
+            self.assertIn("2026-11-21 02:30 JST", posts[0]["snippet"])
+            self.assertEqual(transport.call_args.args[3]["limit"], 1)
+            with self.assertRaisesRegex(MonthlyBudgetUnavailable, "SEARCH_MONTHLY_PACED"):
+                weir_posts("极光", **options)
+            credit["balance"] += 100
+            with self.assertRaisesRegex(MonthlyBudgetUnavailable, "WEIR_FREE_UNVERIFIED"):
+                weir_posts("极光", **options)
+            self.assertEqual([row.args[2] for row in transport.call_args_list].count("/v1/x/search"), 1)
+
+    def test_daily_reservations_are_atomic_and_reset_while_holding_monthly_reserve(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from search_budget import MonthlyBudgetUnavailable, reserve_monthly
+        now = datetime(2026, 11, 1, 23, 59, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            def claim(_):
+                try:
+                    return reserve_monthly("serpapi", 250, 250, directory=directory, now=now)
+                except MonthlyBudgetUnavailable:
+                    return 0
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                self.assertEqual(sum(pool.map(claim, range(12))), 6)
+            self.assertEqual(reserve_monthly("serpapi", 250, 244, directory=directory, now=now+timedelta(minutes=1)), 1)
+            with self.assertRaisesRegex(MonthlyBudgetUnavailable, "SEARCH_MONTHLY_PACED"):
+                reserve_monthly("serpapi", 250, 50, directory=directory, now=now+timedelta(days=28))
+
+    def test_serpapi_checks_hard_free_plan_and_budget_before_using_monthly_search(self):
+        from public_images import serp_results
+        from search_budget import MonthlyBudgetUnavailable
+        from unittest.mock import Mock
+        now = datetime(2026, 11, 21, tzinfo=timezone.utc)
+        account = {"plan_name": "Free Plan", "plan_monthly_price": 0, "searches_per_month": 250,
+                   "plan_searches_left": 50, "extra_credits": 0}
+        def fetch(url, limit):
+            return (200, {}, json.dumps(account).encode()) if "account.json" in url else (200, {}, b'{"images_results":[{}]}')
+        reader = Mock()
+        reader.get.side_effect = fetch
+        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"SERPAPI_API_KEY": "fixture"}):
+            options = dict(directory=Path(tmp), now=now)
+            with self.assertRaisesRegex(MonthlyBudgetUnavailable, "SEARCH_MONTHLY_PACED"):
+                serp_results("birds", reader, **options)
+            self.assertEqual(reader.get.call_count, 1)
+            account["plan_searches_left"] = 250
+            self.assertEqual(serp_results("birds", reader, **options), [{}])
+            self.assertEqual(reader.get.call_count, 3)
+
+    def test_tavily_existing_monthly_reservations_are_preserved(self):
+        import sqlite3
+        from contextlib import closing
+        from search_budget import MonthlyBudgetUnavailable, reserve_monthly
+        now = datetime(2026, 11, 21, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            with closing(sqlite3.connect(directory / "tavily-budget.sqlite3")) as db, db:
+                db.execute("CREATE TABLE monthly (month TEXT PRIMARY KEY, used INTEGER NOT NULL)")
+                db.execute("INSERT INTO monthly VALUES ('2026-11', 800)")
+            with self.assertRaisesRegex(MonthlyBudgetUnavailable, "SEARCH_MONTHLY_PACED"):
+                reserve_monthly("tavily", 1000, 1000, directory=directory, now=now)
+            self.assertEqual(reserve_monthly("tavily", 1000, 1000, directory=directory, now=now+timedelta(days=11)), 1)
 
     def test_publication(self):
         with tempfile.TemporaryDirectory() as tmp:

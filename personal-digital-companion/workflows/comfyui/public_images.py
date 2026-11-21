@@ -11,7 +11,9 @@ import sys
 import uuid
 import subprocess
 from urllib.parse import urlencode, urlsplit
-from public_reader import Reader, news, page_material, discover_images
+from public_reader import Reader, news, page_material, discover_images, target
+from public_search_sources import lookup, SOURCE_ERRORS
+from search_budget import reserve_monthly
 import tavily_search
 
 DEFAULT = Path(__file__).with_name("world-tour-sources.json")
@@ -41,26 +43,79 @@ def read_url(url, limit):
 IMAGE_LIMIT = 5
 
 
-def serp_images(query,reader):
-    key=os.getenv("SERPAPI_API_KEY")
+def serp_results(query, reader, *, directory=None, now=None):
+    key = os.getenv("SERPAPI_API_KEY")
     if not key:
-        return
-    origin="https://serpapi.com/"
-    status,_,raw=reader.get(origin+"account.json?"+urlencode({"api_key":key}),100_000)
-    if status!=200:
-        return
-    account=json.loads(raw)
-    if (account.get("plan_name")!="Free Plan" or account.get("plan_monthly_price")!=0 or
-            not isinstance(account.get("plan_searches_left"),int) or account["plan_searches_left"]<1 or
-            account.get("extra_credits",0)!=0):
-        return
-    status,_,raw=Reader(seconds=25,request_timeout=22).get(origin+"search.json?"+urlencode(dict(engine="google_images",q=query,api_key=key)),2_000_000)
-    if status!=200:
-        return
-    for item in json.loads(raw).get("images_results",[])[:IMAGE_LIMIT]:
-        page,image=item.get("link"),item.get("original")
-        if page and image:
-            yield (item.get("title"),page,image,"","授权见原页",[urlsplit(page).hostname],[urlsplit(image).hostname])
+        return []
+    origin = "https://serpapi.com/"
+    status, _, raw = reader.get(origin + "account.json?" + urlencode(dict(api_key=key)), 100_000)
+    if status != 200:
+        return []
+    account = json.loads(raw)
+    left = account.get("plan_searches_left")
+    if (account.get("plan_name") != "Free Plan" or account.get("plan_monthly_price") != 0 or
+            type(left) is not int or left < 1 or account.get("extra_credits") != 0):
+        return []
+    reserve_monthly("serpapi", account.get("searches_per_month"), left, directory=directory, now=now)
+    params = dict(engine="google_images", q=query, api_key=key, safe="active")
+    status, _, raw = reader.get(origin + "search.json?" + urlencode(params), 2_000_000)
+    return json.loads(raw).get("images_results", []) if status == 200 else []
+
+
+def serp_images(query, reader):
+    for item in serp_results(query, reader)[:IMAGE_LIMIT]:
+        page, image = item.get("link"), item.get("original")
+        if not page or not image:
+            continue
+        yield (item.get("title"), page, image, "", "授权见原页", [urlsplit(page).hostname], [urlsplit(image).hostname])
+
+
+def initiative_images(query, reader):
+    def candidates(rows, provider):
+        found = []
+        seen = set()
+        for title, page, image, author, license_name in rows:
+            try:
+                if not all(isinstance(url, str) for url in (page, image)):
+                    continue
+                target(page)
+                target(image)
+            except ValueError:
+                continue
+            if not plain(title) or image in seen:
+                continue
+            seen.add(image)
+            snippet = " · ".join(filter(None, [plain(author), plain(license_name) or "授权见原页"]))
+            found.append(dict(title=plain(title), url=page, imageUrl=image, provider=provider, snippet=snippet))
+            if len(found) == 5:
+                break
+        return found
+
+    def fetch(url, limit):
+        status, _, raw = reader.get(url, limit)
+        if status != 200:
+            raise ValueError("IMAGE_SEARCH_UNAVAILABLE")
+        return raw
+
+    try:
+        sources = candidates((row[:5] for row in catalogue({"adapter": "commons"}, query, fetch, 320)), "Wikimedia Commons")
+    except SOURCE_ERRORS:
+        sources = []
+    if sources:
+        return sources
+
+    items = serp_results(query, Reader())[:IMAGE_LIMIT]
+    return candidates(((i.get("title"), i.get("link"), i.get("original"), "", "") for i in items), "SerpApi / Google 图片")
+
+
+def initiative_sources(mode, query):
+    if mode in ("web", "x"):
+        return lookup(query, mode)
+    if mode == "editorial":
+        return news(Reader(), query, editorials=True)
+    if mode == "images":
+        return initiative_images(query, Reader())
+    raise ValueError("UNKNOWN_SEARCH_MODE")
 
 
 def catalogue(provider, query, fetch, thumbnail_width):
@@ -194,6 +249,9 @@ if __name__ == "__main__":
         request = json.loads(sys.stdin.buffer.readline()) if interactive else json.load(sys.stdin.buffer)
         query = request["query"]
         mode = request.get("mode","images")
+        if request.get("initiative") is True:
+            print(json.dumps(dict(sources=initiative_sources(mode, query))))
+            sys.exit(0)
         if mode in ("web","news","page","x"):
             if mode=="x":
                 sources=tavily_search.search(query,x_only=True)
@@ -235,6 +293,6 @@ if __name__ == "__main__":
         (root/"sources.json").write_text(json.dumps([dict((k,v) for k,v in s.items() if k!="preview")
                                                     for s in sources],ensure_ascii=False,indent=2),encoding="utf-8")
         print(json.dumps(dict(sources=sources)))
-    except (KeyError, OSError, ValueError) as exc:
+    except (KeyError, OSError, ValueError, http.client.HTTPException) as exc:
         print(json.dumps(dict(error=str(exc))))
         sys.exit(1)

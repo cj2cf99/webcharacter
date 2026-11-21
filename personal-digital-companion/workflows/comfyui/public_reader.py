@@ -1,5 +1,6 @@
 """Bounded public HTTPS reader. No browser state, JavaScript, form submission or local tools."""
 import http.client
+from contextlib import closing
 import html
 import ipaddress
 import json
@@ -31,6 +32,20 @@ def target(url):
             p.username is not None or p.password is not None or p.port not in (None,443)):
         raise ValueError("仅支持无登录凭据的公开 HTTPS 地址")
     return p
+
+
+def provider_json(host, key, path, body=None):
+    with closing(http.client.HTTPSConnection(host, timeout=10)) as conn:
+        conn.request("GET" if body is None else "POST", path,
+                     body=json.dumps(body).encode() if body is not None else None,
+                     headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
+        response = conn.getresponse()
+        if response.status != 200:
+            return response.status, None
+        raw = response.read(1_000_001)
+        if len(raw) > 1_000_000:
+            raise ValueError("SEARCH_RESPONSE_TOO_LARGE")
+        return response.status, json.loads(raw)
 
 
 class Reader:
@@ -173,7 +188,11 @@ def discover(query):
     return [item["url"] for item in tavily_search.search(query)]
 
 
-def news(reader,query):
+EDITORIAL_TAG = r"社[论論説说]|时评|時評|評論|评论|觀點|观点|オピニオン|editorials?|opinion|op-ed|commentary"
+EDITORIAL_TITLE = re.compile(rf"(?:^|[【\[｜|])\s*(?:{EDITORIAL_TAG})(?=$|[】\]：:｜|\s])", re.I)
+
+
+def news(reader,query,*,editorials=False):
     def stamp(value):
         if not value:
             return ""
@@ -187,11 +206,11 @@ def news(reader,query):
         except (ValueError,TypeError,OverflowError):
             pass
         return ""
-    rows = rss_news(reader, query)
+    rows = rss_news(reader, query, days=3, editorials=True) if editorials else rss_news(reader, query)
     if not rows:
-        raise ValueError("Google 新闻没有返回相关报道")
+        raise ValueError("EDITORIAL_NO_RESULTS" if editorials else "Google 新闻没有返回相关报道")
     return [dict(title=item["title"], url=item["url"], snippet=" · ".join(filter(None, [
-        item["source"], stamp(item["published"])]))) for item in rows[:3]]
+        item["source"], stamp(item["published"])]))) for item in rows[:5 if editorials else 3]]
 
 
 def picture_key(url):
@@ -224,8 +243,15 @@ def rss_picture(item, channel_images=()):
     return None
 
 
-def rss_news(reader, query, days=1):
-    url="https://news.google.com/rss/search?"+urlencode(dict(q=f"{query} when:{days}d",hl="zh-CN",gl="CN",ceid="CN:zh-Hans"))
+def rss_news(reader, query, days=1, *, editorials=False):
+    edition = ("zh-CN", "CN", "CN:zh-Hans")
+    if editorials:
+        if re.search(r"[ぁ-んァ-ン]", query):
+            edition = ("ja", "JP", "JP:ja")
+        elif query.isascii():
+            edition = ("en-US", "US", "US:en")
+        query += " (社论 OR 社説 OR Opinion OR Editorial)"
+    url="https://news.google.com/rss/search?"+urlencode(dict(q=f"{query} when:{days}d",hl=edition[0],gl=edition[1],ceid=edition[2]))
     status,_,raw=reader.get(url,1_500_000)
     if status!=200:
         raise ValueError("Google 新闻暂不可用")
@@ -246,6 +272,10 @@ def rss_news(reader, query, days=1):
     for item in channel.findall("item"):
         link=item.findtext("link","")
         title=item.findtext("title","")
+        publisher=item.findtext("source", "")
+        headline=title.removesuffix(" - "+publisher) if publisher else title
+        if editorials and not EDITORIAL_TITLE.search(headline):
+            continue
         if title and link.startswith("https://"):
             description = item.findtext("description", "")
             text = html.unescape(re.sub(r"<[^>]*>", " ", description))

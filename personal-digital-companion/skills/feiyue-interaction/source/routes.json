@@ -61,5 +61,11 @@
     "restart": "desktop-controls",
     "visibility": "desktop-controls",
     "quit": "desktop-controls"
+  },
+  "replyModes": {
+    "speech": "personal-conversation",
+    "writing": "diary-writing",
+    "judgment": "emotion-appraisal",
+    "tool": "tool-response"
   }
 }

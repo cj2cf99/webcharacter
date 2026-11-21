@@ -227,8 +227,8 @@ export function createTopicMemory({profile,memory,model,safeStorage,traffic,now=
       return step?step('本地文档整理','核查专题 '+t.id+'：'+t.title,run):run();
     }
   }
-  async function note(fact,action,summary,round){
-    const id=hash(action+'/'+fact.ref);await modify(id,d=>({...d,id,title:fact.title.slice(0,80),status:action,summary,
+  async function note(fact,action,summary,round,{category}={}){
+    const id=hash(action+'/'+fact.ref+(category&&category!==action?'/'+category:''));await modify(id,d=>({...d,id,title:fact.title.slice(0,80),status:action,summary,
       evidence:[{ref:fact.ref,text:fact.title}],history:[...(d?.history??[]),...(d?.summary?[{at:d.updated,summary:d.summary}]:[])],round}));return '专题已保存：'+id;
   }
   const confirmed=()=>[...docs.values()].filter(d=>d.status==='confirmed'&&!d.announced).slice(0,3);

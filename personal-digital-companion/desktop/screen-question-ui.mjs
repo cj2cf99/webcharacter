@@ -28,12 +28,12 @@ let displayed='',expanded=false,lastView=null;
 
 const resetIdle=()=>{
   clearTimeout(idleTimer);
-  if(busy||composing||reading||expanded||audit&&question.value.trim())return;
+  if(busy||composing||reading||expanded||audit)return;
   idleTimer=setTimeout(()=>{
     if(draftReady&&host.idleClose){
       host.idleClose({text:question.value,mode:mode.value,withScreen:withScreen.checked,attachment,references});
     }else if(!question.value)host.close();
-  },30_000);
+  },90_000);
 };
 const updatePending=value=>{pending.hidden=!host.pending||value!==true;};
 function allowSupplement(){

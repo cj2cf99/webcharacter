@@ -15,6 +15,7 @@ import {createImageTasks,imageRequest} from './image-tasks.mjs';
 import {attachmentRegistration,menuEntry,menuGuidance,readInteractionSkill,validatePreview} from './interaction-skills.mjs';
 import {attachInquiry} from './registration-review-host.mjs';
 import {chatTotalMs,untilAbort} from './chat-budget.mjs';
+import {responseMode} from '../agent/assistant/response-style.mjs';
 import {missingRows,uploadInquiryPhoto} from './inquiry-input.mjs';
 
 const inputModes = new Set(['registration','supplement','web','memory','tour']);
@@ -133,16 +134,22 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       ...(memory?{archive_day:tokyoDay(turn.at)}:{}),...(turn.image?{image:turn.image}:{}),
       duration_ms:Math.round(performance.now()-timing.start),local_ms:Math.round(timing.localMs),cloud_ms:Math.round(timing.cloudMs)});
   }
+  function modelSkill(selected) {
+    return selected?.localAi ? {...selected.localAi,name:selected.skill,version:selected.version} : selected?.instruction;
+  }
+  const replySkill=mode=>readInteractionSkill(mode,'replyModes').catch(()=>null);
+
   async function think(text,hint,signal,onProgress,timing) {
     if(!localModel)return null;
     const start=performance.now();
     const previous=latest?.state==='answer'&&!latest.direct?{用户:String(latest.question??'').slice(0,180),绯月:String(latest.text??'').slice(0,220)}:undefined;
     try{
       const menu=hint==='auto'&&menuEntry(text);
-      const selected=await (menu?readInteractionSkill(menu.action,'menu'):readInteractionSkill(hint==='registration'&&requestsResource(text)?'resourceRegistration':hint)).catch(()=>null);
+      const style=hint==='auto'?responseMode(text):undefined;
+      const selected=await (menu?readInteractionSkill(menu.action,'menu')
+        :style?replySkill(style):readInteractionSkill(hint==='registration'&&requestsResource(text)?'resourceRegistration':hint)).catch(()=>null);
       signal.throwIfAborted();
-      const skillInstruction=selected?.localAi
-        ? {...selected.localAi,name:selected.skill,version:selected.version} : selected?.instruction;
+      const skillInstruction=modelSkill(selected);
       if(skillInstruction?.profile==='conversation'&&emotion()){
         const tone=JSON.stringify(emotion().expression());
         const recall=topics();
@@ -154,7 +161,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         }
         for(const key of ['draft','review','rewrite'])skillInstruction[key]+='\n已核实的本机状态仅影响口吻，如实完成工作：'+tone;
       }
-      return await localModel.analyze(text,{hint,previous,signal,onProgress,skillInstruction,turnStart:timing.start});
+      return await localModel.analyze(text,{hint,previous,signal,onProgress,skillInstruction,replyMode:style,turnStart:timing.start});
     }
     catch(error){signal.throwIfAborted();return {error:'LOCAL_AI_INFERENCE_FAILED'};}
     finally{timing.localMs=performance.now()-start;}
@@ -289,7 +296,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     busy=true;const token=++generation;controller=new AbortController();const manual=controller.signal;
     const plainChat=route.kind==='direct'||(route.kind==='question' && mode==='auto' && !route.fileName && !(retry?route.withScreen:withScreen) && !matchWeatherQuestion(String(userText??'')));
     const deadline=plainChat?new AbortController():null;
-    const signal=deadline?AbortSignal.any([manual,deadline.signal]):manual;
+    let signal=deadline?AbortSignal.any([manual,deadline.signal]):manual;
     const withinChat=work=>deadline?untilAbort(work,signal):work;
     const timedReply={state:'error',code:'LOCAL_CHAT_TIME_LIMIT',text:'这次对话未能在时限内完成。',retryable:true};
     let readyAtDeadline;
@@ -336,7 +343,9 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       waiting('正在根据搜索结果整理答案…');
       try{
         const prompt=searchSummaryPrompt(route.purpose||query,found.sources);
-        const answer=await localModel?.analyze(prompt,{signal,hint:'direct',onProgress:waiting});
+        const skillInstruction=modelSkill(await replySkill('tool'));
+        signal.throwIfAborted();
+        const answer=await localModel?.analyze(prompt,{signal,hint:'direct',replyMode:'tool',skillInstruction,onProgress:waiting});
         if(answer?.reply?.trim())return {...found,text:answer.reply};
       }catch{signal.throwIfAborted();}
       return {...found,text:'AI 暂未整理，以下为搜索摘要。\n\n'+found.text};
@@ -354,7 +363,10 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         result=await lookup(route.query,route.summarize,route.images,route.research,route.page);
       }else if(route.kind==='direct'){
         const previous=latest?.direct&&latest.state==='answer'?{用户:latest.question,绯月:latest.text}:undefined;
-        const response=await withinChat(localModel?.analyze(userText,{hint:'direct',previous,signal,onProgress:waiting,turnStart:timing.start}));
+        const style=responseMode(userText);
+        const skillInstruction=modelSkill(await withinChat(replySkill(style)));
+        signal.throwIfAborted();
+        const response=await withinChat(localModel?.analyze(userText,{hint:'direct',previous,signal,onProgress:waiting,replyMode:style,skillInstruction,turnStart:timing.start}));
         timing.localMs=performance.now()-timing.start;
         result=response?.reply?.trim()?{state:'answer',text:response.reply}:response?.error==='LOCAL_CHAT_TIME_LIMIT'?timedReply:{state:'error',text:'本地直连暂未取得回复。',code:response?.error??'LOCAL_AI_NOT_READY'};
       }else if(route.kind==='registration'&&/^(?:(?:请|帮我|替我|给我)\s*)*(?:登记|记录)(?:一下)?[。！!吧\s]*$/u.test(text)){
@@ -379,6 +391,8 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         else if(draft?.error==='LOCAL_CHAT_TIME_LIMIT')result=timedReply;
         else if(draft?.error==='LOCAL_CHAT_REVIEW_FAILED')result={state:'error',code:draft.error,text:'这次回复经过复核仍有问题。',retryable:true};
         else {
+          clearTimeout(clock);
+          signal=manual;
           cloudStart=performance.now();
           if(localModel&&hint==='auto'&&!route.fileName)waiting(draft?.kind==='task'?'已识别任务，正在转交云端…':'正在转交云端模型…');
           result=await withinChat(runExistingRoute());
@@ -660,8 +674,8 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(!trusted(event))return;
     if(nag&&input?.reason==='idle'&&typeof input.draft?.text==='string'&&input.draft.text.trim())return;
     if(nag?.audit){
-      if(input?.reason==='idle'&&busy)return;
-      leaveNag(['refuse','later','idle'].includes(input?.reason)?input.reason:'interrupted');hide();return;
+      if(input?.reason==='idle')return;
+      leaveNag(['refuse','later'].includes(input?.reason)?input.reason:'interrupted');hide();return;
     }
     if(input?.reason==='idle'){
       if(busy||draining||activeCommands.size||registrationDraft)return;
@@ -721,11 +735,6 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     await open('auto',session);
     if(session.signal?.aborted||!panel?.isVisible()||!ready||busy)return false;
     nag=session;
-    session.deadline?.addEventListener('abort',()=>{
-      if(nag!==session)return;
-      nag=null;
-      publish({state:'answer',text:session.timeoutText,nagReply:true},generation);
-    },{once:true});
     publish({state:'answer',text:session.prompt,nag:true,nagReply:true,audit:Boolean(session.audit)},generation);
     session.visible();
     return true;

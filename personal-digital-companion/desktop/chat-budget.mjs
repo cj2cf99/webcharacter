@@ -1,5 +1,4 @@
-export const chatPhaseMs=15000;
-export const chatTotalMs=2*chatPhaseMs;
+export const chatTotalMs=60_000;
 
 // 文件读取和部分第三方接口没有原生取消参数；丢弃迟到的结果。
 export function untilAbort(work,signal){
