@@ -5,7 +5,7 @@ import {createLocalModel} from './local-model.mjs';
 import {chatTotalMs,untilAbort} from './chat-budget.mjs';
 
 const run=promisify(execFile);
-const minFreeMiB={'0.8':1280,'2':2304,'9':6656};
+const minFreeMiB={'0.8':1280,'2':2304,'4':3840,'9':6656};
 const primaryChatFile='Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf';
 
 export async function readGpuLoad(){
@@ -52,6 +52,22 @@ export function modelChoices(gpu,correcting,residentMiB=0,primaryChat=false,prim
   return choices;
 }
 
+function workChoices(gpu,residentMiB,primaryResident,tier){
+  const choices=[];
+  const upgrade=tier==='upgrade';
+  if(gpu&&gpu.utilization<80){
+    const free=gpu.freeMiB+residentMiB;
+    if(upgrade){
+      if(free>=minFreeMiB['9'])choices.push({size:'9',device:'gpu'});
+    }else{
+      if(primaryResident||free>=minFreeMiB['9'])choices.push({size:'9',device:'gpu',file:primaryChatFile});
+      for(const size of ['4','2'])if(free>=minFreeMiB[size])choices.push({size,device:'gpu'});
+    }
+  }
+  choices.push({size:upgrade?'9':'2',device:'cpu'});
+  return choices;
+}
+
 export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=readGpuLoad,create=createLocalModel,localFirst=false}){
   let current,chosen,initializing,warmController,exiting,busy=false,closed=false,failedText='',failures=0,lastUsed,lastWork;
   function release(){
@@ -62,12 +78,14 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     return exiting;
   }
   let memoryTurn;
-  async function prepare(correcting,signal,fixedAggressive=false,primaryChat=false){
+  async function prepare(signal,{correcting=false,fixedAggressive=false,primaryChat=false,workTier}={}){
     if(!current)await untilAbort(exiting,signal);
     const gpu=await untilAbort(readGpu(),signal);
     const resident=chosen?.device==='gpu'?current?.snapshot().vramMiB??0:0;
     const primaryResident=chosen?.file===primaryChatFile && chosen.device==='gpu' && current?.snapshot().state==='ready';
-    const choices=fixedAggressive?aggressiveChoices(gpu,resident,primaryResident):modelChoices(gpu,correcting,resident,primaryChat,primaryResident);
+    const choices=workTier?workChoices(gpu,resident,primaryResident,workTier)
+      :fixedAggressive?aggressiveChoices(gpu,resident,primaryResident)
+        :modelChoices(gpu,correcting,resident,primaryChat,primaryResident);
     for(const choice of choices){
       signal?.throwIfAborted();
       if(closed)return false;
@@ -92,7 +110,8 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     if(closed || busy || current?.snapshot().state==='ready')return initializing;
     if(!initializing){
       warmController=new AbortController();
-      initializing=prepare(false,warmController.signal,false,!localFirst).catch(()=>false).finally(()=>{initializing=undefined;warmController=undefined;});
+      initializing=prepare(warmController.signal,localFirst?{workTier:'main'}:{primaryChat:true})
+        .catch(()=>false).finally(()=>{initializing=undefined;warmController=undefined;});
     }
     return initializing;
   }
@@ -115,7 +134,8 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
       try{
         await untilAbort(initializing,signal);
         signal?.throwIfAborted();
-        if(!await prepare(improved,signal,direct,conversation))return {error:closed?'LOCAL_AI_STOPPED':lastUsed?.error??'LOCAL_AI_NOT_READY'};
+        if(!await prepare(signal,{correcting:improved,fixedAggressive:direct,primaryChat:conversation}))
+          return {error:closed?'LOCAL_AI_STOPPED':lastUsed?.error??'LOCAL_AI_NOT_READY'};
         signal?.throwIfAborted();
         const state=lastUsed=current.snapshot();
         options.onProgress?.('本地思索 · '+state.model+' · '+state.backend);
@@ -157,7 +177,7 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     memoryTurn={controller,done:done.promise};busy=true;
     try{
       await untilAbort(initializing,signal);
-      if(!await prepare(false,signal,true))throw Error('本机 Aggressive 9B 未就绪');
+      if(!await prepare(signal,{fixedAggressive:true}))throw Error('本机 Aggressive 9B 未就绪');
       const result=await current.analyze(text,{hint:'personalityMemory',signal,skillInstruction:{...skill,instruction,schema}});
       signal.throwIfAborted();
       if(result.error)throw Error(result.error);
@@ -176,7 +196,7 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     try{
       await untilAbort(initializing,signal);
       const ready=lastWork?.session===session&&lastWork?.tier===tier&&current?.snapshot().state==='ready';
-      if(!ready&&!await prepare(false,signal,tier==='upgrade'))return {error:lastUsed?.error??'LOCAL_AI_NOT_READY'};
+      if(!ready&&!await prepare(signal,{workTier:tier}))return {error:lastUsed?.error??'LOCAL_AI_NOT_READY'};
       lastWork={session,tier};
       const model=lastUsed=current.snapshot();
       onProgress?.('本地思索 · '+model.model+' · '+model.backend);

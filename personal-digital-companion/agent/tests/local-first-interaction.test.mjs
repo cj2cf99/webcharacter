@@ -140,6 +140,44 @@ test('TXT 气泡把完整正文交给主力并复审，本地合格时不上传'
   assert.equal(reviews,1);
 });
 
+test('普通聊天保留上一轮上下文，拦截长段复述并完整归档长回复',async t=>{
+  const ui=questionFixture(),root=resolve(import.meta.dirname,'../..');
+  const oldReply='下雨时沿着有屋檐的商店街慢慢走，走到尽头就能从河边的玻璃窗看见车站对面那棵已经开始变红的枫树。';
+  const copiedReply='好呀。'+oldReply.replace('，','。');
+  const freshReply='要是太阳出来，我们可以改走河堤。顺着靠水的一侧往东走，转角有一块能坐下来休息的空地，风大的时候也可以到桥下面躲一躲。\n\n'
+    +'记得带一件轻薄的外套，傍晚回来的路上会凉一点。要是不想走太远，我们就在桥头折返，还能顺便看看周末开的小摊有没有收摊。'
+    +'等天色完全暗下来再坐车回家，路上的灯刚亮起来，正好能看见倒映在河里的那一排树影。回程也可以提前一站下车，绕到街角买杯热茶。';
+  const at=Date.now(),saved=new Map([['previous',{id:'previous',at:at-1000,state:'answer',question:'下雨时到哪走走？',text:oldReply}]]);
+  const drafts=[],reviews=[],events=[];
+  const history={latest:()=>saved.get('previous'),read:()=>[...saved.values()].reverse(),save:turn=>saved.set(turn.id,turn)};
+  const interactionWork=createInteractionWork({log:event=>events.push(event),model:{async work(input,{schema}){
+    const data=JSON.parse(input);
+    if(schema.properties.selected){
+      reviews.push(data.候选[0]);
+      return {selected:1,feedback:''};
+    }
+    drafts.push(data);
+    const reply=data.原始输入.用户请求==='把上一轮的话原样复述一遍。'?freshReply
+      : data.复审反馈?freshReply:copiedReply;
+    const limit=schema.properties.reply.maxLength;
+    return {reply:limit?reply.slice(0,limit):reply};
+  }}});
+  const host=attachScreenQuestion(ui.electron,{win:ui.win,root,bundle:'unused',profile:'unused',history,interactionWork,
+    client:{askText:()=>assert.fail('本地通过时无需云端'),forget(){}},visible:false});
+  t.after(()=>host.close());await host.open();
+  const ask=text=>ui.handlers.get('screen-qa:ask')(ui.event(host.panel),{text});
+  const actual=await ask('那太阳出来呢？');
+  assert.ok([...freshReply].length>160);
+  assert.equal(actual.text,freshReply);
+  assert.equal(drafts[0].原始输入.上一轮.绯月,oldReply);
+  assert.match(drafts[1].复审反馈,/复用了上一轮/);
+  assert.deepEqual(reviews,[freshReply]);
+  assert.deepEqual([...saved.values()].map(turn=>turn.text),[oldReply,freshReply]);
+  assert.ok(events.some(event=>event.error==='CHAT_REPLY_REPEATED'));
+  assert.equal((await ask('把上一轮的话原样复述一遍。')).text,freshReply);
+  assert.equal(drafts.length,3);
+});
+
 test('主力无法加载且只有云端给出答复，用云端最终复审一次后才能交付',async()=>{
   let reviews=0;
   const work=createInteractionWork({model:{work:async()=>({error:'LOCAL_AI_MODEL_MISSING'})},request:async(path,options)=>{
