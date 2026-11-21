@@ -251,3 +251,25 @@ node tools/personality-memory-preview.mjs --serve
 用户批准本机安装并选择本次不登记花园。东京时间 2026-11-21T06:43:00.6370153+09:00 完成，原进程 16344 正常退出，新进程 23352 从原安装和资料目录运行。仅替换 desktop/personality-diary.mjs，原文件备份在 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/diary-summary-before-cde5ac2e4d0a4cc89c57294b9312400a，前后 SHA-256 与审核清单相符。本机服务已就绪。
 验收直接加载正式安装版代码及 Aggressive 9B Vulkan 权重。用只读数据库副本离线回放，原故障篇首 summary/tags 生成成功。使用隔离资料生成完整测试手记，独立读回正文、摘要、修订并比对；相同输入重跑后一篇、内容和修订均相同。真实手记未提交或改写。本次未登记花园，无数据库迁移、云端部署或远端推送。本地发布分支 codex/feiyue-diary-summary-fix-20261121。
 
+## 2026-11-21 JST · 手记正文有内容而私语为空（待安装候选）
+
+用户反馈上一版未通过。按既有手记需求，每条有效素材应写成段落，保留当时的评价与绯月私语，能保存、读回并对重复输入去重。用户尚未确认本次看到的具体提示。上一次修复篇首摘要截断；本次检查在正式安装版下一批尚未收录的部署素材上复现另一处中断。一次实际推理得到 173 字符正文、0 字符私语，通过模型推理检查，随后无法通过日记草稿字段检查。
+
+目标为绯月 Windows 本机正式安装。来源为 G:/selftool/WebCharacter/personal-digital-companion 的 desktop/personality-diary.mjs。比较基准取实际安装文件 SHA256 F649B5EA3D43E5F936E92FEE3A9CBF2E044FD65695EDF9042F8721CE0F35081A。上次修复的发布提交 709c849eefe18d1bfc439864f3608c16a3482107，本次准备时安装仓库 HEAD 39fd098e40ebf7c2c82dd5a6f9944ae98055566e，以文件散列核实实际运行版本。
+候选路径 G:/chat/2026-11-20/wo-z/work/diary-narration-release/desktop/personality-diary.mjs，SHA256 DB1AC778BCD53E5E9761364264FD9A459EE0F1CEADBB993B92D2EA51641AE95E。仅该文件需替换。用 git diff --no-index 比较正式文件与候选；核对只给 diary-writing 叙述阶段的生成语法增加限制：正文 1–120、私语 1–80、可选悬念 0–48 字符。以往允许空字符串并在推理后中断。本次在生成阶段约束长度并保留原有清洗和空值检查，避免用占位文案填补失败。重点审核其他输出结构、直连聊天与未产生悬念的情形。
+数据库迁移、回填、配置、云端部署和协议变化均为无。当前隔离试验未修改正式手记。生成式模型仍可能有内容质量问题；片段回放不能替代所有七天正式素材或用户对文笔的验收。
+
+已执行的检测（回放命令的目录为 G:/chat/2026-11-20/wo-z）
+- node work/replay-next-diary-material.mjs，加载正式安装代码及 Aggressive 9B Vulkan，第一待写片段返回空私语，退出 1。
+- node work/replay-next-diary-material.mjs --candidate，两条真实片段均得到有文字的私语。再以两条原始片段运行写日记入口到结束，独立读回隔离 D1 的来源摘记和私语，两条摘记、一篇正文；同一输入再次运行，修订和正文一致，退出 0。其余日期和来源在本测试中为空。
+- node work/narration-shell-baseline.mjs candidate，正式安装基线加单文件候选，桌面壳测试通过。开发目录运行 node ../tools/test-desktop-shell.mjs 在手动写日记立即显示进度断言失败，移除本次约束的开发基线也在该断言失败；开发目录中其他变更未纳入候选。
+- 使用 desktop/node_modules/electron/dist/electron.exe tools/test-panel-titlebar-electron.mjs 运行开发库窗口回归，七个面板通过，进程正常退出。
+
+安装步骤：获准后重验快捷方式、登录启动项、运行实例及双端文件散列；备份原文件，替换单文件，以应用自己的重启流程等候在途任务。核对安装进程、资料目录及 GET /infoguide，再加载实际安装代码以隔离资料重放原片段、验证独立回读与重复运行。若验收失败，使用备份恢复相同基线并受控重启；已保存的用户手记保留。待核对实际用户看到的提示以及正式资料全轮完成情况。
+本次安装和本次花园登记意愿均待用户决定。第三方独立审核未执行。候选待安装，未触发部署、登记、Git 提交或推送。
+
+## 2026-11-21 JST · 手记私语修复安装回执
+
+本机安装已获确认，本次不登记花园。2026-11-21T11:19:13.9868721+09:00 完成单文件备份和安装。旧进程 23352 正常退出，新进程 28952 从原安装目录启动，桌面快捷方式、登录启动项、实际资料目录及本机接口 /infoguide 核对通过。安装备份为 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/diary-narration-before-239b08df7c604a9e9149cc6a23cec80b。
+
+正式安装文件 SHA256 为 DB1AC778BCD53E5E9761364264FD9A459EE0F1CEADBB993B92D2EA51641AE95E。直接从安装路径加载 Aggressive 9B Vulkan，以两条真实故障相关素材执行 node work/replay-next-diary-material.mjs --installed。两段都有带文字的私语，隔离库独立读回两条来源摘记及一篇正文，重复运行正文和修订号一致。正式安装版的 tools/test-desktop-shell.mjs 通过。正式用户资料的七天全轮与文笔验收仍待实用确认。无数据库迁移、云端部署或花园登记。Git 仅本地留存。

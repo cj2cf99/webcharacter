@@ -92,6 +92,11 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
       format.properties.summary={type:'string',maxLength:72};
       format.properties.tags={type:'string',maxLength:36};
     }
+    if(skill?.name==='diary-writing'&&fields.includes('thread')&&fields.includes('comment')){
+      format.properties.text={type:'string',minLength:1,maxLength:120};
+      format.properties.comment={type:'string',minLength:1,maxLength:80};
+      format.properties.thread={type:'string',maxLength:48};
+    }
     const writingContext=skill?.name==='diary-writing'?'每个字段简短作答，叙事和感受各写一两句。“花园部署”是软件发布台账，条目列出发布的功能；感受应针对该更新，不虚构功能使用、园艺或出行经历。':'';
     const answer=await model.memory(data,instructions+writingContext+job,format,signal,skill);
     signal.throwIfAborted();

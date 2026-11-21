@@ -465,3 +465,8 @@ Qwen 会话通过 local-model-process.mjs 中的 systemPrompt 加载绯月人设
 用户批准本机安装并选择本次不登记花园。东京时间 2026-11-21T06:43:00.6370153+09:00 完成，原进程 16344 正常退出，新进程 23352 从原安装和资料目录运行。仅替换 desktop/personality-diary.mjs，原文件备份在 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/diary-summary-before-cde5ac2e4d0a4cc89c57294b9312400a，前后 SHA-256 与审核清单相符。本机服务已就绪。
 验收直接加载正式安装版代码及 Aggressive 9B Vulkan 权重。用只读数据库副本离线回放，原故障篇首 summary/tags 生成成功。使用隔离资料生成完整测试手记，独立读回正文、摘要、修订并比对；相同输入重跑后一篇、内容和修订均相同。真实手记未提交或改写。本次未登记花园，无数据库迁移、云端部署或远端推送。本地发布分支 codex/feiyue-diary-summary-fix-20261121。
 
+## 2026-11-21 JST · 手记私语修复安装回执
+
+本机安装已获确认，本次不登记花园。2026-11-21T11:19:13.9868721+09:00 完成单文件备份和安装。旧进程 23352 正常退出，新进程 28952 从原安装目录启动，桌面快捷方式、登录启动项、实际资料目录及本机接口 /infoguide 核对通过。安装备份为 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/diary-narration-before-239b08df7c604a9e9149cc6a23cec80b。
+
+正式安装文件 SHA256 为 DB1AC778BCD53E5E9761364264FD9A459EE0F1CEADBB993B92D2EA51641AE95E。直接从安装路径加载 Aggressive 9B Vulkan，以两条真实故障相关素材执行 node work/replay-next-diary-material.mjs --installed。两段都有带文字的私语，隔离库独立读回两条来源摘记及一篇正文，重复运行正文和修订号一致。正式安装版的 tools/test-desktop-shell.mjs 通过。正式用户资料的七天全轮与文笔验收仍待实用确认。无数据库迁移、云端部署或花园登记。Git 仅本地留存。
