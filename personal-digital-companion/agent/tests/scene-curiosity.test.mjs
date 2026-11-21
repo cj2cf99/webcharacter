@@ -58,6 +58,20 @@ async function setup(t,decision,{first='observe',position='[300,200,100,120]',va
   return {profile,options,service,notes,views,prompts,captures:()=>captures,onReady:()=>new Promise(r=>{wake=r;})};
 }
 const ask={action:'ask',record:'nag',text:'老公，这弯月亮是你画的吗？',focus:'月牙',drawing:''};
+test('生产路径把场景问题交给待确认，队列暂满也保留原题和同帧',async t=>{
+  const f=await setup(t,ask);
+  const offered=[];
+  const service=createSceneCuriosity({...f.options,queueQuestion:s=>{offered.push(s);return offered.length===2;}});
+  t.after(()=>service.close());
+  assert.match((await service.run(signal)).detail,/等待加入/);
+  assert.match((await service.run(signal)).detail,/已加入待确认/);
+  assert.equal(offered[0].id,offered[1].id);
+  assert.equal(offered[0].text,ask.text);
+  assert.match(await service.questionImage(offered[0].id,offered[0].at),/^data:image\/jpeg;base64,/);
+  assert.equal(f.views.length,0);
+  assert.equal(f.notes.length,0);
+  assert.equal(f.captures(),1);
+});
 test('定向提问保留同帧 JPEG，记录实际回答；全图和不确定的定位都无标注',async t=>{
   for(const [focus,valid,mark] of [['月牙','是',true],['','是',false],['月牙','否',false]]){
     const f=await setup(t,{...ask,focus},{valid});await f.service.run(signal);

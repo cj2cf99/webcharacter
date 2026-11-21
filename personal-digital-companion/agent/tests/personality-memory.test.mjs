@@ -7,7 +7,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {createHash} from 'node:crypto';
 import {openTestDatabase} from './sqlite-d1.mjs';
 import {personalityMemory} from '../assistant/personality-memory.mjs';
-import {createPersonalityDiary,cleanMemory} from '../../desktop/personality-diary.mjs';
+import {createPersonalityDiary,cleanMemory,reviewDiaryThread} from '../../desktop/personality-diary.mjs';
 import {createPersonalityNags} from '../../desktop/personality-nags.mjs';
 import {createMemoryPage} from '../host/memory-route.mjs';
 import {handleCompanion} from '../host/subscriptions.mjs';
@@ -210,6 +210,8 @@ test('离线草稿恢复，空日记复用；跨日后续与旧篇标记；读�
     const keys=schema.required;
     if(keys.includes('review'))return {review:'记得约定',text};
     if(keys.includes('match'))return {match:text.includes('买了散文集')?'1':'0',text:'老公买了散文集。',comment:'书名记好了。'};
+    if(keys.includes('score'))return {score:'4',benefit:'共同关心'};
+    if(keys.includes('quote'))return {quote:''};
     return {text:'记下今天的事。',comment:'我会记得。',summary:'书店约定',tags:'书店',mood:'期待',thread:text.includes('下午去书店')?'买了哪本？':''};
   }};
   const options={profile,model,now:()=>start,weather:()=>[],memory:{read:async d=>{
@@ -231,26 +233,95 @@ test('离线草稿恢复，空日记复用；跨日后续与旧篇标记；读�
   assert.equal((await (await req('diaries')).json()).total,7);
   failedDay='2026-11-19';await assert.rejects(store.run('diary',signal),/归档打不开/);
 });
-test('一轮一件、两日消费与相邻周；超时续同条、意外中断、按钮结束及用尽回合',async t=>{
-  const {req}=fixture(t);let at=start,session;
+test('手记候选先复审，同篇只保留前三，后续追加和旧客户端也不能新增第四个',async t=>{
+  const {req}=fixture(t),profile=mkdtempSync(join(tmpdir(),'feiyue-diary-ranking-'));
+  const turns=['2','0','1','5','4','3'].map((score,i)=>({id:'q'+i,at:start+i,question:'素材'+score,text:'收到'}));
+  const reviews=[];
+  const store=createPersonalityDiary({profile,now:()=>start+1000,weather:()=>[],memory:{
+    read:d=>d===day?turns:[],readTasks:()=>[]},request:(url,opts)=>req(url.slice('/api/memory/'.length),opts.body&&JSON.parse(opts.body)),
+    model:{memory:async(input,prompt,schema)=>{
+      const keys=schema.required;
+      if(keys.includes('review'))return {text:input,review:'已阅读'};
+      if(keys.includes('score')){
+        assert.match(prompt,/妻子.*实际有什么用/);
+        const question=JSON.parse(input).候选问题;
+        reviews.push(question);
+        const score=/\d/u.exec(question)[0];
+        if(score==='0')return {score:'5',benefit:'安排'};
+        if(score==='1')return {score:'5',benefit:'无'};
+        return {score,benefit:'安排'};
+      }
+      if(keys.includes('quote')){
+        const data=JSON.parse(input);
+        if(data.候选问题.includes('0'))return {answer:'是',quote:'素材0'};
+        if(data.候选问题.includes('5'))return {answer:'是',quote:'材料中不存在的答案'};
+        return {quote:''};
+      }
+      if(keys.includes('match'))return {match:'0'};
+      return {text:'这是今天的事。',comment:'我会记得。',summary:'写下他的记录',tags:'生活',mood:'关切',
+        thread:'我需要弄清后续'+(/素材(\d)/u.exec(input)?.[1]??'0')+'吗？'};
+    }}});
+  t.after(()=>{store.close();rmSync(profile,{recursive:true,force:true});});
+  const signal=new AbortController().signal;
+  await store.run('diary',signal);
+  assert.equal(reviews.length,6);
+  let p=await (await req('diaries/'+day+'.1')).json();
+  assert.deepEqual(p.threads.map(q=>[q.no,q.priority]),[[1,5],[2,4],[3,3]]);
+  assert(!p.threads.some(q=>q.text.includes('0')));
+  assert((await req('diaries',{...packet,batch:'oldClientAttempt',threads:['第四个问题？']})).ok);
+  p=await (await req('diaries/'+day+'.1')).json();
+  assert.equal(p.threads.length,3);
+});
+test('已有答案需要完整原文依据，截掉未交代限定也不能排除值得追问的问题',async()=>{
+  const question='新住处找到了吗？';
+  const review=(fact,quote,summary,answer='是')=>reviewDiaryThread({fact,summary,question},async(_input,stage)=>
+    stage==='reviewThread'?{benefit:'安排',score:'4'}:{answer,quote});
+  assert.equal(await review('周末要搬家，他还没有说找到住处。','找到住处'),4);
+  assert.equal(await review('周末要搬家，他还没说找到住处。','还没说找到住处',undefined,'没'),4);
+  assert.equal(await review('周末要搬家，他还没有说找到住处。','已经安顿好了'),4);
+  assert.equal(await review('周末要搬家。','。'),4);
+  assert.equal(await review('我问起周末搬家的事。','已经找到新住处。','他说已经找到新住处。'),0);
+  assert.equal(await review('他明确说还没找到新住处。','还没找到新住处',undefined,'没'),0);
+  const support=(fact,question,answer,quote,summary)=>reviewDiaryThread({fact,question,summary},async(_input,stage)=>
+    stage==='reviewThread'?{benefit:'照顾',score:'4'}:{answer,quote});
+  assert.equal(await support('他只是担心开口会打扰我。','你想我怎么陪你？','希望我陪他说话','担心开口会打扰我'),4);
+  assert.equal(await support('他还在犹豫是否去医院。','你需要我陪你去看手腕吗？','否','还在犹豫是否去医院'),4);
+  assert.equal(await support('他在确认聚餐行程。','今晚还要给你留饭吗？','不用','今晚不用给他留饭','他说晚上参加聚餐，今晚不用给他留饭。'),0);
+});
+test('无实际用途的物件细节不入选，关系到替他选配件的颜色仍可追问',async()=>{
+  const noReview=()=>assert.fail('材料仅提及物件时，应在调用模型前排除旁枝细节');
+  assert.equal(await reviewDiaryThread({fact:'老公把显示器擦干净了。',question:'背面有几颗螺丝？'},noReview),0);
+  const useful=await reviewDiaryThread({
+    fact:'老公托我买备用插头，店里按红色和绿色区分型号，他还没告诉我原来的颜色。',
+    question:'原来的插头是什么颜色？',
+  },async(_input,stage)=>stage==='reviewThread'?{benefit:'安排',score:'4'}:{answer:'红色',quote:'红色和绿色'});
+  assert.equal(useful,4);
+  const preference=await reviewDiaryThread({fact:'老公主动和我聊他心里喜欢的家是什么样子。',question:'你更喜欢门厅什么颜色？'},
+    async(_input,stage)=>stage==='reviewThread'?{benefit:'共同关心',score:'3'}:{answer:'',quote:''});
+  assert.equal(preference,3);
+});
+test('一轮一件、两日消费与相邻周；继续同一问题、拒绝及用尽回合',async t=>{
+  let at=start,session;
   const raw=[['y','2026-11-19',3500],['high','2026-11-20',9000],['old','2026-11-18',99999],['prior','2026-11-08',7000],['refund',day,-10000]];
   const local=new Map(),schedule=new Map(),signal=new AbortController().signal;
   const store={nags:()=>[...local.values()].map(structuredCloneSafe),pages:()=>[],mark:(k,v)=>schedule.set(k,v),last:k=>schedule.get(k),
     saveNag:n=>{n.revision++;local.set(n.id,structuredClone(n));},syncNags:async()=>{},
     api:async()=>({records:raw.map(([id,spendDate,amount])=>({id,spendDate,amount,category:'图书'})),complete:true}),
-    think:async(_d,_p,keys)=>keys.includes('question')?{question:'这笔是买什么呀？',evaluation:'惦记这笔消费',mood:'担心'}:{reply:'原来如此。',next:'还有后续吗？',evaluation:'听到了理由',mood:'释然'}};
+    think:async(d,_p,keys)=>keys.includes('question')?{question:'这笔是买什么呀？',evaluation:'惦记这笔消费',mood:'担心'}:
+      {reply:'原来如此。',next:'还有后续'+JSON.parse(d).解释+'吗？',evaluation:'听到了理由',mood:'释然'}};
+  store.queueQuestion=n=>{store.saveNag(n);return true;};
   function structuredCloneSafe(r){return structuredClone(r);}
   const n=createPersonalityNags({store,now:()=>at,random:()=>0,idle:()=>true,show:async s=>{session=s;s.visible();return true;}});t.after(()=>n.close());
   await n.poll(signal);let current=n.pending();assert.equal(current.source_id,'high');assert(current.stats.includes('2 笔、103499 日元'));assert(current.stats.includes('1 笔、7000 日元'));
-  session.leave('idle');assert.equal(n.pending().status,'等待回应');
-  at+=7200000;await n.poll(signal);assert.equal(n.pending().id,current.id);
-  session.leave('interrupted');await n.poll(signal);session.leave('interrupted');await n.poll(signal);
-  assert.equal(n.pending().interruptions,2);assert(session.prompt.includes('一起说完'));session.leave('button');
+  assert(!session);await n.resume(current.id,signal);
+  session.leave('later');assert.equal(n.pending().status,'等待回应');
+  at++;await n.poll(signal);assert.equal(n.pendingQuestions().length,2);
+  await n.resume(current.id,signal);session.leave('interrupted');
+  await n.resume(current.id,signal);session.leave('interrupted');await n.resume(current.id,signal);
+  assert.equal(n.pendingQuestions().find(r=>r.id===current.id).interruptions,2);session.leave('refuse');
   current=[...local.values()][0];assert.equal(current.status,'用户结束');assert.equal(current.talk.at(-1).text,'老公闷闷的不理我了');
-  assert((await req('nags',current)).ok);assert.equal((await req('nags',{...current,revision:99,status:'提问中'})).status,409);
-  assert.equal((await req('nags',{...current,id:'duplicate'})).status,409);
-  at+=7200000;await n.poll(signal);assert.equal(n.pending().source_id,'y');
-  for(let i=0;i<3;i++){const reply=await session.reply('买了一本书');reply.shown?.();}
+  assert.equal(n.pending().source_id,'y');await n.resume(n.pending().id,signal);
+  for(let i=0;i<3;i++)await session.reply('买了一本书'+i);
   assert.equal(n.pending(),undefined);const end=[...local.values()].at(-1);assert.equal(end.status,'回合结束');assert.equal(end.questions,3);assert(end.remaining);assert(!end.talk.some(l=>l.text==='老公闷闷的不理我了'));
 });
 test('网页只读，列表和详情经身份接线，拒绝跨来源改写',async t=>{
@@ -339,6 +410,8 @@ test('先处理今天再补出旧篇，仍能按序号追到两条旧悬念；�
   },readTasks:async()=>[]},model:{memory:async(text,_p,schema)=>{
     if(schema.required.includes('review'))return {review:'记住约定',text};
     if(schema.required.includes('match'))return {match:'1',text:'今天已到。',comment:'安心了。'};
+    if(schema.required.includes('score'))return {score:'4',benefit:'共同关心'};
+    if(schema.required.includes('quote'))return {quote:''};
     return {text:'记下约定。',summary:'书',tags:'书',mood:'期待',comment:'我惦记着。',thread:text.includes('何时到')?'书何时到？':''};
   }},request:(path,options)=>req(path.slice('/api/memory/'.length),options.body&&JSON.parse(options.body))});
   t.after(()=>{store.close();rmSync(profile,{recursive:true,force:true});});
@@ -406,21 +479,19 @@ test('按清洗结果和固定段尾入册，归档根目录缺失时不产生�
   const refreshed=store.nags().find(n=>n.id==='legacy');
   assert.equal(refreshed.status,'用户结束');assert.equal(refreshed.localInitiativeRound,'private-round');
 });
-test('气泡没显示不登记，候选先排除已问和退款，再从金额前五和悬念中随机选一件',async()=>{
+test('只入队并提示，候选排除已问和退款，再从金额前五和悬念中选一件',async()=>{
   const records=Array.from({length:9},(_,i)=>({id:'P'+i,spendDate:day,amount:9000-i*100,description:'书'+i,category:'图书'}));
   records[1].description='退款';records[2].spendDate='2026-11-18';
   const archive=[{id:'done',source:'paylog',source_id:'P0',status:'已解释'}];
-  let displayed=false,stored=0;
+  let stored=0;
   const s={nags:()=>archive,handledThread:()=>false,pages:()=>[{day,part:1,threads:[{no:1,text:'已问',asked:true},{no:2,text:'待问',asked:false,resolved:false}]}],
     last:()=>null,mark(){},saveNag(n){stored++;n.revision++;},syncNags:async()=>{},think:async()=>({question:'书买好了？',evaluation:'惦记着',mood:'好奇'}),
     api:async()=>({records,nextCursor:null,complete:false})};
-  let opened;
-  const n=createPersonalityNags({store:s,idle:()=>true,now:()=>start,random:()=>0.999,show:async session=>{opened=session;if(displayed)session.visible();return displayed;}});
-  await n.poll(new AbortController().signal);assert.equal(stored,0);
-  const original=s.saveNag;s.saveNag=r=>{original(r);archive.push(structuredClone(r));};
-  displayed=true;await n.poll(new AbortController().signal);
+  s.queueQuestion=r=>{s.saveNag(r);archive.push(structuredClone(r));return true;};
+  const n=createPersonalityNags({store:s,idle:()=>true,now:()=>start,random:()=>0.999,show:()=>assert.fail('轮询不打开气泡')});
+  await n.poll(new AbortController().signal);
   assert.equal(archive.at(-1).source_id,'P7');assert(archive.at(-1).stats.includes('资料不全'));assert.equal(stored,1);
-  opened.leave('idle');await n.close();
+  await n.close();
 });
 test('等待期间留下解释但推理中断，恢复后用已存原话收尾',async()=>{
   const n={id:'test',source:'paylog',source_id:'1',status:'意外中断',revision:3,turns:1,questions:1,interruptions:1,next:'买了什么？',mood:'好奇',
@@ -430,7 +501,7 @@ test('等待期间留下解释但推理中断，恢复后用已存原话收尾',
     assert(text.includes('一本书。'));return {next:'',evaluation:'明白用途了。',reply:'记下了。',mood:'开心'};
   }};
   const engine=createPersonalityNags({store:s,idle:()=>true,show:()=>assert.fail('重复弹出旧问题')});
-  await engine.poll(new AbortController().signal);assert.equal(saved.status,'已解释');assert.equal(saved.afterEvaluation,'明白用途了。');await engine.close();
+  await engine.resume(n.id,new AbortController().signal);assert.equal(saved.status,'已解释');assert.equal(saved.afterEvaluation,'明白用途了。');await engine.close();
 });
 
 test('记忆锁定 Aggressive 9B，显存不足走 CPU，前台对话抢占后回到普通模型',async()=>{

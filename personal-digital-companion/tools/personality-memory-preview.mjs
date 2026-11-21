@@ -21,10 +21,13 @@ for(const [url,file] of [['/assets/icons/feiyue-journal.svg','feiyue-journal.svg
   assets[url]=[await readFile(integrated?join(main,'public',url.slice(1)):join(root,'web/icons',file),'utf8'),'image/svg+xml'];
 }
 const readerRoute=integrated?join(main,'src/features/companion/vendor/memory-route.mjs').replaceAll('\\','/'):'./agent/host/memory-route.mjs';
+const subscriptionRoute=process.env.FEIYUE_API_DIR
+  ?resolve(process.env.FEIYUE_API_DIR,'src/companion/agent/host/subscriptions.mjs').replaceAll('\\','/')
+  :'./agent/host/subscriptions.mjs';
 const portrait=await readFile(integrated?join(main,'public/assets/companion/journal-portrait.png'):join(root,'assets/desktop-media/baseline.png'));
 const bundle=await build({keepNames:true,stdin:{resolveDir:root,contents:
   "import {createMemoryPage} from "+JSON.stringify(readerRoute)+";\n"+
-  "import {handleCompanion} from './agent/host/subscriptions.mjs';\n"+
+  "import {handleCompanion} from "+JSON.stringify(subscriptionRoute)+";\n"+
   "import {shell} from "+JSON.stringify(join(main,'src/pages/navigation.js').replaceAll('\\','/'))+";\n"+
   "import {memoryExpenses} from './agent/host/memory-expenses.mjs';\n"+
   "import {memorySources} from './agent/host/memory-sources.mjs';\n"+
@@ -64,6 +67,8 @@ try{
     'CREATE TABLE garden_deploy(id INTEGER PRIMARY KEY,deployed_at)',
     'CREATE TABLE garden_deploy_item(id INTEGER PRIMARY KEY,deploy_id,project_id,flower_name,version_before,version_after,note)'
   ].map(sql=>expenseDb.prepare(sql)));
+  const attachmentSchema=await readFile(join(main,'migrations/0033_txt_record_files.sql'),'utf8');
+  await expenseDb.batch(attachmentSchema.split(';').map(sql=>sql.trim()).filter(Boolean).map(sql=>expenseDb.prepare(sql)));
   for(const [kind,n] of [['journal',1],['deploy',0]]){
     const response=await runtime.dispatchFetch('http://preview.test/api/companion/memory/sources?day=2026-11-20&kind='+kind,{headers:{'x-fixture':'1'}});
     assert(response.ok);assert.equal((await response.json()).records.length,n);
@@ -103,6 +108,9 @@ try{
     refs:[{page:'2026-11-20.1',quote:'买的是散文集。'},{page:'2026-11-18.1',quote:'买的是游记。'}],points:['两篇写了不同的书。'],
     reason:'书名不一致',title:'当天买的是哪本？',next:'当天买的是哪本？',questions:1,interruptions:0,mood:'好奇',status:'等待回应',
     talk:[{who:'绯月',at:auditAt,text:'当天买的是哪本？'}]});
+  await seed('nags',{id:'preview-follow',source:'nag',source_id:'preview-0',revision:1,finalOnly:true,
+    created_at:'2026-11-19T03:00:00.000Z',title:'后来读完那本书了吗？',reason:'原唠叨的后续',
+    status:'已解释',mood:'好奇',talk:[{who:'你',at:'2026-11-20T01:10:00.000Z',text:'已经读完了。'}]});
   const url=new URL('/companion/memory/',await runtime.ready);
   const res=await fetch(url);assert.equal(res.status,200);assert((await res.text()).includes('绯月手记'));
   assert.equal((await (await fetch(new URL('/api/companion/memory/diaries',url))).json()).total,3);

@@ -212,23 +212,17 @@ function renderPending(data,explicit){
     const s=stagger(card('section','warn'),sections.length);
     s.append(head(title,chip('⏳ '+clock.format(expires).slice(0,5)+' 前','warn')));sections.push(s);return s;
   }
-  if(data.audit){
+  for(const [index,question] of (data.questions??[]).entries()){
     const s=stagger(card('section','accent'),sections.length);
-    const resume=button('继续回答',async()=>{
+    const resume=button('回答',async()=>{
       resume.disabled=true;
-      try{status.textContent=await api.resumeAudit(data.audit.id);}catch(error){status.textContent=error.message;}
+      try{status.textContent=await api.resumeAudit(question.id);}catch(error){status.textContent=error.message;}
       finally{resume.disabled=false;}
     });
-    s.append(head('绯月的手记质问',chip(data.audit.status,'accent')),element('p',data.audit.title,'fy-clamp'),resume);sections.push(s);
-  }
-  if(data.audit){
-    const s=element('section','');s.className='event';
-    const resume=button('继续回答',async()=>{
-      resume.disabled=true;
-      try{status.textContent=await api.resumeAudit(data.audit.id);}catch(error){status.textContent=error.message;}
-      finally{resume.disabled=false;}
-    });
-    s.append(element('h2','绯月的手记质问'),element('p',data.audit.title),element('small',data.audit.status+'　'),resume);sections.push(s);
+    s.append(head(question.kind??'绯月的质问',index===0?chip('最想知道','accent'):null,
+      chip(question.status,question.status==='意外中断'?'warn':'info')),
+      element('p',question.title,'fy-clamp'),resume);
+    sections.push(s);
   }
   for(const choice of data.choices){
     const s=section('要修改哪些事项？',choice.expires),selected=new Set();
@@ -251,7 +245,7 @@ function renderPending(data,explicit){
   list.replaceChildren(...sections);
   if(explicit)api.reviewed?.(data.choices.length?'':data.token);
   if(sections.length)pendingReceipt='';
-  status.textContent=pendingReceipt||(sections.length?'可以先关闭，稍后再决定。':'没有待确认的事项。');
+  status.textContent=pendingReceipt||(data.questions?.length?'绯月有 '+data.questions.length+' 个问题等你回答。':sections.length?'可以先关闭，稍后再决定。':'没有待确认的事项。');
 }
 function logRow(line){
   const row=card('section','muted');

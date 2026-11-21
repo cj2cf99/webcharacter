@@ -15,7 +15,8 @@ function validBatch(x){
   return x&&date(x.day)&&key(x.batch)&&string(x.body,5000)&&x.body.trim()&&
     string(x.summary,200)&&string(x.mood,40)&&string(x.weather,200)&&Array.isArray(x.tags)&&
     x.tags.length<=24&&x.tags.every(t=>string(t,50))&&Array.isArray(x.threads)&&x.threads.length<=8&&
-    x.threads.every(t=>typeof t==='string'?string(t,300)&&t.trim():typeof t?.asked==='boolean'&&Number.isSafeInteger(t.at)&&string(t.text,300)&&t.text.trim());
+    x.threads.every(t=>typeof t==='string'?string(t,300)&&t.trim():typeof t?.asked==='boolean'&&Number.isSafeInteger(t.at)&&string(t.text,300)&&t.text.trim()&&
+      (t.priority===undefined||Number.isInteger(t.priority)&&t.priority>=1&&t.priority<=5));
 }
 async function append(db,owner,x,env){
   if(!validBatch(x))return fail(400,'日记批次无效');
@@ -31,7 +32,10 @@ async function append(db,owner,x,env){
     const grow=last&&length(last.body)+2+length(x.body)<=5000;
     const part=grow?last.part:(last?.part??0)+1;
     const threads=grow?JSON.parse(last.threads):[];
-    for(const t of x.threads)threads.push({no:threads.length+1,text:typeof t==='string'?t:t.text,resolved:false,asked:t.asked===true,...(Number.isSafeInteger(t.at)?{at:t.at}:{})});
+    for(const t of x.threads.slice(0,Math.max(0,3-threads.length))){
+      threads.push({no:threads.length+1,text:typeof t==='string'?t:t.text,resolved:false,asked:t.asked===true,
+        ...(Number.isSafeInteger(t.at)?{at:t.at}:{}),...(t.priority?{priority:t.priority}:{})});
+    }
     const tags=JSON.stringify([...new Set([...x.tags,...(grow?JSON.parse(last.tags):[])])].slice(0,24));
     const history=grow?JSON.parse(last.batches):{};
     if(x.txtUpdate){
@@ -85,7 +89,7 @@ async function updateThread(db,owner,day,part,no,input){
 }
 function validAudit(n){
   const canonicalPage=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}\.[1-9]\d{0,5}$/.test(s);
-  const keys=['source','source_id','id','created_at','revision','title','reason','refs','points','next','questions','interruptions','status','mood','talk','notBefore','afterEvaluation','automaticTxt'];
+  const keys=['source','source_id','id','created_at','revision','title','reason','refs','points','next','questions','interruptions','status','mood','talk','notBefore','afterEvaluation','automaticTxt','finalOnly'];
   return Object.keys(n).every(k=>keys.includes(k))&&canonicalPage(n.source_id)&&
     Array.isArray(n.refs)&&n.refs.length>=1&&n.refs.length<=8&&n.refs[0]?.page===n.source_id&&
     n.refs.every(r=>r&&Object.keys(r).length===2&&canonicalPage(r.page)&&string(r.quote,160)&&r.quote.trim())&&
@@ -95,12 +99,16 @@ function validAudit(n){
     (n.notBefore===undefined||Number.isSafeInteger(n.notBefore));
 }
 async function saveNag(db,owner,x,env){
-  if(!x||!key(x.id)||!Number.isSafeInteger(x.revision)||x.revision<1||!['paylog','diary','audit','curiosity'].includes(x.source)||x.source==='audit'&&!validAudit(x)||
+  if(!x||!key(x.id)||!Number.isSafeInteger(x.revision)||x.revision<1||!['paylog','diary','audit','curiosity','nag'].includes(x.source)||x.source==='audit'&&!validAudit(x)||
      !string(x.source_id,150)||!x.source_id||!string(x.title,300)||!string(x.reason,400)||!string(x.mood,40)||
      x.source==='paylog'&&!date(x.source_day)||x.source==='diary'&&!/^\d{4}-\d{2}-\d{2}\.\d+\/[1-9]\d*$/.test(x.source_id)||
      typeof x.created_at!=='string'||x.created_at!==new Date(x.created_at).toJSON()||!['提问中','等待回应','意外中断','用户结束','已解释','回合结束'].includes(x.status)||
      !Array.isArray(x.talk)||!x.talk.length||x.talk.length>24||!x.talk.every(line=>line&&string(line.text,12000)&&typeof line.at==='string'&&line.at===new Date(line.at).toJSON()&&['绯月','你','结束记录'].includes(line.who)))return fail(400,'念叨记录无效');
+  if(x.finalOnly!==undefined&&(x.finalOnly!==true||!['已解释','回合结束'].includes(x.status)||!x.talk.some(t=>t.who==='你'&&t.text.trim())))return fail(400,'只能提交已回答并结束的质问');
+  if(x.source==='nag'&&(!x.finalOnly||!key(x.source_id)))return fail(400,'唠叨来源无效');
   const existing=await db.prepare('SELECT payload FROM companion_nags WHERE owner=? AND id=?').bind(owner,x.id).first();
+  if(x.source==='nag'&&!existing&&!await db.prepare("SELECT 1 FROM companion_nags WHERE owner=? AND id=? AND status IN ('已解释','回合结束')")
+    .bind(owner,x.source_id).first())return fail(409,'原唠叨尚未完成同步');
   const previous=existing&&JSON.parse(existing.payload).automaticTxt;
   if(x.automaticTxt){
     if(JSON.stringify(previous)!==JSON.stringify(x.automaticTxt)&&!await validOriginal(env,owner,'nags',x.id,x.automaticTxt))return fail(400,'原文 TXT 未就绪');
@@ -109,7 +117,8 @@ async function saveNag(db,owner,x,env){
   const payload=JSON.stringify(x);
   // Citation snapshots live inside the nag. Only source_id is a navigable primary object.
   let guard='WHERE 1';
-  if(x.source==='audit'){
+  let args=[];
+  if(x.source==='audit'&&!x.finalOnly){
     guard=`WHERE NOT EXISTS (
       SELECT 1 FROM companion_nags n, json_each(?) incoming
       WHERE n.owner=? AND n.id<>? AND (
@@ -119,18 +128,16 @@ async function saveNag(db,owner,x,env){
         )) OR (n.source='diary' AND printf('%s.%d',substr(n.source_id,1,10),cast(substr(n.source_id,12) as integer))=json_extract(incoming.value,'$.page'))
       )
     )`;
-  }else if(x.source==='diary'){
+    args=[JSON.stringify(x.refs),owner,x.id];
+  }else if(x.source==='diary'&&!x.finalOnly){
     guard=`WHERE NOT EXISTS (
       SELECT 1 FROM companion_nags n,json_each(n.payload,'$.refs') r
       WHERE n.owner=? AND n.source='audit' AND json_extract(r.value,'$.page')=?
     )`;
+    args=[owner,x.source_id.split('/')[0].replace(/\.0+(?=\d)/u,'.')];
   }
-  const args=x.source==='audit'?[JSON.stringify(x.refs),owner,x.id]:x.source==='diary'?[owner,x.source_id.split('/')[0].replace(/\.0+(?=\d)/u,'.')]:[];
-  if(x.source==='audit'&&x.revision>1){
-    const prior=await db.prepare('SELECT 1 FROM companion_nags WHERE owner=? AND id=?').bind(owner,x.id).first();
-    if(!prior)return fail(409,'请先登记这条质问和出处');
-  }
-  if(x.source==='audit'&&x.revision===1){
+  if(x.source==='audit'&&!existing){
+    if(x.revision>1&&!x.finalOnly)return fail(409,'请先登记这条质问和出处');
     for(const r of x.refs){
       const [day,part]=r.page.split('.');
       const found=await db.prepare('SELECT 1 FROM companion_diary WHERE owner=? AND day=? AND part=? AND instr(body,?)>0').bind(owner,day,Number(part),r.quote).first();

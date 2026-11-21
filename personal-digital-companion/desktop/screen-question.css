@@ -206,3 +206,4 @@ button:disabled, select:disabled { cursor: default; opacity: .55; }
 .bubble .fy-compact #close[data-nag=true] { width:auto; padding:3px 6px; font-size:12px; color:var(--fy-ink); }
 #reply[data-nag=true] { overflow-y:auto; }
 #reply[data-nag=true] #answer { display:block; overflow:visible; max-height:none; white-space:pre-wrap; }
+#nagContext { max-width: 100%; max-height: 110px; object-fit: contain; border-radius: var(--fy-radius); margin-top: 5px; }

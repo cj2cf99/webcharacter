@@ -5,7 +5,7 @@ import {tokyoDay} from './conversation-history.mjs';
 import {createPanelWindow} from './panel-window.mjs';
 import {readTaskReviews} from './personality-diary.mjs';
 
-export function attachConversationDetails(electron,{root,profile,bundle,history,memory,readTasks,readTraffic,checks,edits,auditPending=()=>null,resumeAudit,visible,onReview}) {
+export function attachConversationDetails(electron,{root,profile,bundle,history,memory,readTasks,readTraffic,checks,edits,auditPending=()=>[],resumeAudit,visible,onReview}) {
   const {ipcMain,shell}=electron;
   let initialView='chat';
   let panel=null, selection=null, shownSources=new Set(), loading=null;
@@ -23,7 +23,7 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
       catch{return {day,view,lines:[],next:null,warning:'日志已轮转或暂时无法读取，请刷新日志。'};}
     }
     if(view==='pending'){
-      return {day,view,choices:[],entries:[],...await edits?.view(),audit:auditPending()};
+      return {day,view,choices:[],entries:[],...await edits?.view(),questions:auditPending()};
     }
     if(view==='tasks'){
       if(!readTasks)throw Error('任务记录未连接');
@@ -45,8 +45,8 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
     return {day,view:'chat',turns,selectedId:selected?.id,warning};
   });
   ipcMain.handle('conversation:resume-audit',(event,id)=>{
-    if(!trusted(event)||!id||auditPending()?.id!==id)throw Error('这条手记质问已经结束。');
-    return resumeAudit();
+    if(!trusted(event)||!id||!auditPending().some(n=>n.id===id))throw Error('这条质问已经结束。');
+    return resumeAudit(id);
   });
   ipcMain.handle('conversation:report',async(event,day,id)=>{
     if(!trusted(event)||day!==reportDay||!shownTasks.has(id))throw Error('请选择任务复盘中的记录');

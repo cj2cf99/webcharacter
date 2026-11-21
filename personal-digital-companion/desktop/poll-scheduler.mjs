@@ -1,4 +1,4 @@
-const memoryPolls=new Set(['diary','nag','review','diaryAudit']);
+const memoryPolls=new Set(['diary','nag','review','diaryAudit','curiosity']);
 const memoryLimit=10*60_000;
 const pauseDetail='闲置整理已满 10 分钟，等下一轮轮询继续';
 const types=[

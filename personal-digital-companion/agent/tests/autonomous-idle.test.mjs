@@ -66,7 +66,7 @@ test('同一悬念遇到多条新事实只比对一次；下个东京日继续�
   assert.match(results[0].join(' '),/悬念跟进.*2026-11-19\.1\/1.*未解/);
 });
 
-test('日记与待续念叨共用篇号和序号；重启与东京零点',async t=>{
+test('悬念质问续答不受旧的逐日处理标记影响',async t=>{
   let at=Date.parse('2026-11-21T23:59:59+09:00');
   const profile=mkdtempSync(join(tmpdir(),'fy-thread-day-'));
   const options={profile,now:()=>at},source='2026-11-19.1/2';
@@ -79,10 +79,9 @@ test('日记与待续念叨共用篇号和序号；重启与东京零点',async 
   t.after(async()=>{await nags.close();diary.close();rmSync(profile,{recursive:true,force:true});});
   const signal=new AbortController().signal;
   await nags.poll(signal);assert.equal(shown,0);
-  assert(diary.claimThread('2026-11-19.1/3'));
+  await nags.resume('fixture',signal);assert.equal(shown,1);
   at+=1000;await nags.poll(signal);assert.equal(shown,1);
-  assert.equal(diary.claimThread(source),false);
-  await nags.poll(signal);assert.equal(shown,1);
+  await nags.resume('fixture',signal);assert.equal(shown,2);
 });
 
 test('排队的日记与整理共用十分钟，超时等待正式轮询；任务日志可回读目标、实际耗时和子动作',async t=>{

@@ -192,29 +192,36 @@ export function createTopicMemory({profile,memory,model,safeStorage,traffic,now=
     return saved?.status==='pending'&&saved.round===round&&saved.queued===true;
   }
   let asking=false;
+  async function recoveryQuestion(excluded=new Set()){
+    await ready;
+    const t=[...docs.values()].find(d=>d.recoveryHelp==='pending'&&!excluded.has(d.id));
+    if(!t)return;
+    const prompt=t.needsTitle?'我的一个专题文件和备份都损坏了（'+t.id.slice(0,8)+'）。亲爱的，你记得专题名称或关键词吗？':
+      '我的《'+t.title+'》专题和备份都损坏了，我在重新整理。亲爱的，你还记得什么线索吗？';
+    return {id:t.id,prompt};
+  }
+  async function answerRecovery(id,answer){
+    const clue=answer?.action==='cancel'?'':cleanMemory(answer?.text);
+    if(!clue&&answer?.action!=='cancel')return;
+    await modify(id,d=>{
+      if(d?.recoveryHelp!=='pending')return null;
+      d.recoveryHelp=clue?'answered':'dismissed';
+      if(clue){
+        if(d.needsTitle)d.title=clue.slice(0,90);
+        d.needsTitle=false;d.queued=true;d.status='pending';d.tries=0;d.cursor=0;
+        d.recoveryReply=clue;
+        d.evidence.push({ref:'user-help/'+d.id,text:clue.slice(0,135),at:now()});
+      }
+      return d;
+    });
+  }
   async function offerRecoveryHelp(ask){
     await ready;
     if(asking)return;
-    const t=[...docs.values()].find(d=>d.recoveryHelp==='pending');
-    if(!t)return;
     asking=true;
     try{
-      const prompt=t.needsTitle?'我的一个专题文件和备份都损坏了（'+t.id.slice(0,8)+'）。亲爱的，你记得专题名称或关键词吗？':
-        '我的《'+t.title+'》专题和备份都损坏了，我在重新整理。亲爱的，你还记得什么线索吗？';
-      const answer=await ask(prompt);
-      const clue=answer?.action==='cancel'?'':cleanMemory(answer?.text);
-      if(!clue&&answer?.action!=='cancel')return;
-      await modify(t.id,d=>{
-        if(d?.recoveryHelp!=='pending')return null;
-        d.recoveryHelp=clue?'answered':'dismissed';
-        if(clue){
-          if(d.needsTitle)d.title=clue.slice(0,90);
-          d.needsTitle=false;d.queued=true;d.status='pending';d.tries=0;d.cursor=0;
-          d.recoveryReply=clue;
-          d.evidence.push({ref:'user-help/'+d.id,text:clue.slice(0,135),at:now()});
-        }
-        return d;
-      });
+      const t=await recoveryQuestion();
+      if(t)await answerRecovery(t.id,await ask(t.prompt));
     }finally{asking=false;}
   }
   async function runQueued(signal,step){
@@ -235,7 +242,7 @@ export function createTopicMemory({profile,memory,model,safeStorage,traffic,now=
   const announced=(id,revision)=>modify(id,d=>d?.status==='confirmed'&&!d.announced&&
     (d.versions?.at(-1)?.revision??d.revision)===revision?{...d,announced:now()}:null);
   const decisionReceipt=id=>[...docs.values()].find(d=>d.round===id)?.id;
-  return {ready,remember,queueCheck,runQueued,offerRecoveryHelp,confirmed,announced,decisionReceipt,search,recall,check,note,pending:()=>[...docs.values()].filter(d=>d.status==='pending'&&!d.needsTitle).slice(0,3),
+  return {ready,remember,queueCheck,runQueued,offerRecoveryHelp,recoveryQuestion,answerRecovery,confirmed,announced,decisionReceipt,search,recall,check,note,pending:()=>[...docs.values()].filter(d=>d.status==='pending'&&!d.needsTitle).slice(0,3),
     preferences:()=>[...docs.values()].filter(d=>d.status==='preference').slice(-3).map(t=>t.summary),
     facts:day=>[...docs.values()].flatMap(t=>(t.versions??[]).filter(v=>new Date(v.at+9*3600000).toISOString().startsWith(day))
       .map(v=>({id:t.id,title:t.title,revision:v.revision,updated:v.at,summary:v.summary}))),

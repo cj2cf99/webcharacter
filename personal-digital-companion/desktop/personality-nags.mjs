@@ -4,22 +4,25 @@ import {readInteractionSkill} from './interaction-skills.mjs';
 import {createHash} from 'node:crypto';
 import {tokyoDay} from './conversation-history.mjs';
 import {cleanMemory} from './personality-diary.mjs';
+import {answeredQuestion,isPendingQuestion,pendingLimit,questionReminder,questionTarget,questionText} from './pending-questions.mjs';
 
 const dayMs=86400000;
-const openStates=['提问中','等待回应','意外中断'];
 const game=/游戏|遊戲|ゲーム|娱乐|娛樂|娯楽|gaming|entertainment/i;
 const refund=/退款|返金|退费|refund/i;
 const unknown=s=>!s||/未知|其他|不明|未分类|未分類|unknown|other/i.test(s);
-const sourceKey=(source,id)=>source+'/'+id;
 const brief=(s,n)=>Array.from(cleanMemory(s)).slice(0,n).join('');
 const iso=at=>new Date(at).toISOString();
 
-export function createPersonalityNags({store,emotion,initiative,show,idle,canContinue=()=>true,onInterrupted=()=>{},changed=()=>{},now=Date.now,random=Math.random}){
-  let active=null,syncJob=null,stopped=false;
+export function createPersonalityNags({store,emotion,initiative,show,idle,canContinue=()=>true,notify=()=>{},changed=()=>{},onAnswered,questionImage,now=Date.now,random=Math.random}){
+  let active=null,syncJob=null,stopped=false,working=false;
   const lifetime=new AbortController();
-  const pending=()=>store.nags().find(n=>openStates.includes(n.status));
-  for(const n of store.nags())if(n.status==='提问中'){
-    n.status='意外中断';n.interruptions++;store.saveNag(n);
+  const pendingQuestions=()=>store.nags().filter(isPendingQuestion)
+    .sort((a,b)=>(b.priority??3)-(a.priority??3)||a.created_at?.localeCompare(b.created_at)||a.id.localeCompare(b.id));
+  const pending=()=>pendingQuestions()[0];
+  for(const n of store.nags().filter(isPendingQuestion)){
+    if(n.status==='提问中'){n.status='意外中断';n.interruptions++;}
+    else if(n.localQuestion)continue;
+    n.localQuestion=true;delete n.notBefore;store.saveNag(n);
   }
   let resync=false;
   function sync(signal){
@@ -28,13 +31,14 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     if(!stopped)syncJob=(async()=>{do{combined.throwIfAborted();resync=false;await store.syncNags(combined);}while(resync&&!stopped);})().catch(()=>{}).finally(()=>{syncJob=null;});
     return syncJob;
   }
-  function save(n){store.saveNag(n);changed();void sync();}
-  const audit=createDiaryAudit({emotion,store,show,idle,canContinue,save,changed,onInterrupted:()=>onInterrupted('diaryAudit'),now,random});
+  function save(n){n.localQuestion=true;store.saveNag(n);changed();if(answeredQuestion(n)&&!n.localOnly)void sync();}
+  const audit=createDiaryAudit({store,show,idle,canContinue,save,now,random});
   function talk(n,who,text){n.talk.push({who,text,at:iso(now())});}
   async function think(stage,data,fields,signal){
     const skill=await readInteractionSkill('basicNag');signal.throwIfAborted();
     const prompt=skill.localAi?.[stage];if(!prompt)throw Error('念叨技能缺少阶段 '+stage);
-    return store.think(data,prompt,fields,signal,{name:skill.skill,version:skill.version});
+    const priority=stage==='open'?' score 表示绯月现在有多想弄清：1 为稍有好奇，3 为值得关心，5 为关系、处境或安排上特别重要。':'';
+    return store.think(data,prompt+priority,fields,signal,{name:skill.skill,version:skill.version});
   }
   const assessments=new Map();
   async function verdict(stage,data,signal){
@@ -51,31 +55,33 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     }
   }
   async function candidates(signal){
-    const day=i=>tokyoDay(now()-i*dayMs),known=new Set(store.nags().map(n=>sourceKey(n.source,n.source_id)));
-    const pool=[];
-    const cited=new Set(store.nags().filter(n=>n.source==='audit').flatMap(n=>n.refs.map(r=>r.page)));
+    const archive=store.nags();
+    const day=i=>tokyoDay(now()-i*dayMs),known=new Set(archive.map(questionTarget));
+    const pool=archive.filter(n=>answeredQuestion(n)&&n.source!=='nag'&&n.remaining&&!known.has('nag/'+n.id))
+      .map(n=>({source:'nag',source_id:n.id,title:n.remaining,reason:'念叨里还有待核实的下文',stats:'',priority:3}));
     for(const p of store.pages(day(6)).filter(p=>p.day>=day(6)&&p.day<=day(0))){
-      if(cited.has(p.day+'.'+p.part))continue;
-      for(const t of p.threads){
+      for(const t of p.threads.slice(0,3)){
         const id=p.day+'.'+p.part+'/'+t.no;
-        if(!t.asked&&!t.resolved&&!known.has(sourceKey('diary',id))&&!store.handledThread(id))pool.push({source:'diary',source_id:id,title:t.text,reason:'日记中的未解悬念',stats:''});
+        if(!t.asked&&!t.resolved&&!known.has('diary/'+id))pool.push({source:'diary',source_id:id,title:t.text,reason:'日记中的未解悬念',stats:'',priority:t.priority??3});
       }
     }
     const byId=new Map();
     let cursor='',complete=true;
     const cursors=new Set();
-    do{
-      const query=new URLSearchParams({from:day(14),to:day(0),cursor});
-      const p=await store.api('expenses?'+query,undefined,signal);
-      if(!Array.isArray(p.records))throw Error('消费来源未返回账目');
-      complete=complete&&p.complete===true;
-      for(const r of p.records)if(r.id&&Number(r.amount)>0&&!refund.test([r.category,r.description,r.tag?.name].join(' ')))byId.set(r.id,r);
-      cursor=p.nextCursor||'';
-      if(cursor&&cursors.has(cursor))throw Error('消费分页游标重复');
-      cursors.add(cursor);
-    }while(cursor);
+    try{
+      do{
+        const query=new URLSearchParams({from:day(14),to:day(0),cursor});
+        const p=await store.api('expenses?'+query,undefined,signal);
+        if(!Array.isArray(p.records))throw Error('消费来源未返回账目');
+        complete=complete&&p.complete===true;
+        for(const r of p.records)if(r.id&&Number(r.amount)>0&&!refund.test([r.category,r.description,r.tag?.name].join(' ')))byId.set(r.id,r);
+        cursor=p.nextCursor||'';
+        if(cursor&&cursors.has(cursor))throw Error('消费分页游标重复');
+        cursors.add(cursor);
+      }while(cursor);
+    }catch(error){signal.throwIfAborted();if(!pool.length)throw error;return pool;}
     const records=[...byId.values()];
-    const sorted=records.filter(r=>r.spendDate>=day(1)&&r.spendDate<=day(0)&&!known.has(sourceKey('paylog',r.id))).sort((a,b)=>b.amount-a.amount);
+    const sorted=records.filter(r=>r.spendDate>=day(1)&&r.spendDate<=day(0)&&!known.has('paylog/'+r.id)).sort((a,b)=>b.amount-a.amount);
     const expenses=[];
     for(const r of sorted){
       let probable=false,fun=game.test([r.category,r.tag?.name].join(' '));
@@ -97,12 +103,17 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       }
       expenses.push({source:'paylog',source_id:r.id,source_day:r.spendDate,title:brief(r.description||r.merchant||r.category||'用途待确认',240),
         reason:[r.amount+' 日元',r.amount>=3500?'大额消费':'',fun?(probable?'游戏或娱乐（推测）':'游戏或娱乐'):''].filter(Boolean).join(' · '),
-        stats:(r.category||'未分类')+'：'+stats(day(7),day(1))+'；'+stats(day(14),day(8))+(complete?'':'（资料不全）')});
+        stats:(r.category||'未分类')+'：'+stats(day(7),day(1))+'；'+stats(day(14),day(8))+(complete?'':'（资料不全）'),priority:3});
       if(expenses.length===5)break;
     }
     return pool.concat(expenses);
   }
   function ended(n){return n.questions>=3||n.turns>=Math.min(6,n.limit??6);}
+  async function complete(n,status,signal){
+    await onAnswered?.(n,signal);
+    signal.throwIfAborted();
+    finish(n,status);
+  }
   function finish(n,status){
     n.status=status;
     if(status==='用户结束')talk(n,'结束记录','老公闷闷的不理我了');
@@ -111,109 +122,152 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     if(n.localInitiativeRound)emotion?.feedback(n.localInitiativeRound,status);
   }
   async function appraise(n,text,signal){
-    const v=await think('reply',JSON.stringify({事项:n.title,问题:n.next,解释:brief(text,550),此前情绪:n.mood,当前心情:emotion?.expression()}),
+    const v=await think('reply',JSON.stringify({事项:n.title,问题:n.next,解释:brief(text,550),本机现场:n.localContext,此前情绪:n.mood,当前心情:emotion?.expression()}),
       ['reply','evaluation','mood','next'],signal);
     signal.throwIfAborted();
-    if(!v.reply||!v.evaluation||!v.mood)throw Error('回应尚未生成');
+    if(!v.reply||!v.evaluation||!v.mood||typeof v.next!=='string')throw Error('回应尚未生成');
     return v;
   }
-  async function poll(signal,{manual=false,progress=()=>{},step}={}){
-    if(active||!idle())return {deferred:true};
-    await sync(signal);
-    signal.throwIfAborted();
-    let n=pending();
-    let selection;
-    if(n?.source==='audit')return manual?audit.poll(signal,{manual}):'手记质问正在待确认';
-    if(manual&&!n)return '没有待续事项';
-    if(!manual&&n?.status!=='意外中断'&&now()-(store.last('nag-shown')??0)<2*3600000)return {detail:'本轮名额已使用',nextAt:store.last('nag-shown')+2*3600000};
-    if(!n){
+  function remind(added=false){
+    const queue=pendingQuestions(),preferred=queue[0];
+    const message=questionReminder(queue.length,added);
+    if(message)notify(message,preferred?.id);
+    return message;
+  }
+  function enqueue(source,{prompt=source.title,evaluation='',mood='',announce=true}={}){
+    if(pendingQuestions().length>=pendingLimit){if(announce)remind();return false;}
+    const next=questionText(prompt);
+    if(!next)return false;
+    const id='nag-'+createHash('sha256').update(questionTarget(source)).digest('hex');
+    const n={...source,id,title:source.title.slice(0,300),created_at:iso(now()),revision:0,talk:[],turns:1,questions:1,interruptions:0,
+      status:'等待回应',next,mood,before:mood,beforeEvaluation:evaluation};
+    talk(n,'绯月',next);
+    return queue(n,announce);
+  }
+  function queue(n,announce=true){
+    if(!store.queueQuestion(n))return false;
+    changed();
+    if(announce)remind(true);
+    return true;
+  }
+  async function pollAudit(signal){
+    if(working||active||audit.active||!idle())return {deferred:true};
+    if(pendingQuestions().length>=pendingLimit)return {detail:remind()};
+    working=true;
+    try{
+      const result=await audit.prepare(signal);
+      if(result.n&&queue(result.n))return {detail:'已新增 1 个手记质问'};
+      if(!result.deferred&&pending())remind();
+      return result.detail??result;
+    }finally{working=false;}
+  }
+  async function poll(signal,{progress=()=>{},step}={}){
+    if(working||active||audit.active||!idle())return {deferred:true};
+    if(pendingQuestions().length>=pendingLimit)return {detail:remind()};
+    working=true;
+    try{
+      await sync(signal);
       progress({stage:'核对待续事项'});
-      let online=true;
-      try{await store.refresh?.(signal);}catch(error){signal.throwIfAborted();if(!initiative)throw error;online=false;}
-      n=pending();
-      if(n?.source==='audit')return '手记质问正在待确认';
-      if(!n){
-        let pool=[];
-        if(online)try{pool=await candidates(signal);}catch(error){signal.throwIfAborted();if(!initiative)throw error;}
-        if(initiative){
-          emotion.store.pool.closeSources(store.nags().map(r=>sourceKey(r.source,r.source_id)));
-          selection=await initiative.choose(pool,signal,idle,store,step);
-          if(!selection.source)return selection;
-        }
-        if(!pool.length)return '没有待问事项';
-        const source=selection?.source??pool[Math.floor(random()*pool.length)];
-        n={...source,id:'nag-'+createHash('sha256').update(sourceKey(source.source,source.source_id)).digest('hex'),created_at:iso(now()),
-          revision:0,talk:[],turns:0,questions:0,interruptions:0,status:'提问中'};
+      try{await store.refresh?.(signal);}catch{signal.throwIfAborted();}
+      if(pendingQuestions().length>=pendingLimit)return {detail:remind()};
+      let pool=[];
+      try{pool=await candidates(signal);}catch(error){signal.throwIfAborted();if(!initiative&&!pending())throw error;}
+      if(pool.length){
+        const source=pool[Math.floor(random()*pool.length)];
+        progress({stage:'准备一个待确认问题'});
+        const v=await think('open',JSON.stringify([source.title,source.reason,source.stats,emotion?.expression()]),['question','evaluation','mood','score'],signal);
+        signal.throwIfAborted();
+        const mood=emotion?.expression().word??v.mood;
+        if(!v.evaluation||!mood||!questionText(v.question))throw Error('没有取得可用的念叨问题');
+        if(/^[1-5]$/u.test(v.score)&&source.source!=='diary')source.priority=Number(v.score);
+        if(enqueue(source,{prompt:v.question,evaluation:v.evaluation,mood}))return {detail:'已新增 1 个待确认问题'};
       }
-    }
-    if(!manual&&n.source==='diary'&&!selection){
-      const lastShown=n.talk.findLast(t=>t.who==='绯月');
-      const shownAt=Date.parse(lastShown?.at);
-      if((Number.isFinite(shownAt)&&tokyoDay(shownAt)===tokyoDay(now()))||!store.claimThread(n.source_id))return '这个悬念今天已处理';
-    }
+      if(pending())return {detail:remind()};
+      if(initiative){
+        emotion.store.pool.closeSources(store.nags().map(questionTarget));
+        return await initiative.choose([],signal,idle,undefined,step);
+      }
+      return '没有待问事项';
+    }finally{working=false;}
+  }
+  async function resume(id,signal){
+    const pending=pendingQuestions();
+    if(working||active||audit.active||!idle()||!canContinue())return {deferred:true};
+    const n=pending.find(row=>row.id===id);
+    if(!n)return '这条质问已经结束。';
+    working=true;
+    try{return await (n.source==='audit'?audit.resume(n,signal):resumeNag(n,signal));}
+    finally{working=false;}
+  }
+  async function resumeNag(n,signal){
+    signal.throwIfAborted();
     if(n.talk.at(-1)?.who==='你'){
-      progress({stage:'整理上次的回应'});
+      if(n.source==='topic')return completeTopic(n,signal);
       const heard=await appraise(n,n.talk.at(-1).text,signal);
       n.afterEvaluation=heard.evaluation;n.mood=heard.mood;delete n.localMoodStrength;
-      if(!heard.next||ended(n)){
-        n.next=heard.next;finish(n,heard.next?'回合结束':'已解释');return '已按上次留下的解释收尾';
+      const next=followUp(n,heard);
+      if(!next||ended(n)){
+        talk(n,'绯月',heard.reply);n.next=questionText(heard.next);
+        await complete(n,heard.next.trim()?'回合结束':'已解释',signal);return '已按上次留下的解释收尾';
       }
-      n.next=heard.next;n.recoveredQuestion=true;
+      talk(n,'绯月',heard.reply);setFollowUp(n,next);save(n);
     }
-    if(n.turns>=Math.min(6,n.limit??6)){finish(n,'回合结束');return '本次念叨已收尾';}
-    const first=!n.revision;
-    if(first){
-      progress({stage:'想一句提问'});
-      const v=selection?{question:selection.message,evaluation:selection.evaluation,mood:emotion.expression().word}:await think('open',JSON.stringify([n.title,n.reason,n.stats,emotion?.expression()]),['question','evaluation','mood'],signal);
-      if(!v.question||!v.mood||!v.evaluation)throw Error('念叨提问未生成');
-      Object.assign(n,{next:v.question,before:emotion?.expression().word??v.mood,mood:emotion?.expression().word??v.mood,beforeEvaluation:v.evaluation});
-      if(emotion)n.localMoodStrength=Math.abs(emotion.expression().grade);
-      if(selection)n.localInitiativeRound=selection.roundId;
-    }
-    if(n.interruptions>=2&&!n.limit)n.limit=Math.min(6,n.turns+3);
-    const prompt=(n.interruptions>=2?'这次一起说完就好。':'')+n.next;
-    if(signal.aborted||!idle()){
-      await selection?.finish(false,'显示前被打断');
-      signal.throwIfAborted();return {deferred:true};
-    }
-    const session={controller:new AbortController()};
+    signal.throwIfAborted();
+    if(!idle()||!canContinue())return {deferred:true};
+    const sceneImage=n.source==='curiosity'&&await questionImage?.(n);
+    signal.throwIfAborted();
+    const session={id:n.id,audit:true,prompt:[n.localContext,n.next].filter(Boolean).join('\n'),sceneImage,signal,controller:new AbortController(),visible,leave,reply};
     function visible(){
       if(active!==session)return;
-      if(first)n.created_at=iso(now());
-      if(first||n.recoveredQuestion)n.questions++;
-      delete n.recoveredQuestion;
-      n.turns++;n.status='提问中';talk(n,'绯月',prompt);store.mark('nag-shown',now());save(n);
+      n.status='提问中';save(n);
     }
     function leave(reason){
       if(active!==session)return;
       active=null;session.controller.abort();
-      if(reason==='button'){finish(n,'用户结束');return;}
-      n.status=reason==='idle'?'等待回应':'意外中断';
-      if(reason!=='idle')n.interruptions++;
-      save(n);if(reason!=='idle')onInterrupted();
+      if(reason==='refuse'){finish(n,'用户结束');return;}
+      n.status=reason==='later'||reason==='idle'?'等待回应':'意外中断';
+      if(n.status==='意外中断')n.interruptions++;
+      save(n);
     }
     async function reply(input){
       const text=store.nagText?await store.nagText(n,input,session.controller.signal):cleanMemory(input);
       if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请把这次的解释控制在 3000 字以内。'};
       talk(n,'你',text);save(n);
+      if(n.source==='topic'){
+        const result=await completeTopic(n,session.controller.signal);
+        active=null;return {text:result,done:true};
+      }
       const v=await appraise(n,text,session.controller.signal);
+      if(!canContinue()){
+        n.status='意外中断';save(n);active=null;
+        return {text:'回答已留在本机，可以从「待确认」继续。',done:true};
+      }
       n.afterEvaluation=v.evaluation;n.mood=v.mood;delete n.localMoodStrength;
-      talk(n,'绯月',v.reply);n.next=v.next;
-      emotion?.chat({state:'answer',inReplyToInitiative:n.localInitiativeRound,id:n.id+'/'+n.talk.length,at:Date.parse(n.talk.at(-1).at),question:text,text:v.reply});
-      if(!v.next||ended(n)){
-        active=null;finish(n,v.next?'回合结束':'已解释');
+      const next=followUp(n,v);
+      talk(n,'绯月',v.reply);n.next=questionText(v.next);
+      if(!next||ended(n)){
+        await complete(n,v.next.trim()?'回合结束':'已解释',session.controller.signal);active=null;
         return {text:v.reply,done:true};
       }
-      return {text:v.reply+'\n'+v.next,shown(){
-        n.questions++;n.turns++;talk(n,'绯月',v.next);save(n);
-      }};
+      setFollowUp(n,next);save(n);
+      return {text:v.reply+'\n'+next};
     }
     active=session;
-    try{const displayed=await show({prompt,visible,leave,reply,signal});
-      if(!displayed){active=null;await selection?.finish(false,'未展示');return {deferred:true};}
+    try{const displayed=await show(session);
+      if(!displayed){active=null;return {deferred:true};}
     }catch(error){active=null;throw error;}
-    await selection?.finish(true,'已展示：'+n.id);
-    return '只问了这一件：'+n.title;
+    return '已打开质问气泡。';
   }
-  return {assessPending,poll,pollAudit:audit.poll,recoverAudit:audit.recover,pending,flush:sync,async close(){audit.close();stopped=true;lifetime.abort();active?.controller.abort();await syncJob;}};
+  function followUp(n,v){
+    const next=questionText(v.next);
+    return next&&!n.talk.some(t=>t.who==='绯月'&&t.text===next)?next:'';
+  }
+  function setFollowUp(n,next){n.next=next;n.questions++;n.turns++;talk(n,'绯月',next);}
+  async function completeTopic(n,signal){
+    await complete(n,'已解释',signal);
+    return '线索已记下，我会继续整理专题。';
+  }
+  return {assessPending,poll,pollAudit,resume,enqueue,remind,recoverAudit:audit.recover,pending,pendingQuestions,flush:sync,async close(){
+    audit.close();active?.leave('interrupted');stopped=true;lifetime.abort();await syncJob;
+  }};
 }

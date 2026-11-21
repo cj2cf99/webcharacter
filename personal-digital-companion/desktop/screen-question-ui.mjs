@@ -130,6 +130,11 @@ function render(value){
   reply.dataset.state=value.state;reply.setAttribute('aria-busy',String(busy));
   byId('asked').hidden=!value.question;
   byId('asked').textContent=value.question??'';
+  const scene=byId('nagContext');
+  scene.hidden=!value.sceneImage;
+  if(value.sceneImage){
+    if(scene.getAttribute('src')!==value.sceneImage)scene.src=value.sceneImage;
+  }else scene.removeAttribute('src');
   const full=value.text??'';
   speech.setReply(value.state==='answer'?full:'',value.voiceReply);
   lastView=value;
