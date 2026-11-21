@@ -1,0 +1,72 @@
+{
+  "desktop": {
+    "applied": "2026-11-21T15:02:18.2117830+09:00",
+    "started": "2026-11-21T15:02:13.6884580+09:00",
+    "pid": 19436,
+    "previousPid": 13840,
+    "restVersion": 4,
+    "retainedBatches": 11,
+    "installedTxtTests": 7,
+    "electronTests": 2
+  },
+  "workers": [
+    {
+      "target": "api",
+      "previous": "7cc4d0be-c772-4202-a165-94a176ce501d",
+      "version": "433cac21-d356-41f0-8fd2-f2264a37da29",
+      "percentage": 100,
+      "created_on": "2026-11-21T05:56:38.378858Z",
+      "bindings": 14,
+      "binding_differences": 0
+    },
+    {
+      "target": "main",
+      "previous": "631635d1-5e21-4512-8da9-69132b02f5f4",
+      "version": "6c2f851f-4541-4695-86e4-5be83a680b71",
+      "percentage": 100,
+      "created_on": "2026-11-21T05:56:52.562592Z",
+      "bindings": 42,
+      "binding_differences": 0
+    }
+  ],
+  "garden": {
+    "id": "txt-attachments-release-20261121",
+    "reviewHash": "698a8e9311751a7dec36533170b98e7175a4322892ffb87b227075324d0d4f03",
+    "commit": "eb1955e65e0945ab75110c1ffb92ae1728eca3c6",
+    "state": "done",
+    "steps": [
+      {
+        "label": "登记四个既有功能的成功发布",
+        "state": "verified",
+        "at": "2026-11-21T06:08:27.864Z",
+        "revision": 131
+      },
+      {
+        "label": "个人日记 TXT 附件",
+        "state": "verified",
+        "at": "2026-11-21T06:08:41.168Z",
+        "revision": 132
+      },
+      {
+        "label": "随手记 TXT 附件",
+        "state": "verified",
+        "at": "2026-11-21T06:08:54.14Z",
+        "revision": 133
+      },
+      {
+        "label": "鱼与熊掌 TXT 附件",
+        "state": "verified",
+        "at": "2026-11-21T06:09:07.37Z",
+        "revision": 134
+      },
+      {
+        "label": "绯月手记与唠叨长文 TXT 归档",
+        "state": "verified",
+        "at": "2026-11-21T06:09:19.975Z",
+        "revision": 135
+      }
+    ],
+    "finished": "2026-11-21T06:09:26.528Z",
+    "acknowledged": "2026-11-21T06:11:27.554Z"
+  }
+}
