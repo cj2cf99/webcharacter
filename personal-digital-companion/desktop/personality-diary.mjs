@@ -71,6 +71,17 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     CREATE TABLE IF NOT EXISTS schedule(job TEXT PRIMARY KEY,at INTEGER NOT NULL);`);
   const rows=(sql,...args)=>db.prepare(sql).all(...args);
   const put=(sql,...args)=>db.prepare(sql).run(...args);
+  const threadStamp=db.prepare('SELECT at FROM schedule WHERE job=?');
+  const takeThread=db.prepare(`INSERT INTO schedule(job,at) VALUES(?,?)
+    ON CONFLICT(job) DO UPDATE SET at=excluded.at WHERE schedule.at<?`);
+  function handledThread(id){
+    const stamp=threadStamp.get('thread/'+id);
+    return Boolean(stamp&&tokyoDay(stamp.at)===tokyoDay(now()));
+  }
+  function claimThread(id){
+    const at=now(),midnight=Date.parse(tokyoDay(at)+'T00:00:00+09:00');
+    return takeThread.run('thread/'+id,at,midnight).changes===1;
+  }
   async function api(path,body,signal){
     if(!request)throw Error('绯月云端连接未配置');
     const res=await request('/api/memory/'+path,{method:body?'POST':'GET',signal,cache:'no-store',...(body?{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});
@@ -306,9 +317,11 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     const packet={batch:{day,batch:id,...batch},resolve};
     put('INSERT OR IGNORE INTO drafts VALUES(?,?,?)',id,day,JSON.stringify(packet));
   }
-  async function followThreads(period,facts,signal,syncDrafts,write){
+  async function followThreads(period,facts,signal,syncDrafts,write,step){
     const pending=pages(period.at(-1)).filter(p=>period.includes(p.day)).flatMap(p=>p.threads.filter(t=>!t.resolved).map(t=>({...t,page:p.day+'.'+p.part,day:p.day})));
     for(const thread of pending){
+      const source=thread.page+'/'+thread.no;
+      if(handledThread(source))continue;
       for(const fact of facts){
         if(thread.day>fact.day||thread.day===fact.day&&(!thread.at||thread.at>=fact.at))continue;
         signal.throwIfAborted();
@@ -316,15 +329,22 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
         if(db.prepare('SELECT 1 FROM compared WHERE id=?').get(id))continue;
         const current=pages(fact.day).filter(p=>p.day===fact.day).sort((a,b)=>b.part-a.part)[0];
         if(!current)continue;
-        const reply=await write(JSON.stringify({悬念:thread.text,来源:fact.label||'本机行动',新事实:fact.content,基础情绪:current.mood}),'follow',['match','text','comment']);
-        if(reply.match==='1'&&reply.text&&reply.comment){
-          const body='接 '+thread.day+' 的悬念（第 '+thread.page.split('.')[1]+' 篇 · '+thread.no+'）：'+thread.text+'\n'+reply.text+'\n绯月私语：'+reply.comment;
-          const header=await summarize(fact.label?fact.content:body,Array.from(current.body+'\n\n'+body).length<=5000?current:null,write,fact.label);
-          stage(fact.day,id,{body,summary:header.summary,tags:tagsOf(header),mood:current.mood,weather:current.weather,threads:[]},thread);
-          await syncDrafts();
-          break;
-        }
-        put('INSERT OR IGNORE INTO compared VALUES(?)',id);
+        if(!claimThread(source))break;
+        const compare=async()=>{
+          const reply=await write(JSON.stringify({悬念:thread.text,来源:fact.label||'本机行动',新事实:fact.content,基础情绪:current.mood}),'follow',['match','text','comment']);
+          if(reply.match==='1'&&reply.text&&reply.comment){
+            const body='接 '+thread.day+' 的悬念（第 '+thread.page.split('.')[1]+' 篇 · '+thread.no+'）：'+thread.text+'\n'+reply.text+'\n绯月私语：'+reply.comment;
+            const header=await summarize(fact.label?fact.content:body,Array.from(current.body+'\n\n'+body).length<=5000?current:null,write,fact.label);
+            stage(fact.day,id,{body,summary:header.summary,tags:tagsOf(header),mood:current.mood,weather:current.weather,threads:[]},thread);
+            await syncDrafts();
+            return '已写入后续并回读已解标记';
+          }
+          put('INSERT OR IGNORE INTO compared VALUES(?)',id);
+          return '本次事实未提供下文，保留未解状态';
+        };
+        if(step)await step('悬念跟进','用 '+fact.day+' 的事实核对悬念 '+source+'：'+thread.text,compare);
+        else await compare();
+        break;
       }
     }
   }
@@ -383,7 +403,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     }
     return '已检查 '+dates.length+' 个归档日期的 '+checked+' 条任务素材，已有 '+(checked-added-skipped)+' 条评价，补写 '+added+' 条执行评价，空正文跳过 '+skipped+' 条。评价保存在本机，写日记时随相关段落上传。';
   }
-  async function run(mode,signal,progress=()=>{}){
+  async function run(mode,signal,progress=()=>{},step){
     signal.throwIfAborted();
     const selected=await readInteractionSkill('diaryWriting');
     const skill={name:selected.skill,version:selected.version};
@@ -448,14 +468,14 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     if(mode==='review')await flush(signal);
     if(offline)throw offline;
     if(mode==='review')return '本轮补写 '+addedReviews+' 条行动评价。';
-    await followThreads(period,facts.sort((a,b)=>a.at-b.at),signal,syncDrafts,write);
+    await followThreads(period,facts.sort((a,b)=>b.at-a.at),signal,syncDrafts,write,step);
     if(sourceErrors.length)throw Error('已同步 '+synced+' 段手记，部分素材待下次补读：'+sourceErrors.join('；'));
     return synced?'已同步 '+synced+' 段绯月的手记。':'已核对最近七天的手记，本轮上传 0 段。'+(facts.length?'已收录的素材没有需要补写的内容。':'本轮没有读到可入册的事实。');
   }
   return {run,think,api,nags,pages,refresh,explanations,auditAssociations,reserveAudit,
     auditScan:()=>db.prepare("SELECT job FROM schedule WHERE job LIKE 'audit-scan:%' LIMIT 1").get()?.job.slice(11),
     markAuditScan:key=>transaction(()=>{put("DELETE FROM schedule WHERE job LIKE 'audit-scan:%'");put('INSERT INTO schedule VALUES(?,?)','audit-scan:'+key,now());}),
-    saveNag,syncNags,close:()=>db.close(),
+    saveNag,syncNags,claimThread,handledThread,close:()=>db.close(),
     last:job=>db.prepare('SELECT at FROM schedule WHERE job=?').get(job)?.at,
     mark:(job,at)=>put('INSERT OR REPLACE INTO schedule VALUES(?,?)',job,at)};
 }

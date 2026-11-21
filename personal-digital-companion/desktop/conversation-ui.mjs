@@ -243,6 +243,18 @@ function logRow(line){
   let data;
   try{data=JSON.parse(line);}catch{}
   if(!data||typeof data!=='object'){row.append(element('p',line,'fy-clamp'));return row;}
+  if(data.category==='绯月自主行动'){
+    const time=clock.format(new Date(data.started_at));
+    row.append(head(data.category+' · '+data.route,chip(data.stage,'accent'),element('time',time+(data.stage==='未执行'?' JST 调度检查':' JST 开始'))),
+      element('p',data.goal));
+    if(data.stage!=='开始'){
+      const elapsed=Number.isFinite(data.duration_ms)?(data.duration_ms/1000).toFixed(1)+' 秒':'耗时未知';
+      row.append(element('p',[data.finished_at!=null?stamp(data.finished_at)+' 结束':'结束时间未知',elapsed].join(' · '),'fy-meta'),element('p',data.result));
+    }
+    const more=element('details','');
+    more.append(element('summary','行动编号'),element('p',data.action_id+(data.parent_id?' · 所属轮询 '+data.parent_id:'')));
+    row.append(more);return row;
+  }
   const {time,direction,method,route,status:code,duration_ms,local_ms,cloud_ms,error,image,...detail}=data;
   const split=Number.isFinite(local_ms)&&Number.isFinite(cloud_ms);
   const operation=split?detail.operation:undefined;

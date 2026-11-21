@@ -46,10 +46,11 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
   let pending = Promise.resolve();
   let failed = false;
   let indexedDay;
-  function write(event) {
+  function write(event,{recover=false}={}) {
     const time = timestamp.format(clock()).replace(' ', 'T') + '+09:00';
     pending = pending.then(async () => {
       const row={time,...await event},line=JSON.stringify(row)+'\n';
+      if(recover&&await hasReceipt(row))return;
       if(memory){
         const day=row.archive_day??row.image?.day??time.slice(0,10),dir=join(memory.folder(day),'日志');
         await mkdir(dir,{recursive:true});
@@ -63,12 +64,31 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
       });
       if (size && size + Buffer.byteLength(line) > maxBytes) await rename(file, previous);
       await appendFile(file, line, {encoding: 'utf8', mode: 0o600});
-    }).catch(() => { failed = true; });
+    }).catch(() => { failed = true; return false; });
     return pending;
   }
   // 游标只保留文件标识和字节位置。追加日志不改变已打开阅读的分页边界。
   async function readPage(cursor,day=tokyoDay(clock())) {
     await pending;
+    return readStoredPage(cursor,day);
+  }
+  // 恢复前读同一东京日的日志；在写入队列内核对，不能再等待队列自身。
+  async function hasReceipt(row){
+    let cursor=null;
+    do{
+      const page=await readStoredPage(cursor,row.archive_day);
+      for(const line of page.lines){
+        const saved=peek(line);
+        if(saved?.action_id===row.action_id&&saved.category===row.category){
+          if(saved.stage===row.stage)return true;
+          if(saved.stage==='开始')return false;
+        }
+      }
+      cursor=page.next;
+    }while(cursor);
+    return false;
+  }
+  async function readStoredPage(cursor,day){
     const opened=[];
     try {
       const paths=memory?['任务通信.jsonl','历史通信.jsonl'].map(name=>join(memory.folder(day),'日志',name)):[file,previous];

@@ -158,7 +158,7 @@ export async function startDesktop(electron,options={}){
   const memoryIdle=()=>!quitPending&&!work&&!localPool?.active&&!screenQuestion.hasLocalWork&&!screenQuestion.panel&&
     !reminderReview?.panel?.isVisible()&&!taskInbox?.panel?.isVisible()&&tasks.activeCount()===0&&(!tasks.canPoll||tasks.canPoll());
   function interruptMemory(){backgroundController?.abort();}
-  async function memoryJob(kind,signal,manual=false){
+  async function memoryJob(kind,signal,manual=false,step){
     if(backgroundJob||!memoryIdle())return {deferred:true};
     backgroundController=new AbortController();
     const combined=AbortSignal.any([signal,backgroundController.signal]);
@@ -174,8 +174,8 @@ export async function startDesktop(electron,options={}){
         try{return await diary.run(kind,combined,progress);}finally{writing=false;}
       }
       if(kind==='diaryAudit')return nags.pollAudit(combined,{manual});
-      if(kind==='nag')return nags.poll(combined,{manual,progress});
-      await nags.flush();
+      if(kind==='nag')return nags.poll(combined,{manual,progress,step});
+      await nags.flush(combined);
       if(kind==='diary'&&!manual){
         const nextAt=(diary.last(kind)??0)+checks.polls().find(p=>p.id===kind).minutes*60000;
         if(nextAt>Date.now())return {detail:'本周期已写过日记',nextAt};
@@ -183,11 +183,16 @@ export async function startDesktop(electron,options={}){
       combined.throwIfAborted();
       writing=true;syncActivity();
       try{
-        const result=await diary.run(kind,combined,progress);diary.mark(kind,Date.now());return result;
+        const result=await diary.run(kind,combined,progress,step);diary.mark(kind,Date.now());return result;
       }finally{writing=false;}
     };
     backgroundKind=kind;backgroundJob=work();
-    try{return await backgroundJob;}catch(error){if(combined.aborted)return {deferred:true};throw error;}
+    try{return await backgroundJob;}catch(error){
+      if(!combined.aborted)throw error;
+      const state=memoryThought;
+      const count=Number.isFinite(state?.done)&&Number.isFinite(state?.total)?'（'+state.done+'/'+state.total+'）':'';
+      return {deferred:true,detail:state?.stage?'中断时进度：'+state.stage+count:undefined};
+    }
     finally{backgroundJob=null;backgroundKind=null;backgroundController=null;memoryThought=null;syncActivity();}
   }
   function contextualAction(kind){
@@ -218,11 +223,11 @@ export async function startDesktop(electron,options={}){
       if(!quitPending&&!cleaned)await messages.showMessageBox({type:'warning',title,message:kind==='diary'?'这次写日记未能完成。':'执行评价尚未补完，稍后可继续。',detail:error.message,buttons:['确定']});
     }
   }
-  const checks=createReminderChecks({profile,check:signal=>checkDueItems(tasks.weatherRequest,signal,day=>{
+  const checks=createReminderChecks({profile,log:tasks.traffic?.write,check:signal=>checkDueItems(tasks.weatherRequest,signal,day=>{
     if(checks.takeEveningPraise(day))contextualAction('praise-idle');
   }),
     lastRun:id=>diary?.last(id==='nag'?'nag-shown':id),
-    handlers:{...(hasMemory?Object.fromEntries(['diary','diaryAudit','nag','review'].map(k=>[k,s=>memoryJob(k,s)])):{}),weather:()=>weather.check(),tasks:()=>{
+    handlers:{...(hasMemory?Object.fromEntries(['diary','diaryAudit','nag','review'].map(k=>[k,(s,step)=>memoryJob(k,s,false,step)])):{}),weather:()=>weather.check(),tasks:()=>{
       if(!tasks.pollOnce)throw Object.assign(Error('任务轮询未连接'),{code:'NO_CONNECTION'});
       return tasks.pollOnce();
     }},

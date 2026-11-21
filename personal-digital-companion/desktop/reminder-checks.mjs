@@ -3,6 +3,7 @@ import {join} from 'node:path';
 import {tokyoDay} from './conversation-history.mjs';
 
 import {createPollScheduler} from './poll-scheduler.mjs';
+import {createAutonomousAudit} from './autonomous-audit.mjs';
 
 export async function checkDueItems(request,signal,onStudyComplete){
   if(!request)throw Object.assign(Error('云端连接未配置'),{code:'NO_CONNECTION'});
@@ -20,7 +21,7 @@ export async function checkDueItems(request,signal,onStudyComplete){
 
 // 复盘窗口多数只看最新几条：检查记录和提醒每页 8 条，由新到旧。
 const PAGE=8;
-export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,changed=()=>{},now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout}){
+export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,log,changed=()=>{},now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout}){
   const db=new DatabaseSync(join(profile,'reminder-checks.sqlite'));
   db.exec(`CREATE TABLE IF NOT EXISTS checks(
     id INTEGER PRIMARY KEY, day TEXT NOT NULL, at INTEGER NOT NULL, due INTEGER NOT NULL,
@@ -40,7 +41,8 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,c
     changed();
   }
   const due=check&&((signal)=>check(AbortSignal.any([signal,AbortSignal.timeout(30_000)])));
-  const scheduler=createPollScheduler({db,handlers:{due,...handlers},isBusy,changed,now,setTimer,clearTimer,add,
+  const audit=log&&createAutonomousAudit(db,log,now);
+  const scheduler=createPollScheduler({db,handlers:{due,...handlers},isBusy,changed,now,setTimer,clearTimer,add,audit,
     lastRun,weatherLastAt:()=>{const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value).lastCheck;}});
   return {
     start:scheduler.start,enqueue:scheduler.enqueue,polls:scheduler.snapshot,configure:scheduler.configure,
@@ -91,7 +93,7 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,c
         first:due?.first,running:due?.running,pending:scheduler.pending,events,page,pages};
     },
     close(){
-      closed=true;scheduler.close();db.close();
+      closed=true;scheduler.close();audit?.close();db.close();
     },
   };
 }

@@ -273,3 +273,34 @@ node tools/personality-memory-preview.mjs --serve
 本机安装已获确认，本次不登记花园。2026-11-21T11:19:13.9868721+09:00 完成单文件备份和安装。旧进程 23352 正常退出，新进程 28952 从原安装目录启动，桌面快捷方式、登录启动项、实际资料目录及本机接口 /infoguide 核对通过。安装备份为 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/diary-narration-before-239b08df7c604a9e9149cc6a23cec80b。
 
 正式安装文件 SHA256 为 DB1AC778BCD53E5E9761364264FD9A459EE0F1CEADBB993B92D2EA51641AE95E。直接从安装路径加载 Aggressive 9B Vulkan，以两条真实故障相关素材执行 node work/replay-next-diary-material.mjs --installed。两段都有带文字的私语，隔离库独立读回两条来源摘记及一篇正文，重复运行正文和修订号一致。正式安装版的 tools/test-desktop-shell.mjs 通过。正式用户资料的七天全轮与文笔验收仍待实用确认。无数据库迁移、云端部署或花园登记。Git 仅本地留存。
+
+## 2026-11-21 JST · 闲置十分钟、同日悬念去重和自主行动任务日志
+
+用户要求同一天同一个悬念最多处理一次，闲置日记、念叨和本地整理合计最多十分钟，超时等待下一轮轮询。用户追加要求每次轮询及相关动作记录开始时间、目的、耗时、结果，归入「任务日志 → 绯月自主行动」。验收需覆盖多条事实、东京跨日、重启、排队接续、截止时中断以及日志实际读回。
+
+目标为本目录 Windows 安装版。准备时 8765 的进程 17472 及 /infoguide 对应本目录 desktop，登录项指向正式安装树。开发源为 G:/selftool/WebCharacter/personal-digital-companion（工作区 HEAD 3b55903），发布树 Git HEAD 39fd098 加本机现件。候选、逐文件 SHA-256、隔离日志在 G:/selftool/WebCharacter/personal-digital-companion/output/idle-memory-7adc0mxo。逐项用 git diff --no-index 对照 manifest.json 的 path 在本目录与 candidate 的同名文件。当前正式基线未安装独立专题模块和自主看屏，开发版另外在 desktop/topic-memory.mjs 和 emotion-initiative.mjs 接入专题子动作及去重；此次不引入这些尚未安装的功能。
+
+- desktop/personality-diary.mjs、personality-nags.mjs 用本机 schedule 原子登记东京日的悬念篇号和序号。此前同一悬念可能逐条比对多份材料、本日多次恢复念叨；现在先登记，每个悬念当日仅占一次，次日可继续，新事实优先。
+- desktop/poll-scheduler.mjs、reminder-checks.mjs、shell.mjs 为连续闲置队列共享十分钟，超时保留现有草稿，把本轮等待项留待下次正常轮询。所有实际轮询均有开始和结果；繁忙跳过单独标为未执行。
+- desktop/autonomous-audit.mjs、task-traffic-log.mjs 在已有任务日志内增加「绯月自主行动」类别、行动编号、所属轮询编号、目标、东京开始时间、结束、耗时和真实结果。无结束回执的异常退出如实标记未知。desktop/conversation-ui.mjs 及 output/desktop-bundle 同名副本展示日志。
+- 测试涉及 agent/tests/autonomous-idle.test.mjs、agent/tests/personality-memory.test.mjs、tools/test-autonomous-log-electron.mjs。开发使用 node --test 加自主行动、手记、手记质问、主动倾向、专题恢复及 tools/test-reminder-checks.mjs 共 56/56。候选四项新专项通过，使用独立资料与虚拟时钟。实际 Electron 从候选启动 test-autonomous-log-electron.mjs 验证分类、父子目标和耗时结果。当前七面板回归 test-current-titlebar.mjs 通过。
+- 安装目录自带的旧综合测试存在七项失败，基线与候选失败名单一致。包括旧测试沿用 4B、20 行分页和缺失新数据源夹具。另一个旧面板脚本对右键菜单断言必须有标题栏，改用当前项目相应的七面板验收脚本通过。原始日志见 baseline.log、candidate-unit.log、current-panels.log。尚未用用户资料运行十分钟或主动发起念叨；未执行第三方独立审核。
+- 数据：首次启动在本机 reminder-checks.sqlite 新建闲置轮询恢复表和在途行动回执表，使用既有 personality-memory.sqlite 的 schedule 保存悬念当日处理时间。既有数据回填、云端 SQL、云端部署、配置变更均无。保留草稿、资料目录和已有日志。异常退出精确结束时刻无法追溯时显示未知。
+- 安装与恢复：取得本次安装及花园意愿确认后，复核正式监听进程、实际目录及全部原摘要，备份清单项，受控正常退出后复制并核对新摘要；从原入口启动，核对新 PID、资料与 /infoguide，使用临时资料从正式目录重跑日志专项，追加实际时间与版本。异常时正常退出后恢复备份，移除本次新增文件，保留用户资料和独立的本机表。
+- 当前为待确认候选。用户尚未批准此次安装或花园登记。本次无安装提交、推送、花园登记或生产数据库写入。
+
+
+## 闲置限时与自主行动日志 · 两轮检测后的最终安装候选（2026-11-21 JST）
+
+用户本次授权两轮检测，合格后准备部署。沿用上节 Windows 安装目标、业务验收、十二项文件范围和本机数据库说明。此次补正只涉及 desktop/autonomous-audit.mjs、desktop/task-traffic-log.mjs 和 agent/tests/autonomous-idle.test.mjs。最终逐字节差异基线和 SHA-256 以 output/idle-memory-7adc0mxo/manifest.json 为准（位于 G:/selftool/WebCharacter/personal-digital-companion）。实际安装前仍须核对该清单。
+
+第一轮运行 node --test，范围为 autonomous-idle、personality-memory、diary-audit、emotion-initiative、topic-recovery 和 tools/test-reminder-checks.mjs。原有 56 项通过。额外安排“完成后立即关闭、再以同一资料重开”后，同一行动出现两条完成回执。修正恢复写入：仅补传时在现有写队列内按开始的东京日期、行动编号和阶段回读已有回执，跨页查找。已落盘直接确认，缺失时补写。正常写日志仍然直接追加。新增跨东京日期重启、分页、漏写补传和在途表清理用例。修正后开发回归 57/57，安装候选专项 5/5。日志 r1-corrected-development.log、r1-corrected-candidate.log。
+
+第二轮从候选启动实际 Electron：tools/test-autonomous-log-electron.mjs 核对任务日志入口、分类、父子目标、开始、结束和耗时；tools/test-current-titlebar.mjs（开发版面板验收脚本的独立拷贝）验证七面板和分页，均通过。独立资料下再次运行五项自主行动专项和存储、日志读取、登记日志测试，按当前每页 12 行契约为 28 项通过、0 失败、1 跳过（需要主站供应商客户端的独立用例）。见 r2-audit.log、r2-panels.log、r2-storage-current.log。
+
+基线对照：正式版旧综合测试和候选分别都是 20 项中 13 通过、7 项失败，逐条核对失败名单相同。扩查日志存储组另有一个旧断言要求每页 40 行，同样在正式版与候选上失败，现行 12 行分页用例通过。八项均为原有测试问题；不宣称历史套件全绿。未改云端、未用正式用户资料触发模型或业务写入。仅已在正式安装版提供的闲置作业进入本次发布；独立专题整理仍随开发版本接线。
+
+正式实例及部署准备：比对 PID 17472 的 8765 监听、/infoguide、正式目录、资料目录、快捷方式与登录项。十二项安装前及候选摘要已核实；准备目录 pre-install-backup 有九个原文件，三项为新增。恢复时按 manifest.json 原摘要。这是待安装候选；尚未覆盖正式程序、受控重启或登记花园，尚未提交或推送此次修正。第三方独立审核未执行。下一步依照上节取得本次安装授权及花园登记意愿后执行。
+
+
+2026-11-21 13:25:58 JST 本次 Windows 本机安装完成。用户批准安装，并要求验收后先查看花园登记清单。正常关闭 PID 17472，按已审核的十二项摘要安装，从原目录启动 PID 35452。新进程使用原资料目录，8765 的 /infoguide 返回 v3。从正式目录用临时资料重跑 agent/tests/autonomous-idle.test.mjs，5/5 通过；实际 Electron tools/test-autonomous-log-electron.mjs 从任务日志回读自主行动的目标、时间、耗时及父子结果。安装回执及日志在 G:/selftool/WebCharacter/personal-digital-companion/output/idle-memory-7adc0mxo 的 installed.json、installed-acceptance.log、installed-panel.log。恢复用 pre-install-backup 和 manifest.json。花园登记待具体清单确认。

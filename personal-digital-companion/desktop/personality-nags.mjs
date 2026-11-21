@@ -1,3 +1,4 @@
+import {untilAbort} from './chat-budget.mjs';
 import {createDiaryAudit} from './diary-audit.mjs';
 import {createHash} from 'node:crypto';
 import {tokyoDay} from './conversation-history.mjs';
@@ -20,9 +21,10 @@ export function createPersonalityNags({store,show,idle,canContinue=()=>true,onIn
     n.status='意外中断';n.interruptions++;store.saveNag(n);
   }
   let resync=false;
-  function sync(){
-    if(syncJob){resync=true;return syncJob;}
-    if(!stopped)syncJob=(async()=>{do{resync=false;await store.syncNags(lifetime.signal);}while(resync&&!stopped);})().catch(()=>{}).finally(()=>{syncJob=null;});
+  function sync(signal){
+    if(syncJob){if(!signal)resync=true;return untilAbort(syncJob,signal);}
+    const combined=signal?AbortSignal.any([signal,lifetime.signal]):lifetime.signal;
+    if(!stopped)syncJob=(async()=>{do{combined.throwIfAborted();resync=false;await store.syncNags(combined);}while(resync&&!stopped);})().catch(()=>{}).finally(()=>{syncJob=null;});
     return syncJob;
   }
   function save(n){store.saveNag(n);changed();void sync();}
@@ -36,7 +38,7 @@ export function createPersonalityNags({store,show,idle,canContinue=()=>true,onIn
       if(cited.has(p.day+'.'+p.part))continue;
       for(const t of p.threads){
         const id=p.day+'.'+p.part+'/'+t.no;
-        if(!t.asked&&!t.resolved&&!known.has(sourceKey('diary',id)))pool.push({source:'diary',source_id:id,title:t.text,reason:'日记中的未解悬念',stats:''});
+        if(!t.asked&&!t.resolved&&!known.has(sourceKey('diary',id))&&!store.handledThread(id))pool.push({source:'diary',source_id:id,title:t.text,reason:'日记中的未解悬念',stats:''});
       }
     }
     const byId=new Map();
@@ -94,9 +96,10 @@ export function createPersonalityNags({store,show,idle,canContinue=()=>true,onIn
     if(!v.reply||!v.evaluation||!v.mood)throw Error('回应尚未生成');
     return v;
   }
-  async function poll(signal,{manual=false,progress=()=>{}}={}){
+  async function poll(signal,{manual=false,progress=()=>{},step}={}){
     if(active||!idle())return {deferred:true};
-    await sync();
+    await sync(signal);
+    signal.throwIfAborted();
     let n=pending();
     if(n?.source==='audit')return manual?audit.poll(signal,{manual}):'手记质问正在待确认';
     if(manual&&!n)return '没有待续事项';
@@ -113,6 +116,11 @@ export function createPersonalityNags({store,show,idle,canContinue=()=>true,onIn
         n={...source,id:'nag-'+createHash('sha256').update(sourceKey(source.source,source.source_id)).digest('hex'),created_at:iso(now()),
           revision:0,talk:[],turns:0,questions:0,interruptions:0,status:'提问中'};
       }
+    }
+    if(!manual&&n.source==='diary'){
+      const lastShown=n.talk.findLast(t=>t.who==='绯月');
+      const shownAt=Date.parse(lastShown?.at);
+      if((Number.isFinite(shownAt)&&tokyoDay(shownAt)===tokyoDay(now()))||!store.claimThread(n.source_id))return '这个悬念今天已处理';
     }
     if(n.talk.at(-1)?.who==='你'){
       progress({stage:'整理上次的回应'});

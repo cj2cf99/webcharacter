@@ -251,7 +251,7 @@ test('气泡没显示不登记，候选先排除已问和退款，再从金额�
   records[1].description='退款';records[2].spendDate='2026-11-18';
   const archive=[{id:'done',source:'paylog',source_id:'P0',status:'已解释'}];
   let displayed=false,stored=0;
-  const s={nags:()=>archive,pages:()=>[{day,part:1,threads:[{no:1,text:'已问',asked:true},{no:2,text:'待问',asked:false,resolved:false}]}],
+  const s={nags:()=>archive,handledThread:()=>false,pages:()=>[{day,part:1,threads:[{no:1,text:'已问',asked:true},{no:2,text:'待问',asked:false,resolved:false}]}],
     last:()=>null,mark(){},saveNag(n){stored++;n.revision++;},syncNags:async()=>{},think:async()=>({question:'书买好了？',evaluation:'惦记着',mood:'好奇'}),
     api:async()=>({records,nextCursor:null,complete:false})};
   let opened;

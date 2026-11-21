@@ -470,3 +470,12 @@ Qwen 会话通过 local-model-process.mjs 中的 systemPrompt 加载绯月人设
 本机安装已获确认，本次不登记花园。2026-11-21T11:19:13.9868721+09:00 完成单文件备份和安装。旧进程 23352 正常退出，新进程 28952 从原安装目录启动，桌面快捷方式、登录启动项、实际资料目录及本机接口 /infoguide 核对通过。安装备份为 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/diary-narration-before-239b08df7c604a9e9149cc6a23cec80b。
 
 正式安装文件 SHA256 为 DB1AC778BCD53E5E9761364264FD9A459EE0F1CEADBB993B92D2EA51641AE95E。直接从安装路径加载 Aggressive 9B Vulkan，以两条真实故障相关素材执行 node work/replay-next-diary-material.mjs --installed。两段都有带文字的私语，隔离库独立读回两条来源摘记及一篇正文，重复运行正文和修订号一致。正式安装版的 tools/test-desktop-shell.mjs 通过。正式用户资料的七天全轮与文笔验收仍待实用确认。无数据库迁移、云端部署或花园登记。Git 仅本地留存。
+
+## 2026-11-21 JST · 闲置轮询与「绯月自主行动」任务日志
+每个悬念按篇号与序号在调用推理前领取当日名额，未匹配、被打断和重启均保留记录。日记优先比对最近一条尚未比较的新事实。闲置日记、念叨、手记核对、行动评价及其中的专题整理共用十分钟，超时撤下待执行项并持久保存下一次允许启动的轮询时间。任务日志按行动编号记录开始、目标、结束、耗时与实际结果，悬念与专题子动作引用所属轮询。异常退出后缺少回执的行动在恢复时标记中断。沿用项目手记设计、TASK_TEMPLATE_PREVIEW.md 的备忘录索引及全局 FRAMEWORK_PREFERENCES.md 的本地存储、东京时间和按需展示约定。
+开发专项 56/56，安装基线候选四项新专项、日志实际面板和当前七面板检查通过。候选清单在 output/idle-memory-7adc0mxo/manifest.json。正式基线没有开发版独立专题模块；本次候选覆盖已有日记、念叨和本地补评，专题的同类接线已在开发工作区验证。安装前证据及既有测试情况见正式根目录发布审核记录。
+
+2026-11-21 JST 两轮复验发现并修正了完成后立即退出时的重复回执。恢复仅补写缺少的行动结束记录；跨东京日期和分页均已验证。开发 57/57，安装候选专项 5/5，真实任务日志与七面板通过。最终回归、历史夹具限制及候选备份见正式目录 RELEASE_REVIEW.md 的两轮检测记录和 output/idle-memory-7adc0mxo。本次为部署准备。
+
+
+2026-11-21 13:25:58 JST 本次 Windows 本机安装完成。用户批准安装，并要求验收后先查看花园登记清单。正常关闭 PID 17472，按已审核的十二项摘要安装，从原目录启动 PID 35452。新进程使用原资料目录，8765 的 /infoguide 返回 v3。从正式目录用临时资料重跑 agent/tests/autonomous-idle.test.mjs，5/5 通过；实际 Electron tools/test-autonomous-log-electron.mjs 从任务日志回读自主行动的目标、时间、耗时及父子结果。安装回执及日志在 G:/selftool/WebCharacter/personal-digital-companion/output/idle-memory-7adc0mxo 的 installed.json、installed-acceptance.log、installed-panel.log。恢复用 pre-install-backup 和 manifest.json。花园登记待具体清单确认。
