@@ -1,4 +1,6 @@
+import {requestsResource,resourceParams} from '../agent/assistant/resource-registration.mjs';
 import {serverTaskSteps,explicitRegistration,businessDate} from './server-registration-plan.mjs';
+import {datePattern} from './calendar-date.mjs';
 import {readFile, rename, unlink, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {validateParameters} from '../agent/tasks/parameters.mjs';
@@ -154,7 +156,9 @@ export function createServerTaskCommand({profile,tasks,localModel,dialog,readSki
           [/吃喝|饮食/u,'pc.food.create'],[/运动记录/u,'pc.exercise.create'],[/撸管/u,'pc.event.create'],
           [/长期(?:计划|任务)/u,'pc.planner.hours'],[/提醒/u,/移到|移动|挪到|调整到|改到|改为/u.test(subject)?'pc.reminders.move':'pc.reminders.create']];
         const matches=hints.filter(([pattern])=>pattern.test(subject));
-        const type=exercise?'pc.exercise.create':matches.length===1?matches[0][1]:null;
+        const resource=requestsResource(command);
+        if(resource&&!templates.some(t=>t.type==='pc.resources.create'))throw Error('当前服务器或目标电脑尚未提供鱼与熊掌资源登记模板。');
+        const type=resource?'pc.resources.create':exercise?'pc.exercise.create':matches.length===1?matches[0][1]:null;
         // 旧服务器只有自定义模板时，继续使用其真实清单。
         const candidates=type&&templates.some(t=>t.type===type)?templates.filter(t=>t.type===type):templates;
         if(!candidates.length)throw Error('当前服务器没有运动登记模板。');
@@ -164,10 +168,11 @@ export function createServerTaskCommand({profile,tasks,localModel,dialog,readSki
         if(!plan||plan.error)throw Error('本地模型未能生成任务方案，请稍后再试。');
         if(typeof plan.question==='string'&&plan.question.trim())return {question:plan.question.trim()};
         if(['pc.reminders.move','pc.reminders.create'].includes(plan.type)&&plan.params?.deadline){
-          const date=command.match(/今天|明天|\d{4}-\d{2}-\d{2}|\d{4}年\d{1,2}月\d{1,2}日?/u)?.[0];
-          if(!date)throw Error('请明确提醒的目标日期。');
-          plan.params.deadline=businessDate(date,now);
+          const dates=[...new Set(subject.match(new RegExp(datePattern,'gu'))??[])];
+          if(dates.length!==1)throw Error('请明确提醒的目标日期。');
+          plan.params.deadline=businessDate(dates[0],now);
         }
+        if(plan.type==='pc.resources.create'&&plan.params)plan.params=resourceParams(command,plan.params,true);
         if(plan.type===PC_IMAGE_GENERATE)plan.params={prompt:command.trim()};
         const template=candidates.find(t=>t.type===plan.type);
         if(!template||!validateParameters(template.parameter_spec,plan.params).valid||(exercise&&plan.params.body!==exercise[1]))

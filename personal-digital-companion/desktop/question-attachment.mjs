@@ -26,6 +26,8 @@ export async function readAttachment(file){
       if(validAttachment(attachment)){
         if(['image/png','image/jpeg','image/webp'].includes(file.type)){
           attachment.originalBytes=new Uint8Array(await file.arrayBuffer());
+        }else{
+          attachment.galleryBytes=new Uint8Array(await file.arrayBuffer());
         }
         return attachment;
       }

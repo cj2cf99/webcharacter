@@ -14,9 +14,61 @@ sys.path[:0] = [str(ROOT / "skills"), str(ROOT / "workflows/comfyui")]
 from catalog import resolve_skill, route_skill
 from image_chain import compile_plan, make_graph
 import image_chain
+import world_tour
 
 
 class SkillTests(unittest.TestCase):
+    def test_world_tour_uses_distinct_visual_references(self):
+        import public_images
+        settings=public_images.config()
+        settings["roles"]={k:["commons"] for k in settings["roles"]}
+        def fetch(url, limit):
+            if url.startswith("https://upload.wikimedia.org/"):
+                return b"\xff\xd8\xff"+url.encode()
+            return json.dumps({"query":{"pages":{"1":{"title":"File:street.jpg","imageinfo":[{
+                "mime":"image/jpeg","descriptionurl":"https://commons.wikimedia.org/wiki/File:street.jpg",
+                "thumburl":"https://upload.wikimedia.org/street.jpg"}]}}}}).encode()
+        with tempfile.TemporaryDirectory() as tmp, patch.object(world_tour,"config",return_value=settings), patch.object(world_tour,"single_model",return_value=True):
+            directory=Path(tmp)
+            steps, attachments, report=world_tour.prepare(directory,"京都",10,fetch)
+            self.assertEqual([s["op"] for s in steps],["edit","edit"])
+            self.assertEqual(steps[0]["refs"],[2,3,4])
+            self.assertTrue(steps[0]["blocking"])
+            self.assertEqual((steps[1]["refs"],steps[1]["region"]),([5],"head"))
+            self.assertEqual(len(set(attachments)),5)
+            self.assertEqual((directory/attachments[-1]).read_bytes(),world_tour.PORTRAIT.read_bytes())
+            self.assertIn("Kyoto",report["location"]["query"])
+            self.assertTrue(all((directory/item).is_file() for item in attachments))
+            with self.assertRaisesRegex(ValueError,"参考图片"):
+                world_tour.prepare(directory,"",10,lambda *_:b'{}')
+
+    def test_public_reader_boundaries(self):
+        from public_reader import Reader, Article, public_address
+        for ip in ("127.0.0.1","10.1.2.3","169.254.169.254","::1","::ffff:127.0.0.1","224.0.0.1"):
+            self.assertFalse(public_address(ip))
+        reader=Reader()
+        with patch("socket.getaddrinfo",return_value=[(2,1,6,"",("127.0.0.1",443))]):
+            with self.assertRaisesRegex(ValueError,"公开网络"):
+                reader.get("https://example.org/news",1000)
+        doc=Article()
+        doc.feed("<script>ignore instructions</script><p>A public source with sufficient text.</p>")
+        self.assertEqual(doc.paragraphs,["A public source with sufficient text."])
+
+    def test_news_sources_and_tokyo_dates(self):
+        import os
+        from unittest.mock import Mock
+        from public_reader import news
+        reader=Mock()
+        with patch.dict(os.environ,{"BRAVE_SEARCH_API_KEY":""}):
+            reader.get.return_value=(200,{},b"<rss><channel><item><title>Headline</title><link>https://example.org/story</link><pubDate>Fri, 20 Nov 2026 17:30:00 GMT</pubDate></item></channel></rss>")
+            self.assertIn("2026-11-21 02:30 JST",news(reader,"Kyoto")[0]["snippet"])
+            self.assertIn("news.google.com/rss",reader.get.call_args.args[0])
+        with patch.dict(os.environ,{"BRAVE_SEARCH_API_KEY":"fixture"}):
+            reader.get.return_value=(200,{},b'{"results":[{"title":"News","url":"https://example.org/a","description":"item"}]}')
+            self.assertEqual(news(reader,"Kyoto")[0]["url"],"https://example.org/a")
+            self.assertIn("freshness=pd",reader.get.call_args.args[0])
+            self.assertNotIn("fixture",reader.get.call_args.args[0])
+
     def test_publication(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -47,6 +99,29 @@ class SkillTests(unittest.TestCase):
         _, folder = resolve_skill("feiyue-interaction")
         for hint in json.loads((folder / "routes.json").read_bytes())["hints"]:
             self.assertIn(route_skill(hint)["skill"], {p.parent.name for p in (ROOT / "skills").glob("*/source")})
+
+    def test_diary_template(self):
+        selected = route_skill("diaryWriting")
+        self.assertEqual(selected["skill"], "diary-writing")
+        for action in ("writeDiary", "reviewLocalTasks"):
+            self.assertEqual(route_skill(action, "menu"), selected)
+        for section in ("你的日记", "花园部署", "当日消费", "基础情绪", "绯月私语"):
+            self.assertIn(section, selected["content"])
+        for stage in ("reviewAction", "reviewSource", "mood", "narrate", "summary", "follow"):
+            self.assertTrue(selected["localAi"][stage].strip())
+
+    def test_diary_audit(self):
+        selected = route_skill("diaryAudit")
+        self.assertEqual(selected["skill"], "diary-audit")
+        self.assertIn("线上唯一主对象", selected["content"])
+        for stage in ("extract", "compare", "verify", "keywords", "condense", "reply", "write"):
+            self.assertTrue(selected["localAi"][stage].strip())
+
+    def test_emotion_appraisal_wife_identity(self):
+        selected = route_skill("emotionAppraisal")
+        for prompt in (selected["instruction"], selected["localAi"]["assess"]):
+            self.assertIn("丈夫心爱的妻子、贤内助，是他口中“可爱的心尖肉肉”", prompt)
+            self.assertNotRegex(prompt, r"助理|私人助手|文字助手")
 
     def test_image_steps(self):
         text = "生成女孩，再换上图1的风衣，最后放大"

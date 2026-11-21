@@ -9,6 +9,7 @@
 | 交互分流、按需查找子技能 | feiyue-interaction | 根据宿主判断的用途或菜单动作选子技能 |
 | 对话 | personal-conversation | 原有本地思索、回复及已有回退 |
 | 图片、文件或所选屏幕 | evidence-reading | 问答或提取待核对的登记字段 |
+| 鱼与熊掌资源登记 | resource-registration | 标题概括资源，正文保留原文，默认其他，单独提取网址后确认 |
 | 吃喝、运动、一键事件、随手记、日记、新提醒 | record-submission | 使用现有六类模板，逐条回执 |
 | 今日任务、已有提醒的查询和修改 | reminder-review | 使用现有列表和整组修改审批 |
 | 联网搜索、三地天气 | public-lookup、weather-lookup | 各自调用已有查询接口 |
@@ -16,9 +17,14 @@
 | 接取、执行、补传、中断恢复 | task-lifecycle | 现有任务链、设备归属和确认流程 |
 | 动作、依附、设置、显示、连接、重启、退出 | desktop-controls | 对话或菜单中已存在的入口 |
 | 对话与任务复盘、日志、归档 | activity-review | 已有日期复盘和日志视图 |
+| 绯月手记和行动评价 | [diary-writing](diary-writing/source/SKILL.md) | 手动与定时共用一个版本，按东京日期取材，先定情绪，再写叙述与私语 |
 | 本机生图、重绘、局部指令编辑、高清放大 | image-task-chain、comfy-image-workflows | 按步骤保存中间图并返回最终 PNG |
 
 ## 更新和查找
+
+更新绯月手记范本时，同时核对 diary-writing/source/SKILL.md 的成篇范例和同目录 local-ai.json 的六个阶段。每轮手记或补评通过 diaryWriting 读取一次技能快照，Aggressive 9B 按阶段接收短指令，推理日志记录技能名和版本。手动「看绯月写日记」与定时手记沿用同一入口。
+
+手记质问走 `diaryAudit`，使用 `diary-audit` 的摘录、比对、本机关键词联想、回答完整度判定和收笔指令。引文可以跨篇，线上唯一主篇排在引文首位。
 
 编辑对应稳定目录内的 `source/`。下次解析此 skill 时比较全部源文件的内容；内容有变化就生成新的快照并原子更新 `latest.json`。版本按 1.0、1.1、…、1.9、2.0 递增。重复读取相同内容保持同一版本。历史快照位于 `versions/<稳定标识>-v<主版>-<小版>/`，每份 SKILL.md 的名称和标题都带版本号。已发布快照作为历史保留。
 

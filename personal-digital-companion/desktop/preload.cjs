@@ -6,6 +6,10 @@ function subscribe(channel,callback){
   return ()=>ipcRenderer.removeListener(channel,listener);
 }
 const api={
+  managedActions:process.argv.includes('--feiyue-actions'),
+  onAction:callback=>subscribe('desktop:action',callback),
+  finishAction:(ticket,ok)=>ipcRenderer.send('desktop:action-finished',{ticket,ok}),
+  onIdleContext:callback=>subscribe('desktop:idle-context',callback),
   getSettings:()=>ipcRenderer.invoke('pc:get'),
   saveSettings:(config,domain)=>ipcRenderer.invoke('pc:save',{config,domain}),
   importResource:kind=>ipcRenderer.invoke('pc:import',kind),
@@ -36,6 +40,7 @@ const api={
   onPosture:callback=>subscribe('desktop:posture',callback),
   onPointer:callback=>subscribe('desktop:pointer',callback),
   onVisible:callback=>subscribe('desktop:visible',callback),
+  onThought:callback=>subscribe('desktop:thought',callback),
   onWork:callback=>subscribe('desktop:work',callback),
 };
 if(process.argv.includes('--feiyue-benchmark')){

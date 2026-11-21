@@ -169,8 +169,12 @@ test('启动时有桌面工作或上次执行结果待补传，自动轮询按�
     pollerOptions:{setTimer:(fn,ms)=>{assert.equal(ms,900_000);next=fn;return 1;},clearTimer(){}}});
   try{
     runtime.startPolling();await tick();assert.deepEqual(calls,[]);
+    assert.equal(runtime.tasksIdle(),false);
     runtime.executor.markUploaded('prior');
-    busy=true;next();await tick();assert.deepEqual(calls,[]);
+    busy=true;
+    assert.equal(runtime.canPoll(),false);
+    assert.equal(runtime.tasksIdle(),true,'自己的质问气泡占用前台时，仍能判断其他任务是否空闲');
+    next();await tick();assert.deepEqual(calls,[]);
     busy=false;runtime.cancelRestart();runtime.cancelQuitCheck();await tick();assert.deepEqual(calls,[]);
     next();await tick();
     assert.deepEqual(calls,[`/api/devices/${identity.device_id}`,`/api/devices/${identity.device_id}/pending`]);
@@ -188,12 +192,14 @@ test('P05：空闲轮询自动领取，真实线程执行回传，未知类型�
   insert.run('auto', 'mock.unit', identity.device_id, '{"value":"x"}', new Date().toISOString());
   insert.run('unknown', 'not.installed', identity.device_id, '{}', new Date().toISOString());
   let nextTimer,polls=0;
+  const progress=[];
+  const reports=[];
   const reading=Promise.withResolvers(),release=Promise.withResolvers();
-  const runtime = await createDesktopTasks({ profile, request:async(path,options)=>{
+  const runtime = await createDesktopTasks({ profile,onAutomaticProgress:value=>progress.push(value),request:async(path,options)=>{
     if(path.endsWith('/pending'))polls++;
     if(path==='/api/tasks/auto'&&options.method==='GET'){reading.resolve();await release.promise;}
     return request(path,options);
-  }, dialog: { async showMessageBox() { return { response: 0 }; } },
+  }, dialog: { async showMessageBox(options) { reports.push(options);return { response: 0 }; } },
     handlerModule: new URL('./fixtures/thread-handlers.mjs', import.meta.url).href,
     pollerOptions: { setTimer: fn => { nextTimer = fn; return 1; }, clearTimer: () => { nextTimer = null; } } });
   try {
@@ -205,6 +211,11 @@ test('P05：空闲轮询自动领取，真实线程执行回传，未知类型�
     release.resolve();
     for(let i=0;i<400&&!nextTimer;i++)await new Promise(resolve=>setTimeout(resolve,5));
     assert.ok(nextTimer);
+    // 轮询在领取确认后即结束，执行与汇报随后完成。
+    await runtime.settled();await new Promise(resolve=>setTimeout(resolve,30));
+    assert.deepEqual(progress.map(value=>value?.stage??null),['正在领取','正在本机执行',null]);
+    assert.equal(reports.filter(r=>r.title==='绯月 · 自动任务汇报').length,1);
+    assert.match(reports.find(r=>r.title==='绯月 · 自动任务汇报').detail,/云端已确认收到结果/);
     nextTimer();await tick();assert.equal(polls,2);
     assert.equal(sqlite.prepare("SELECT status FROM tasks WHERE task_id='auto'").get().status, 'COMPLETED');
     assert.equal(sqlite.prepare("SELECT status FROM tasks WHERE task_id='unknown'").get().status, 'PENDING');
@@ -259,4 +270,55 @@ test('P07：本机配置可映射主站扩展前缀，不需要改内部任务�
     for (let i = 0; i < 50 && !scheduled; i++) await tick();
     assert.deepEqual(paths, [`/api/companion/devices/${identity.device_id}`, `/api/companion/devices/${identity.device_id}/pending`]);
   } finally { await runtime.stop(); rmSync(profile, { recursive: true }); }
+});
+
+test('桌宠自动领取任一电脑和指定本机的任务，完成后从云端清单移除',async t=>{
+  const {request}=fixture(t);
+  const profile=mkdtempSync(join(tmpdir(),'companion-inbox-'));
+  let legacy=false,reads=[];
+  const runtime=await createDesktopTasks({profile,request:(path,options)=>{
+    if(path.includes('/tasks?')){
+      reads.push(new URLSearchParams(path.split('?')[1]).get('scope'));
+      if(legacy&&reads.at(-1)==='standalone')return Response.json({error:{code:'INVALID_OFFSET'}},{status:400});
+    }
+    return request(path,options);
+  },dialog:{},
+    handlerModule:new URL('./fixtures/thread-handlers.mjs',import.meta.url).href});
+  t.after(async()=>{await runtime.stop();rmSync(profile,{recursive:true});});
+  const deviceId=runtime.identity.device_id;
+  await request('/api/devices/'+deviceId,{method:'PUT',body:JSON.stringify({computer_name:'INBOX TEST'})});
+  async function create(target_device_id){
+    const {submission_id}=await (await request('/api/task-submissions',{method:'POST'})).json();
+    const response=await request('/api/tasks',{method:'POST',body:JSON.stringify({
+      submission_id,type:'mock.unit',target_device_id,params:{value:'test'},
+    })});
+    assert.equal(response.status,201);
+    return (await response.json()).task_id;
+  }
+  const fixed=await create(deviceId),pool=await create('all'),elsewhere=await create(other);
+  const before=await runtime.taskInbox.tasks(null);
+  assert.equal(before.standalone,true);
+  assert.deepEqual(reads,['standalone']);
+  assert.deepEqual(new Set(before.tasks.map(task=>task.task_id)),new Set([fixed,pool]));
+  assert.ok(before.tasks.every(task=>task.can_claim));
+  legacy=true;
+  const older=await runtime.taskInbox.tasks();
+  assert.equal(older.standalone,false);
+  assert.deepEqual(older.tasks,before.tasks);
+  assert.deepEqual(reads,['standalone','standalone',null]);
+  legacy=false;
+  // 有名额就接：一轮轮询把两个可做的任务都接下，本机逐个执行。
+  await runtime.pollOnce();await runtime.settled();
+  const remote=id=>request('/api/tasks/'+id).then(response=>response.json());
+  assert.equal((await Promise.all([fixed,pool].map(remote))).filter(task=>task.status==='COMPLETED').length,2);
+  await runtime.pollOnce();await runtime.settled();
+  for(const id of [fixed,pool]){
+    const task=await remote(id);
+    assert.equal(task.status,'COMPLETED');
+    assert.equal(task.target_device_id,deviceId);
+    assert.equal(runtime.executor.getTask(id).attempt_count,1);
+  }
+  assert.equal((await remote(elsewhere)).status,'PENDING');
+  assert.deepEqual((await runtime.taskInbox.tasks()).tasks,[]);
+  assert.deepEqual(runtime.taskInbox.local(),[]);
 });

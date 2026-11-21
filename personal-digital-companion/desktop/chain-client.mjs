@@ -70,7 +70,7 @@ export function createChainClient({profile,request,deviceId,executor,executeClai
   return {
     list:after=>call(`/api/chains?device_id=${deviceId}${after?`&after=${encodeURIComponent(after)}`:''}`),
     get:id=>call(`/api/chains/${encodeURIComponent(id)}?device_id=${deviceId}`),
-    pending:()=>Object.entries(saved).filter(([id])=>!active.has(id)).map(([request_id,item])=>({request_id,task_id:item.task_id,action:item.body.action||(item.url.endsWith('/stop')?'stop':'claim')})),
+    pending:()=>Object.entries(saved).filter(([id])=>!active.has(id)).map(([request_id,item])=>({request_id,task_id:item.task_id,title:item.title,action:item.body.action||(item.url.endsWith('/stop')?'stop':'claim')})),
     activeCount:()=>active.size,
     unacknowledged:()=>Object.values(saved).some(item=>!item.receipt),
     forgetTask:id=>{for(const [key,item] of Object.entries(saved))if(item.task_id===id||item.receipt?.claimReceipt?.task?.task_id===id)delete saved[key];persist();},

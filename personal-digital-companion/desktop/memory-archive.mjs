@@ -95,7 +95,7 @@ export function createMemoryArchive(root=memoryRoot){
       }catch{entry.error='原图未能归档';problems.push('第 '+step+' 步原图未能归档');}
       steps.push(entry);
     }
-    const report={job:row.job,...(row.serverTaskId?{serverTaskId:row.serverTaskId}:{}),version:row.version,workflowVersion:row.workflowVersion,steps,state:row.state,error:row.error};
+    const report={job:row.job,...(row.serverTaskId?{serverTaskId:row.serverTaskId}:{}),...(row.tour?{tour:row.tour}:{}),version:row.version,workflowVersion:row.workflowVersion,steps,state:row.state,error:row.error};
     const at=Date.parse(row.updated)||Date.parse(steps.at(-1)?.finished)||row.at;
     const turn={id:row.job,at:row.at,answeredAt:at,question:row.original,state:row.state==='done'?'answer':'error',
       text:[row.serverTaskId&&'服务器任务 '+row.serverTaskId,row.text,...problems].filter(Boolean).join('\n'),report};
@@ -118,7 +118,7 @@ export function createMemoryArchive(root=memoryRoot){
     const turn=raw&&JSON.parse(raw);
     return turn?.report?.job===job?turn:null;
   }
-  async function taskHistory(taskId){
+  async function archiveDays(){
     const dates=[];
     for(const year of await optional(readdir(root))??[]){
       if(!/^\d{4}$/.test(year))continue;
@@ -129,8 +129,11 @@ export function createMemoryArchive(root=memoryRoot){
         }
       }
     }
+    return dates.sort();
+  }
+  async function taskHistory(taskId){
     const rows=[];
-    for(const date of dates)rows.push(...(await readEvents(date)).filter(row=>row.task_id===taskId));
+    for(const date of await archiveDays())rows.push(...(await readEvents(date)).filter(row=>row.task_id===taskId));
     return rows.sort((a,b)=>a.at-b.at);
   }
   const writing=new Map();
@@ -156,7 +159,7 @@ export function createMemoryArchive(root=memoryRoot){
     return work.finally(()=>{if(writing.get(day)===work)writing.delete(day);});
   }
   return {root,folder,save,read,latest:async day=>(await read(day))[0],storeImage,thumbnail,original,archiveImageTask,readImageReport,taskImage,
-    readTasks,taskHistory,refreshIndex,async saveTasks(day,rows,{index=true}={}){
+    readTasks,taskHistory,archiveDays,refreshIndex,async saveTasks(day,rows,{index=true}={}){
       await atomicFile(join(folder(day),'任务','执行记录.json'),JSON.stringify(rows,null,2)+'\n');
       if(index)await refreshIndex(day);
     }};

@@ -21,7 +21,7 @@ async function fixture(t, pool, authorize) {
   }), env);
 }
 
-const isProbe=input=>input.messages.length===1&&input.messages[0].role==='user'&&input.messages[0].content==='请直接恢复你好，我在';
+const isProbe=input=>input.messages.at(-1)?.role==='user'&&input.messages.at(-1).content==='请直接恢复你好，我在';
 const greeting=(provider,text='你好，我在')=>({value:{provider,model:provider+'-test',text,finishReason:'stop'}});
 
 const food = {type: 'hu-shi.food.create', params: {body: '隔离结果'}};
@@ -49,14 +49,16 @@ test('限流、探测答非所问及供应商取消后切换，默认可到付�
   const {ai, chain} = await (await call('/api/assistant/recording-plan', {method: 'POST',
     headers: {Authorization: 'do-not-log'}, body: JSON.stringify({text: '私密用例文本'})})).json();
   assert.equal(chain.nodes.length, 1);
-  assert.deepEqual(providerCalls, ['cloudflare', 'gemini', 'groq', 'deepseek','deepseek']);
-  assert.deepEqual(ai.attempts.filter(row=>row.stage==='probe').map(row=>row.code).sort(), ['CANCELLED','OK','PROBE_MISMATCH']);
-  assert.deepEqual(ai.attempts.filter(row=>row.stage==='request').map(row=>row.code),['RATE_LIMITED','OK']);
+  assert.deepEqual(providerCalls, ['cloudflare', 'gemini', 'groq', 'deepseek','gemini','deepseek']);
+  assert.deepEqual(ai.attempts.filter(row=>row.stage==='probe').map(row=>row.code).sort(), ['CANCELLED','OK','OK']);
+  assert.deepEqual(ai.attempts.filter(row=>row.stage==='request').map(row=>row.code),['RATE_LIMITED','INVALID_AI_RESPONSE','OK']);
   assert.equal(ai.attempts[0].upstream_status, 429);
-  assert.deepEqual(cloudLog.mock.calls.map(call => call.arguments[0].trace_id), Array(5).fill(ai.trace_id));
+  assert.deepEqual(cloudLog.mock.calls.map(call => call.arguments[0].trace_id), Array(6).fill(ai.trace_id));
   await traffic.flush();
   const written = await readFile(traffic.file, 'utf8');
-  assert.doesNotMatch(written, /私密用例文本|隔离结果|do-not-log/);
+  assert.doesNotMatch(written, /私密用例文本|do-not-log/);
+  assert.match(ai.attempts.find(row=>row.code==="INVALID_AI_RESPONSE").refusal_response,/隔离结果/);
+  assert.doesNotMatch(JSON.stringify(cloudLog.mock.calls.map(c=>c.arguments)),/隔离结果/);
   const events = written.trim().split('\n').map(JSON.parse);
   assert.deepEqual(events.map(event => event.direction), ['send', 'receive']);
   assert.equal(events[0].request_id, events[1].request_id);
@@ -103,7 +105,7 @@ test('任务、决定与上传结果的请求回执包含标识，离线也留�
   assert.equal(offlineResult.error, 'TIMEOUT');
 });
 
-test('文字与登记共用五小时冷却，跨请求、跨入口跳过；到期先探测；账户隔离',async t=>{
+test('上次可用的 API 在一小时内供登记和对话优先使用，按账户隔离',async t=>{
   t.mock.method(console,'info',()=>{});
   t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-11-19T12:00:00Z')});
   const calls=[];
@@ -127,16 +129,13 @@ test('文字与登记共用五小时冷却，跨请求、跨入口跳过；到�
   assert.deepEqual(await ask(true),[['gemini','request']]);
   broken=false;
   assert.deepEqual(await ask(true,'two'),[['cloudflare','request']]);
-  t.mock.timers.tick(5*3600000-1);
-  assert.deepEqual(await ask(true),[['gemini','probe'],['gemini','request']]);
-  // 一小时首选仍然有效。两小时后它到期，同时五小时冷却也已结束。
-  t.mock.timers.tick(2*3600000);
-  const recovered=await ask();
-  assert.deepEqual(recovered.slice(0,2),[['cloudflare','probe'],['gemini','probe']]);
-  assert.equal(recovered[2][1],'request');
+  t.mock.timers.tick(3600000-1);
+  assert.deepEqual(await ask(true),[['gemini','request']]);
+  t.mock.timers.tick(1);
+  assert.deepEqual(await ask(),[['cloudflare','request']]);
 });
 
-test('并行三路中最快的正确回复立即触发一次原问题，慢探测和错误问候均不接收正文',async t=>{
+test('并行三路中最早返回正常文本的接口立即处理正文，问候内容不影响接通',async t=>{
   t.mock.method(console,'info',()=>{});
   let finishSlow,showStarted;
   const businessStarted=new Promise(resolve=>showStarted=resolve), calls=[];
@@ -147,18 +146,18 @@ test('并行三路中最快的正确回复立即触发一次原问题，慢探�
       if(provider==='a')return {error:'TIMEOUT'};
       if(isProbe(input)){
         if(provider==='b')await new Promise(resolve=>finishSlow=resolve);
-        return greeting(provider,provider==='c'?'你好，我在。':'你好，我在');
+        return greeting(provider,provider==='c'?'你好，我不在。':'“你好, 我在。”');
       }
       showStarted(provider);return generated(provider,{reply:'罗马',proposal:null});
     }
   });
   const result=request('/api/assistant/message',{method:'POST',body:JSON.stringify({messages:[{role:'user',content:'私密的原问题'}]})});
-  assert.equal(await businessStarted,'d');
-  assert.deepEqual(calls,[['a','request'],['b','probe'],['c','probe'],['d','probe'],['d','request']]);
+  assert.equal(await businessStarted,'c');
+  assert.deepEqual(calls,[['a','request'],['b','probe'],['c','probe'],['d','probe'],['c','request']]);
   finishSlow();assert.equal((await result).status,200);
 });
 
-test('全组失败分批探测，五小时内再次询问零模型调用，取消请求不误封',async t=>{
+test('全组失败结束本轮；下一问立即从头重试，已取消请求零调用',async t=>{
   t.mock.method(console,'info',()=>{});
   t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-11-20T00:00:00Z')});
   const calls=[];
@@ -169,16 +168,14 @@ test('全组失败分批探测，五小时内再次询问零模型调用，取�
   assert.equal(calls.length,0);
   assert.equal((await ask()).status,504);
   assert.deepEqual(calls,[['a',false],['b',true],['c',true],['d',true],['e',true]]);
-  calls.length=0;t.mock.timers.tick(5*3600000-1);
-  assert.equal((await (await ask()).json()).error.code,'AI_COOLDOWN');assert.equal(calls.length,0);
-  t.mock.timers.tick(1);assert.equal((await ask()).status,504);
-  assert.deepEqual(calls,[['a',true],['b',true],['c',true],['d',true],['e',true]]);
+  calls.length=0;
+  assert.equal((await ask()).status,504);
+  assert.deepEqual(calls,[['a',false],['b',true],['c',true],['d',true],['e',true]]);
 });
 
-test('提问中途取消，已发出的独立探针仍记录明确故障，两个入口共享直到复探通过', async t => {
+test('提问中途取消，已发出的独立探针仍记录明确故障，下一次登记可立即重试', async t => {
   t.mock.method(console, 'info', () => {});
   t.mock.timers.enable({apis: ['Date'], now: Date.parse('2026-11-20T00:00:00Z')});
-  const fiveHours = 5 * 3600000;
   const started = Promise.withResolvers(), pending = Promise.withResolvers(), calls = [];
   let attempts = 0;
   const request = await fixture(t, {
@@ -201,20 +198,16 @@ test('提问中途取消，已发出的独立探针仍记录明确故障，两�
     headers: {'X-Feiyue-AI-Trace': '1'}, body: JSON.stringify({messages: [{role: 'user', content: '问答测试'}]})});
   await started.promise;
   controller.abort();
-  pending.resolve(greeting('backup', '晚安'));
+  pending.resolve(greeting('backup', '  '));
   const cancelled = await chat;
   assert.equal(cancelled.status, 408);
   assert.deepEqual((await cancelled.json()).ai.attempts.map(a => [a.stage, a.code]),
-    [['request', 'TIMEOUT'], ['probe', 'PROBE_MISMATCH']]);
+    [['request', 'TIMEOUT'], ['probe', 'EMPTY_RESPONSE']]);
   const register = () => request('/api/assistant/recording-plan', {method: 'POST', body: JSON.stringify({text: '登记测试'})});
   for (let cycle = 0; cycle < 2; cycle++) {
     calls.length = 0;
-    t.mock.timers.tick(fiveHours - 1);
-    assert.equal((await (await register()).json()).error.code, 'AI_COOLDOWN');
-    assert.deepEqual(calls, []);
-    t.mock.timers.tick(1);
     const response = await register();
-    const probes = [['first', 'probe'], ['backup', 'probe']];
+    const probes = [['first', 'request'], ['backup', 'probe']];
     if (cycle === 0) {
       assert.deepEqual(calls, probes);
       assert.ok((await response.json()).ai.attempts.some(a => a.provider === 'backup' && a.code === 'RATE_LIMITED'));
@@ -225,7 +218,7 @@ test('提问中途取消，已发出的独立探针仍记录明确故障，两�
   }
 });
 
-test('同一线路已有两个在途探针时，从最后一次确认失败起计满五小时', async t => {
+test('并发探针均失败后，下一次请求仍能立即探测', async t => {
   t.mock.method(console, 'info', () => {});
   t.mock.timers.enable({apis: ['Date'], now: Date.parse('2026-11-20T00:00:00Z')});
   const started = [Promise.withResolvers(), Promise.withResolvers()];
@@ -251,16 +244,27 @@ test('同一线路已有两个在途探针时，从最后一次确认失败起�
   t.mock.timers.tick(1000);
   pending[1].resolve({error: 'TIMEOUT'});
   await two;
-  t.mock.timers.tick(5 * 3600000 - 1);
-  await ask();
-  assert.equal(backupProbes, 2);
-  t.mock.timers.tick(1);
   await ask();
   assert.equal(backupProbes, 3);
 });
 
 const main = process.env.COMPANION_HU_SHI_MAIN_SOURCE;
 const heartbeat = request => request('/api/assistant/heartbeat', {method: 'POST'}).then(response => response.json());
+test('登记回答格式错误只影响本次业务；另一条线路故障时仍可立即用原线路问答',async t=>{
+  t.mock.method(console,'info',()=>{});
+  const calls=[];
+  const request=await fixture(t,{providers:()=>['groq','other'],attempt(provider,input){
+    calls.push(provider);
+    if(provider==='other')return {error:'RATE_LIMITED'};
+    if(input.maxOutputTokens===2048)return greeting(provider,'收到了，但是这里没有业务 JSON');
+    return generated(provider,{reply:'我在',proposal:null});
+  }});
+  const failed=await request('/api/assistant/recording-plan',{method:'POST',body:JSON.stringify({text:'登记用例'})});
+  assert.deepEqual((await failed.json()).ai.attempts.map(a=>a.code),['INVALID_AI_RESPONSE','RATE_LIMITED']);
+  const chat=await request('/api/assistant/message',{method:'POST',body:JSON.stringify({messages:[{role:'user',content:'你好'}]})});
+  assert.equal(chat.status,200);
+  assert.deepEqual(calls,['groq','other','groq']);
+});
 test('心跳经桌面挂载入口鉴权，固定问候独立于请求数据，落盘仅含诊断',async t=>{
   const db=openTestDatabase();
   t.after(db.close);
@@ -286,7 +290,9 @@ test('心跳经桌面挂载入口鉴权，固定问候独立于请求数据，�
   const response=await request('/api/assistant/heartbeat',{method:'POST',
     headers:{Origin:origin,Authorization:'fixture-secret-header'},body:JSON.stringify({text:'fixture-private-question'})});
   assert.equal(response.status,200);
-  assert.deepEqual(calls.map(input=>input.messages),[[{role:'user',content:'请直接恢复你好，我在'}]]);
+  assert.equal(calls.length,1);
+  assert.deepEqual(calls[0].messages,[{role:'system',content:'这是连接测试。只回复「你好，我在」这句话，不加解释。'},
+    {role:'user',content:'请直接恢复你好，我在'}]);
   await log.flush();
   const file=await readFile(log.file,'utf8');
   assert.doesNotMatch(file+JSON.stringify(cloud.mock.calls.map(call=>call.arguments)),/fixture-private-question|fixture-secret-header|请直接恢复你好，我在/);
@@ -306,7 +312,7 @@ test('半小时心跳仅检查当前免费接口，失败后先尝试其余免�
     attempt(provider, input) {
       calls.push([provider,isProbe(input)]);
       if (!isProbe(input)) return generated(provider, {reply:'回答',proposal:null});
-      return greeting(provider, provider === healthy ? '你好，我在' : '线路异常');
+      return provider===healthy ? greeting(provider,'我是一个语言模型') : {error:'TIMEOUT'};
     },
   });
   assert.equal((await request('/api/assistant/heartbeat', {method:'GET'})).status,405);
@@ -316,6 +322,7 @@ test('半小时心跳仅检查当前免费接口，失败后先尝试其余免�
   const switched = await heartbeat(request);
   assert.equal(switched.status,'switched');
   assert.equal(switched.provider,'groq');
+  assert.equal(switched.ai.attempts.find(row=>row.provider==='groq').reply_check,'mismatch');
   assert.deepEqual(calls.splice(0), [['cloudflare',true],['gemini',true],['groq',true]]);
   assert.equal((await heartbeat(request)).status, 'healthy');
   assert.deepEqual(calls.splice(0), [['groq',true]]);
@@ -406,7 +413,7 @@ test('真实提问已选中收费接口，旧心跳的免费探针失败后不�
   assert.deepEqual(paid,['probe','request']);
 });
 
-test('迟到的正确问候不能将已经进入五小时冷却的接口报告为健康',async t=>{
+test('并发心跳分别返回本次实测结果，失败后仍继续探测',async t=>{
   t.mock.method(console,'info',()=>{});
   const started=Promise.withResolvers(), pending=Promise.withResolvers();
   let calls=0;
@@ -421,12 +428,12 @@ test('迟到的正确问候不能将已经进入五小时冷却的接口报告�
   await started.promise;
   assert.equal((await heartbeat(request)).error.code,'TIMEOUT');
   pending.resolve(greeting('cloudflare'));
-  assert.equal((await old).error.code,'AI_COOLDOWN');
-  assert.equal((await heartbeat(request)).error.code,'AI_COOLDOWN');
-  assert.equal(calls,2);
+  assert.equal((await old).status,'healthy');
+  assert.equal((await heartbeat(request)).error.code,'TIMEOUT');
+  assert.equal(calls,3);
 });
 
-test('心跳探遍全部线路后停止，五小时冷却内没有模型调用', async t => {
+test('心跳探遍全部线路后停止，下次心跳重新探测', async t => {
   t.mock.method(console,'info',()=>{});
   const calls=[];
   const request=await fixture(t,{
@@ -435,8 +442,8 @@ test('心跳探遍全部线路后停止，五小时冷却内没有模型调用',
   });
   assert.equal((await heartbeat(request)).error.code,'TIMEOUT');
   assert.deepEqual(calls.splice(0),[['cloudflare',true],['gemini',true],['openai',true]]);
-  assert.equal((await heartbeat(request)).error.code,'AI_COOLDOWN');
-  assert.deepEqual(calls,[]);
+  assert.equal((await heartbeat(request)).error.code,'TIMEOUT');
+  assert.deepEqual(calls,[['cloudflare',true],['gemini',true],['openai',true]]);
 });
 
 test('复用主站真实供应商客户端，顺序覆盖全部已定义接口且默认允许付费 DeepSeek', {skip: !main}, async () => {
@@ -444,18 +451,29 @@ test('复用主站真实供应商客户端，顺序覆盖全部已定义接口�
   const shared = await import(pathToFileURL(resolve(root, 'index.mjs')));
   const {runPaidProbe} = await import(pathToFileURL(resolve(root, 'paid-probe.mjs')));
   const outbound = [];
-  const gateway = createRegistrationAiGateway({deepseekLanguage: 'synthetic-only'}, {...shared, runPaidProbe}, {
+  const gateway = createRegistrationAiGateway({deepseekLanguage: 'synthetic-only', BIGMODEL_API_KEY: 'fixture', GEMINI_API_KEY: 'fixture'}, {...shared, runPaidProbe}, {
     fetcher: async (url, options) => {
       const payload=JSON.parse(options.body);
+      if (url.includes('generativelanguage.googleapis.com')) return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:'ok'}]}}]});
       outbound.push([url, payload.model, payload.max_tokens]);
       return Response.json({choices: [{finish_reason: 'stop', message: {content: JSON.stringify({actions: [food], pending: []})}}]});
     },
   });
-  assert.deepEqual(gateway.providers().slice(0, shared.AI_PRIORITY.length), shared.AI_PRIORITY);
-  assert.ok(Object.keys(shared.AI_MODELS).every(provider => gateway.providers().includes(provider)));
+  const expected = shared.AI_PRIORITY.filter(provider => provider !== 'bigmodel');
+  assert.deepEqual(gateway.providers().slice(0, expected.length), expected);
+  assert.ok(Object.keys(shared.AI_MODELS).every(provider => gateway.providers().includes(provider) === (provider !== 'bigmodel')));
   assert.equal(gateway.providers().at(-1), 'deepseek');
   const input = {version: 1, route: 'text', maxOutputTokens: 2048, messages: [{role: 'user', content: 'test'}]};
+  assert.equal((await gateway.attempt('bigmodel', input)).error, 'NOT_CONFIGURED');
+  assert.equal((await gateway.attempt('gemini', input)).value.provider, 'gemini');
   assert.equal((await gateway.attempt('cloudflare', input)).error, 'NOT_CONFIGURED');
   assert.equal((await gateway.attempt('deepseek', input)).value.provider, 'deepseek');
   assert.deepEqual(outbound, [['https://api.deepseek.com/chat/completions', 'deepseek-flash', 2048]]);
+  const partial=async()=>Response.json({choices:[{finish_reason:'length',message:{content:'我收到请求了'}}]});
+  const env={deepseekLanguage:'synthetic-only'};
+  await assert.rejects(runPaidProbe({env,messages:input.messages,fetcher:partial}),{code:'INVALID_RESPONSE'});
+  const partialGateway=createRegistrationAiGateway(env,{...shared,runPaidProbe},{fetcher:partial});
+  const {value}=await partialGateway.attempt('deepseek',input);
+  assert.equal(value.text,'我收到请求了');
+  assert.equal(value.finishReason,'length');
 });

@@ -1,4 +1,5 @@
 import {searchHint} from '../agent/assistant/search-hint.mjs';
+import {refusalExcerpt} from '../agent/host/refusal-response.mjs';
 import {loadCloudConnection} from './cloud-connection.mjs';
 import {matchWeatherQuestion,answerWeatherQuestion} from '../agent/weather/question.mjs';
 const limit=4*1024*1024;
@@ -22,7 +23,7 @@ async function abortable(work,signal){
   try{return await Promise.race([Promise.resolve().then(()=>{if(signal.aborted)throw cancelled();return work();}),stopped]);}
   finally{signal.removeEventListener('abort',onAbort);}
 }
-function encodeImage(image){
+export function encodeImage(image){
   if(!image||image.isEmpty())throw failure('CAPTURE_EMPTY','未能获取屏幕图片');
   for(let step=0;step<8;step++){
     for(const quality of [85,65,45]){const bytes=image.toJPEG(quality);if(bytes.length&&bytes.length<=limit){if(bytes[0]!==255||bytes[1]!==216||bytes[2]!==255)throw failure('CAPTURE_FAILED','截图编码失败');return {mime_type:'image/jpeg',data_base64:bytes.toString('base64')};}}
@@ -68,6 +69,7 @@ async function call(request,{endpoint,body,weather,question,grounded},signal,dia
           /^[a-z][a-z0-9-]{0,31}$/.test(row.provider)&&['probe','request'].includes(row.stage)&&
           typeof row.code==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(row.code)).map(row=>({
             provider:row.provider,stage:row.stage,code:row.code,at:Number.isSafeInteger(row.at)?row.at:Date.now(),
+            refusal_response:row.code!=='OK'?refusalExcerpt(row.refusal_response):undefined,
             durationMs:Number.isSafeInteger(row.duration_ms)?row.duration_ms:0,upstream:Number.isInteger(row.upstream_status)?row.upstream_status:undefined}));
         delete value.ai;
       }
@@ -75,7 +77,7 @@ async function call(request,{endpoint,body,weather,question,grounded},signal,dia
       if(!response.ok&&typeof value?.error?.code==='string'){
         const code=/^[A-Z][A-Z0-9_]{0,63}$/.test(value.error.code)?value.error.code:'UNKNOWN_SERVICE_ERROR';
         const textErrors={TIMEOUT:'文字模型响应超时',RATE_LIMITED:'文字模型请求过于频繁',NOT_CONFIGURED:'服务端文字模型尚未配置',
-          CONFIG_ERROR:'服务端文字模型配置无效',AI_UNAVAILABLE:'服务端调用文字模型失败',AI_COOLDOWN:'所有模型线路都在五小时冷却期内',AI_ROUTING_UNAVAILABLE:'模型路由状态暂不可用',
+          CONFIG_ERROR:'服务端文字模型配置无效',AI_UNAVAILABLE:'服务端调用文字模型失败',AI_COOLDOWN:'当前服务端报告线路处于冷却期',AI_ROUTING_UNAVAILABLE:'模型路由状态暂不可用',
           INVALID_AI_RESPONSE:'文字模型没有返回可用的完整答复',CONTEXT_TOO_LARGE:'清单与消息超出模型上下文限制'};
         const reason=Object.hasOwn(textErrors,code)?textErrors[code]:Object.hasOwn(userMessages,code)?userMessages[code]:'文字问答服务返回错误';
         return failure(code,reason+`（HTTP ${response.status} · ${code}）`,[429,502,504].includes(response.status));
@@ -95,12 +97,7 @@ async function call(request,{endpoint,body,weather,question,grounded},signal,dia
   }
   finally{clearTimeout(timer);signal.removeEventListener('abort',abort);}
 }
-export async function createScreenQuestionClient({profile,screen,desktopCapturer,request,memory,vision}={}){
-  let configurationError=null;
-  if(request===undefined)try{request=await configuredRequest(profile);}catch(error){configurationError=error;}
-  if(!configurationError&&typeof request!=='function')configurationError=failure('CONFIG_NOT_CONFIGURED','问答连接尚未配置');
-  let active=null,last=null;
-  async function capture(signal){
+export async function captureCursorDisplay(screen,desktopCapturer,signal){
     const display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const size=display.size??display.bounds,scale=display.scaleFactor??1;
     if(!Number.isFinite(size?.width)||!Number.isFinite(size?.height)||size.width<=0||size.height<=0||!Number.isFinite(scale)||scale<=0)throw failure('CAPTURE_FAILED','无法确定鼠标所在屏幕');
@@ -109,6 +106,12 @@ export async function createScreenQuestionClient({profile,screen,desktopCapturer
     if(!source)throw failure('DISPLAY_NOT_FOUND','未找到鼠标所在屏幕，未截取其他屏幕');
     return source.thumbnail;
   }
+export async function createScreenQuestionClient({profile,screen,desktopCapturer,request,memory,vision}={}){
+  let configurationError=null;
+  if(request===undefined)try{request=await configuredRequest(profile);}catch(error){configurationError=error;}
+  if(!configurationError&&typeof request!=='function')configurationError=failure('CONFIG_NOT_CONFIGURED','问答连接尚未配置');
+  let active=null,last=null;
+  const capture=signal=>captureCursorDisplay(screen,desktopCapturer,signal);
   async function run(question,{signal,onState,onFailure,onImage,turn,grounded=false,image:attachedImage,document}={},retry=false,withScreen=false){
     if(active)return failure('BUSY','已有一个问题正在处理');
     const controller=new AbortController(),externalAbort=()=>controller.abort();active=controller;
@@ -169,7 +172,8 @@ export async function createScreenQuestionClient({profile,screen,desktopCapturer
         delete diagnostic.routes;
         for(const row of routes??[]){
           if(row.code!=='OK'&&onFailure)await onFailure({attempt,operation:'文字问答',phase:row.stage==='probe'?'线路探测':'模型调用',
-            at:row.at,durationMs:row.durationMs,code:row.code,httpStatus:row.upstream,text:row.provider+' · '+row.code});
+            at:row.at,durationMs:row.durationMs,code:row.code,httpStatus:row.upstream,text:row.provider+' · '+row.code,
+            ...(row.refusal_response?{refusal_response:row.refusal_response}:{})});
         }
         if(value.state==='error'&&onFailure){
           const at=Date.now();

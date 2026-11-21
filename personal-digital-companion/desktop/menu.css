@@ -1,0 +1,44 @@
+* {box-sizing:border-box}
+html,body {margin:0;background:transparent;overflow:hidden;user-select:none}
+body {padding:12px;font:13px/1.4 var(--fy-sans);color:var(--fy-ink)}
+/* 菜单卡片：暖白纸面 + 梅紫月印，与面板同一套令牌 */
+#menu {
+  position:relative;overflow:hidden;padding:5px;border:1px solid var(--fy-line);border-radius:12px;
+  background:var(--fy-paper);box-shadow:0 4px 12px #21132133;
+}
+#menu::before {
+  content:"";position:absolute;right:-58px;top:-92px;width:140px;height:140px;border-radius:50%;pointer-events:none;
+  border:1px solid color-mix(in srgb,var(--fy-gold) 40%,transparent);
+}
+body.show #menu {animation:menu-in .16s ease-out}
+@keyframes menu-in {from{opacity:0}}
+.brand {display:flex;align-items:center;gap:7px;padding:4px 7px 6px;margin-bottom:3px;border-bottom:1px solid var(--fy-line)}
+.moon {
+  display:grid;place-items:center;width:20px;height:20px;border-radius:50%;
+  color:#f1d7a8;background:#5c354b;border:1px solid #986f72;font:14px/1 Georgia,serif;
+}
+.brand strong {font:700 13px/1 var(--fy-serif);letter-spacing:.06em}
+.sep {height:1px;margin:4px 8px;background:linear-gradient(to right,transparent,var(--fy-line),transparent)}
+.item {
+  display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:7px;width:100%;
+  min-height:29px;padding:4px 8px;border:0;border-radius:8px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;
+  transition:background-color .12s,color .12s;
+}
+.item .icon {text-align:center;font-size:14px;line-height:1}
+.item .label {overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .tail {color:var(--fy-muted);font-size:12px}
+.item:is(:hover,:focus-visible):not(:disabled) {outline:none;background:var(--fy-soft);color:var(--fy-accent)}
+.item:active:not(:disabled) {background:color-mix(in srgb,var(--fy-accent) 20%,var(--fy-surface))}
+.item:disabled {cursor:default;opacity:.45}
+.item.group .tail {transition:transform .2s}
+.item.group[aria-expanded=true] {color:var(--fy-accent)}
+.item.group[aria-expanded=true] .tail {transform:rotate(90deg);color:var(--fy-accent)}
+.item .check {display:grid;place-items:center;width:15px;height:15px;border:1px solid var(--fy-line);border-radius:4px;font-size:11px;color:transparent}
+.item[aria-checked=true] .check {background:var(--fy-ok);border-color:var(--fy-ok);color:var(--fy-on-accent)}
+/* 未读提醒等重要项：梅紫字 + 呼吸点 */
+.item.hot .label {color:var(--fy-accent);font-weight:600}
+.item.hot .tail::before {content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--fy-accent);animation:fy-pulse 1.6s ease-in-out infinite}
+/* 子菜单：原位展开，左侧细线 */
+.sub {margin:1px 0 3px 17px;padding-left:6px;border-left:1px solid var(--fy-line);animation:menu-in .18s ease-out}
+.sub .item {min-height:27px}
+.item.danger:is(:hover,:focus-visible) {color:var(--fy-danger);background:color-mix(in srgb,var(--fy-danger) 12%,transparent)}

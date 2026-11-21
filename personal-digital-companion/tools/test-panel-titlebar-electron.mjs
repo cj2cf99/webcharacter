@@ -4,6 +4,7 @@ import {copyFileSync,mkdtempSync,mkdirSync,readdirSync,readFileSync,renameSync,w
 import {tmpdir} from 'node:os';
 import {resolve,join} from 'node:path';
 import {attachReminderReview} from '../desktop/reminder-review-host.mjs';
+import {attachTaskInbox} from '../desktop/task-inbox-host.mjs';
 import {createReminderReviewFlow} from '../desktop/reminder-review-flow.mjs';
 import {attachRegistration} from '../desktop/registration-host.mjs';
 import {attachWeather} from '../desktop/weather-host.mjs';
@@ -17,7 +18,7 @@ const root=resolve(import.meta.dirname,'..'),profile=mkdtempSync(join(tmpdir(),'
 const out=join(root,'output/titlebar-qa');
 const fixture=join(profile,'desktop');
 mkdirSync(fixture);
-for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs']){
+for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','task-inbox-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs']){
   copyFileSync(join(root,'desktop',file),join(fixture,file));
 }
 const common={root:profile,profile,bundle:join(root,'output/desktop-bundle'),visible:false};
@@ -28,7 +29,7 @@ async function test(){
   await electron.app.whenReady();
   assert.deepEqual(Object.keys(pages).sort(),readdirSync(join(root,'desktop')).filter(name=>name.endsWith('.html')).sort());
   for(const [page,dependencies] of Object.entries(pages)){
-    if(page==='index.html')continue;
+    if(page==='index.html'||page==='menu.html')continue; // 角色页和右键菜单不是面板
     const html=readFileSync(join(common.bundle,page),'utf8');
     assert(dependencies.includes('feiyue-surface.css')&&html.includes('href="feiyue-surface.css"'),page);
     assert.equal((html.match(/<header\b[^>]*\bfy-titlebar\b/g)||[]).length,1,page);
@@ -66,6 +67,35 @@ async function test(){
       ...(recorded?{plannerRecord:recorded}:{plannerWork:{dispatchId:'d71',plannedHours:3}})});
   }});
   const review=attachReminderReview(runtime,{...common,flow});
+  const created='2026-11-20T08:37:00Z';
+  let cloudReads=0,claimed=false,inspected=null,failTasks=false,legacyTasks=false;
+  const detailReads=[];
+  const inbox=attachTaskInbox(runtime,{...common,flow:{
+    local:()=>[{name:'整理本周计划',attempt_count:1,started_at:created},
+      {name:'绯月更新登记',started_at:created,batch:{state:'running',steps:[{label:'功能改善',state:'verified'},{label:'登记版本',state:'applying'}]}},
+      {name:'核对恢复现场',started_at:created,batch:{state:'running',steps:[{label:'核实目标',state:'checking'}]}}],
+    tasks:offset=>{
+      cloudReads++;
+      if(failTasks)throw Error('云端任务读取失败');
+      if(offset)return {standalone:!legacyTasks,tasks:[{task_id:'next',name:'补充资源笔记',status:'PENDING',created_at:created}],next_offset:null};
+      return {standalone:!legacyTasks,tasks:claimed?[]:[{task_id:'shared',name:'登记吃喝',status:'PENDING',can_claim:true,created_at:created}],
+        next_offset:claimed?null:50};
+    },
+    chains:()=>({chains:[{chain_id:'group-1',name:'晚间记录',created_at:created},
+      {chain_id:'group-2',name:'工作检查',created_at:created}],next_after:null}),
+    detail:id=>{
+      detailReads.push(id);
+      return id==='group-1'?{name:'晚间记录',status:'ACTIVE',nodes:[
+        {node_id:'meal',name:'登记吃喝',status:'COMPLETED',params:{body:'晚餐吃了乌冬面'}},
+        {node_id:'diary',name:'登记日记',status:'PENDING',depends_on:'meal',params:{content:'晚上整理了开发计划'}},
+      ]}:{name:'工作检查',status:'ACTIVE',nodes:[
+        {node_id:'work',name:'回显文字',status:'RUNNING',params:{text:'核对交付清单'}},
+      ]};
+    },
+    receipts:()=>[],
+    claim:async id=>{assert.equal(id,'shared');claimed=true;},
+    inspect:async id=>{inspected=id;},
+  }});
   const registration=attachRegistration(runtime,{...common,flow:{resume:async()=>({})}});
   const weather=attachWeather(runtime,{...common,service:{snapshot:()=>({rows:[]}),close(){}}});
   let history,polls;
@@ -81,7 +111,7 @@ async function test(){
     readTraffic:cursor=>({lines:[JSON.stringify({direction:'receive',method:'GET',route:cursor?'/api/older':'/api/tasks',status:200})],next:cursor?null:[1]})});
   const owner=new TestWindow({width:250,height:360});
   const settings=attachSettings(runtime,{...common,win:owner});
-  const hosts=[review,registration,weather,history,settings,polls];
+  const hosts=[review,registration,weather,history,settings,polls,inbox];
   try{
     for(const host of hosts){
       await host.open();
@@ -158,6 +188,48 @@ async function test(){
       for(let attempt=0;attempt<100;attempt++){if(await testUi(host,code))return;await wait(25);}
       throw Error('没有出现预期画面 '+code);
     }
+    inbox.panel.setSize(550,440);
+    await until(inbox,"document.querySelector('#local-items').textContent.includes('整理本周计划')");
+    assert.match(await testUi(inbox,"document.querySelector('#local-items').textContent"),/绯月更新登记.*1\/2.*功能改善 · 已核对.*登记版本 · 核对写入结果/);
+    assert.match(await testUi(inbox,"document.querySelector('#local-items').textContent"),/核对恢复现场.*0\/1.*核实目标 · 核对基线/);
+    assert.equal(cloudReads,0,'首屏只读取本机任务');
+    assert.equal(await testUi(inbox,"document.querySelectorAll('[role=tab]').length"),2);
+    writeFileSync(join(out,'task-inbox-local.png'),(await inbox.panel.webContents.capturePage()).toPNG());
+    await testUi(inbox,"document.querySelector('#local-tab').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight'}))");
+    await until(inbox,"document.querySelector('#local').hidden && document.querySelector('#tasks-items').textContent.includes('登记吃喝') && document.querySelector('#chains-items').textContent.includes('晚间记录')");
+    assert.equal(cloudReads,1);
+    assert.equal(await testUi(inbox,"document.querySelector('#tasks-title').textContent"),'单条任务');
+    assert.equal(await testUi(inbox,"document.querySelector('#receipts').hidden"),true);
+    assert.match(await testUi(inbox,"document.querySelector('#tasks-items').textContent"),/17:37:00 JST/);
+    await wait(180);
+    writeFileSync(join(out,'task-inbox-cloud.png'),(await inbox.panel.webContents.capturePage()).toPNG());
+    await testUi(inbox,"document.querySelector('#tasks-more').click()");
+    await until(inbox,"document.querySelector('#tasks-more').hidden && document.querySelectorAll('#tasks-items li').length===2");
+    assert.deepEqual(detailReads,[]);
+    await testUi(inbox,`document.querySelector('[data-chain-id="group-1"] summary').click()`);
+    await until(inbox,`document.querySelector('[data-chain-id="group-1"] .chain-steps')?.textContent.includes('晚上整理了开发计划')`);
+    assert.deepEqual(detailReads,['group-1']);
+    await testUi(inbox,`document.querySelector('[data-chain-id="group-2"] summary').click()`);
+    await until(inbox,`document.querySelector('[data-chain-id="group-2"] .chain-steps')?.textContent.includes('核对交付清单')`);
+    assert.deepEqual(detailReads,['group-1','group-2']);
+    assert.equal(await testUi(inbox,`document.querySelector('[data-chain-id="group-2"]').textContent.includes('晚餐吃了乌冬面')`),false);
+    assert.equal(await testUi(inbox,`document.querySelector('[data-chain-id="group-1"]').textContent.includes('前置 登记吃喝')`),true);
+    await testUi(inbox,`document.querySelector('[data-chain-id="group-1"]').scrollIntoView({block:'start'})`);
+    await wait(120);
+    writeFileSync(join(out,'task-inbox-expanded.png'),(await inbox.panel.webContents.capturePage()).toPNG());
+    await testUi(inbox,`document.querySelector('[data-chain-id="group-1"] button').click()`);
+    await until(inbox,"!document.querySelector('#chains-items button')?.disabled");
+    assert.equal(inspected,'group-1');
+    await until(inbox,"Boolean(document.querySelector('[data-operation=\"claim:shared\"]'))");
+    await testUi(inbox,"document.querySelector('[data-operation=\"claim:shared\"]').click()");
+    await until(inbox,"document.querySelector('#notice').textContent.includes('收到云端回执') && !document.querySelector('#tasks-items li')");
+    failTasks=true;
+    await testUi(inbox,"document.querySelector('#refresh').click()");
+    await until(inbox,"document.querySelector('#tasks-message').textContent.includes('云端任务读取失败') && document.querySelector('#chains-items').textContent.includes('晚间记录')");
+    failTasks=false;legacyTasks=true;
+    await testUi(inbox,"document.querySelector('#refresh').click()");
+    await until(inbox,"document.querySelector('#tasks-title').textContent==='单条任务' && document.querySelector('#tasks-scope').textContent.includes('旧版')");
+    console.log('PASS：本机执行中与云端未结束双页签、延迟查询、分页、查看任务链及领取回执。');
     await until(polls,"document.querySelectorAll('form[data-poll]').length===3");
     await testUi(polls,"{const f=document.querySelector('[data-poll=tasks]');f.elements.enabled.checked=false;f.elements.minutes.value=10;f.elements.maximum.value=0;f.requestSubmit()}");
     await until(polls,"document.querySelector('#feedback').textContent.includes('已保存')");
@@ -205,11 +277,13 @@ async function test(){
     await history.open(null,'log');
     await until(history,"document.querySelector('#turns').textContent.includes('/api/tasks')");
     assert.equal(await testUi(history,"document.querySelectorAll('#turns textarea,#turns input,#turns [contenteditable]').length"),0);
-    await testUi(history,"document.querySelector('#older').click()");
+    await testUi(history,"document.querySelector('#nextCheckPage').click()");
     await until(history,"document.querySelector('#turns').textContent.includes('/api/older')");
-    assert.equal(await testUi(history,"document.querySelector('#older').hidden && document.querySelectorAll('#turns section').length===2"),true);
-    console.log('PASS：今日工时行、零与小数、执行回执、只读任务日志及加载更早。');
-    console.log('PASS：六个面板通过深浅色、原生标题栏和热加载检查；轮询设定通过保存、重开、队列定位和数值边界检查。');
+    assert.equal(await testUi(history,"document.querySelector('#nextCheckPage').disabled && document.querySelectorAll('#turns section').length===1 && document.querySelector('#checkPage').textContent==='第 2 页'"),true);
+    await testUi(history,"document.querySelector('#previousCheck').click()");
+    await until(history,"document.querySelector('#turns').textContent.includes('/api/tasks') && !document.querySelector('#nextCheckPage').disabled");
+    console.log('PASS：今日工时行、零与小数、执行回执、只读任务日志及前后翻页。');
+    console.log('PASS：七个面板通过深浅色、原生标题栏和热加载检查；轮询设定通过保存、重开、队列定位和数值边界检查。');
   }finally{for(const host of hosts)host.close();checkStore.close();owner.destroy();}
 }
 test().then(()=>electron.app.exit(0),error=>{console.error(error);electron.app.exit(1);});

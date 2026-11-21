@@ -1,0 +1,154 @@
+diff --git a/src/companion-entrypoint.js b/src/companion-entrypoint.js
+index ed48970..24311ac 100644
+--- a/src/companion-entrypoint.js
++++ b/src/companion-entrypoint.js
+@@ -1,9 +1,16 @@
+ import {WorkerEntrypoint} from 'cloudflare:workers';
+ import {companionGateway} from './features/companion/gateway.js';
+ import {companionReminderReview} from './features/companion/reminder-review-gateway.js';
++import {memoryExpenses} from './features/companion/vendor/memory-expenses.mjs';
++import {memorySources} from './features/companion/vendor/memory-sources.mjs';
++import {createContext} from './features/expenses/context.js';
++import {configuredOwners} from './features/expenses/identity.js';
++import {getExpenses} from './features/expenses/routes.js';
+ export {default} from './worker.js';
+ 
+ export class CompanionHost extends WorkerEntrypoint {
++  memoryExpenses(query) { return memoryExpenses(this.env,query,{createContext,configuredOwners,getExpenses}); }
++  memorySources(query) { return memorySources(this.env,query); }
+   providers() { return companionGateway(this.env).providers(); }
+   attempt(provider, input) { return companionGateway(this.env).attempt(provider, input); }
+   categories() { return companionGateway(this.env).categories(); }
+diff --git a/src/features/companion/page.js b/src/features/companion/page.js
+index 78b983b..cb2eeac 100644
+--- a/src/features/companion/page.js
++++ b/src/features/companion/page.js
+@@ -4,4 +4,7 @@ import script from '../../client/companion/chains.js';
+ import style from '../../client/companion/chains.css';
+ import {createChainPage} from './vendor/chain-page.mjs';
+ 
+-export const handleCompanion = createChainPage({shell, authorize: authorizeSite, script, style});
++import {createMemoryPage} from './vendor/memory-route.mjs';
++const memory=createMemoryPage({shell,authorize:authorizeSite});
++const tasks = createChainPage({shell, authorize: authorizeSite, script, style});
++export async function handleCompanion(request,env){return await memory(request,env) ?? tasks(request,env);}
+diff --git a/src/features/expenses/routes.js b/src/features/expenses/routes.js
+index 8f9ea12..72f8801 100644
+--- a/src/features/expenses/routes.js
++++ b/src/features/expenses/routes.js
+@@ -63,7 +63,7 @@ async function getSession(ctx) {
+ 	};
+ }
+ 
+-async function getExpenses(ctx, req, m, url) {
++export async function getExpenses(ctx, req, m, url) {
+ 	const p = paramsOf(url);
+ 	const { ownerId } = ctx.owner;
+ 	let snapshotId = p.get('snapshotId');
+diff --git a/src/features/self-notes/routes.js b/src/features/self-notes/routes.js
+index 94501e0..38d2326 100644
+--- a/src/features/self-notes/routes.js
++++ b/src/features/self-notes/routes.js
+@@ -3,7 +3,7 @@ import {entries} from '../../pages/navigation.js';
+ // Every main-site project (navigation entry) is a board; MyNet's manage console keeps its own key.
+ // Display-only pages (MyNet map, World & City, garden display) have no board; their management pages do.
+ export const displayPages=path=>path==='/mynet'||path==='/mynet/'||path.startsWith('/worldandcity')||path==='/garden'||path==='/garden/'||path==='/garden/garden.html';
+-export const pageKeys=[...entries.filter(e=>!['home','self-notes','mynet','worldandcity','companion'].includes(e.id)).map(e=>e.id),'mynet_manage'];
++export const pageKeys=[...entries.filter(e=>!['home','self-notes','mynet','worldandcity','companion','feiyue-memory'].includes(e.id)).map(e=>e.id),'mynet_manage'];
+ export const jstDay=(now)=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+ const validDay=d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&Number.isFinite(Date.parse(d+'T00:00:00Z'))&&new Date(d+'T00:00:00Z').toISOString().slice(0,10)===d;
+ const count=s=>[...new Intl.Segmenter('zh',{granularity:'grapheme'}).segment(s)].length;
+diff --git a/src/pages/home.html b/src/pages/home.html
+index 2a54cd9..e39d3a0 100644
+--- a/src/pages/home.html
++++ b/src/pages/home.html
+@@ -99,6 +99,7 @@
+ 			<a class="portal self-notes-portal" href="/self-notes"><span class="icon" aria-hidden="true">✎</span><span class="portal-copy"><h3>我的留言</h3><p class="muted">查看、编辑个人留言与历史。</p></span><span class="enter">进入 →</span></a>
+ 			<a class="portal subscriptions-portal" href="/subscriptions"><span class="icon" aria-hidden="true">◷</span><span class="portal-copy"><h3>会员管理</h3><p class="muted">会员周期、缴费、手机号和 API Key 位置。</p></span><span class="enter">进入 →</span></a>
+ 			<a class="portal minitools-portal" href="/minitools/"><span class="icon" aria-hidden="true">簪</span><span class="portal-copy"><h3>饰品铺子</h3><p class="muted">汇率速算等随手可用的小工具。</p></span><span class="enter">进入 →</span></a>
++			<a class="portal companion-portal" href="/companion/memory/"><span class="icon" aria-hidden="true">☾</span><span class="portal-copy"><h3>绯月手记</h3><p class="muted">翻阅绯月的日记与念叨。</p></span><span class="enter">进入 →</span></a>
+ 			<a class="portal expenses-portal" href="/expenses"><span class="icon" aria-hidden="true">¥</span><span class="portal-copy"><h3>消费记录</h3><p class="muted">消费明细、Dashboard 与缴费监控。</p></span><span class="enter">进入 →</span></a>
+ 		</div>
+ 	</section>
+diff --git a/src/pages/navigation.js b/src/pages/navigation.js
+index 7c38552..d8b9ee6 100644
+--- a/src/pages/navigation.js
++++ b/src/pages/navigation.js
+@@ -25,6 +25,7 @@ export const entries = [
+ 	{ id: 'subscriptions', url: '/subscriptions', label: '会员管理' },
+ 	{ id: 'minitools', url: '/minitools/', label: '饰品铺子' },
+ 	{ id: 'garden', url: '/garden/manage.html', label: '项目花园' },
++	{ id: 'feiyue-memory', url: '/companion/memory/', label: '绯月手记' },
+ 	{ id: 'expenses', url: '/expenses', label: '消费记录' },
+ ];
+ 
+@@ -33,6 +34,7 @@ export const groups = [
+  {id:'learn',label:'学习成长',icon:'✧'}, {id:'life',label:'生活管理',icon:'♡'},
+ ];
+ const metadata = {
++ 'feiyue-memory':['life','日记、私语与念叨记录。','☾'],
+  garden:['life','项目资源、功能进展与改进需求。','✿'],
+  minitools:['life','汇率速算等随手可用的小工具。','簪'],
+  'self-notes':['schedule','查看、编辑个人留言与历史。','✎'],
+@@ -70,7 +72,7 @@ function link(entry,path,env) {
+ }
+ function links(path,env) {
+  const visible=entries.filter(e=>(e.id!=='self-notes'||env.SELF_NOTES_ENABLED==='true')&&
+-  (e.id!=='subscriptions'||env.SUBSCRIPTIONS_ENABLED==='true')&&(e.id!=='companion'||env.COMPANION_ENABLED==='true'));
++  (e.id!=='subscriptions'||env.SUBSCRIPTIONS_ENABLED==='true')&&(!['companion','feiyue-memory'].includes(e.id)||env.COMPANION_ENABLED==='true'));
+  return `<div class="nav-home"${active(visible[0],path,env)?' data-current="true"':''}>${link(visible[0],path,env)}</div>`+groups.map(group=>{
+   const items=visible.filter(e=>e.group===group.id);if(!items.length)return '';
+   return `<details class="nav-group" data-nav-group="${group.id}"${items.some(e=>active(e,path,env))?' data-current="true"':''}><summary>${group.label}<span aria-hidden="true">⌄</span></summary><div class="nav-dropdown">${items.map(e=>link(e,path,env)).join('')}</div></details>`;
+diff --git a/src/pages/render.js b/src/pages/render.js
+index 68798c0..3aff2ef 100644
+--- a/src/pages/render.js
++++ b/src/pages/render.js
+@@ -16,7 +16,7 @@ const dialogs = [reminderEditor, diaryEditor, deleteDialog].join('\n');
+ const shared = layout.replace('{{HOME}}', home).replace('{{WORKSPACE}}', workspace).replace('{{DIALOGS}}', dialogs);
+ export function renderPage(path, env = {}) {
+  let visibleShared = env.SELF_NOTES_ENABLED === 'true' ? shared : shared.replace(/<a class="portal self-notes-portal"[\s\S]*?<\/a>/, '');
+- if (env.COMPANION_ENABLED !== 'true') visibleShared = visibleShared.replace(/<a class="portal companion-portal"[\s\S]*?<\/a>/, '');
++ if (env.COMPANION_ENABLED !== 'true') visibleShared = visibleShared.replace(/<a class="portal companion-portal"[\s\S]*?<\/a>/g, '');
+ 	return shell(path.startsWith('/sync-monitor') ? syncMonitor : path.startsWith('/subscriptions') ? subscriptions : path.startsWith('/planner') ? (env.PLANNER_REDESIGN==='execution'&&!path.startsWith('/planner-legacy')?plannerRedesign:planner) : path==='/calendar/special-dates' ? specialDates : path.startsWith('/calendar') ? calendar : path.startsWith('/aim') ? aim : (env.SUBSCRIPTIONS_ENABLED === 'true' ? visibleShared : visibleShared.replace(/<a class="portal subscriptions-portal"[\s\S]*?<\/a>/, '')), path, env);
+ }
+ // Shown instead of a raw JSON error when a gated page is turned off; keeps the shared header.
+diff --git a/tests/self-notes.test.mjs b/tests/self-notes.test.mjs
+index 0a970fd..ebcbd28 100644
+--- a/tests/self-notes.test.mjs
++++ b/tests/self-notes.test.mjs
+@@ -80,7 +80,7 @@ test('supported navigation boards match across the server, client and database',
+  const {pageKeys}=await import('../src/features/self-notes/routes.js'),{entries}=await import('../src/pages/navigation.js');
+  const client=readFileSync(new URL('../src/client/self-notes/shared.js',import.meta.url),'utf8'),modules=JSON.parse(client.match(/export const modules = (\[.*\]);/)[1].replaceAll("'",'"'));
+  assert.deepEqual(modules.map(m=>m[0]).sort(),[...pageKeys].sort());
+- const nonBoards=['home','self-notes','mynet','worldandcity','companion'];
++ const nonBoards=['home','self-notes','mynet','worldandcity','companion','feiyue-memory'];
+  for(const e of entries.filter(e=>!nonBoards.includes(e.id)))assert.ok(modules.some(m=>m[0]===e.id&&m[2]===e.group),e.id+' board/group');
+  assert.ok(pageKeys.includes('mynet_manage'));for(const k of nonBoards)assert.ok(!pageKeys.includes(k),k+' has no board');assert.ok(pageKeys.includes('garden'));
+  // 0028 keeps old rows, ids and timers, then accepts boards the old CHECK rejected.
+diff --git a/tests/workspace-navigation.test.mjs b/tests/workspace-navigation.test.mjs
+index 425eb77..ffe570b 100644
+--- a/tests/workspace-navigation.test.mjs
++++ b/tests/workspace-navigation.test.mjs
+@@ -8,7 +8,7 @@ test('grouped shell preserves a single canonical link tree and feature-gated mem
+   const html=shell(page,'/calendar/special-dates',{SUBSCRIPTIONS_ENABLED:String(enabled)});
+   const ids=[...html.matchAll(/id="nav-([^"]+)"/g)].map(m=>m[1]);
+   assert.equal(new Set(ids).size,ids.length);
+-  assert.deepEqual(ids.sort(),entries.filter(e=>!['self-notes','companion'].includes(e.id)&&(enabled||e.id!=='subscriptions')).map(e=>e.id).sort());
++  assert.deepEqual(ids.sort(),entries.filter(e=>!['self-notes','companion','feiyue-memory'].includes(e.id)&&(enabled||e.id!=='subscriptions')).map(e=>e.id).sort());
+   assert.equal((html.match(/class="nav-group"/g)||[]).length,4);
+   assert.match(html,/data-nav="calendar"[^>]+aria-current="page"/);
+   assert.match(html,/<span class="local">本地状态<\/span>/);
+@@ -25,6 +25,13 @@ test('Feiyue is a peer of reminders in the schedule group and owns the heading i
+   assert.match(on,/data-shell-page="companion" data-shell-group="schedule"/);
+  }
+ });
++test('handbook follows the companion gate and retains its own navigation entry',()=>{
++ const path='/companion/memory/';
++ assert.doesNotMatch(shell(page,path,{}),/id="nav-feiyue-memory"/);
++ const on=shell(page,path,{COMPANION_ENABLED:'true'});
++ assert.match(on,/id="nav-feiyue-memory"[^>]*aria-current="page"/);
++ assert.match(on,/data-shell-page="feiyue-memory" data-shell-group="life"/);
++});
+ test('route groups use segment boundaries and retain the site brand on health',()=>{
+  assert.doesNotMatch(shell(page,'/aimless'),/data-nav="aim"[^>]+aria-current/);
+  assert.match(shell(page,'/health/'),/个人工作台<\/a>/);

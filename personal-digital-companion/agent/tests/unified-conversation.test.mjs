@@ -9,10 +9,10 @@ import {searchPublicWeb} from '../../desktop/public-search.mjs';
 import {createConversationHistory} from '../../desktop/conversation-history.mjs';
 
 test('自动输入区分登记、询问和显式搜索，登记中的搜索文字保留在原记录',()=>{
-  for(const text of ['午饭吃了拉面，帮我记一下','今天刚跑了五公里','帮我登记今天的支出','明天下午提醒我看医生','随手记：上网查 Firefox']){
+  for(const text of ['午饭吃了拉面，帮我记一下','登记今天跑的五公里','帮我登记今天的支出','明天下午提醒我看医生','随手记：上网查 Firefox']){
     assert.equal(conversationRoute(text).kind,'registration',text);
   }
-  for(const text of ['今天吃了多少算合理？','刚才那段是什么意思','提醒我是什么意思？','今天需要带伞吗','不用联网，解释这个词']){
+  for(const text of ['今天刚跑了五公里','我们聊聊这段记录','先别记录晚饭','昨天吃了牛肉和面包','今天吃了多少算合理？','刚才那段是什么意思','提醒我是什么意思？','今天需要带伞吗','不用联网，解释这个词']){
     assert.equal(conversationRoute(text).kind,'question',text);
   }
   assert.deepEqual(conversationRoute('帮我上网查一下 Firefox'),{kind:'search',query:'Firefox'});
@@ -30,17 +30,24 @@ test('自动输入区分登记、询问和显式搜索，登记中的搜索文�
 });
 
 test('公开搜索只读固定搜索页，拒绝不明确的目标并保留实际链接',async()=>{
-  const urls=[],signal=new AbortController().signal;
-  const fetcher=async url=>{
-    urls.push(url.href);
-    return new Response('<li><a href="https://www.mozilla.org/">Mozilla <b>Firefox</b></a><div>网页 &amp; 搜索</div></li>');
+  const calls=[],signal=new AbortController().signal;
+  const reader=async request=>{
+    calls.push(request);
+    return [{title:'Mozilla Firefox',snippet:'网页搜索',url:'https://www.mozilla.org/'}];
   };
-  for(const query of ['那个','secret=123456789'])assert.equal((await searchPublicWeb(query,signal,fetcher)).sources,undefined);
-  assert.equal(urls.length,0);
-  const answer=await searchPublicWeb('Mozilla Firefox',signal,fetcher);
-  assert.deepEqual(answer.sources,[{title:'Mozilla Firefox',snippet:'网页 & 搜索',url:'https://www.mozilla.org/'}]);
-  assert.equal(new URL(urls[0]).searchParams.get('p'),'Mozilla Firefox');
-  await assert.rejects(searchPublicWeb('Firefox',signal,async()=>new Response('无结果')),/没有返回/);
+  for(const query of ['那个','secret=123456789'])assert.equal((await searchPublicWeb(query,signal,reader)).sources,undefined);
+  assert.equal(calls.length,0);
+  const answer=await searchPublicWeb('Mozilla Firefox',signal,reader);
+  assert.equal(answer.sources[0].url,'https://www.mozilla.org/');
+  assert.equal(calls[0].query,'Mozilla Firefox');
+  const manual=await searchPublicWeb('Mozilla Firefox',signal,async()=>{throw Error('GOOGLE_NOT_CONFIGURED')});
+  assert.equal(manual.manual,true);
+  assert.equal(new URL(manual.sources[0].url).hostname,'www.google.com');
+  assert.equal(conversationRoute('帮我找几张京都的照片').images,true);
+  assert.equal(conversationRoute('查京都新闻').research,'news');
+  assert.equal(conversationRoute('打开网页 https://example.org/look 找图').images,true);
+  assert.equal(conversationRoute('问 DeepSeek 如何分析公开数据').research,'deepseek');
+
 });
 
 test('本地记录按东京午夜跨日，同次提交写入最终回复，重开可读',async t=>{

@@ -5,7 +5,9 @@ export function menuTemplate(items, actions) {
   for (const item of items) {
     if (item === '-') { result.push({type:'separator'}); continue; }
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw Error('菜单项无效');
-    const {action, label, hidden} = item;
+    const {action, label, hidden, icon, tone} = item;
+    if (icon !== undefined && (typeof icon !== 'string' || [...icon].length > 3)) throw Error('菜单图标必须是一个字符');
+    if (tone !== undefined && !['hot','danger'].includes(tone)) throw Error('菜单 tone 只能是 hot 或 danger');
     if (action !== undefined && !Object.hasOwn(actions, action)) throw Error('菜单动作不存在：' + action);
     if (hidden !== undefined && typeof hidden !== 'boolean') throw Error('菜单 hidden 必须是布尔值');
     if (label !== undefined && (typeof label !== 'string' || !label.trim())) throw Error('菜单名称无效');
@@ -13,6 +15,9 @@ export function menuTemplate(items, actions) {
     const command = actions[action];
     const entry = {...command};
     if (label !== undefined) entry.label = label;
+    // 自绘菜单读取 fyIcon / fyTone；原生菜单忽略这两个字段。
+    if (icon) entry.fyIcon = icon;
+    if (tone) entry.fyTone = tone;
     if (item.items !== undefined) {
       if (entry.click) throw Error('可点击动作不能同时作为分组');
       entry.submenu = menuTemplate(item.items, actions);

@@ -22,6 +22,7 @@ if(existsSync(resolve(committed,'clip-catalog.json'))&&!process.argv.includes('-
   writeFileSync(resolve(out,'local-clips.js'),'window.localClips='+JSON.stringify(clips)+';');
   console.log('已从Git正式资源构建：'+out);process.exit(0);
 }
+cpSync(resolve(committed,'actions'),resolve(out,'actions'),{recursive:true});
 copyFileSync(resolve(media,'baseline.png'),resolve(out,'baseline.png'));
 const manifest=JSON.parse(readFileSync(resolve(media,'manifest.json'),'utf8')),clips={};
 mkdirSync(resolve(out,'clips'),{recursive:true});

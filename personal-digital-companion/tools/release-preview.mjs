@@ -41,7 +41,7 @@ function gateway(env) {
   return companionGateway(env,{fetcher: async (url,options) => {
     if (url !== 'https://api.deepseek.com/chat/completions') return new Response(null,{status:503});
     const input=JSON.parse(options.body);
-    if(input.messages.length===1 && input.messages[0].content==='请直接恢复你好，我在')return Response.json({choices:[{finish_reason:'stop',message:{content:'你好，我在'}}]});
+    if(input.messages.at(-1)?.content==='请直接恢复你好，我在')return Response.json({choices:[{finish_reason:'stop',message:{content:'你好，我在'}}]});
     if(input.messages.at(-1).content==='介绍罗马')return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'罗马在台伯河畔。',proposal:null})}}]});
     return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({actions:${JSON.stringify(actions)},pending:[]})}}]});
   }});

@@ -5,6 +5,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRegistrationFlow } from '../../desktop/registration-flow.mjs';
+import {attachScreenQuestion} from '../../desktop/screen-question-host.mjs';
+import {fixture as questionFixture} from './screen-question-fixture.mjs';
 import { createWorker } from '../worker.mjs';
 import { initializeDatabase, openTestDatabase } from './sqlite-d1.mjs';
 
@@ -69,8 +71,37 @@ async function fixture(t, { actions = all, register, fault, pending = [] } = {})
   const savedFile = join(profile, 'registration-submission.json');
   const events=new Map();
   return { db, env, writes, calls, create, call, savedFile,events,
-    desktop: () => createRegistrationFlow({ profile, request: request(),record:event=>events.set(event.key,event) }) };
+    desktop: (options={}) => createRegistrationFlow({ profile, request: request(),record:event=>events.set(event.key,event),...options }) };
 }
+
+test('这周日看手顺书：确认前只有草稿，跨日确认仍只写原日期和完整条件',async t=>{
+  const f=await fixture(t);
+  let now=Date.parse('2026-11-20T18:00:00+09:00');
+  const flow=f.desktop({now:()=>now});
+  const text='宝贝，加个提醒，这周日看手顺书，rene的手顺书工作至少推进3个才行';
+  const expected={deadline:'2026-11-22',title:'看手顺书',content:'rene的手顺书工作至少推进3个才行'};
+  const ui=questionFixture();
+  const host=attachScreenQuestion(ui.electron,{win:ui.win,root:join(import.meta.dirname,'../..'),bundle:'unused',profile:'unused',history:ui.history,registration:flow,visible:false});
+  t.after(()=>host.close());await host.open();
+  const ask=text=>ui.handlers.get('screen-qa:ask')(ui.event(host.panel),{text});
+  const review=await ask(text);
+  assert.ok(review.reviewId);
+  for(const value of Object.values(expected))assert.ok(review.fields.includes(value),review.fields);
+  assert.deepEqual(f.calls,[]);
+  now=Date.parse('2026-11-23T00:01:00+09:00');
+  assert.match((await ask('确认登记')).text,/已登记/);
+  assert.deepEqual(f.writes.map(w=>w.body),[{...expected,level:'中'}]);
+});
+
+test('新增随手记只有确认时提供的图库回执进入业务记录',async t=>{
+  const f=await fixture(t,{actions:[{type:'records.create',params:{body:'测试',category_id:'resource',photos:['https://fixture.test/unconfirmed']}}]});
+  const flow=f.desktop(),plan=await flow.preview('新增随手记');
+  const params=plan.chain.nodes[0].params;
+  assert.equal(params.photos,undefined);
+  params.photos=['https://fixture.test/photos/confirmed.png'];
+  assert.equal((await flow.submitReviewed('新增随手记',plan)).status,'completed');
+  assert.deepEqual(f.writes.map(w=>w.body.photos),[params.photos]);
+});
 
 const node = (key, type = 'hu-shi.event.create', params = {}) => ({ key, type, params, target_device_id: null });
 
@@ -220,3 +251,21 @@ test('解析保留待确认项，旧临时链同号重放后仍可领到原节�
   assert.equal((await f.call(`/api/tasks/${legacy.nodes[0].current_task.task_id}/execute`, {})).status, 200);
   assert.equal(f.writes.length, 1);
 });
+
+test('鱼与熊掌：确认前展示四栏，标题与完整正文写入真实接口对应字段',async t=>{
+  const url='https://posewear.pages.dev/#portrait';
+  const text='我要登记一个资源：['+url+']('+url+') ，这是个包含成人要素的姿势服装参考网站，后面可以拿来用。';
+  const title='成人向姿势与服装参考网站';
+  const f=await fixture(t,{actions:[{type:'resources.create',params:{title,body:'摘要',url:'https://model.invalid/'}}]});
+  const ui=questionFixture(),flow=f.desktop();
+  const host=attachScreenQuestion(ui.electron,{win:ui.win,root:join(import.meta.dirname,'../..'),bundle:'unused',profile:'unused',history:ui.history,registration:flow,visible:false});
+  t.after(()=>host.close());await host.open();
+  const ask=text=>ui.handlers.get('screen-qa:ask')(ui.event(host.panel),{text});
+  const review=await ask(text);
+  assert.ok(review.reviewId,review.text);
+  for(const field of ['标题：'+title,'正文：'+text,'分类：其他','网址：'+url])assert.ok(review.fields.includes(field),review.fields);
+  assert.equal(f.writes.length,0);
+  assert.match((await ask('确认登记')).text,/已登记/);
+  assert.deepEqual(f.writes.map(({path,body})=>({path,body})),[{path:'/api/resources',body:{body:title,note:text,url,category_id:'other'}}]);
+});
+

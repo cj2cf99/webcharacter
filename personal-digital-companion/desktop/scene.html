@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data: 'self'">
+<title>绯月 · 此刻所想</title><link rel="stylesheet" href="feiyue-surface.css"><link rel="stylesheet" href="scene.css">
+</head><body>
+<header class="fy-titlebar"><div class="fy-caption"><h1>此刻所想</h1></div></header>
+<main><article><div class="byline">绯月 <time></time></div><h2 id="thought"></h2><div id="images"></div></article>
+<form><label for="reply">你的回应</label><textarea id="reply" maxlength="2000" rows="2" placeholder="和绯月说说你的想法…"></textarea>
+<footer><span role="status"></span><button type="button" id="skip">收起</button><button type="submit" class="primary">回应绯月</button></footer></form></main>
+<dialog aria-label="场景大图"><button id="back">返回</button><div id="zoom"></div></dialog>
+<script type="module" src="scene-ui.mjs"></script></body></html>

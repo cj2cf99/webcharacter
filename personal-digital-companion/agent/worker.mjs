@@ -7,9 +7,11 @@ import { handleTaskAction } from './tasks/actions.mjs';
 import { normalizeDeadline } from './tasks/deadline.mjs';
 import { handleRecovery } from './tasks/recover.mjs';
 import {handleAssistantMessage} from './assistant/message.mjs';
+import {testAiProviders} from './assistant/provider-test.mjs';
 import {planRegistration} from './assistant/registration-plan.mjs';
 import {runProviderChain} from './assistant/provider-chain.mjs';
 import {handleWeather} from './weather/api.mjs';
+import {personalityMemory} from './assistant/personality-memory.mjs';
 import {createBindingAiClient,createBindingVisionClient} from './assistant/cloudflare.mjs';
 import {handleScreenQuestion} from './assistant/screen-question.mjs';
 import {screenError} from './assistant/screen-errors.mjs';
@@ -211,7 +213,17 @@ export function createWorker({authorize=authorizeDevelopment,createAiClient=crea
       }
       if(path.startsWith('/api/weather/'))return await handleWeather(request,env,weatherOptions);
       if(path==='/api/assistant/message')return await handleAssistantMessage(request,env.DB,createAiClient,env,weatherOptions,identity.ownerId);
+      if(path==='/api/assistant/provider-test')return await testAiProviders(request,env,createAiClient);
       if(!env.DB)return error(503,'DATABASE_NOT_CONFIGURED',dailyLogs?'日志数据库尚未配置':'任务数据库尚未配置');
+      if(path==='/api/memory/sources'&&request.method==='GET'){
+        if(!env.COMPANION_HOST?.memorySources)return error(503,'MEMORY_SOURCES_UNAVAILABLE','手记来源未连接');
+        return json(await env.COMPANION_HOST.memorySources(Object.fromEntries(url.searchParams)));
+      }
+      if(path==='/api/memory/expenses'&&request.method==='GET'){
+        if(!env.COMPANION_HOST?.memoryExpenses)return error(503,'EXPENSES_UNAVAILABLE','消费来源未连接');
+        return json(await env.COMPANION_HOST.memoryExpenses(Object.fromEntries(url.searchParams)));
+      }
+      if(path.startsWith('/api/memory/'))return await personalityMemory(request,env,identity.ownerId);
       if(path==='/api/assistant/heartbeat'){
         if(request.method!=='POST')return error(405,'METHOD_NOT_ALLOWED','仅支持 POST',{Allow:'POST'});
         const {value,code,ai}=await runProviderChain({env,ownerId:identity.ownerId,signal:request.signal,heartbeat:true});

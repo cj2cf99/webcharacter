@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {registrationTypes} from './conversation-routing.mjs';
 
 export function missingRows(pending=[]){
-  const fields={deadline:'到期日',category_id:'分类',title:'标题',body:'正文',content:'内容',level:'等级',reflection:'感想'};
+  const fields={url:'网址',deadline:'到期日',category_id:'分类',title:'标题',body:'正文',content:'内容',level:'等级',reflection:'感想'};
   return pending.map((item,index)=>{
     const key=item.field??Object.keys(fields).find(k=>item.question.includes(fields[k]))
       ??(/日期|哪一天/u.test(item.question)?'deadline':null);
@@ -15,13 +15,16 @@ export function missingRows(pending=[]){
 export async function uploadInquiryPhoto(file,request,cache){
   if(!request)throw Error('随手记图片上传未连接。');
   let bytes=Buffer.from(file.data.slice(file.data.indexOf(',')+1),'base64'),type='image/jpeg';
-  if(file.originalBytes instanceof Uint8Array&&file.originalBytes.byteLength<=8*1024*1024){
-    const original=Buffer.from(file.originalBytes);
+  const originalBytes=file.originalBytes??file.galleryBytes;
+  if(originalBytes instanceof Uint8Array){
+    if(originalBytes.byteLength>8*1024*1024)throw Error('随手记附图上限为 8 MB，请选择较小的原图。');
+    const original=Buffer.from(originalBytes);
     const detected=original.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex'))?'image/png':
       original[0]===255&&original[1]===216?'image/jpeg':
       original.toString('ascii',0,4)==='RIFF'&&original.toString('ascii',8,12)==='WEBP'?'image/webp':
       /^GIF8[79]a$/.test(original.toString('ascii',0,6))?'image/gif':null;
-    if(detected){bytes=original;type=detected;}
+    if(!detected)throw Error('随手记支持 JPG、PNG、WebP、GIF 附图。');
+    bytes=original;type=detected;
   }
   const key=createHash('sha256').update(bytes).digest('hex');
   if(cache?.has(key))return cache.get(key);

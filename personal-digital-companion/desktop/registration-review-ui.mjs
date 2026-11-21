@@ -1,23 +1,39 @@
 import {readAttachment} from './question-attachment.mjs';
 const api=window.registration,el=id=>document.getElementById(id);
 let draft,attachment=null,reading=false;
+const photos=Array(3).fill(null);
+let pickIndex=null;
 const inputs=()=>[...el('missing').querySelectorAll('input')];
 function setFile(file){
   attachment=file;el('filename').textContent=file?.name??'';el('removeFile').hidden=!file;
-  el('thumb').hidden=file?.kind!=='image';
-  if(file?.kind==='image')el('thumb').src=file.data;else el('thumb').removeAttribute('src');
   el('file').value='';
+}
+function paintPhotos(){
+  const slots=el('slots');slots.replaceChildren();
+  photos.forEach((photo,index)=>{
+    const box=document.createElement('div'),pick=document.createElement('button');
+    box.className='photo-slot';box.dataset.index=index;pick.className='photo-pick';pick.type='button';
+    pick.title=photo?'替换 '+photo.name:'添加第 '+(index+1)+' 张图片';pick.setAttribute('aria-label',pick.title);
+    if(photo){
+      const image=document.createElement('img');image.src=photo.data;image.alt=photo.name;pick.append(image);
+    }else pick.textContent='＋';
+    pick.onclick=()=>{pickIndex=index;el('imageFiles').click();};
+    box.append(pick);slots.append(box);
+    if(photo){
+      const remove=document.createElement('button');remove.type='button';remove.className='photo-remove';
+      remove.textContent='×';remove.setAttribute('aria-label','移除 '+photo.name);
+      remove.onclick=()=>{photos[index]=null;paintPhotos();controls();};box.append(remove);
+    }
+  });
 }
 function controls(){
   const pending=draft?.status==='pending'&&!reading,finished=['done','error'].includes(draft?.status);
-  const fields=inputs(),filled=!!(el('answer').value.trim()||attachment||fields.some(i=>i.value.trim()));
+  const hasText=!!(el('answer').value.trim()||attachment||inputs().some(i=>i.value.trim()));
+  const localPhotos=!draft?.targets.length&&photos.some(Boolean);
   el('editor').hidden=finished;
-  el('sendInput').disabled=!pending||!filled;
-  const canAttach=draft?.targets.length&&(attachment?.kind==='image'||!attachment&&draft.photoName);
-  el('photoLabel').hidden=!canAttach||finished;
-  el('approveRecord').disabled=!pending||filled&&!(canAttach&&el('photoTarget').value!==''&&!el('answer').value.trim()&&!fields.length);
-  el('approveRecord').textContent=canAttach&&el('photoTarget').value!==''?'确认登记并附图':'确认登记';
-  if(canAttach&&el('photoTarget').value!=='')el('sendInput').disabled=true;
+  el('sendInput').disabled=!pending||!(hasText||localPhotos);
+  el('approveRecord').disabled=!pending||hasText||localPhotos;
+  el('approveRecord').textContent=draft?.confirmLabel??'确认';
   el('approveRecord').hidden=!draft?.canConfirm||finished;
   el('discardRecord').disabled=!pending;
   el('discardRecord').hidden=el('sendInput').hidden=finished;
@@ -32,8 +48,15 @@ function render(data){
   if(!data)return;
   if(draft?.id!==data.id){
     el('answer').value='';setFile(null);
-    el('photoTarget').replaceChildren(new Option('仅本地参考',''),...data.targets.map(t=>new Option('附到 '+t.label,String(t.index))));
-    if(data.photoName)el('filename').textContent='本地参考图：'+data.photoName;
+    const lastTarget=el('photoTarget').selectedOptions[0]?.textContent;
+    const sameTarget=data.parentId===draft?.id&&data.targets.find(t=>t.label===lastTarget);
+    if(!sameTarget)photos.fill(null);
+    paintPhotos();
+    el('photoTarget').replaceChildren(...data.targets.map(t=>new Option(t.label,String(t.index))));
+    if(sameTarget)el('photoTarget').value=String(sameTarget.index);
+    el('targetLabel').hidden=data.targets.length<2;
+    el('photos').querySelector('legend').textContent=data.targets.length?'随手记附图':'本地参考图';
+    el('sourcePhoto').hidden=!(data.sourcePhoto&&data.targets.length);
     el('recordFields').textContent=data.fields;el('prompt').textContent=data.prompt;
     el('recordSource').textContent=data.source;el('recordSource').parentElement.hidden=!data.source;
     el('missing').replaceChildren();el('bulk').replaceChildren();
@@ -58,27 +81,51 @@ function render(data){
 }
 api.onReviewChange(render);api.getReview().then(render).catch(()=>{el('recordStatus').textContent='无法读取询问，请重新打开。';});
 el('editor').oninput=controls;
-async function attach(files){
+async function attach(files,index=null){
   if(!draft||reading||draft.status!=='pending'||!files.length)return;
-  if(files.length!==1){el('recordStatus').textContent='每次回答可附一份图片或文本文件。';return;}
   const id=draft.id;reading=true;controls();
-  try{const file=await readAttachment(files[0]);if(draft.id===id){setFile(file);el('recordStatus').textContent='';}}
-  catch(e){el('recordStatus').textContent=e.message;}
+  try{
+    const isImage=file=>file.type.startsWith('image/')||/\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(file.name);
+    const pictures=files.filter(isImage),texts=files.filter(file=>!isImage(file));
+    const free=photos.flatMap((photo,i)=>!photo&&i!==index?[i]:[]);
+    if(index!==null)free.unshift(index);
+    if(pictures.length>free.length)throw Error('最多添加 3 张图片，请先移除已有图片。');
+    if(texts.length>1||index!==null&&texts.length)throw Error('图片位只接收图片，文本文件请单独添加。');
+    const images=await Promise.all(pictures.map(readAttachment));
+    const doc=texts.length?await readAttachment(texts[0]):null;
+    if(draft.id!==id)return;
+    images.forEach((file,i)=>{photos[free[i]]=file;});
+    if(doc)setFile(doc);
+    paintPhotos();el('recordStatus').textContent='';
+  }catch(e){if(draft.id===id)el('recordStatus').textContent=e.message;}
   finally{reading=false;controls();}
 }
+el('sourcePhoto').onclick=()=>{
+  const index=photos.indexOf(null);
+  if(index<0){el('recordStatus').textContent='最多添加 3 张图片。';return;}
+  photos[index]={...draft.sourcePhoto,source:true};paintPhotos();controls();
+};
+el('imageFiles').onchange=e=>{const files=[...e.target.files];e.target.value='';void attach(files,pickIndex);};
 el('chooseFile').onclick=()=>el('file').click();
 el('file').onchange=e=>void attach([...e.target.files]);
 el('removeFile').onclick=()=>{setFile(null);controls();};
-document.addEventListener('paste',e=>{
-  const files=[...(e.clipboardData?.files??[])];if(files.length){e.preventDefault();void attach(files);}
-});
+function acceptFiles(e,files){
+  if(!files.length)return;
+  e.preventDefault();
+  const slot=e.target.closest?.('.photo-slot');
+  void attach([...files],slot?Number(slot.dataset.index):null);
+}
+document.addEventListener('paste',e=>acceptFiles(e,e.clipboardData?.files??[]));
 document.addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();});
-document.addEventListener('drop',e=>{if(e.dataTransfer.types.includes('Files')){e.preventDefault();void attach([...e.dataTransfer.files]);}});
+document.addEventListener('drop',e=>acceptFiles(e,e.dataTransfer.files));
 for(const [id,action] of [['approveRecord','confirm'],['discardRecord','cancel'],['sendInput','send']]){
   el(id).onclick=async()=>{
     if(!draft||el(id).disabled)return;
-    const answer=action==='send'?{action,text:el('answer').value,values:inputs().map(i=>i.value),attachment}:
-      action==='confirm'&&!el('photoLabel').hidden&&el('photoTarget').value!==''?{action,attachment,photoTarget:Number(el('photoTarget').value)}:{action};
+    const selected=photos.filter(Boolean).map(file=>file.source?'source':file);
+    const answer={action};
+    if(action==='send')Object.assign(answer,{text:el('answer').value,values:inputs().map(i=>i.value),attachment,
+      images:draft.targets.length?[]:selected});
+    if(action==='confirm'&&selected.length&&draft.targets.length)Object.assign(answer,{images:selected,photoTarget:Number(el('photoTarget').value)});
     const token=draft.id;render({...draft,status:'working',message:'正在处理…'});
     try{await api.decideReview(token,answer);}
     catch(e){if(draft.id===token)render({...draft,status:'pending',message:e.message});}

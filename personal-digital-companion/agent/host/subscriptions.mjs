@@ -32,7 +32,11 @@ export async function handleCompanion(request, env, actor, fromMain) {
     return fail(403, 'ORIGIN_DENIED', '仅允许同源操作');
   }
   url.pathname = '/api' + url.pathname.slice(prefix.length);
-  if (fromMain && !browserRoute.test(url.pathname)) return fail(404, 'NOT_FOUND', '接口不存在');
+  if (url.pathname.startsWith('/api/memory/') && !fromMain && actor.role !== 'bot') {
+    return fail(403, 'ACCESS_DENIED', '桌宠接口仅供服务身份使用');
+  }
+  const memoryRead=request.method==='GET'&&/^\/api\/memory\/(?:diaries|nags)(?:\/[\w.-]+(?:\/original)?)?$/.test(url.pathname);
+  if (fromMain && !memoryRead && !browserRoute.test(url.pathname)) return fail(404, 'NOT_FOUND', '接口不存在');
   if (!env.COMPANION_DB || !env.COMPANION_HOST) return fail(503, 'COMPANION_NOT_CONFIGURED', '绯月服务尚未接入');
   if(url.pathname==='/api/records/photos')return forwardRecordPhoto(request,(bytes,type,name)=>env.COMPANION_HOST.uploadRecordPhoto(bytes,type,name));
   if (url.pathname === '/api/health' && request.method === 'GET') {

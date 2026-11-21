@@ -1,18 +1,14 @@
-import {normalizeDeadline} from '../agent/tasks/deadline.mjs';
+import {calendarDate,datePattern,tokyoDate} from './calendar-date.mjs';
 
-export function businessDate(value,now){
-  const jst=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo'}).format(now);
-  if(value==='今天')return jst;
-  if(value==='明天')return new Date(Date.parse(jst+'T00:00:00Z')+86400000).toISOString().slice(0,10);
-  const date=value.replace(/^(\d{4})年(\d{1,2})月(\d{1,2})日?$/,(_,y,m,d)=>y+'-'+m.padStart(2,'0')+'-'+d.padStart(2,'0'));
-  normalizeDeadline(date+'T00:00:00+09:00');return date;
-}
+export const businessDate=(value,now)=>calendarDate(value,tokyoDate(now));
+const moveAfterName=new RegExp('^(?:把|将)?(?:名为|名称为)?提醒(?:事项)?[：:\\s]*(?:名为|名称为)?(.+?)(?:移动|挪|改|移|推迟|调整)(?:到|至|为)\\s*('+datePattern+')$','u');
+const moveQuoted=new RegExp('^(?:把|将)([「“].+[」”])(?:这条|的)?提醒(?:移动|挪|改|移|调整)(?:到|至|为)\\s*('+datePattern+')$','u');
+const createReminder=new RegExp('^(?:创建|新增|登记)(?:一条|一个)?提醒[：:\\s]*[「“]([^「」“”]+)[」”](?:[，,\\s]*(?:日期|到期|截止)?[为是：:\\s]*('+datePattern+'))?$','u');
 
 const strip=s=>s.trim().replace(/^[「“](.*)[」”]$/su,'$1');
 export function explicitRegistration(text,now){
   const s=text.replace(/^(?:请|帮我|替我)\s*/u,'').trim().replace(/[。！!]$/u,'');
-  let m=/^(?:把|将)?(?:名为|名称为)?提醒(?:事项)?[：:\s]*(?:名为|名称为)?(.+?)(?:移动|挪|改|移|推迟|调整)(?:到|至|为)\s*(今天|明天|\d{4}-\d{2}-\d{2}|\d{4}年\d{1,2}月\d{1,2}日?)$/u.exec(s)
-    ??/^(?:把|将)([「“].+[」”])(?:这条|的)?提醒(?:移动|挪|改|移|调整)(?:到|至|为)\s*(今天|明天|\d{4}-\d{2}-\d{2}|\d{4}年\d{1,2}月\d{1,2}日?)$/u.exec(s);
+  let m=moveAfterName.exec(s)??moveQuoted.exec(s);
   if(m)return {type:'pc.reminders.move',params:{title:strip(m[1]),deadline:businessDate(m[2],now)}};
   m=/^(?:给|为|登记|记录)?长期(?:计划|任务)[：:\s]*(.+?)[，,\s]*(?:登记|记录)?(?:实际)?投入(?:时间|工时)?[：:\s]*(\d+(?:\.\d+)?)\s*(小时|分钟)$/u.exec(s);
   if(m)return {type:'pc.planner.hours',params:{title:strip(m[1]),actualHours:Number(m[2])/(m[3]==='分钟'?60:1)}};
@@ -23,7 +19,7 @@ export function explicitRegistration(text,now){
   if(m)return {type:'pc.records.create',params:{category:m[1],body:m[2]}};
   m=/^(?:登记|记录|新增)(?:一条)?吃喝(?:记录)?[：:\s]*[「“]([^「」“”]+)[」”]$/su.exec(s);
   if(m)return {type:'pc.food.create',params:{body:m[1]}};
-  m=/^(?:创建|新增|登记)(?:一条|一个)?提醒[：:\s]*[「“]([^「」“”]+)[」”](?:[，,\s]*(?:日期|到期|截止)?[为是：:\s]*(今天|明天|\d{4}-\d{2}-\d{2}))?$/u.exec(s);
+  m=createReminder.exec(s);
   if(m)return {type:'pc.reminders.create',params:{title:m[1],...(m[2]?{deadline:businessDate(m[2],now)}:{})}};
   return null;
 }

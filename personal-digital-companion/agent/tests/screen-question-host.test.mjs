@@ -15,6 +15,24 @@ import {attachmentRegistration,menuGuidance,validatePreview} from '../../desktop
 import {attachScreenQuestion,questionBounds} from '../../desktop/screen-question-host.mjs';
 import {conversationRoute} from '../../desktop/conversation-routing.mjs';
 
+test('直连只走本地文字对话，传递同模式上一轮，退出后恢复自动识别',async t=>{
+  const f=fixture(),calls=[];
+  const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:'unused',
+    localModel:{async analyze(text,options){calls.push({text,...options});return {kind:'chat',reply:'这一轮的回复'};}},
+    client:{forget(){},askText(){assert.fail('直连不应调用云端');}}});
+  t.after(()=>host.close());await host.open();
+  const submit=(text,mode,extra={})=>f.handlers.get('screen-qa:ask')(f.event(host.panel),{text,mode,...extra});
+  const first=' 不去床上亲热吗\n';
+  assert.equal((await submit(first,'direct')).text,'这一轮的回复');
+  assert.equal((await submit('确认登记','direct')).text,'这一轮的回复');
+  assert.deepEqual(calls.map(x=>x.hint),['direct','direct']);
+  assert.ok(calls.every(x=>x.skillInstruction===undefined));
+  assert.deepEqual(calls[1].previous,{用户:first,绯月:'这一轮的回复'});
+  assert.equal((await submit('截图','direct',{withScreen:true})).state,'error');
+  assert.equal((await submit('你好','auto')).state,'answer');
+  assert.equal(calls.at(-1).hint,'auto');assert.equal(calls.at(-1).previous,undefined);
+});
+
 test('两次真实措辞走登记技能，引用原文，先核对无日期草案，确认一次才写入',async t=>{
   const original='加个没时间的提醒，内容是关注Qwen4的量化模型发布，目前在使用qwen3.5的0.8到9b版本，需要关注qwen4的2b,4b版本的发布';
   const followup='上面那个需要提交为事项提醒哦';
@@ -60,14 +78,20 @@ test('图像确定性步骤、附件角色与负面指令',()=>{
   assert.throws(()=>checkEditConstraints(keep,[{op:'edit',quote:'换成图2的雨衣'}]),/漏掉了「保留脸」/);
   for(const q of ['怎么画一只猫','不要生图','生成一份生图提示词','帮我记录今天吃了什么'])assert.equal(imageRequest(q),false);
   assert.equal(imageRequest('放大这张照片',1),true);
+  assert.equal(imageRequest('绯月环球之旅'),true);
+  assert.equal(imageRequest('绯月环球之旅：京都'),true);
+  assert.equal(imageRequest('绯月环球之旅怎么用？'),false);
   assert.equal(attachmentRegistration('把图里的会议记成提醒'),true);
   assert.equal(attachmentRegistration('请描述这张图片'),false);
-  assert.match(menuGuidance('本地复盘怎么打开'),/任务 → 本地复盘/);
+  assert.match(menuGuidance('本地复盘怎么打开'),/选择「本地复盘」/);
+  assert.match(menuGuidance('任务日志在哪'),/任务 → 任务日志/);
   assert.match(menuGuidance('要怎么才能登记日记？'),/问绯月.*帮我写日记/);
 });
 
 test('附件登记核对同一份计划，放弃、旧令牌和重复确认都不提交',async t=>{
   const f=fixture(),plans=[],writes=[];
+  const original=' 把附件记成提醒\n',history=[];
+  f.history.save=row=>history.push(row);
   const plan={pending:[],chain:{nodes:[{key:'entry-1',type:'reminders.create',target_device_id:null,params:{title:'会议',deadline:'2026-11-24'}}]}};
   assert.throws(()=>validatePreview(plan,'登记成运动'),/类型/);
   const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:join(import.meta.dirname,'../..'),
@@ -77,9 +101,10 @@ test('附件登记核对同一份计划，放弃、旧令牌和重复确认都�
     }}});
   t.after(()=>host.close());await host.open();
   const event=f.event(host.panel);
-  const ask=()=>f.handlers.get('screen-qa:ask')(event,{text:'把附件记成提醒',attachment:{name:'会议.txt',kind:'text',data:'会议，2026-11-24'}});
+  const ask=()=>f.handlers.get('screen-qa:ask')(event,{text:original,attachment:{name:'会议.txt',kind:'text',data:'会议，2026-11-24'}});
   const decide=(id,approve)=>f.handlers.get('screen-qa:attachment-review')(event,{id,approve});
   const first=await ask();assert.match(first.fields,/2026-11-24/);assert.equal(writes.length,0);
+  assert(history.some(row=>row.originalQuestion===original&&row.question.endsWith('会议.txt')));
   assert.equal((await decide(first.reviewId,false)).state,'answer');
   const second=await ask();assert.equal((await decide(first.reviewId,true)).state,'error');assert.equal(writes.length,0);
   assert.equal((await decide(second.reviewId,true)).state,'answer');
@@ -199,10 +224,11 @@ test('查询网络先搜公开资料，再用 AI 按来源整理；记忆入口�
   f.history.save=value=>history.push(value);
   const sources=[{title:'发布公告',snippet:'11 月 20 日发布。',url:'https://example.test/official'}];
   const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:'unused',
-    client:{forget(){},captureAndAsk(){assert.fail('联网模式不能采图');},async askText(text,options){
-      assert.equal(options.grounded,true);
+    client:{forget(){},captureAndAsk(){assert.fail('联网模式不能采图')},askText(){assert.fail('检索不能交给云端模型')}},
+    localModel:{async analyze(text,options){
+      assert.equal(options.hint,'direct');
       summaries.push(text);
-      return aiAvailable?{state:'answer',text:'公告显示 11 月 20 日发布。[1]'}:{state:'error'};
+      return aiAvailable?{reply:'公告显示 11 月 20 日发布。[1]'}:{error:'UNAVAILABLE'};
     }},
     registration:{submit:()=>assert.fail('显式联网不能登记')},
     search:async query=>{

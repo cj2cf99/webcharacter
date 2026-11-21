@@ -1,0 +1,227 @@
+const byId=id=>document.getElementById(id);
+const api=window.taskInbox;
+const notice=byId('notice');
+const scroll=document.querySelector('main');
+const tabs=[byId('local-tab'),byId('cloud-tab')];
+const format=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',dateStyle:'short',timeStyle:'medium'});
+const labels={claim:'接取任务',continue:'继续重做',force:'接管任务',skip:'跳过任务',stop:'停止任务链'};
+const states={ACTIVE:'进行中',COMPLETED:'已完成',STOPPED:'已停止',RUNNING:'等待回执',
+  PENDING:'待领取',FAILED:'失败',CANCELLED:'已取消',EXPIRED:'已过期',SKIPPED:'已跳过'};
+const fields={title:'标题',content:'内容',body:'内容',text:'内容',prompt:'提示词',deadline:'截止日期'};
+const lists={
+  tasks:{rows:new Set(),key:'task_id',items:'tasks',more:'next_offset',empty:'当前没有待接取或执行中的任务。'},
+  chains:{rows:new Set(),key:'chain_id',items:'chains',more:'next_after',empty:'当前没有未结束的任务链。'},
+};
+let view='local';
+const working=new Set();
+const operationKey=({method,id})=>method==='inspect'?'inspect':method+':'+id;
+
+function putNotice(message=''){
+  notice.textContent=message;
+  notice.hidden=!message;
+}
+function stamp(value){
+  const date=new Date(value);
+  return value&&Number.isFinite(date.getTime())?format.format(date)+' JST':'';
+}
+async function read(method,value){
+  const result=await api[method](value);
+  if(result.error)throw Error(result.error);
+  return result.value;
+}
+// 卡片：第一项信息是状态，显示为带色徽标；其余为灰色元信息。
+const tone=text=>/失败|已停止|已取消|已过期/.test(text)?'danger':/暂停|重试|等待|不可/.test(text)?'warn':/完成|已核对|已跳过/.test(text)?'ok':/待领取|核对|排队/.test(text)?'accent':'info';
+function row(title,info,action){
+  const item=document.createElement('li'),body=document.createElement('div');
+  const top=document.createElement('div'),name=document.createElement('strong'),meta=document.createElement('small');
+  const [state,...rest]=info,chip=document.createElement('span');
+  item.className='fy-card';item.dataset.tone=tone(state||'');
+  item.style.setProperty('--i',document.querySelectorAll('li.fy-card').length%8);
+  top.className='fy-head';name.textContent=title;chip.className='fy-chip';chip.textContent=state||'';
+  top.append(name);if(state)top.append(chip);
+  meta.textContent=rest.filter(Boolean).join(' · ');
+  body.append(top,meta);
+  item.append(body);
+  if(action)item.append(actionButton(action,title));
+  return item;
+}
+function actionButton(action,title){
+  const button=document.createElement('button');
+  button.type='button';
+  button.textContent=action.text;
+  button.setAttribute('aria-label',action.text+' '+title);
+  button.dataset.operation=operationKey(action);
+  button.disabled=working.has(button.dataset.operation);
+  button.addEventListener('click',()=>operate(action));
+  return button;
+}
+async function loadLocal(){
+  try{
+    const tasks=await read('local');
+    byId('local-message').textContent=tasks.length?'':'绯月当前没有正在本机执行的任务。';
+    const phase={queued:'排队中',running:'执行中',verifying:'整批核对中',archiving:'保存复盘中',blocked:'已暂停'};
+    const stepState={pending:'待执行',checking:'核对基线',applying:'核对写入结果',verified:'已核对'};
+    byId('local-items').replaceChildren(...tasks.map(task=>{
+      const batch=task.batch;
+      if(!batch)return row(task.name||task.type,[task.attempt_count>1?'重试中':'执行中',stamp(task.started_at)]);
+      const done=batch.steps.filter(s=>s.state==='verified').length;
+      // 正式工作队列：排队的批次显示序号，暂停的显示已暂停。
+      const state=batch.state==='queued'&&batch.queue?'排队 #'+batch.queue.position:phase[batch.state];
+      const item=row(task.name,[state,done+'/'+batch.steps.length,stamp(task.started_at),batch.error]);
+      const steps=document.createElement('ol');
+      for(const step of batch.steps){
+        const line=document.createElement('li');line.textContent=step.label+' · '+stepState[step.state];line.dataset.state=step.state;steps.append(line);
+      }
+      item.firstElementChild.append(steps);
+      return item;
+    }));
+  }catch(error){
+    byId('local-message').textContent=error.message;
+  }
+}
+function taskRow(task){
+  const running=task.status==='RUNNING';
+  return row(task.name||task.type,[
+    running?'执行中':task.can_claim?'待领取':'暂不可领取',
+    stamp(task.updated_at||task.created_at),task.progress_message,
+  ],task.can_claim&&!running?{text:'接取',method:'claim',id:task.task_id}:null);
+}
+function chainRow(chain){
+  const item=document.createElement('li'),card=document.createElement('details');
+  const summary=document.createElement('summary'),title=document.createElement('strong');
+  const state=document.createElement('span'),created=document.createElement('small');
+  const steps=document.createElement('div');
+  item.className='fy-card chain-item';item.dataset.tone='accent';
+  card.dataset.chainId=chain.chain_id;
+  title.textContent=chain.name||'任务链';
+  state.className='chain-state';
+  state.textContent=states[chain.status]||states.ACTIVE;
+  created.textContent=stamp(chain.created_at);
+  summary.append(title,state,created);
+  card.append(summary,steps);
+  item.append(card);
+  let loading=false,loaded=false;
+  card.addEventListener('toggle',async()=>{
+    if(!card.open||loading||loaded)return;
+    loading=true;
+    steps.textContent='正在读取任务链…';
+    if(scroll.getBoundingClientRect().bottom-summary.getBoundingClientRect().bottom<110)
+      summary.scrollIntoView({block:'start'});
+    try{
+      const detail=await read('detail',chain.chain_id);
+      state.textContent=states[detail.status]||detail.status;
+      title.textContent=detail.name||title.textContent;
+      const rows=document.createElement('ol');
+      rows.className='chain-steps';
+      const names=new Map(detail.nodes.map(node=>[node.node_id,node.name]));
+      for(const node of detail.nodes){
+        const dependency=names.get(node.depends_on);
+        const step=row(node.name,[states[node.status]||node.status,dependency&&'前置 '+dependency,node.progress],
+          node.can_claim?{text:'接取',method:'claim',id:node.task_id}:null);
+        const parameters=document.createElement('dl');
+        for(const [key,value] of Object.entries(node.params||{})){
+          if(value==null||value==='')continue;
+          const name=document.createElement('dt'),content=document.createElement('dd');
+          name.textContent=fields[key]||key;
+          content.textContent=typeof value==='object'?JSON.stringify(value):String(value);
+          parameters.append(name,content);
+        }
+        if(parameters.childElementCount)step.firstElementChild.append(parameters);
+        rows.append(step);
+      }
+      steps.replaceChildren(rows,actionButton({text:'处理任务链',method:'inspect',id:chain.chain_id},title.textContent));
+      loaded=true;
+    }catch(error){steps.textContent=error.message+' · 重新展开可重试';}
+    finally{loading=false;}
+  });
+  return item;
+}
+async function loadList(name,append=false){
+  const list=lists[name],message=byId(name+'-message'),more=byId(name+'-more');
+  const turn=(list.turn??0)+1;
+  list.turn=turn;
+  if(!append){list.rows.clear();list.next=null;byId(name+'-items').replaceChildren();}
+  message.textContent='正在读取…';
+  more.disabled=true;
+  if(!append)more.hidden=true;
+  try{
+    const page=await read(name,list.next);
+    if(list.turn!==turn)return;
+    if(name==='tasks'){
+      byId('tasks-scope').textContent=page.standalone?'指定本机或派给任一电脑':'旧版云端清单可能包含任务链节点';
+    }
+    const container=byId(name+'-items');
+    for(const item of page[list.items]){
+      const id=item[list.key];
+      if(list.rows.has(id))continue;
+      list.rows.add(id);
+      container.append((name==='tasks'?taskRow:chainRow)(item));
+    }
+    list.next=page[list.more];
+    more.hidden=list.next==null;
+    message.textContent=list.rows.size?'':(list.next==null?list.empty:'本页暂无结果，可加载下一页。');
+  }catch(error){
+    if(list.turn===turn)message.textContent=error.message;
+  }finally{
+    if(list.turn===turn)more.disabled=false;
+  }
+}
+async function loadReceipts(){
+  const receipts=await read('receipts');
+  byId('receipts').hidden=!receipts.length;
+  byId('receipt-items').replaceChildren(...receipts.map(item=>row(item.title||labels[item.action]||'任务操作',
+    ['等待核对原回执'],{text:'核对回执',method:'resume',id:item.request_id})));
+}
+async function refresh(){
+  if(view==='local')return loadLocal();
+  await Promise.all([loadList('tasks'),loadList('chains'),loadReceipts().catch(error=>putNotice(error.message))]);
+}
+function syncButtons(){
+  document.querySelectorAll('[data-operation]').forEach(button=>button.disabled=working.has(button.dataset.operation));
+}
+async function operate(action){
+  const {method,id}=action,key=operationKey(action);
+  if(working.has(key))return;
+  working.add(key);
+  syncButtons();
+  putNotice(method==='claim'?'正在接取任务…':method==='resume'?'正在核对原回执…':'');
+  try{
+    await read(method,id);
+    putNotice(method==='claim'?'已执行并收到云端回执。':method==='resume'?'已核对原回执。':'');
+  }catch(error){
+    putNotice(error.message);
+  }finally{
+    working.delete(key);
+    syncButtons();
+    await Promise.all([loadList('tasks'),loadList('chains'),loadReceipts().catch(error=>putNotice(error.message)),loadLocal()]);
+  }
+}
+function select(name){
+  if(name===view)return;
+  view=name;
+  for(const tab of tabs){
+    const active=tab.id===view+'-tab';
+    tab.setAttribute('aria-selected',String(active));
+    tab.tabIndex=active?0:-1;
+    byId(tab.getAttribute('aria-controls')).hidden=!active;
+  }
+  scroll.scrollTop=0;
+  void refresh();
+}
+for(const tab of tabs){
+  tab.addEventListener('click',()=>select(tab.getAttribute('aria-controls')));
+  tab.addEventListener('keydown',event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    event.preventDefault();
+    const target=event.key==='Home'?tabs[0]:event.key==='End'?tabs[1]:tabs.find(other=>other!==tab);
+    select(target.getAttribute('aria-controls'));target.focus();
+  });
+}
+byId('refresh').addEventListener('click',async()=>{
+  const button=byId('refresh');if(!working.size)putNotice();
+  button.setAttribute('aria-busy','true');
+  try{await refresh();}finally{setTimeout(()=>button.removeAttribute('aria-busy'),300);}
+});
+for(const name of Object.keys(lists))byId(name+'-more').addEventListener('click',()=>void loadList(name,true));
+void refresh();
+setInterval(()=>{if(view==='local'&&!document.hidden)void loadLocal();},1500);

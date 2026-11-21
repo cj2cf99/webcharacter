@@ -106,5 +106,33 @@
   "tray.png": {
     "bytes": 3234,
     "sha256": "41f817021418b6f3b76d227f924fe1c08736874c2a62c07367c109d2b298d40b"
+  },
+  "./actions/diary-review-idle.webm": {
+    "bytes": 1917774,
+    "sha256": "da26cd5ca280786deb1c94a34427c2c69d21ca3ed7269dfce3e5de950ff39d27"
+  },
+  "./actions/farewell.webm": {
+    "bytes": 2346731,
+    "sha256": "44f917bd1c67ac37b21257f6c20232ee1741c20591c31b1a3e889224188c5989"
+  },
+  "./actions/reminder-idle.webm": {
+    "bytes": 2434690,
+    "sha256": "baebee9022e04bff80cde88b1e4101dbda10fb1615bf7eab1ac29aa4ff83ff54"
+  },
+  "./actions/startup.webm": {
+    "bytes": 2199856,
+    "sha256": "b1fb833615740da010aede01076b8a03cf7e0de9daf7147a6cc7c9dd9bffa64a"
+  },
+  "./actions/chat-registration.webm": {
+    "bytes": 2181044,
+    "sha256": "7951bd26a301d236d1011fac8d4075ea20a609f1ca7df1add915434c9adfe637"
+  },
+  "./actions/idle-special-2.webm": {
+    "bytes": 3005608,
+    "sha256": "1510f8e3e9ad4534ab4da09acdda102273b5c9ef2febfe9d54b4989663e7421f"
+  },
+  "./actions/praise-idle.webm": {
+    "bytes": 2132964,
+    "sha256": "807db1e4821a0cd0de493ce911c4fed91c25ff58609367f01f3a925371cf6fcc"
   }
 }

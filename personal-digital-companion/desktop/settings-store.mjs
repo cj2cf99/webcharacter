@@ -29,6 +29,9 @@ export class SettingsStore{
     this.profile=profile;this.bundle=bundle;this.file=resolve(profile,'pc-behavior-settings.json');mkdirSync(profile,{recursive:true});
     const clips=JSON.parse(readFileSync(resolve(bundle,'clip-catalog.json'),'utf8'));
     this.builtins=Object.entries(mapping).map(([id,key])=>({id,name:names[id],kind:'video',url:pathToFileURL(resolve(bundle,clips[key].normal)).href,compact:clips[key].compact?pathToFileURL(resolve(bundle,clips[key].compact)).href:null}));
+    for(const [id,name] of Object.entries({startup:'入场 · 挥手',farewell:'退场 · 鞠躬','reminder-idle':'有提醒 · 举铃','diary-review-idle':'写日记或补评价 · 沉思','praise-idle':'晚间学习 · 亲爱的真棒','chat-registration':'气泡登记 · 接到任务','idle-special-2':'特殊待机二'})){
+      this.builtins.push({id,name,kind:'video',url:pathToFileURL(resolve(bundle,'actions',id+'.webm')).href});
+    }
     this.builtins.push(...SOUND_NODES.filter(n=>n.file).map(n=>({id:'voice:'+n.id,name:n.label+' · '+n.text,kind:'audio',url:pathToFileURL(resolve(bundle,'voice',n.file)).href})));
     this.builtins.push(...[
       ['laugh-soft','✓ 已认可 · 停顿轻笑'],

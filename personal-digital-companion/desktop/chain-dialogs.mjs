@@ -10,9 +10,7 @@ export function chainDetail(chain) {
   return [`本机已接取 ${chain.held_count}/2；任务组：${chain.status}`,...lines,...notes].join('\n\n');
 }
 
-// 沿用原生对话框提供可操作的验收入口；管理页面由界面线接同一接口。
-export function createChainDialogs({dialog,client,runTask,request,deviceId,canShow,supports}) {
-  let showing=null;
+export function createChainDialogs({dialog,client,runTask,canShow,supports}) {
   const tell=(message,detail='')=>dialog.showMessageBox({type:'info',title:'任务管理',message,detail,buttons:['确定']});
   async function inspect(id) {
     while(canShow()) {
@@ -40,40 +38,5 @@ export function createChainDialogs({dialog,client,runTask,request,deviceId,canSh
       return;
     }
   }
-  async function show() {
-    if(showing)return showing;
-    showing=(async()=>{
-      if(!canShow())return;
-      const pending=client.pending();
-      if(pending.length){
-        const pick=await dialog.showMessageBox({type:'warning',message:'有操作等待核对原回执',
-          detail:'不会另建一轮。结果未知的执行请使用“中断任务与补传”。',buttons:['查看任务',...pending.map(p=>`${p.action} · ${p.task_id||'任务组'}`)],defaultId:0,cancelId:0});
-        if(!canShow())return;
-        if(pick.response>0){void client.resume(pending[pick.response-1].request_id).catch(error=>canShow()?tell(error.message):undefined);return;}
-      }
-      let after=null;
-      do{
-        const page=await client.list(after);if(!canShow())return;
-        const pick=await dialog.showMessageBox({type:'info',title:'主动接取任务',message:'选择任务组查看完整链',
-          buttons:['关闭','本机待领取单任务',...page.chains.map(c=>c.name||c.chain_id),...(page.next_after?['下一页']:[])],defaultId:0,cancelId:0});
-        if(!canShow()||pick.response===0)return;
-        if(pick.response===1){await singles();return;}
-        const chain=page.chains[pick.response-2];if(chain){await inspect(chain.chain_id);return;}
-        after=page.next_after;
-      }while(after&&canShow());
-    })();
-    try{return await showing;}finally{showing=null;}
-  }
-  async function singles(){
-    const response=await request(`/api/devices/${deviceId}/pending`,{method:'GET',cache:'no-store'});
-    if(!response.ok)throw new Error('获取任务清单失败');
-    const page=await response.json();
-    const tasks=page.tasks.filter(supports);
-    if(!canShow())return;
-    if(!tasks.length){await tell('当前没有本机可接取且已安装处理函数的任务','链式任务的阻塞原因请在完整任务链中查看。');return;}
-    const choice=await dialog.showMessageBox({type:'info',message:'显式接取一个任务',detail:'接取后会立即执行；本机最多同时接取两个。',
-      buttons:['返回',...tasks.map(t=>`${t.type} · ${t.task_id}`)],defaultId:0,cancelId:0});
-    if(canShow()&&choice.response>0)void runTask(tasks[choice.response-1].task_id).catch(error=>canShow()?tell(error.message):undefined);
-  }
-  return {show,inspect};
+  return {inspect};
 }

@@ -1,28 +1,28 @@
-:root { color-scheme: light dark; font: 14px/1.45 "Microsoft YaHei UI", system-ui, sans-serif; }
-body { margin: 0; color: CanvasText; background: Canvas; }
-main { padding: 16px; }
-label { display: block; font-size: 1.15rem; font-weight: 650; margin-bottom: 6px; }
-textarea { display: block; box-sizing: border-box; width: 100%; resize: vertical; font: inherit; padding: 8px; }
+body { margin: 0; }
+main { padding: 12px; }
+label { display: block; font-size: 15px; font-weight: 650; margin-bottom: 6px; }
+textarea { display: block; box-sizing: border-box; width: 100%; resize: vertical; font: inherit; padding: 8px 10px; border-radius: var(--fy-radius) !important; }
+textarea:focus { outline: none; border-color: var(--fy-accent) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--fy-accent) 18%, transparent); }
 p { margin: 6px 0; }
-#hint { font-size: .9rem; }
+#hint { font-size: 11.5px; color: var(--fy-muted); }
 .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 [hidden] { display: none !important; }
-button { font: inherit; padding: 5px 12px; border-radius: 6px; border: 1px solid GrayText; cursor: pointer; }
-button:disabled { cursor: default; }
-button[type=submit] { background: AccentColor; color: AccentColorText; }
 ul { margin: 4px 0; padding-inline-start: 22px; overflow-wrap: anywhere; }
-#status { margin-block: 12px 6px; font-weight: 650; }
+#status { margin-block: 10px 6px; padding: 6px 10px; border-radius: 8px; background: var(--fy-soft); font-size: 12px; font-weight: 600; animation: fy-rise .25s ease-out; }
 #status:empty { display: none; }
 #receipts { display: grid; gap: 6px; padding: 0; list-style: none; }
 .receipt {
-  --receipt-ink: CanvasText;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, CanvasText 20%, Canvas);
-  border-radius: 8px;
-  background: color-mix(in srgb, CanvasText 5%, Canvas);
+  --receipt-ink: var(--fy-info);
+  position: relative;
+  padding: 7px 10px 7px 13px;
+  border: 1px solid var(--fy-line);
+  border-radius: var(--fy-radius);
+  background: var(--fy-surface);
+  animation: fy-rise .3s ease-out both;
 }
-.receipt[data-state="COMPLETED"] { --receipt-ink: light-dark(#14624d, #9be2cc); }
-.receipt[data-state="FAILED"] { --receipt-ink: light-dark(#981b32, #ffadb6); }
+.receipt::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--receipt-ink); }
+.receipt[data-state="COMPLETED"] { --receipt-ink: var(--fy-ok); }
+.receipt[data-state="FAILED"] { --receipt-ink: var(--fy-danger); }
 .receipt-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .receipt-kind { font-weight: 650; }
 .receipt-state {
@@ -30,18 +30,36 @@ ul { margin: 4px 0; padding-inline-start: 22px; overflow-wrap: anywhere; }
   padding: 1px 7px;
   border-radius: 99px;
   color: var(--receipt-ink);
-  background: color-mix(in srgb, var(--receipt-ink) 13%, Canvas);
-  font-size: .83rem;
+  background: color-mix(in srgb, var(--receipt-ink) 14%, transparent);
+  font-size: 11px;
+  font-weight: 600;
 }
 .receipt-title { margin: 4px 0 0; font-weight: 650; }
 .receipt-text { margin: 4px 0 0; }
-.receipt-meta { margin: 4px 0 0; color: light-dark(#4e5359, #b4bac1); font-size: .82rem; }
+.receipt-meta { margin: 4px 0 0; color: var(--fy-muted); font-size: 11.5px; }
 #recordFields,#recordSource,#recordStatus { white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.6 }
 #recordFields { margin-top:0 }
 #recordStatus { font-weight:600 }
-.review-actions { flex:none;display:flex;gap:8px;justify-content:flex-end;padding:10px 16px;border-top:1px solid var(--fy-line) }
-#prompt{font-size:1.08rem;margin:0 0 8px}#recordFields:empty,#missing:empty,#bulk:empty{display:none}
+.review-actions { flex:none;display:flex;gap:8px;justify-content:flex-end;padding:8px 12px;border-top:1px solid var(--fy-line);background:color-mix(in srgb,var(--fy-surface) 55%,var(--fy-paper)) }
+#prompt{font:700 15px/1.4 var(--fy-serif);margin:0 0 8px}#recordFields:empty,#missing:empty,#bulk:empty{display:none}
 #editor{margin-top:14px}#editor label{font:inherit}#bulk label,#missing label{display:grid;grid-template-columns:minmax(8em,1fr) minmax(6em,1.2fr);align-items:center;gap:8px;margin:5px 0}
 #editor input:not([type=file]){font:inherit;width:100%;min-width:0;box-sizing:border-box;padding:4px}
-#missing{padding-inline-start:24px}#thumb{max-width:140px;max-height:96px;margin-top:6px}#filename{overflow-wrap:anywhere}
+#missing{padding-inline-start:24px}#filename{overflow-wrap:anywhere}
 .review-actions{flex-wrap:wrap}#recordSource,#filename{color:var(--fy-muted)}
+
+#photos {margin:8px 0 0;padding:0;border:0}
+#slots {display:flex;gap:8px}
+.photo-slot {position:relative}
+.photo-pick {display:grid;place-items:center;width:68px;height:56px;padding:0;overflow:hidden;background:transparent;border:1px dashed var(--fy-muted) !important;border-radius:8px;font-size:1.45rem}
+.photo-pick:hover {border-color:var(--fy-accent) !important;color:var(--fy-accent)}
+.photo-pick img {width:100%;height:100%;object-fit:cover}
+.fy-panel .photo-remove {position:absolute;right:1px;top:1px;min-height:0;padding:0;width:20px;height:20px;border-radius:50%;line-height:1}
+/* 询问与确认：待登记字段做成卡片，原文折叠，标签收小 */
+#recordFields:not(:empty){position:relative;margin:0 0 8px;padding:8px 10px 8px 13px;border:1px solid var(--fy-line);border-radius:var(--fy-radius);background:var(--fy-surface);animation:fy-rise .3s ease-out both}
+#recordFields:not(:empty)::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:0 3px 3px 0;background:var(--fy-accent)}
+main>details{margin:0 0 6px;font-size:12px;color:var(--fy-muted)}
+main>details>summary::before{content:"›";display:inline-block;margin-right:5px;color:var(--fy-accent);transition:transform .2s}
+main>details[open]>summary::before{transform:rotate(90deg)}
+#editor>label,#photos legend{font-size:12px;font-weight:600;color:var(--fy-muted);margin-bottom:4px}
+#photos legend{padding:0}
+#recordStatus:not(:empty){padding:6px 10px;border-radius:8px;background:var(--fy-soft);font-size:12px}
