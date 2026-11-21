@@ -470,3 +470,6 @@ Qwen 会话通过 local-model-process.mjs 中的 systemPrompt 加载绯月人设
 本机安装已获确认，本次不登记花园。2026-11-21T11:19:13.9868721+09:00 完成单文件备份和安装。旧进程 23352 正常退出，新进程 28952 从原安装目录启动，桌面快捷方式、登录启动项、实际资料目录及本机接口 /infoguide 核对通过。安装备份为 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/diary-narration-before-239b08df7c604a9e9149cc6a23cec80b。
 
 正式安装文件 SHA256 为 DB1AC778BCD53E5E9761364264FD9A459EE0F1CEADBB993B92D2EA51641AE95E。直接从安装路径加载 Aggressive 9B Vulkan，以两条真实故障相关素材执行 node work/replay-next-diary-material.mjs --installed。两段都有带文字的私语，隔离库独立读回两条来源摘记及一篇正文，重复运行正文和修订号一致。正式安装版的 tools/test-desktop-shell.mjs 通过。正式用户资料的七天全轮与文笔验收仍待实用确认。无数据库迁移、云端部署或花园登记。Git 仅本地留存。
+
+
+2026-11-21 14:30:10 JST，三次正式安装（06:23:25 登记分流与回复尾串，06:43:00 手记篇首截断，11:19:13 手记私语为空）经用户确认合批补登。源码提交依次为 4ee4a1e、709c849、b7b8097。批次 feiyue-desktop-installed-catchup-20261121，经正式桌宠 REST v4 完成；精确 SQL c15b767be74426a1216c00dd75b5aa6acba54e92，清单摘要 fe56ef9719cdda4a5cf06e5d1128dd0bb9b5a916c0de722b55081f645bd7775b。六步 verified，项目 #16、功能 #61、发布 #63–65、明细 #134–136、改善 #72、缺陷 #25/#26。在线独立核对 9 行逐字段相符，修订 122 → 128，功能页 15.3。回执存 cloudflaremyapp 的 myapp/database/changes/feiyue-desktop-installed-catchup-20261121/execution-receipt.json。
