@@ -400,3 +400,63 @@ Windows 旧 PID 33608 经原生窗口正常退出，安装前备份清单到准�
 - recordanyting `3d46157` · `codex/feiyue-non-newspaper-release-20261121`
 - resourceforlater `f8b3aa2` · `codex/feiyue-non-newspaper-release-20261121`
 - diary-attachments `73f593f` · `codex/feiyue-non-newspaper-release-20261121`
+
+## 2026-11-21 JST · 绯月 Windows 七日新闻发布审核
+
+### 用户需求及验收
+
+原始需求是把重复新闻稍作汇总，并保留多次刷新累积的报道。用户将可直接查看的期限由两天改为七天。同一件事跨来源汇成一块，首页先展示最新情况，事件详情再按从旧到新的顺序说明发展。七天前的事件本地归档，每事件保留 50–200 字的摘要、日期和消息来源，按日期分目录、每事一份文件。
+
+首页保持紧凑，普通桌面宽度多栏。选择事件后列表缩为左侧单列，右侧是可主动关闭的详情，窄窗使用详情抽屉。首页和详情分别可回顶部。详情需要有结合时间的详细现状，底部来源默认折叠并可打开原文。RSS 有合适图片时用固定的 192×128 缩略图，按需加载并可放大。需求原文、确认的原型和两轮复审见 [需求变更](docs/REQUIREMENT_CHANGES.md)、[归档设计](docs/NEWS_BRIEFING_ARCHIVE_DESIGN.md) 和 [新闻实现复审](docs/reviews/NEWS_WEEKLY_IMPLEMENTATION_REVIEW_2026-11-21.md)。
+
+### 发布目标和基线
+
+- 只更新本机 Windows 绯月正式版。安装根目录为 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`。用户资料目录为相对该根目录的 `output/desktop-profile`。当前正式进程 PID 17084，2026-11-21 18:08:50 JST 启动，本机 REST 指南 v4，快捷方式与登录启动项指向同一安装根。
+- 上一批 Windows 交付记录为 `435c5b0`，明确排除七日新闻。只读核对到该发布分支 `codex/feiyue-non-newspaper-release-20261121` 的远端分支头为 `afc0bfe1a71c713ad636a8eb75030f23bddd64f1`。本次比较以正式安装文件实测 SHA-256 为准。新闻变更来自 `work/feiyue-combined-heartbeat-20261121/git-desktop/personal-digital-companion`，提交基线 `d700383` 及开发树中的新闻改动。纳入范围由白名单限定。
+- 候选版本 `92be3d7d8d0f` 是 39 个差异文件及其基线、候选 SHA-256 清单的摘要。20 个运行文件、19 个测试和文档等伴随文件。完整路径和散列见 [release-manifest.json](docs/reviews/NEWS_WEEKLY_WINDOWS_RELEASE_MANIFEST_2026-11-21.json)。本审核记录单独按历史版本和新段落内容核对。Git 源码同步应沿正式 Windows 发布基线单独提交新闻差异，构建产物由源码复现，逐项核对远端提交。当前尚未提交或推送本次发布。
+
+### 行为变化和文件
+
+| 变更 | 之前与候选行为 | 文件 |
+|---|---|---|
+| RSS 与本地累积 | 旧版主要显示最新期次。候选沿用免费的 RSS，正常 720 分钟一次，最多回看 72 小时做增量采集，结合本机已有数据按事件累积七个东京自然日。归并跨源转述，同一转述不推进事件时间。 | `desktop/news-briefing.mjs`、`desktop/news-history.mjs`、`desktop/source-updates.mjs`、`workflows/comfyui/news_watch.py` |
+| 新闻总览和事件详情 | 由标题报面改为新闻事件总览。总览按最近进展排序，详情先讲现状，再按东京时间从早到晚显示进展、配图与底部来源。展开详情、收起、移动窄窗及两处回顶部独立生效。 | `desktop/news-layout.mjs`、`desktop/news-panel-{host,ui}.mjs`、`desktop/news-panel-preload.cjs`、`desktop/news-panel.{html,css}`、`desktop/news-weekly.css`，及同名的 5 个前端构建产物 |
+| 摘要与配图 | 结合每个节点的事实和时间组织现状。沿用本机模型，数值与时间缺乏足够来源证据时保留有据摘录。RSS 无图的事件正常展示。使用延迟加载和分开的缩略图、放大图请求。 | `desktop/news-editor.mjs`、`desktop/shell.mjs`、`desktop/news-panel-host.mjs`、`workflows/comfyui/research_preview.py` |
+| 旧闻归档 | 旧版轮询不保留跨期事件档案。候选在轮询时把已过七天的事件写入 `output/desktop-profile/news-archive/YYYY-MM-DD/<事件ID>.md`。写盘并成功提交后才从活动记录移出。写盘失败或证据不足以形成合格摘要时保留本地记录待重试。 | `desktop/news-history.mjs`、`desktop/news-briefing.mjs`、`desktop/reminder-checks.mjs` |
+| 验证和需求留痕 | 增加正式新闻模块测试、Electron 测试图片、已确认原型和复审记录，补齐使用说明。 | `agent/tests/news-briefing.test.mjs`、`tools/test-news-panel-electron.mjs`、`tools/run-electron-check.mjs`、`tools/news-fixtures/spot-nasa-jpl.jpg`、`prototype/news-weekly/`、相关新闻设计、界面及开发文档 |
+
+### 数据、配置和兼容性
+
+本机 `reminder-checks.sqlite` 启动时增建 `news_events`、`news_event_urls`、`news_history_migration` 和 `news_poll_state`。旧刊由 `news_briefing.latest` 迁入一次，保留旧表和已收录去重记录。安装前只读检查 `PRAGMA quick_check` 为 `ok`，存在一条旧简报记录，正式新闻轮询已启用、间隔 720 分钟。本次保持其实际轮询设置。七日内容按本地现有记录和后续增量逐步积累。已被旧版刷新覆盖的刊次无现成副本可恢复。发布时间和存储格式保持现有语义，界面和归档使用 JST。
+
+Cloudflare、主站、生产云数据库迁移、外部鉴权配置、正式快捷方式、开机项、模型文件及用户偏好改动均无。当前阶段仅备妥候选包、构建和验证。安装和验收尚未发生。
+
+### 实际检测及未完成验证
+
+- `node tools/build-desktop.mjs` 成功生成候选桌面资源。候选和安装基线按 SHA-256 对照，只覆盖白名单内差异。
+- `node --test agent/tests/news-briefing.test.mjs tools/test-poll-settings.mjs` 通过 21 项候选测试。覆盖七天累积、旧刊迁移、来源、摘要数值和时间边界、归档失败及重启幂等、轮询配置。
+- `python -B tools/test-skills.py` 在候选通过 4 项。开发树的完整新闻复审及更广的测试数字见实现复审记录，两处测试树基线不同。
+- 使用共享的正式 Electron 二进制执行 `tools/run-electron-check.mjs tools/test-news-panel-electron.mjs`，隔离用户资料目录，通过新闻 IPC、三节点四来源、详细现状、折叠来源、双尺寸真实 JPEG 解码、桌面/窄窗布局、归档入口、刷新和重开操作。截图位于候选旁的 `e2e/`，为隔离数据。
+- `node --test tools/test-reminder-checks.mjs` 中旧测试期待每页 20 条，正式安装基线和候选均为每页 8 条。`tools/run-electron-check.mjs tools/test-desktop-shell.mjs --garden-api` 在两份代码均停于第 117 行的旧托盘菜单断言。保持现行复盘和托盘设计。
+- 对两份树执行 `node --test --test-timeout=12000 'agent/tests/*.test.mjs'`。候选 260 通过、23 失败、2 取消、2 跳过，安装基线 246 通过、23 失败、2 跳过。两份树失败用例名称一致，`pending-poller.test.mjs` 均未自行退出，已结束相应隔离测试子进程。两个并行超时的花园用例随后用 `--test-concurrency=1 --test-timeout=35000 --test-name-pattern='独立调用方仅凭|导入进度前缀后'` 单独复跑，两份树均 2 项通过。排除 `garden-first-use.test.mjs`、`local-rest-garden.test.mjs`、`balanced-local-model.test.mjs` 的同组对照，候选 249 通过、19 失败、2 跳过，基线 233 通过、19 失败、2 跳过。全量回归仍有基线红项。
+- 先前开发验证 Google News RSS 样本得到 159 条报道，无 `imageUrl`。实际 RSS 配图到达和真实模型生成仍缺证据，现有模型回退和图片界面用隔离输入验证。正式库只读核对通过，实际迁入和正式重启验收待部署后核对。第三方独立审核未执行。
+
+### 安装、恢复和发布后核验
+
+1. 获得本次安装重启的明确确认后，按清单重验已安装旧文件和候选文件散列，核实正式 PID、启动目录、资料目录、本机指南、轮询设置和活动任务状态。对将替换的文件和历史审核记录做散列备份，对本机提醒 SQLite 做一致性备份，保留同目录归档。任何基线变更先停下核对。
+2. 正常退出正式绯月并等待释放本机 REST 端口。写入根目录审核记录，按白名单逐文件安装，按散列逐项复核，再经现有正式入口启动。媒体资源、模型和资料目录按原样接续。安装失败只恢复本批已替换的旧文件和新路径，验证恢复散列，再启动旧版。旧数据由加法迁移保留，发生 SQLite 故障时先保全现场，再以一致性备份作恢复依据。
+3. 核验新进程与启动时间、安装路径、REST v4、既有批次、原轮询设置和新闻库 `quick_check`，核对迁移标记及事件数量。确认打开正式新闻窗口，抽验事件详情、来源及关闭操作。待真实后续 RSS 到达再核对有图新闻和历史跨轮累积。将实际退出、启动、运行检查和 Git 提交与回读记录追加到本文件及开发纪要。
+4. 本次部署许可待确认。花园登记意愿待单独确认。若同意，再只读核实线上结构与实际现状，提供具体清单供确认。获得清单确认后，按实际发布结果生成精确 SQL 并先提交 Git，再交给重启后的正式绯月 REST 一次，记录批次和回读回执。
+
+
+### 绯月 Windows 七日新闻实际发布 · 2026-11-21 JST
+
+用户回复「确认」，授权按审核记录安装并重启本机绯月。花园登记未获单独授权，本次无登记、花园 SQL 或外部部署。
+
+正式绯月于 18:46:55 JST 启动 PID 38364，18:46:59 JST 核验完成。旧 PID 17084 正常退出。20 项运行文件与 19 项伴随文件的内容摘要逐项一致，使用原安装入口和数据目录。安装前已保留替换项原文件和一致性的本机提醒库副本。
+
+本机 REST 指南 v4 可用，保留 14 个历史批次。正式 `reminder-checks.sqlite` 完整性检查通过，旧简报保留 1 行，迁入标记 1 行。回读 311 个事件和 316 个来源索引，正式新闻轮询继续每 720 分钟且启用。新闻库最近一次刷新为 16:38:41 JST。当前累计事件中 RSS 未提供配图。真实后续配图和本机模型生成待验证。
+
+从已安装目录用隔离资料运行 `tools/run-electron-check.mjs tools/test-news-panel-electron.mjs` 通过，覆盖 IPC、累积、详情、来源、缩略图与放大、归档入口、刷新及重开。用户停止了 Windows 桌面控制，正式新闻窗口手动操作未完成。
+
+发布标识 `92be3d7d8d0f`。Git 在上次已发布 Windows 分支的 `afc0bfe1a71c713ad636a8eb75030f23bddd64f1` 上建立独立发布分支，提交仅包含本次新闻源码、测试和审核记录。推送结果将在回读后追加。

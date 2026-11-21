@@ -33,6 +33,8 @@ import {attachWeather} from './weather-host.mjs';
 import {createReminderChecks,checkDueItems} from './reminder-checks.mjs';
 import {attachPollSettings} from './poll-settings-host.mjs';
 import {attachNewsPanel} from './news-panel-host.mjs';
+import {createNewsEditor} from './news-editor.mjs';
+import {cleanNewsTitle} from './news-layout.mjs';
 import {attachReminderReview} from './reminder-review-host.mjs';
 import {attachTaskInbox} from './task-inbox-host.mjs';
 import {desktopModelPath} from './local-model.mjs';
@@ -254,14 +256,17 @@ export async function startDesktop(electron,options={}){
       if(!quitPending&&!cleaned)await messages.showMessageBox({type:'warning',title,message:kind==='diary'?'这次写日记未能完成。':'执行评价尚未补完，稍后可继续。',detail:error.message,buttons:['确定']});
     }
   }
-  const checks=createReminderChecks({profile,log:tasks.traffic?.write,check:signal=>checkDueItems(tasks.weatherRequest,signal,day=>{
+  const compileNews=createNewsEditor(localModel);
+  const checks=createReminderChecks({profile,compileNews,log:tasks.traffic?.write,check:signal=>checkDueItems(tasks.weatherRequest,signal,day=>{
     if(checks.takeEveningPraise(day))contextualAction('praise-idle');
   }),
     lastRun:id=>diary?.last(id==='nag'?'nag-shown':id),
     notifyNews:options.benchmark?undefined:items=>{
       newsPanel.update();
+      if(!items.length)return;
       const title='绯月 · 新闻简报（'+items.length+' 条）';
-      const content=items[0].title+'\n对我说「看新闻简报」可读本期全部标题和出处。';
+      const first=items[0];
+      const content=cleanNewsTitle(first.latest||first.title)+'\n对我说「看新闻简报」可读最近七天要点和出处。';
       if(process.platform==='win32')tray.displayBalloon({title,content,respectQuietTime:true});
       else if(electron.Notification?.isSupported())new electron.Notification({title,body:content}).show();
     },
@@ -290,7 +295,7 @@ export async function startDesktop(electron,options={}){
     }});
   menuUnread=checks.unread;pendingCheckVisible=checks.pending;
   const pollSettings=attachPollSettings(electron,{root,bundle,checks});
-  const newsPanel=attachNewsPanel(electron,{root,bundle,checks,model:localModel});
+  const newsPanel=attachNewsPanel(electron,{root,bundle,checks,model:localModel,compile:compileNews});
   const serverTask=createServerTaskCommand({profile,tasks,localModel,dialog:messages});
   const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,checks,emotion:()=>emotion,topics:()=>topics,onForeground:interruptMemory,auditPending:()=>{const n=nags?.pending();return n?.source==='audit'?{id:n.id,title:n.title,status:n.status}:null;},
     openNews:newsPanel.open,resumeAudit:()=>memoryJob('diaryAudit',reminderStartup.signal,true),onRegistration:()=>contextualAction('chat-registration'),serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,

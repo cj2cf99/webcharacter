@@ -1,14 +1,20 @@
 // 权重仅用于本期版面。相关度优先使用具体实体和事件，再看同一关注主题。
 const families=topic=>topic.endsWith('社会')?'社会':topic.endsWith('股市')?'市场':'科技';
+export function cleanNewsTitle(title){
+  return title.trim()
+    .replace(/^(?:[\p{Script=Han}]{2,8}讯号|快讯|简讯)\s*[|｜：:]\s*/u,'')
+    .replace(/\s*(?:[|｜]\s*)?(?:#[^#\r\n]+#\s*)+$/u,'').trim()||title;
+}
 const signals=[
   /紧急状态|紧急疏散|重大事故|遇难|海啸|熔断|evacuation order|tsunami warning|非常事態|避難(?:指示|命令)/i,
   /全国|生效|实施|暴跌|重挫|暴涨|state of emergency|record plunge|急落/i,
   /开源|首发|量产|部署|新高|地震|open.source|release|earthquake|発売/i
 ];
 function features(item,at) {
-  const text=(item.chinese?.title||item.title).normalize('NFKC').toLowerCase();
+  const original=cleanNewsTitle(item.chinese?.title||item.title).normalize('NFKC').toLowerCase();
+  const text=item.headline||original;
   const percent=Number(text.match(/(\d+(?:\.\d+)?)\s*%/)?.[1]||0);
-  const score=1+(signals[0].test(text)?4:0)+(signals[1].test(text)?2:0)+(signals[2].test(text)?1:0)
+  const score=1+(signals[0].test(original)?4:0)+(signals[1].test(original)?2:0)+(signals[2].test(original)?1:0)
     +(families(item.topic)==='市场'?Math.min(3,percent/3):0)+Math.max(0,1-(at-item.publishedAt)/86400000);
   const terms=new Set(text.match(/[a-z][a-z0-9.-]{2,}|[\p{Script=Han}]{2}/gu)||[]);
   for(const [name,aliases] of [['英伟达',/nvidia|英伟达/],['机器人',/robot|机器人|ロボット/],
