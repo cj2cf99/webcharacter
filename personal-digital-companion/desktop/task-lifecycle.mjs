@@ -45,7 +45,8 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
       const finish=(error,response)=>{clearTimeout(timeout);controller.signal.removeEventListener('abort',abort);if(error)reject(error);else resolve(response);};
       const abort=()=>{local.abort();finish(Object.assign(new Error('应用正在退出，记录保留'),{code:'CANCELLED'}));};
       if(controller.signal.aborted){abort();return;}
-      const wait=['/api/assistant/recording-plan','/api/assistant/heartbeat','/api/assistant/provider-test'].includes(path)?240000:path==='/api/records/photos'?60000:path.endsWith('/execute')||path.startsWith('/api/weather/')?15000:5000;
+      const ai=['/api/assistant/message','/api/assistant/recording-plan','/api/assistant/heartbeat','/api/assistant/provider-test'].includes(path);
+      const wait=ai&&options?.method!=='GET'?240000:path==='/api/records/photos'?60000:path.endsWith('/execute')||path.startsWith('/api/weather/')?15000:5000;
       timeout=setTimeout(()=>{local.abort();finish(Object.assign(new Error('连接超时，记录仍保留'),{code:'TIMEOUT'}));},wait);
       controller.signal.addEventListener('abort',abort,{once:true});
       Promise.resolve().then(()=>{

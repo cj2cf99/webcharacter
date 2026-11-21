@@ -4,7 +4,8 @@ import {AttachmentController} from './attachment.mjs';
 import {watchWindows} from './native-windows.mjs';
 import {screenPosture} from './screen-posture.mjs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {resolve} from 'node:path';
+import {dirname,resolve} from 'node:path';
+import {createInteractionWork} from './interaction-work.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
 import {readFile,stat} from 'node:fs/promises';
@@ -144,8 +145,9 @@ export async function startDesktop(electron,options={}){
   const pcSettings=attachSettings(electron,{win,profile,bundle,root,legacySound:sound,onDisplayChange:applyScreenLock});
   let confineToScreen=pcSettings.store.snapshot().config.confineToScreen;
   const localModel=options.localModel??(!options.benchmark&&electron.utilityProcess?createBalancedLocalModel({
-    utilityProcess:electron.utilityProcess,modelPath:desktopModelPath(app,root),log:tasks.traffic?.write
+    utilityProcess:electron.utilityProcess,modelPath:desktopModelPath(app,root),log:tasks.traffic?.write,localFirst:true
   }):null);
+  const interactionWork=localModel?.work&&createInteractionWork({model:localModel,request:tasks.weatherRequest,log:tasks.traffic?.write});
   let pendingCheckVisible=false,menuUnread=0;
   let writing=false,pollExecuting=false,lastWork,lastContext,wasExecuting=false;
   let farewell=null,nextTicket=0;
@@ -296,11 +298,14 @@ export async function startDesktop(electron,options={}){
   menuUnread=checks.unread;pendingCheckVisible=checks.pending;
   const pollSettings=attachPollSettings(electron,{root,bundle,checks});
   const newsPanel=attachNewsPanel(electron,{root,bundle,checks,model:localModel,compile:compileNews});
-  const serverTask=createServerTaskCommand({profile,tasks,localModel,dialog:messages});
+  const serverTask=createServerTaskCommand({profile,tasks,localModel,interactionWork,dialog:messages});
+  const modelFolder=dirname(desktopModelPath(app,root));
+  const upgradeVision=options.upgradeVision??(!options.vision&&interactionWork?localVision(resolve(modelFolder,'Qwen3.5-9B-Q4_K_M.gguf'),
+    {projection:resolve(modelFolder,'Qwen3.5-9B-mmproj-F16.gguf')}):undefined);
   const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,checks,emotion:()=>emotion,topics:()=>topics,onForeground:interruptMemory,auditPending:()=>{const n=nags?.pending();return n?.source==='audit'?{id:n.id,title:n.title,status:n.status}:null;},
     openNews:newsPanel.open,resumeAudit:()=>memoryJob('diaryAudit',reminderStartup.signal,true),onRegistration:()=>contextualAction('chat-registration'),serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
     memory,vision:memory&&(options.vision??localVision(desktopModelPath(app,root))),readTasks:memory?.readTasks??tasks.executor?.review.read,
-    readTraffic:tasks.traffic?.readPage,client:options.screenQuestionClient,requestRestart,localModel,log:tasks.traffic?.write});
+    readTraffic:tasks.traffic?.readPage,client:options.screenQuestionClient,requestRestart,localModel,interactionWork,upgradeVision,log:tasks.traffic?.write});
   const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark,recordCheck:checks.record,checks});
   const reminderReview=tasks.reminderReview?attachReminderReview(electron,{bundle,root,flow:tasks.reminderReview}):null;
   const taskInbox=tasks.taskInbox?attachTaskInbox(electron,{bundle,root,flow:{...tasks.taskInbox,

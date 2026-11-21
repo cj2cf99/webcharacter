@@ -229,9 +229,9 @@ async function start() {
   const rewriteGrammar = await engine.createGrammarForJsonSchema(rewriteSchema);
   const wrapper = new QwenChatWrapper({variation:'3.5',thoughts:'discourage'});
 
-  async function pass(input, signal, systemPrompt, previous, outputGrammar=grammar, maxTokens=160) {
+  async function pass(input, signal, systemPrompt, previous, outputGrammar=grammar, maxTokens=160, promptContext=context) {
     signal.throwIfAborted();
-    const sequence = context.getSequence();
+    const sequence = promptContext.getSequence();
     const session = new LlamaChatSession({contextSequence:sequence,chatWrapper:wrapper,systemPrompt:[systemPrompt,active?.calendar].filter(Boolean).join('\n')});
     try {
       if (previous?.用户 && previous?.绯月) {
@@ -344,6 +344,15 @@ async function start() {
           const instructions=[responseInstruction(mode,{direct}),data.skillInstruction?.response].filter(Boolean).join('\n');
           const reply=await pass(text,signal,instructions,previous,null,mode==='speech'||mode==='judgment'?256:512);
           result=reply?{kind:'chat',reply}:{error:'LOCAL_AI_RESULT_INVALID'};
+        }else if(hint==='interactionWork'){
+          const {instruction,schema,maxTokens=512}=data.skillInstruction;
+          const required=model.tokenize(text).length+model.tokenize(instruction).length+maxTokens+256;
+          if(required>16384)
+            throw Object.assign(Error('本轮交互资料超出本地上下文'),{code:'LOCAL_AI_CONTEXT_BUDGET'});
+          const workGrammar=await engine.createGrammarForJsonSchema(schema);
+          const workContext=required>contextSize?await model.createContext({contextSize:Math.ceil(required/1024)*1024,threads}):context;
+          try{result=await pass(text,signal,instruction,undefined,workGrammar,maxTokens,workContext);}
+          finally{if(workContext!==context)await workContext.dispose();}
         }else if (hint === 'serverTask' || hint === 'personalityMemory') {
           if(hint==='personalityMemory'&&['emotion-appraisal','initiative-decision','topic-memory'].includes(data.skillInstruction.name)){
             const used=model.tokenize(text).length+model.tokenize(data.skillInstruction.instruction).length;
@@ -390,7 +399,8 @@ async function start() {
         }
 
       } catch (error) {
-        result = {error:signal.aborted?'LOCAL_AI_TIMEOUT':error?.code === 'LOCAL_AI_RESULT_INVALID'?'LOCAL_AI_RESULT_INVALID':'LOCAL_AI_INFERENCE_FAILED'};
+        result = {error:signal.aborted?'LOCAL_AI_TIMEOUT':hint==='interactionWork'&&error instanceof SyntaxError?'LOCAL_AI_RESULT_INVALID':
+          ['LOCAL_AI_RESULT_INVALID','LOCAL_AI_CONTEXT_BUDGET'].includes(error?.code)?error.code:'LOCAL_AI_INFERENCE_FAILED'};
       } finally {
         active = null;
       }

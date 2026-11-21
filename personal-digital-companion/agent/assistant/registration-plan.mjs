@@ -19,7 +19,7 @@ const heart = '❤️';
 const finalHeart = /❤[\uFE0E\uFE0F]?$/u;
 const graphemes = new Intl.Segmenter('zh-CN', {granularity: 'grapheme'});
 const diaryFieldsQuestion = /^(?:请)?\s*(?:补充|提供|填写|输入)\s*(?:日记的?\s*)?(?:标题|题目|正文|内容)(?:\s*(?:[、，,]|和|与|及)\s*(?:日记的?\s*)?(?:标题|题目|正文|内容))*[。.!！]?$/u;
-const instructions = `从用户文字中提取要登记的内容。仅返回 JSON {"actions":[{"type":"已有登记类型","params":{},"after":1}],"pending":[{"type":"已有登记类型","question":"待补充内容"}]}。
+export const registrationInstructions = `从用户文字中提取要登记的内容。仅返回 JSON {"actions":[{"type":"已有登记类型","params":{},"after":1}],"pending":[{"type":"已有登记类型","question":"待补充内容"}]}。
 after 可省略。只在用户明确要求先后时填写，从 1 开始引用 actions 中的前置项。前置资料不足时，将依赖它的登记也放入 pending。
 沿用原文出现顺序。只做吃喝、运动、一键事件、随手记、日记、提醒和鱼与熊掌资源。保留用户提供的链接和文字细节，不猜测未提供的日期和分类。
 把记录当天经历、感受或反思的叙述识别为日记。单独的吃喝、运动等明确登记事项不额外生成日记。一段输入只建一条日记；用 diaries.create 的空 params，服务端会把整段原文当作正文并生成标题，不要追问标题或正文。
@@ -35,41 +35,47 @@ async function defaultCategories(env) {
 }
 
 export async function planRegistration(request, env, ownerId, createAiClient, loadCategories = defaultCategories) {
-  if (request.method !== 'POST') return fail(405, 'METHOD_NOT_ALLOWED', '仅支持 POST');
+  if (!['GET','POST'].includes(request.method)) return fail(405, 'METHOD_NOT_ALLOWED', '仅支持 GET 或 POST');
+  const isCatalog=request.method==='GET';
   let input;
-  try { input = await request.json(); } catch { return fail(400, 'INVALID_JSON', '请求必须为 JSON'); }
-  if (!fields(input, ['text']) || typeof input.text !== 'string' || !input.text.trim()) {
-    return fail(400, 'INVALID_TEXT', '请输入登记内容');
+  if(!isCatalog){
+    try { input = await request.json(); } catch { return fail(400, 'INVALID_JSON', '请求必须为 JSON'); }
+    if (!fields(input, ['text'], ['submittedAt','reviewFeedback']) || typeof input.text !== 'string' || !input.text.trim()) {
+      return fail(400, 'INVALID_TEXT', '请输入登记内容');
+    }
+    if ([...input.text].length > 6000) return fail(413, 'MESSAGE_TOO_LARGE', '登记文字超过 6000 字符');
+    if(Object.hasOwn(input,'submittedAt')&&(!Number.isSafeInteger(input.submittedAt)||Math.abs(Date.now()-input.submittedAt)>86400000))
+      return fail(400,'INVALID_REGISTRATION_TIME','登记草案的提交时刻无效');
+    if(Object.hasOwn(input,'reviewFeedback')&&(typeof input.reviewFeedback!=='string'||input.reviewFeedback.length>2000))
+      return fail(400,'INVALID_TEXT','登记复审反馈无效');
   }
-  if ([...input.text].length > 6000) return fail(413, 'MESSAGE_TOO_LARGE', '登记文字超过 6000 字符');
 
-  let catalog, categories;
+  let catalog, categories=[];
+  let categoriesAvailable=true;
   try {
     const { results } = await env.DB.prepare("SELECT type,description,parameter_spec_json FROM tasklist WHERE executor='cloud' ORDER BY type").all();
     catalog = results.filter(row => isRegistrationTaskType(row.type)).map(row => ({
       type: row.type, description: row.description, parameter_spec: JSON.parse(row.parameter_spec_json),
     }));
-    categories = await loadCategories(env);
   } catch {
     return fail(503, 'REGISTRATION_NOT_CONFIGURED', '登记模板或分类暂不可用');
   }
   if (!catalog.length) return fail(503, 'REGISTRATION_NOT_CONFIGURED', '登记模板尚未配置');
+  try {categories=await loadCategories(env);}catch {categoriesAvailable=false;}
+  if(isCatalog)return reply({catalog,categories,categoriesAvailable});
 
-  const now = Date.now();
-  const dates = { today: tokyo.format(now), tomorrow: tokyo.format(now + 86400000) };
-  const defaultTitle = '绯月助记-' + tokyoTimestamp.format(now);
-  const tasklist = catalog.map(definition => {
-    const spec = definition.parameter_spec;
-    if (definition.type === diaryType) return { ...definition, parameter_spec: {} };
-    if (definition.type === 'resources.create' || !Object.hasOwn(spec, 'title')) return definition;
-    return { ...definition, parameter_spec: { ...spec, title: { ...spec.title, required: false } } };
-  });
+  const context=registrationContext({...input,catalog,categories,categoriesAvailable});
+  const {dates,tasklist}=context;
   const prompt = { version: 1, route: 'text', maxOutputTokens: 2048, messages: [
-    { role: 'system', content: instructions },
-    { role: 'user', content: JSON.stringify({ text: input.text, dates, tasklist, categories }) },
+    { role: 'system', content: registrationInstructions },
+    { role: 'user', content: JSON.stringify({ text: input.text, dates, tasklist, categories, categoriesAvailable,reviewFeedback:input.reviewFeedback }) },
   ] };
-  const {value,code,ai}=await runProviderChain({env,ownerId,signal:request.signal,prompt,createAiClient,
-    parse:generated=>parsePlan(generated,{catalog,categories,dates,originalText:input.text,defaultTitle})});
+  const {value,code,ai}=await runProviderChain({env,ownerId,signal:request.signal,prompt,createAiClient,includeInvalidOutput:input.submittedAt===undefined,
+    parse:generated=>{
+      const plan=normalizeRegistration(parsePlan(generated),context);
+      if(input.submittedAt!==undefined&&!plan.chain&&!plan.pending.length)throw Object.assign(Error(),{code:'INVALID_AI_RESPONSE'});
+      return plan;
+    }});
   if(value)return reply({...value,ai});
   const reasons = {
     AI_COOLDOWN: [503,'AI_COOLDOWN','所有 AI 线路都在冷却中'],
@@ -84,12 +90,29 @@ export async function planRegistration(request, env, ownerId, createAiClient, lo
   return reply({error: {code: publicCode, message}, ai}, status);
 }
 
-function parsePlan(generated, {catalog, categories, dates, originalText, defaultTitle}) {
-  try {
+export function registrationContext({text,catalog,categories,categoriesAvailable=true,submittedAt=Date.now()}){
+  const dates = {today:tokyo.format(submittedAt),tomorrow:tokyo.format(submittedAt+86400000)};
+  const defaultTitle = '绯月助记-' + tokyoTimestamp.format(submittedAt);
+  const tasklist=catalog.map(definition=>{
+    const spec = definition.parameter_spec;
+    if (definition.type === diaryType) return { ...definition, parameter_spec: {} };
+    if (definition.type === 'resources.create' || !Object.hasOwn(spec, 'title')) return definition;
+    return { ...definition, parameter_spec: { ...spec, title: { ...spec.title, required: false } } };
+  });
+  return {catalog,categories,categoriesAvailable,dates,defaultTitle,tasklist,originalText:text};
+}
+
+function parsePlan(generated){
+  try{
     if (generated.finishReason === 'length' || typeof generated.text !== 'string' || generated.text.length > 64000) throw Error();
-    const text = generated.text.trim();
-    const wrapped = /^```(?:json)?\s*\n([\s\S]+)\n\s*```$/i.exec(text);
-    const output = JSON.parse(wrapped?.[1] ?? text);
+    const text=generated.text.trim();
+    const wrapped=/^```(?:json)?\s*\n([\s\S]*?)\n\s*```$/i.exec(text);
+    return JSON.parse(wrapped?.[1]??text);
+  }catch{throw Object.assign(Error(),{code:'INVALID_AI_RESPONSE'});}
+}
+
+export function normalizeRegistration(output,{catalog,categories,categoriesAvailable,dates,originalText,defaultTitle}) {
+  try {
     if (!fields(output, ['actions', 'pending']) || !Array.isArray(output.actions) || !Array.isArray(output.pending)) throw Error();
     if (requestsResource(originalText) && ![...output.actions, ...output.pending].some(item => item?.type === 'resources.create')) throw Error();
     const definitions = new Map(catalog.map(item => [item.type, item.parameter_spec]));
@@ -139,8 +162,12 @@ function parsePlan(generated, {catalog, categories, dates, originalText, default
         if (!title || !originalText.includes(title)) params.title = defaultTitle;
       }
       if (type === 'records.create') delete params.photos;
-      if (type === 'records.create' && !categoryIds.has(params.category_id)) throw Error();
       const key = `entry-${index + 1}`;
+      if(type==='records.create'&&!categoriesAvailable){
+        deferred.set(key,'随手记分类暂不可用，请恢复连接后核对这一项。');
+        return {key,type,params,target_device_id:null,...(after===undefined?{}:{depends_on:`entry-${after}`})};
+      }
+      if (type === 'records.create' && !categoryIds.has(params.category_id)) throw Error();
       const unmarked = {...params};
       if (type === reminderType && !params.title.endsWith(titleMarker)) params.title += titleMarker;
       for (const field of type === 'resources.create' ? [] : ['body', 'content']) {

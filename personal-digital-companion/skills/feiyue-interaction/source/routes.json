@@ -67,5 +67,18 @@
     "writing": "diary-writing",
     "judgment": "emotion-appraisal",
     "tool": "tool-response"
+  },
+  "workRedrafts": {
+    "personal-conversation": 2,
+    "diary-writing": 2,
+    "emotion-appraisal": 2,
+    "tool-response": 2,
+    "evidence-reading": 1,
+    "record-submission": 1,
+    "resource-registration": 1,
+    "reminder-review": 1,
+    "server-pc-task": 1,
+    "public-lookup": 1,
+    "image-task-chain": 1
   }
 }

@@ -88,6 +88,8 @@ def route_skill(hint, group="hints"):
         return path.read_text(encoding="utf-8").split("---", 2)[2].strip()
     instruction = body(folder / "SKILL.md") + "\n\n" + body(child / "SKILL.md")
     selected = {"routerVersion": root_version, "skill": skill, "version": version, "content": body(child / "SKILL.md")}
+    if skill in routes.get("workRedrafts", {}):
+        selected["workRedrafts"] = routes["workRedrafts"][skill]
     if hint == "attachmentRegistration" and group == "hints":
         sub, sub_version, location = child_skill(child, "registration")
         selected["child"] = {"skill": sub, "version": sub_version}

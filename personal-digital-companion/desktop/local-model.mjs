@@ -69,7 +69,7 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
 
   async function analyze(text, {hint, previous, signal, onProgress, imageSkill,skillInstruction,replyMode,reviewLimit=3,revision} = {}) {
     const started = performance.now();
-    const budgetMs = hint==='personalityMemory'?120000:['image-plan','serverTask'].includes(hint) ? Math.max(16000,intentBudgetMs) : ['auto','direct'].includes(hint) ? chatTotalMs : intentBudgetMs;
+    const budgetMs = hint==='personalityMemory'?120000:['image-plan','serverTask'].includes(hint) ? Math.max(16000,intentBudgetMs) : ['auto','direct','interactionWork'].includes(hint) ? chatTotalMs : intentBudgetMs;
     const deadline = AbortSignal.timeout(budgetMs);
     const wait = signal ? AbortSignal.any([signal,deadline]) : deadline;
     signal?.throwIfAborted();

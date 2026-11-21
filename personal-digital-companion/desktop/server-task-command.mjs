@@ -30,14 +30,15 @@ function planSchema(templates,exerciseBody) {
   return {oneOf:[...plans,{type:'object',properties:{question:{type:'string'}},required:['question'],additionalProperties:false}]};
 }
 
-export function createServerTaskCommand({profile,tasks,localModel,dialog,readSkill=readInteractionSkill}) {
+export function createServerTaskCommand({profile,tasks,localModel,interactionWork,dialog,readSkill=readInteractionSkill}) {
   const file=join(profile,'server-task-submission.json');
   let active=false;
   async function call(path,body,signal) {
     const response=await tasks.weatherRequest(path,{method:body?'POST':'GET',cache:'no-store',signal,
       ...(body?{headers:{'Content-Type':'application/json'},body:encodeJson(body)}:{})});
-    if(!response.ok)throw Object.assign(Error('任务接口返回 HTTP '+response.status),{status:response.status});
-    return response.json();
+    const data=await response.json();
+    if(!response.ok)throw Object.assign(Error('任务接口返回 HTTP '+response.status),{status:response.status,code:data?.error?.code});
+    return data;
   }
   async function savedSubmission(){
     try{return JSON.parse(await readFile(file,'utf8'));}
@@ -104,7 +105,7 @@ export function createServerTaskCommand({profile,tasks,localModel,dialog,readSki
     const status={COMPLETED:'已执行完成',FAILED:'执行失败',CANCELLED:'已取消'}[result.status]??result.status;
     return '服务器任务 '+id+' · '+status+(result.error?' · '+result.error:'');
   }
-  return async function run(text,signal,progress=()=>{}) {
+  return async function run(text,signal,progress=()=>{},work=interactionWork) {
     if(active)throw Error('上一条服务器任务指令仍在处理中。');
     active=true;
     try{
@@ -162,22 +163,40 @@ export function createServerTaskCommand({profile,tasks,localModel,dialog,readSki
         // 旧服务器只有自定义模板时，继续使用其真实清单。
         const candidates=type&&templates.some(t=>t.type===type)?templates.filter(t=>t.type===type):templates;
         if(!candidates.length)throw Error('当前服务器没有运动登记模板。');
-        const plan=await localModel?.analyze(JSON.stringify({指令:command,派发目标:target,模板:candidates}),{hint:'serverTask',signal,
-          skillInstruction:{name:skill.skill,version:skill.version,instruction:skill.content,schema:planSchema(candidates,exercise?.[1])}});
+        const context={指令:command,派发目标:target,模板:candidates};
+        const schema=planSchema(candidates,exercise?.[1]);
+        function normalize(plan){
+          if(typeof plan?.question==='string'&&plan.question.trim())return {question:plan.question.trim()};
+          if(plan?.target_device_id!=null&&plan.target_device_id!==target)return null;
+          const template=candidates.find(item=>item.type===plan?.type);
+          if(!template||!plan.params||typeof plan.params!=='object')return null;
+          const params={...plan.params};
+          if(['pc.reminders.move','pc.reminders.create'].includes(plan.type)&&params.deadline){
+            const dates=[...new Set(subject.match(new RegExp(datePattern,'gu'))??[])];
+            if(dates.length!==1)return {question:'请明确提醒的目标日期。'};
+            params.deadline=businessDate(dates[0],now);
+          }
+          if(plan.type==='pc.resources.create')Object.assign(params,resourceParams(command,params,true));
+          if(plan.type===PC_IMAGE_GENERATE)params.prompt=command.trim();
+          if(!validateParameters(template.parameter_spec,params).valid||(exercise&&params.body!==exercise[1]))return null;
+          return {type:template.type,params,target_device_id:target};
+        }
+        const instruction=[skill.content,skill.localAi?.work].filter(Boolean).join('\n');
+        if(work)return work({purpose:'服务器任务参数',context,instruction,schema,signal,onProgress:progress,redraft:skill.workRedrafts,
+          skill:{name:skill.skill,version:skill.version},normalize(raw){const value=normalize(raw);return value&&{value};},
+          async cloud(activeSignal,feedback){
+            const messages=[...(feedback?[{role:'user',content:'上轮复审反馈：'+feedback.slice(0,600)}]:[]),
+              {role:'user',content:'只根据以下请求准备 PC 任务建议，并限定在这些可用模板：'+JSON.stringify(context)}];
+            const result=await call('/api/assistant/message',{messages,target_device_id:target},activeSignal);
+            return result.proposal??(/[？?]$/u.test(result.reply?.trim())?{question:result.reply}:null);
+          }});
+        const plan=await localModel?.analyze(JSON.stringify(context),{hint:'serverTask',signal,
+          skillInstruction:{name:skill.skill,version:skill.version,instruction,schema}});
         signal?.throwIfAborted();
         if(!plan||plan.error)throw Error('本地模型未能生成任务方案，请稍后再试。');
-        if(typeof plan.question==='string'&&plan.question.trim())return {question:plan.question.trim()};
-        if(['pc.reminders.move','pc.reminders.create'].includes(plan.type)&&plan.params?.deadline){
-          const dates=[...new Set(subject.match(new RegExp(datePattern,'gu'))??[])];
-          if(dates.length!==1)throw Error('请明确提醒的目标日期。');
-          plan.params.deadline=businessDate(dates[0],now);
-        }
-        if(plan.type==='pc.resources.create'&&plan.params)plan.params=resourceParams(command,plan.params,true);
-        if(plan.type===PC_IMAGE_GENERATE)plan.params={prompt:command.trim()};
-        const template=candidates.find(t=>t.type===plan.type);
-        if(!template||!validateParameters(template.parameter_spec,plan.params).valid||(exercise&&plan.params.body!==exercise[1]))
-          throw Error('任务方案与已有 PC 模板不匹配，请补充任务名称和所需参数。');
-        return {type:template.type,params:plan.params,target_device_id:target};
+        const value=normalize(plan);
+        if(!value)throw Error('任务方案与已有 PC 模板不匹配，请补充任务名称和所需参数。');
+        return value;
       }
       const steps=imagePrompt(command)!==null?[command]:serverTaskSteps(command),proposals=[];
       if(!steps.length)throw Error('请列出任务链的事项。');

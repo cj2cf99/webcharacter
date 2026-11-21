@@ -52,11 +52,12 @@ export function modelChoices(gpu,correcting,residentMiB=0,primaryChat=false,prim
   return choices;
 }
 
-export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=readGpuLoad,create=createLocalModel}){
-  let current,chosen,initializing,warmController,exiting,busy=false,closed=false,failedText='',failures=0,lastUsed;
+export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=readGpuLoad,create=createLocalModel,localFirst=false}){
+  let current,chosen,initializing,warmController,exiting,busy=false,closed=false,failedText='',failures=0,lastUsed,lastWork;
   function release(){
     const worker=current;
     current=chosen=undefined;
+    lastWork=undefined;
     if(worker)exiting=worker.close();
     return exiting;
   }
@@ -91,7 +92,7 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     if(closed || busy || current?.snapshot().state==='ready')return initializing;
     if(!initializing){
       warmController=new AbortController();
-      initializing=prepare(false,warmController.signal,false,true).catch(()=>false).finally(()=>{initializing=undefined;warmController=undefined;});
+      initializing=prepare(false,warmController.signal,false,!localFirst).catch(()=>false).finally(()=>{initializing=undefined;warmController=undefined;});
     }
     return initializing;
   }
@@ -166,6 +167,25 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
       busy=false;memoryTurn=null;done.resolve();
     }
   }
-  return {start,analyze,memory,close(){closed=true;memoryTurn?.controller.abort();warmController?.abort();return release();},
+  async function work(text,{instruction,schema,skill,signal,tier='main',onProgress,maxTokens,session}){
+    signal?.throwIfAborted();
+    if(memoryTurn){memoryTurn.controller.abort();await untilAbort(memoryTurn.done,signal);}
+    if(closed)return {error:'LOCAL_AI_STOPPED'};
+    if(busy)return {error:'LOCAL_AI_BUSY'};
+    busy=true;
+    try{
+      await untilAbort(initializing,signal);
+      const ready=lastWork?.session===session&&lastWork?.tier===tier&&current?.snapshot().state==='ready';
+      if(!ready&&!await prepare(false,signal,tier==='upgrade'))return {error:lastUsed?.error??'LOCAL_AI_NOT_READY'};
+      lastWork={session,tier};
+      const model=lastUsed=current.snapshot();
+      onProgress?.('本地思索 · '+model.model+' · '+model.backend);
+      return await untilAbort(current.analyze(text,{hint:'interactionWork',signal,skillInstruction:{...skill,instruction,schema,maxTokens}}),signal);
+    }finally{
+      if(signal?.aborted){warmController?.abort();await release();}
+      busy=false;
+    }
+  }
+  return {start,analyze,memory,work,close(){closed=true;memoryTurn?.controller.abort();warmController?.abort();return release();},
     snapshot:()=>current?.snapshot()??(closed?{state:'stopped'}:{...lastUsed,state:'idle'})};
 }

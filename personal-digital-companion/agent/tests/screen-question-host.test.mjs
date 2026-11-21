@@ -92,7 +92,7 @@ test('图像确定性步骤、附件角色与负面指令',()=>{
   assert.equal(attachmentRegistration('请描述这张图片'),false);
   assert.match(menuGuidance('本地复盘怎么打开'),/选择「本地复盘」/);
   assert.match(menuGuidance('任务日志在哪'),/任务 → 任务日志/);
-  assert.match(menuGuidance('要怎么才能登记日记？'),/问绯月.*帮我写日记/);
+  assert.match(menuGuidance('要怎么才能登记日记？'),/问绯月.*帮我登记日记/);
 });
 
 test('附件登记核对同一份计划，放弃、旧令牌和重复确认都不提交',async t=>{
@@ -278,10 +278,11 @@ test('本地思索先于问答和任务，云端接收原文并分别记录耗�
     if(mode==='task')return {kind:'task',reply:''};
     return {kind:'chat',reply:'本地你好'};
   }};
-  const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:'unused',
+  const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:join(import.meta.dirname,'../..'),
     localModel:model,log:event=>logs.push(event),
     client:{forget(){},async askText(text){events.push(['cloud',text]);await pause();return {state:'answer',text:'云端答复'};}},
-    registration:{async submit(text){events.push(['register',text]);await pause();return {status:'completed',chain:{nodes:[]}};}}
+    registration:{async preview(text){events.push(['preview',text]);await pause();return {chain:{nodes:[{type:'diaries.create',target_device_id:null,params:{content:text}}]},pending:[]};},
+      submitReviewed:()=>assert.fail('等待独立确认')}
   });
   t.after(()=>host.close());
   await host.open();
@@ -293,8 +294,8 @@ test('本地思索先于问答和任务，云端接收原文并分别记录耗�
   assert.equal(logs[0].cloud_ms,0);
 
   const input='今天的记录';
-  await ask(input,'registration');
-  assert.deepEqual(events.slice(-2),[['local',input,'registration'],['register',input]]);
+  assert.ok((await ask(input,'registration')).reviewId);
+  assert.deepEqual(events.slice(-2),[['local',input,'registration'],['preview',input]]);
   assert.ok(panel.sent.some(([,state])=>state?.text?.includes('复核 1/2')));
   assert.ok(logs[1].local_ms>0&&logs[1].cloud_ms>0);
   assert.ok(logs[1].duration_ms>=logs[1].local_ms+logs[1].cloud_ms-1);
