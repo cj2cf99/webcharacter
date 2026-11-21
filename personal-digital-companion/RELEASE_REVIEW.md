@@ -459,4 +459,4 @@ Cloudflare、主站、生产云数据库迁移、外部鉴权配置、正式快�
 
 从已安装目录用隔离资料运行 `tools/run-electron-check.mjs tools/test-news-panel-electron.mjs` 通过，覆盖 IPC、累积、详情、来源、缩略图与放大、归档入口、刷新及重开。用户停止了 Windows 桌面控制，正式新闻窗口手动操作未完成。
 
-发布标识 `92be3d7d8d0f`。Git 在上次已发布 Windows 分支的 `afc0bfe1a71c713ad636a8eb75030f23bddd64f1` 上建立独立发布分支，提交仅包含本次新闻源码、测试和审核记录。推送结果将在回读后追加。
+发布标识 `92be3d7d8d0f`。Git 在上次已发布 Windows 分支的 `afc0bfe1a71c713ad636a8eb75030f23bddd64f1` 上建立独立发布分支，提交仅包含本次新闻源码、测试和审核记录。已推送至 `codex/feiyue-weekly-news-release-20261121`，远端回读核实源码提交 `91f14e8601988090603b9221e71546d16a2fac3a`。从独立 Git 工作树构建，20 个运行文件与本次安装清单的 SHA-256 一致，新闻及轮询专项 21 项通过。
