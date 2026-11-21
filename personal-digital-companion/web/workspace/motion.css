@@ -1,0 +1,32 @@
+#home .workspace-group[data-group="feiyue"] { --ink:var(--ui-ink); --accent-ink:var(--ui-brand-700); --wash:var(--t-brand-soft,var(--ui-brand-50)); container-type:inline-size; }
+#home .workspace-group[data-group="feiyue"] .fy-stage{isolation:isolate;position:relative;height:76px;display:flex;align-items:center;gap:9px;overflow:hidden}
+#home .workspace-group[data-group="feiyue"] .fy-paper{position:absolute;inset:7px auto 7px 0;width:min(100%,540px);pointer-events:none;z-index:-1;border-radius:5px 30px 30px 5px;mask-image:linear-gradient(to right,#000 60%,transparent)}
+#home .workspace-group[data-group="feiyue"] .fy-stage[data-mood="1"] .fy-paper{background:radial-gradient(ellipse at 30% 90%,#72d7d138,transparent 60%),repeating-linear-gradient(-13deg,transparent 0 16px,#6ba8be21 17px 18px,transparent 19px 30px)}
+#home .workspace-group[data-group="feiyue"] .fy-stage[data-mood="2"] .fy-paper{background:repeating-linear-gradient(0deg,transparent 0 10px,#e6ac752e 11px 12px),linear-gradient(90deg,#efa66219,transparent)}
+#home .workspace-group[data-group="feiyue"] .fy-stage[data-mood="3"] .fy-paper{background:repeating-linear-gradient(115deg,#ec589430 0 8px,#fcb54d33 8px 16px,#7c6aca33 16px 24px,#36c4bc24 24px 32px);background-size:72px 100%}
+#home .workspace-group[data-group="feiyue"] .fy-stage[data-mood="4"] .fy-paper{background:radial-gradient(ellipse at 23% 90%,#8691db40,transparent 50%)}
+#home .workspace-group[data-group="feiyue"] .fy-portrait{flex:none;width:52px;height:52px;position:relative;z-index:2;transform-origin:50% 85%}
+#home .workspace-group[data-group="feiyue"] .fy-portrait img{display:block;width:100%;height:100%;object-fit:contain}
+#home .workspace-group[data-group="feiyue"] .fy-line{display:inline-flex;white-space:nowrap;position:relative;z-index:1}
+#home .workspace-group[data-group="feiyue"] .fy-stage:not([data-mood="0"])[data-mood] .fy-line{font-size:clamp(16px,3.1cqw,22px);font-weight:850;letter-spacing:.015em;color:var(--ui-ink)}
+#home .workspace-group[data-group="feiyue"] .fy-glyph{position:relative;display:inline-block;transform-origin:50% 85%}
+#home .workspace-group[data-group="feiyue"] .fy-leg{position:absolute;width:4px;height:6px;border-inline-start:1.7px solid;border-bottom:1.7px solid;left:30%;bottom:-3px;transform-origin:top}
+#home .workspace-group[data-group="feiyue"] .fy-leg+.fy-leg{left:62%}
+#home .workspace-group[data-group="feiyue"] .fy-dust{position:absolute;line-height:1;pointer-events:none;color:var(--ui-muted);font-family:serif}
+#home .workspace-group[data-group="feiyue"] .fy-type{display:inline-block;position:relative;flex:none;transform-origin:50% 88%;pointer-events:none}
+#home .workspace-group[data-group="feiyue"] .fy-runner{position:absolute;bottom:0;left:10%;width:77%;height:5px;pointer-events:none}
+#home .workspace-group[data-group="feiyue"] .fy-runner i{position:absolute;left:17%;width:5px;height:5px;border-left:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform-origin:top left}
+#home .workspace-group[data-group="feiyue"] .fy-runner i+i{left:64%}
+#home .workspace-group[data-group="feiyue"] .fy-comet{position:absolute;left:0;top:0;display:grid;place-items:center;pointer-events:none;opacity:0}
+#home .workspace-group[data-group="feiyue"] [data-entry="tasks"] .fy-comet{width:12px;height:12px;border:1px solid currentColor;border-radius:3px;color:var(--accent-ink);background:var(--wash);font:bold 10px/1 system-ui}
+#home .workspace-group[data-group="feiyue"] [data-entry="journal"] .fy-comet{width:13px;height:4px;border-radius:100% 2px 70% 35%;background:var(--accent-ink);box-shadow:-6px 0 0 -1px color-mix(in srgb,var(--accent-ink) 36%,transparent)}
+#home .workspace-group[data-group="feiyue"] .fy-fx:before{content:"";position:absolute;left:14%;right:8%;bottom:5px;height:8px;border-radius:50%;background:color-mix(in srgb,var(--accent-ink) 15%,transparent);transform:skewX(-15deg)}
+#home .workspace-group[data-group="feiyue"] .portal[data-entry="journal"] .fy-fx:before{border-radius:2px;bottom:9px;height:16px;transform:rotate(-7deg) skewX(-20deg);border-block:1px solid color-mix(in srgb,var(--accent-ink) 36%,transparent);background:repeating-linear-gradient(0deg,var(--wash) 0 4px,color-mix(in srgb,var(--accent-ink) 24%,var(--wash)) 4px 5px)}
+#home .workspace-group[data-group="feiyue"] .fy-actor{display:block;width:min(100%,53px);height:53px;object-fit:contain;position:relative;transform-origin:50% 87%;pointer-events:none}
+#home .workspace-group[data-group="feiyue"] .fy-fx:empty:before{display:none}
+#home .workspace-group[data-group="feiyue"] .portal[data-entry]{transform:none;display:grid;grid-template-columns:34px minmax(0,1fr) clamp(49px,8cqw,72px);gap:8px;min-height:86px;padding:8px 12px}
+#home .workspace-group[data-group="feiyue"] .portal[data-entry="journal"]{--accent-ink:var(--t-g3,#984866)}
+#home .workspace-group[data-group="feiyue"] .portal .portal-copy{min-width:0}
+#home .workspace-group[data-group="feiyue"] .portal .portal-copy h3{position:relative;display:flex;align-items:center;overflow:hidden;margin:0 0 0 -9px;padding-inline:9px;height:45px;font-size:clamp(17px,2.4cqw,20px);line-height:1.1;white-space:nowrap}
+#home .workspace-group[data-group="feiyue"] .portal .portal-copy p{display:block;margin:0;white-space:normal}
+#home .workspace-group[data-group="feiyue"] .fy-fx{position:relative;height:62px;display:grid;place-items:center;pointer-events:none;overflow:hidden}
