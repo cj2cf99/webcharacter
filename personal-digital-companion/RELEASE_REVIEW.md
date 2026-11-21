@@ -676,3 +676,15 @@ Cloudflare、主站、生产云数据库迁移、外部鉴权配置、正式快�
 - 提醒模板更新一条并可接受 JST 时分，随手记及鱼与熊掌各新增一个「AI登记内容」分类，生产已回读。两库的加密备份 stockanalysis cc189caa51bf（远端恢复 118/118）、feiyue-companion 2c5c77703bb9（远端恢复 18/18）。业务 SQL 提交 27086a60bdc879e5dde94a7b6d9449f4c614303c。
 - 部署 #74、明细 #152，网页角色组件 #16 → 绯月（桌面精灵）#61，23.0 → 24.0。登记先提交精确 SQL 22dbb3aad4df3bce028edba26b2e82b16b71169a，期间仅通过正式绯月 REST 提交一批 feiyue-combined-release-20261122。绯月于 2026-11-22 04:49:49 JST 返回 done，唯一步骤 verified。生产独立复核修订 144 → 145，两个目标行与清单相符，发布标记一次。签收于 2026-11-22 04:50:08 JST。
 - 三个已发布代码提交均已推送并回读：myapp 19f3cb76f29598439c03ebe91ee88069d884139a、api-worker df21190d209dbf6f772d1b31e722d7c993e2ee16、windows 311efb6e3b51b24e5879d2675338b9e90cf2b44b。
+
+## 2026-11-22 JST · Windows 拖拽保持动作单圈替换
+
+用户确认单圈动图并要求替换现有持续拖拽动画。验收为按住时以原速重复完整一次侧摆和回摆，松开仍按原逻辑转入退出。安装目标为 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion。预检主进程 PID 25184、桌面快捷方式的应用参数及登录启动脚本均指向该树，实际配置为 dragIn / dragLoop / dragOut。安装仓库底座 39fd098e40ebf7c2c82dd5a6f9944ae98055566e，来源为 WebCharacter/personal-digital-companion 开发仓库 3830b6069d1c442ce51f9f8496ea8dbfa03fb483 加已确认的两档媒体。比较以实际六个文件的 SHA-256 为准。
+
+**安装差异**。分别在 assets/desktop-media 和 output/desktop-bundle 下替换 clips/drag-loop-speed.webm、clips-compact/drag-loop-speed.webm，逐份更新 RESOURCE_MANIFEST.json 的这两个条目。旧为每轮 72 帧约 3 秒，新为旧片零基帧 39～62 共 24 帧约 1 秒。两份清单各自以现场文件为底，分别保留其余 32 和 25 个条目。普通档散列 784a0e23 → fbf47761，紧凑档 d72ec27e → c9876ad5，两张清单 c9ce8fe0 → 26edd1ed、0e78dbd7 → 0a06e8ed。六项完整哈希与候选位于开发项目 output/drag-cycle-release-20261122/windows-files.json 及同级 candidate/，清单 SHA-256 为 cf0970cb8568b8ebaacd8a63959e5e6472915eda7576dbe8a992bcad09e65f7d。开发仓库重做切点可查 tools/prepare-animation-speed.mjs，原型时长可查 prototype/settings.html。安装范围为上述六个媒体相关文件和发布留痕。数据库迁移、回填、配置、依赖和云端发布影响均无。既有素材 ID、路径、画布、透明通道、帧率兼容。
+
+**检测及审核关注点**。已执行 node tools/prepare-animation-speed.mjs、node tools/build-desktop.mjs，普通与紧凑两个构建件均逐帧匹配原片同一段。按安装目录清单在隔离目录组装候选，用 tools/media.mjs 的 inspect 加 libvpx-vp9 解码四个候选视频，均为 24 帧，末帧结束时间约 0.999 秒。核对清单仅两项变化。复跑 node tools/test-pc-settings.mjs、node tools/test-desktop-priority.mjs、node tools/test-player-resources.mjs、node tools/test-desktop-shell.mjs 均通过。审核重点为实际 dragLoop 映射、两档接缝、构建和安装资源一致、两张清单其余条目完整。
+
+**发布与恢复**。安装前复核六个旧值、实际应用目录和在途任务，按原路径备份六项，受控退出并等待应用就绪后切换六项，从原入口启动。启动失败或部分替换时恢复该次备份并回读旧值后按原入口启动。发布后核对新 PID、启动目标、六项新摘要与槽位；从安装媒体解码确认时长，长按与释放的正式观感待用户验证。用户已确认预览效果并明确本次不登记花园。安装、受控重启及安装后验收待本次发布确认。独立第三方审核未执行，本次尚未提交或推送。
+
+2026-11-22 06:48:34 JST 已在 Windows 正式安装版启用经用户确认的拖拽单圈。用户批准本次安装及受控重启，并选择不登记花园。原进程 25184 正常退出，新进程 26308 从原安装入口启动，六项 SHA-256 与候选一致。由原资料的 dragLoop 映射回读运行包，普通和紧凑两档均实际解码为 24 帧约 1 秒；原快捷方式、登录项及轮询已核验。未代用户进行实际长按拖动。

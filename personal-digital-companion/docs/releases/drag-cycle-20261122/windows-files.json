@@ -1,0 +1,32 @@
+[
+  {
+    "file": "assets/desktop-media/clips/drag-loop-speed.webm",
+    "before": "784a0e23853de1a4fe69296461644f2098fc8ccc40a085740f533c9369853e12",
+    "after": "fbf4776181f6cbca5f29dbbca6f22c5135aa1128080a95025f911e7d80221a1a"
+  },
+  {
+    "file": "assets/desktop-media/clips-compact/drag-loop-speed.webm",
+    "before": "d72ec27e2ff562a06d8bf864b9fbf492d1a9044e136ea68c5e4f27df364ffe26",
+    "after": "c9876ad520bb8f326d145ebf27ac8fdf80e2be089e151aa5f2467806553d7005"
+  },
+  {
+    "file": "assets/desktop-media/RESOURCE_MANIFEST.json",
+    "before": "c9ce8fe0fc767b08078e8a507cf25f04273b450eca769d2a60f69cfdccf322ca",
+    "after": "26edd1edcbcb83e1544802fe2410e26f8bc421591224a49fb5d414888aec8c21"
+  },
+  {
+    "file": "output/desktop-bundle/clips/drag-loop-speed.webm",
+    "before": "784a0e23853de1a4fe69296461644f2098fc8ccc40a085740f533c9369853e12",
+    "after": "fbf4776181f6cbca5f29dbbca6f22c5135aa1128080a95025f911e7d80221a1a"
+  },
+  {
+    "file": "output/desktop-bundle/clips-compact/drag-loop-speed.webm",
+    "before": "d72ec27e2ff562a06d8bf864b9fbf492d1a9044e136ea68c5e4f27df364ffe26",
+    "after": "c9876ad520bb8f326d145ebf27ac8fdf80e2be089e151aa5f2467806553d7005"
+  },
+  {
+    "file": "output/desktop-bundle/RESOURCE_MANIFEST.json",
+    "before": "0e78dbd7f220ee54d8fc3db7f8179f02af733811be64894ea7be36da37d7ea24",
+    "after": "0a06e8ed56793b839ed32d38877dae7f4cb0434ad797da31bf38572ce8ebfb79"
+  }
+]
