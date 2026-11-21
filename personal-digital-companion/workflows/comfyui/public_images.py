@@ -11,7 +11,7 @@ import sys
 import uuid
 import subprocess
 from urllib.parse import urlencode, urlsplit
-from public_reader import Reader, google_items, news, page_material, discover_images
+from public_reader import Reader, news, page_material, discover_images
 import tavily_search
 
 DEFAULT = Path(__file__).with_name("world-tour-sources.json")
@@ -99,13 +99,9 @@ def search(role, query, settings, fetch=read_url, rng=None, count=1, page=None, 
             adapter = provider["adapter"]
             via_web = bool(page) or adapter in ("google", "web")
             if via_web:
+                # 旧个人配置中的 google 来源沿用同一取材词，交给普通公开网页入口。
                 reader = Reader(seconds=35)
-                if page or adapter=="web":
-                    rows = discover_images(reader,effective_query,page)
-                else:
-                    rows = ((i.get("title"),i.get("image",{}).get("contextLink"),i.get("link"),"","授权见原页",
-                             [urlsplit(i.get("image",{}).get("contextLink","")).hostname],
-                             [urlsplit(i.get("link","")).hostname]) for i in google_items(reader,effective_query,True))
+                rows = discover_images(reader,effective_query,page)
             else:
                 rows = list(catalogue(provider, effective_query, fetch, 320 if role == "images" else 960))
                 if rng:
@@ -126,15 +122,12 @@ def search(role, query, settings, fetch=read_url, rng=None, count=1, page=None, 
                 ext = ".jpg" if raw[:3] == b"\xff\xd8\xff" else ".png" if raw[:8] == b"\x89PNG\r\n\x1a\n" else ".webp" if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP" else None
                 if ext and (not validate or (not via_web and role!="pose") or validate(raw,ext)):
                     hits.append((dict(title=plain(title), url=origin, author=plain(author), license=plain(license_name),
-                                      query=effective_query, provider=source, imageUrl=image), ext, raw))
+                                      query=effective_query, provider=("web" if adapter=="google" else source), imageUrl=image), ext, raw))
                 if len(hits) == count:
                     break
             if hits:
                 return hits
         except (KeyError, TypeError, ValueError, OSError, http.client.HTTPException) as exc:
-            if str(exc)=="GOOGLE_NOT_CONFIGURED":
-                errors.append("GOOGLE_NOT_CONFIGURED")
-                continue
             errors.append(f"{source}: {type(exc).__name__}")
     raise ValueError(f"{role} 没有可读取的参考图片（{query}；{', '.join(errors) or '目录无匹配'}）")
 

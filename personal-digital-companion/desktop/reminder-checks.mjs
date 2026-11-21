@@ -4,6 +4,7 @@ import {tokyoDay} from './conversation-history.mjs';
 
 import {createPollScheduler} from './poll-scheduler.mjs';
 import {createAutonomousAudit} from './autonomous-audit.mjs';
+import {createNewsBriefing} from './news-briefing.mjs';
 
 export async function checkDueItems(request,signal,onStudyComplete){
   if(!request)throw Object.assign(Error('云端连接未配置'),{code:'NO_CONNECTION'});
@@ -21,7 +22,7 @@ export async function checkDueItems(request,signal,onStudyComplete){
 
 // 复盘窗口多数只看最新几条：检查记录和提醒每页 8 条，由新到旧。
 const PAGE=8;
-export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,log,changed=()=>{},now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout}){
+export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,log,notifyNews,changed=()=>{},now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout}){
   const db=new DatabaseSync(join(profile,'reminder-checks.sqlite'));
   db.exec(`CREATE TABLE IF NOT EXISTS checks(
     id INTEGER PRIMARY KEY, day TEXT NOT NULL, at INTEGER NOT NULL, due INTEGER NOT NULL,
@@ -42,10 +43,12 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
   }
   const due=check&&((signal)=>check(AbortSignal.any([signal,AbortSignal.timeout(30_000)])));
   const audit=log&&createAutonomousAudit(db,log,now);
-  const scheduler=createPollScheduler({db,handlers:{due,...handlers},isBusy,changed,now,setTimer,clearTimer,add,audit,
-    lastRun,weatherLastAt:()=>{const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value).lastCheck;}});
+  const news=notifyNews&&createNewsBriefing(db,now,notifyNews);
+  const scheduler=createPollScheduler({db,handlers:{due,...handlers,news:news&&(signal=>news.poll(signal,()=>scheduler.get('news').enabled))},isBusy,changed,now,setTimer,clearTimer,add,audit,
+    lastRun:id=>id==='news'?news?.last():lastRun?.(id),weatherLastAt:()=>{const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value).lastCheck;}});
   return {
     start:scheduler.start,enqueue:scheduler.enqueue,polls:scheduler.snapshot,configure:scheduler.configure,
+    latestNews:()=>news?.latest()??{state:'answer',text:'当前未启用新闻关注。'},
     get pending(){return scheduler.pending;},
     get unread(){return db.prepare('SELECT count(*) AS n FROM notices WHERE seen=0').get().n;},
     weatherDiary(day){

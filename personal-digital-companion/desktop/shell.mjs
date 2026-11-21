@@ -257,6 +257,12 @@ export async function startDesktop(electron,options={}){
     if(checks.takeEveningPraise(day))contextualAction('praise-idle');
   }),
     lastRun:id=>diary?.last(id==='nag'?'nag-shown':id),
+    notifyNews:options.benchmark?undefined:items=>{
+      const title='绯月 · 新闻简报（'+items.length+' 条）';
+      const content=items[0].title+'\n对我说「看新闻简报」可读本期全部标题和出处。';
+      if(process.platform==='win32')tray.displayBalloon({title,content,respectQuietTime:true});
+      else if(electron.Notification?.isSupported())new electron.Notification({title,body:content}).show();
+    },
     handlers:{...(hasMemory?Object.fromEntries(['diary','diaryAudit','nag','review','curiosity'].map(k=>[k,(s,step)=>memoryJob(k,s,false,step)])):{}),weather:()=>weather.check(),tasks:()=>{
       if(!tasks.pollOnce)throw Object.assign(Error('任务轮询未连接'),{code:'NO_CONNECTION'});
       return tasks.pollOnce();

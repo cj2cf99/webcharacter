@@ -1,40 +1,39 @@
 {
   "roles": {
     "destination": [
-      "google",
+      "editorials",
       "commons",
       "openverse"
     ],
     "camera": [
-      "google",
+      "editorials",
       "commons"
     ],
     "outfit": [
-      "google",
+      "editorials",
       "sketchfab",
       "openverse"
     ],
     "pose": [
-      "google",
+      "editorials",
       "sketchfab",
       "openverse"
     ],
     "images": [
-      "google"
+      "editorials",
+      "commons",
+      "openverse"
     ]
   },
   "cameraQuery": "full length candid street photograph pedestrian walking pavement natural perspective",
   "providers": {
-    "google": {
-      "adapter": "google",
+    "editorials": {
+      "adapter": "web",
       "roleQueries": {
         "outfit": "{query} fashion magazine fashion week single model full length runway look",
         "pose": "{query} full length candid street style one person",
         "destination": "{query} street level travel photograph foreground pedestrian pavement"
       }
-    },
-    "editorials": {
-      "adapter": "web"
     },
     "commons": {
       "adapter": "commons",

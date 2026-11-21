@@ -59,6 +59,7 @@ export function conversationRoute(text, mode = 'auto', withScreen = false) {
   if (mode === 'direct') return {kind:'direct'};
   if (mode === 'registration' || mode === 'supplement') return {kind:'registration'};
   if (mode === 'memory') return {kind:'memory'};
+  if (/^(?:绯月[，,\s]*)?(?:看看?|查[看查]?|读|打开)?(?:我的|本期|最新)?(?:关注新闻|新闻简报)[。！!]?$/u.test(text.trim())) return {kind:'newsBriefing'};
   const xSearch=/^(?:(?:绯月|请|帮我|替我)[，,\s]*)*(?:(?:查|搜|搜索)(?:一下)?\s*(?:X(?:\.com)?|推特|Twitter)(?=$|[\s：:，,上帖推])(?:上(?:的)?)?(?:帖子|贴子|推文)?|(?:在|去)\s*(?:X(?:\.com)?|推特|Twitter)\s*上?\s*(?:搜索|搜|查)(?:一下)?)[：:，,\s]*(.+)$/iu.exec(text.trim());
   if(xSearch)return {kind:'search',query:xSearch[1].trim(),research:'x'};
   const specialist=/^(?:(?:绯月|请|帮我|替我)[，,\s]*)*(?:问(?:问|一下)?|请教)\s*deepsee+k[\s：:，,]+(.+)$/iu.exec(text.trim());

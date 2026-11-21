@@ -348,7 +348,9 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     let cloudStart;
     try{
       signal.throwIfAborted();
-      if(route.kind==='search'){
+      if(route.kind==='newsBriefing'){
+        result=checks.latestNews();
+      }else if(route.kind==='search'){
         result=await lookup(route.query,route.summarize,route.images,route.research,route.page);
       }else if(route.kind==='direct'){
         const previous=latest?.direct&&latest.state==='answer'?{用户:latest.question,绯月:latest.text}:undefined;

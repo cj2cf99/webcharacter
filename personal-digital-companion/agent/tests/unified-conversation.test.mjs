@@ -53,9 +53,9 @@ test('公开搜索只读固定搜索页，拒绝不明确的目标并保留实�
   const answer=await searchPublicWeb('Mozilla Firefox',signal,reader);
   assert.equal(answer.sources[0].url,'https://www.mozilla.org/');
   assert.equal(calls[0].query,'Mozilla Firefox');
-  const manual=await searchPublicWeb('Mozilla Firefox',signal,async()=>{throw Error('GOOGLE_NOT_CONFIGURED')});
-  assert.equal(manual.manual,true);
-  assert.equal(new URL(manual.sources[0].url).hostname,'www.google.com');
+  const missing=await searchPublicWeb('Mozilla Firefox',signal,async()=>{throw Error('TAVILY_NOT_CONFIGURED')});
+  assert.equal(missing.state,'error');
+  assert.equal(missing.sources,undefined);
   assert.equal(conversationRoute('帮我找几张京都的照片').images,true);
   assert.equal(conversationRoute('查京都新闻').research,'news');
   assert.equal(conversationRoute('打开网页 https://example.org/look 找图').images,true);

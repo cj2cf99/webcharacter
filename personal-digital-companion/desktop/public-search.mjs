@@ -32,7 +32,7 @@ export async function searchPublicWeb(query,signal,read=runReader,{mode='web',pa
     return {state:'answer',text,sources};
   }catch(err){
     const tavilyErrors={
-      TAVILY_NOT_CONFIGURED:'X 搜索需要在本机设置 TAVILY_API_KEY。',
+      TAVILY_NOT_CONFIGURED:'公开搜索需要在本机设置 TAVILY_API_KEY，也可以直接提供公开网页地址。',
       TAVILY_QUOTA:'Tavily 免费额度已用完，本次查询已停止。',
       TAVILY_FREE_UNVERIFIED:'无法确认 Tavily 免费账户额度，请核对 Researcher 套餐及按量付费设置。',
       TAVILY_NO_POSTS:'Tavily 暂未收录匹配的 X 帖子。',
@@ -40,12 +40,7 @@ export async function searchPublicWeb(query,signal,read=runReader,{mode='web',pa
       TAVILY_HTTP_429:'Tavily 请求过于频繁，请稍后再查。'
     };
     if(tavilyErrors[err.message])return {state:err.message==='TAVILY_NO_POSTS'?'answer':'error',code:err.message,text:tavilyErrors[err.message]};
-    if(!err.message.includes('GOOGLE_NOT_CONFIGURED'))throw err;
-    const url=new URL('https://www.google.com/search');
-    url.searchParams.set('q',query);
-    if(mode==='images')url.searchParams.set('udm','2');
-    return {state:'answer',manual:true,text:'本机未配置 Google 搜索接口。可点「查看来源」打开 Google，或把选中的公开网页发给我提取。',
-      sources:[{title:mode==='images'?'打开 Google 图片':'打开 Google 搜索',url:url.href,snippet:'手动搜索入口'}]};
+    throw err;
   }
 }
 

@@ -18,6 +18,36 @@ import world_tour
 
 
 class SkillTests(unittest.TestCase):
+    def test_news_watch_filters_and_skips_invalid_dates(self):
+        import news_watch
+        self.assertTrue(news_watch.relevant("美国社会","美国龙卷风造成大规模停电"))
+        self.assertFalse(news_watch.relevant("中国社会","泉州民企发布可持续生态马桶阶段性成果"))
+        self.assertFalse(news_watch.relevant("日本社会","美国宣布进入紧急状态"))
+        self.assertTrue(news_watch.relevant("日本股市","日经指数暴跌5.06%"))
+        self.assertFalse(news_watch.relevant("美国股市","美股分析师访谈"))
+        entry = dict(title="机器人量产 - 某报",source="某报",url="https://example.com/news")
+        with patch.object(news_watch, "rss_news", return_value=[
+                dict(entry,published="bad"),dict(entry,published="Sat, 21 Nov 2026 00:00:00 GMT")]):
+            topic, items = news_watch.fetch_topic("机器人")
+        self.assertEqual(topic,"机器人")
+        self.assertEqual([row["title"] for row in items],["机器人量产"])
+
+    def test_old_google_credentials_cannot_start_a_search(self):
+        import os
+        import public_reader
+        import public_images
+        from unittest.mock import Mock
+        reader = Mock()
+        with patch.dict(os.environ, {"GOOGLE_CSE_API_KEY":"old", "GOOGLE_CSE_ID":"old"}, clear=True):
+            with self.assertRaisesRegex(ValueError, "TAVILY_NOT_CONFIGURED"):
+                public_reader.page_material(None, "京都", reader)
+            with patch.object(public_images, "Reader", return_value=reader):
+                old = {"roles":{"images":["old"]}, "providers":{"old":{"adapter":"google"}}}
+                with self.assertRaises(ValueError):
+                    public_images.search("images", "京都", old)
+        reader.get.assert_not_called()
+        reader.read.assert_not_called()
+
     def test_tavily_common_budget_and_x_sources(self):
         import os
         import tavily_search as provider

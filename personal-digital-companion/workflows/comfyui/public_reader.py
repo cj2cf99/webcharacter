@@ -167,22 +167,9 @@ def article(reader,url):
     return url,doc
 
 
-def google_items(reader, query, images=False):
-    key, cx = os.getenv("GOOGLE_CSE_API_KEY"), os.getenv("GOOGLE_CSE_ID")
-    if not key or not cx:
-        raise ValueError("GOOGLE_NOT_CONFIGURED")
-    params = dict(cx=cx, q=query, num=6, safe="active")
-    if images:
-        params.update(searchType="image", imgType="photo")
-    status,_,raw = reader.get("https://customsearch.googleapis.com/customsearch/v1?"+urlencode(params),
-                              1_200_000, {"X-Goog-Api-Key":key})
-    if status!=200:
-        raise ValueError("Google 搜索接口未提供结果（HTTP "+str(status)+"）")
-    return json.loads(raw).get("items", [])
-
-
-def discover(reader, query):
-    return (item["link"] for item in google_items(reader,query) if item.get("link","").startswith("https://"))
+def discover(query):
+    import tavily_search
+    return [item["url"] for item in tavily_search.search(query)]
 
 
 def news(reader,query):
@@ -214,6 +201,14 @@ def news(reader,query):
         if not rows:
             raise ValueError("最近 24 小时没有找到相关新闻")
         return rows[:3]
+    rows = rss_news(reader, query)
+    if not rows:
+        raise ValueError("Google 新闻没有返回相关报道")
+    return [dict(title=item["title"], url=item["url"], snippet=" · ".join(filter(None, [
+        item["source"], stamp(item["published"])]))) for item in rows[:3]]
+
+
+def rss_news(reader, query):
     url="https://news.google.com/rss/search?"+urlencode(dict(q=query+" when:1d",hl="zh-CN",gl="CN",ceid="CN:zh-Hans"))
     status,_,raw=reader.get(url,1_500_000)
     if status!=200:
@@ -223,22 +218,14 @@ def news(reader,query):
         link=item.findtext("link","")
         title=item.findtext("title","")
         if title and link.startswith("https://"):
-            rows.append(dict(title=title[:200],url=link,snippet=" · ".join(filter(None,[
-                item.findtext("source"),stamp(item.findtext("pubDate"))]))))
-        if len(rows)==3:
-            break
-    if not rows:
-        raise ValueError("Google 新闻没有返回相关报道")
+            rows.append(dict(title=title[:200], url=link, source=item.findtext("source",""),
+                             published=item.findtext("pubDate","")))
     return rows
 
 
 def page_material(url,query="",reader=None):
     reader=reader or Reader()
-    if not url and os.getenv("TAVILY_API_KEY"):
-        import tavily_search
-        candidates=[item["url"] for item in tavily_search.search(query)]
-    else:
-        candidates=[url] if url else discover(reader,query)
+    candidates=[url] if url else discover(query)
     sources=[]
     for address in candidates:
         try:
@@ -257,7 +244,7 @@ def page_material(url,query="",reader=None):
 
 
 def discover_images(reader,query,url=None):
-    for address in ([url] if url else discover(reader,query)):
+    for address in ([url] if url else discover(query)):
         try:
             final,doc=article(reader,address)
         except (ValueError,OSError,http.client.HTTPException):
