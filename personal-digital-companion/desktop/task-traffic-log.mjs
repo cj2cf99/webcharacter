@@ -1,6 +1,7 @@
 import {appendFile, mkdir, open, rename, stat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tokyoDay} from './conversation-history.mjs';
+import {refusalExcerpt} from '../agent/host/refusal-response.mjs';
 
 const timestamp = new Intl.DateTimeFormat('sv-SE', {timeZone: 'Asia/Tokyo', dateStyle: 'short', timeStyle: 'medium'});
 const id = value => typeof value === 'string' && /^[a-z0-9_-]{1,128}$/i.test(value) ? value : undefined;
@@ -29,6 +30,8 @@ function responseSummary(body) {
       preference_saved: body.ai.preference_saved === false ? false : undefined,
       attempts: body.ai.attempts.slice(0, 32).map(attempt => ({
         provider: word(attempt?.provider), model: word(attempt?.model), code: word(attempt?.code),
+        refusal_response: attempt?.code!=='OK' ? refusalExcerpt(attempt?.refusal_response) : undefined,
+        reply_check: ['matched','mismatch'].includes(attempt?.reply_check) ? attempt.reply_check : undefined,
         stage:word(attempt?.stage),at:Number.isSafeInteger(attempt?.at)?attempt.at:undefined,
         upstream_status: Number.isSafeInteger(attempt?.upstream_status) ? attempt.upstream_status : undefined,
         provider_code: Number.isSafeInteger(attempt?.provider_code) ? attempt.provider_code : undefined,
@@ -83,7 +86,7 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
       if(!files.length)return {lines:[],next:null,failed};
       const [{key,end},...rest]=files,entry=opened.find(f=>f.key===key);
       if(!entry||!Number.isSafeInteger(end)||end<1||end>entry.end)throw Error('日志已轮转，请刷新后查看。');
-      let offset=end,remaining=40;
+      let offset=end,remaining=12; // 每页 12 行，由新到旧
       const chunks=[];
       while(offset>0&&remaining>0){
         const start=Math.max(0,offset-16384),chunk=Buffer.alloc(offset-start);
@@ -108,7 +111,7 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
       return async (path, options = {}) => {
         // The query can hold filters and headers carry credentials. Record identifiers and statuses only.
         const route = path.split('?')[0];
-        if (!/^\/api\/(?:tasks(?:\/|$)|devices(?:\/|$)|chains(?:\/|$)|task-submissions$|assistant\/(?:recording-plan|heartbeat)$|reminder-review(?:\/|$))/.test(route)) {
+        if (!/^\/api\/(?:tasks(?:\/|$)|devices(?:\/|$)|chains(?:\/|$)|task-submissions$|assistant\/(?:recording-plan|heartbeat|provider-test)$|reminder-review(?:\/|$))/.test(route)) {
           return request(path, options);
         }
         const request_id = crypto.randomUUID();

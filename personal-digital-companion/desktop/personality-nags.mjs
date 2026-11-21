@@ -1,3 +1,4 @@
+import {createDiaryAudit} from './diary-audit.mjs';
 import {createHash} from 'node:crypto';
 import {tokyoDay} from './conversation-history.mjs';
 import {cleanMemory} from './personality-diary.mjs';
@@ -11,7 +12,7 @@ const sourceKey=(source,id)=>source+'/'+id;
 const brief=(s,n)=>Array.from(cleanMemory(s)).slice(0,n).join('');
 const iso=at=>new Date(at).toISOString();
 
-export function createPersonalityNags({store,show,idle,onInterrupted=()=>{},changed=()=>{},now=Date.now,random=Math.random}){
+export function createPersonalityNags({store,show,idle,canContinue=()=>true,onInterrupted=()=>{},changed=()=>{},now=Date.now,random=Math.random}){
   let active=null,syncJob=null,stopped=false;
   const lifetime=new AbortController();
   const pending=()=>store.nags().find(n=>openStates.includes(n.status));
@@ -25,11 +26,14 @@ export function createPersonalityNags({store,show,idle,onInterrupted=()=>{},chan
     return syncJob;
   }
   function save(n){store.saveNag(n);changed();void sync();}
+  const audit=createDiaryAudit({store,show,idle,canContinue,save,changed,now,random});
   function talk(n,who,text){n.talk.push({who,text,at:iso(now())});}
   async function candidates(signal){
     const day=i=>tokyoDay(now()-i*dayMs),known=new Set(store.nags().map(n=>sourceKey(n.source,n.source_id)));
     const pool=[];
+    const cited=new Set(store.nags().filter(n=>n.source==='audit').flatMap(n=>n.refs.map(r=>r.page)));
     for(const p of store.pages(day(6)).filter(p=>p.day>=day(6)&&p.day<=day(0))){
+      if(cited.has(p.day+'.'+p.part))continue;
       for(const t of p.threads){
         const id=p.day+'.'+p.part+'/'+t.no;
         if(!t.asked&&!t.resolved&&!known.has(sourceKey('diary',id)))pool.push({source:'diary',source_id:id,title:t.text,reason:'日记中的未解悬念',stats:''});
@@ -90,15 +94,18 @@ export function createPersonalityNags({store,show,idle,onInterrupted=()=>{},chan
     if(!v.reply||!v.evaluation||!v.mood)throw Error('回应尚未生成');
     return v;
   }
-  async function poll(signal,{manual=false}={}){
+  async function poll(signal,{manual=false,progress=()=>{}}={}){
     if(active||!idle())return {deferred:true};
     await sync();
     let n=pending();
+    if(n?.source==='audit')return manual?audit.poll(signal,{manual}):'手记质问正在待确认';
     if(manual&&!n)return '没有待续事项';
     if(!manual&&n?.status!=='意外中断'&&now()-(store.last('nag-shown')??0)<2*3600000)return {detail:'本轮名额已使用',nextAt:store.last('nag-shown')+2*3600000};
     if(!n){
+      progress({stage:'核对待续事项'});
       await store.refresh?.(signal);
       n=pending();
+      if(n?.source==='audit')return '手记质问正在待确认';
       if(!n){
         const pool=await candidates(signal);
         if(!pool.length)return '没有待问事项';
@@ -108,6 +115,7 @@ export function createPersonalityNags({store,show,idle,onInterrupted=()=>{},chan
       }
     }
     if(n.talk.at(-1)?.who==='你'){
+      progress({stage:'整理上次的回应'});
       const heard=await appraise(n,n.talk.at(-1).text,signal);
       n.afterEvaluation=heard.evaluation;n.mood=heard.mood;
       if(!heard.next||ended(n)){
@@ -118,6 +126,7 @@ export function createPersonalityNags({store,show,idle,onInterrupted=()=>{},chan
     if(n.turns>=Math.min(6,n.limit??6)){finish(n,'回合结束');return '本次念叨已收尾';}
     const first=!n.revision;
     if(first){
+      progress({stage:'想一句提问'});
       const v=await store.think(JSON.stringify([n.title,n.reason,n.stats]),'为这一个事项写一句自然的提问，并记录开口前的评价和情绪。',['question','evaluation','mood'],signal);
       if(!v.question||!v.mood||!v.evaluation)throw Error('念叨提问未生成');
       Object.assign(n,{next:v.question,before:v.mood,mood:v.mood,beforeEvaluation:v.evaluation});
@@ -162,5 +171,5 @@ export function createPersonalityNags({store,show,idle,onInterrupted=()=>{},chan
     }catch(error){active=null;throw error;}
     return '只问了这一件：'+n.title;
   }
-  return {poll,pending,flush:sync,async close(){stopped=true;lifetime.abort();active?.controller.abort();await syncJob;}};
+  return {poll,pollAudit:audit.poll,pending,flush:sync,async close(){audit.close();stopped=true;lifetime.abort();active?.controller.abort();await syncJob;}};
 }

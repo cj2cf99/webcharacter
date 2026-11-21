@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
+import {createHash} from 'node:crypto';
 import {openTestDatabase} from './sqlite-d1.mjs';
 import {personalityMemory} from '../assistant/personality-memory.mjs';
 import {createPersonalityDiary,cleanMemory} from '../../desktop/personality-diary.mjs';
@@ -37,6 +39,38 @@ test('并发重传只追加一次，5000 字按字符计，检索只看篇首，
   assert.equal((await (await req('diaries?q=等他回来')).json()).total,0);
   assert.equal((await req('diaries/'+day+'.1',null,'other')).status,404);
 });
+test('旧清洗空值保留已有评价，执行结果与双方对话可补传，重复回执不入册',async t=>{
+  const {req}=fixture(t),profile=mkdtempSync(join(tmpdir(),'feiyue-empty-clean-'));
+  const tasks=[
+    {at:start,task_id:'a',title:'提醒',action:'已核实顺延',detail:'明天交书'},
+    {at:start+1,task_id:'a',title:'提醒',action:'云端已确认收到本机执行结果',detail:''},
+    {at:start+2,task_id:'b',title:'画图',action:'已完成',detail:'画好一只猫'},
+    {at:start+4,task_id:'a',title:'提醒',action:'已核实工时',detail:'读书一小时'},
+  ];
+  const signal=new AbortController().signal;
+  const store=createPersonalityDiary({profile,now:()=>start+5,weather:()=>[],
+    memory:{archiveDays:async()=>[day],readTasks:async d=>d===day?tasks:[],
+      read:async d=>d===day?[{at:start+3,id:'chat',question:'明天一起还书',text:'我记下了。'}]:[]},
+    model:{memory:async (_text,_prompt,s)=>s.required.includes('review')?{text:'',review:'记好这件事'}:
+      {text:'今天记下这件事。',comment:'我会留心。',summary:'手记',mood:'平静',tags:'',thread:''}},
+    request:(url,options)=>req(url.slice('/api/memory/'.length),options.body&&JSON.parse(options.body))});
+  const db=new DatabaseSync(join(profile,'personality-memory.sqlite'));
+  t.after(()=>{db.close();store.close();rmSync(profile,{recursive:true,force:true});});
+  const old=tasks[0],source='task:a',content=[old.title,old.action,old.detail].join(' · ');
+  const id=createHash('sha256').update([day,source,old.at,0,content].join('|')).digest('hex');
+  db.prepare('INSERT INTO materials VALUES(?,?,?,0)').run(id,day,'旧评价：明天要还书');
+  db.prepare('INSERT INTO material_sources VALUES(?,?,?)').run(id,source,old.at);
+  db.prepare('INSERT INTO cleaned VALUES(?,?)').run(id,'');
+  assert.match(await store.run('task-review',signal),/已有 1 条评价，补写 3 条/);
+  assert.equal((await (await req('diaries')).json()).total,0);
+  await store.run('diary',signal);
+  const page=await (await req('diaries/'+day+'.1')).json();
+  for(const fact of ['已核实顺延','明天交书','旧评价：明天要还书','画好一只猫','读书一小时','明天一起还书','我记下了。'])assert.ok(page.body.includes(fact),fact);
+  assert.ok(!page.body.includes('云端已确认收到'));
+  assert.equal(page.revision,4);
+  assert.match(await store.run('diary',signal),/本轮上传 0 段/);
+  assert.equal((await (await req('diaries/'+day+'.1')).json()).revision,4);
+});
 test('已问和已解独立；旧正文与私语原样保留',async t=>{
   const {req}=fixture(t);
   await req('diaries',packet);
@@ -46,6 +80,28 @@ test('已问和已解独立；旧正文与私语原样保留',async t=>{
   await req(path+'/threads/1',{field:'resolved'});
   const after=await (await req(path)).json();assert(after.threads[0].resolved);assert.equal(after.body,packet.body);
   assert.equal((await req(path+'/threads/2',{field:'resolved'})).status,404);
+});
+test('写接口返回成功但独立读回缺段时，保留原草稿和未覆盖状态，恢复后只追加一次',async t=>{
+  const {req}=fixture(t),profile=mkdtempSync(join(tmpdir(),'feiyue-readback-'));
+  let wrong=true;
+  const signal=new AbortController().signal;
+  const store=createPersonalityDiary({profile,now:()=>start,weather:()=>[],
+    memory:{read:async()=>[],readTasks:async d=>d==='2026-11-19'?[{task_id:'audit',at:start-86400000,title:'归还图书',action:'已完成'}]:[]},
+    model:{memory:async (_t,_p,s)=>s.required.includes('review')?{text:'归还图书',review:'记得及时还书'}:{text:'已经还书。',comment:'松了口气。',summary:'还书',tags:'',mood:'放心',thread:''}},
+    request:async(url,opts)=>{
+      const response=await req(url.slice('/api/memory/'.length),opts.body&&JSON.parse(opts.body));
+      if(wrong&&opts.method==='GET'&&url.endsWith('/2026-11-19.1'))return Response.json({...await response.json(),body:'同一天的其他事情'});
+      return response;
+    }});
+  const db=new DatabaseSync(join(profile,'personality-memory.sqlite'));
+  t.after(()=>{db.close();store.close();rmSync(profile,{recursive:true,force:true});});
+  await assert.rejects(store.run('diary',signal),/云端正文未找到/);
+  assert.equal(db.prepare("select count(*) n from drafts where day='2026-11-19'").get().n,1);
+  assert.equal(db.prepare('select sum(covered) n from materials').get().n,0);
+  wrong=false;await store.run('diary',signal);
+  assert.equal(db.prepare('select count(*) n from drafts').get().n,0);
+  assert.equal(db.prepare('select sum(covered) n from materials').get().n,1);
+  assert.equal((await (await req('diaries/2026-11-19.1')).json()).revision,1);
 });
 test('离线草稿恢复，空日记复用；跨日后续与旧篇标记；读取错误不写空篇',async t=>{
   const {req}=fixture(t),profile=mkdtempSync(join(tmpdir(),'feiyue-diary-test-'));
@@ -67,7 +123,8 @@ test('离线草稿恢复，空日记复用；跨日后续与旧篇标记；读�
   await store.run('diary',signal);
   const old=(await (await req('diaries/2026-11-17.1')).json()).body;
   turns.push({at:start,id:'q2',state:'answer',question:'我买了散文集',text:'知道啦'});
-  await store.run('diary',signal);await store.run('diary',signal);
+  assert.match(await store.run('diary',signal),/已同步 [1-9]\d* 段绯月的手记/);
+  assert.match(await store.run('diary',signal),/没有需要补写的内容/);
   const prior=await (await req('diaries/2026-11-17.1')).json();
   assert.equal(prior.body,old);assert(prior.threads[0].resolved);
   const today=await (await req('diaries/'+day+'.1')).json();assert(today.body.includes('接 2026-11-17 的悬念'));assert.equal(today.revision,3);
