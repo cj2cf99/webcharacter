@@ -326,12 +326,12 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
           httpStatus:error?.status,text:empty?'搜索服务没有返回可展示的结果。':'网络查询暂时没有可用结果，可稍后重试。',retryable:true};
       }
       if(found.manual||images)return found;
-      if(route.kind==='search'&&!page&&found.sources?.length&&publicQuery(query))turn.publicTerm=query;
+      if(route.kind==='search'&&!page&&research!=='x'&&found.sources?.length&&publicQuery(query))turn.publicTerm=query;
       if(!summarize||found.state!=='answer'||!found.sources?.length)return found;
       signal.throwIfAborted();
       waiting('正在根据搜索结果整理答案…');
       try{
-        const mayConsult=!page&&process.env.FEIYUE_DEEPSEEK_COMPLEX==='1'&&process.env.DEEPSEEK_API_KEY&&/综合比较|交叉验证|比较.{2,30}差异|复杂问题/u.test(query);
+        const mayConsult=!page&&research!=='x'&&!process.env.TAVILY_API_KEY&&process.env.FEIYUE_DEEPSEEK_COMPLEX==='1'&&process.env.DEEPSEEK_API_KEY&&/综合比较|交叉验证|比较.{2,30}差异|复杂问题/u.test(query);
         const prompt=searchSummaryPrompt(route.purpose||query,found.sources);
         const answer=await localModel?.analyze(prompt,{signal,hint:'direct',onProgress:waiting});
         if(mayConsult&&!answer?.reply?.trim()){

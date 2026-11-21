@@ -234,7 +234,11 @@ def news(reader,query):
 
 def page_material(url,query="",reader=None):
     reader=reader or Reader()
-    candidates=[url] if url else discover(reader,query)
+    if not url and os.getenv("TAVILY_API_KEY"):
+        import tavily_search
+        candidates=[item["url"] for item in tavily_search.search(query)]
+    else:
+        candidates=[url] if url else discover(reader,query)
     sources=[]
     for address in candidates:
         try:

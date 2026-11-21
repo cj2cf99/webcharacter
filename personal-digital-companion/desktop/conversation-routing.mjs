@@ -59,6 +59,8 @@ export function conversationRoute(text, mode = 'auto', withScreen = false) {
   if (mode === 'direct') return {kind:'direct'};
   if (mode === 'registration' || mode === 'supplement') return {kind:'registration'};
   if (mode === 'memory') return {kind:'memory'};
+  const xSearch=/^(?:(?:绯月|请|帮我|替我)[，,\s]*)*(?:(?:查|搜|搜索)(?:一下)?\s*(?:X(?:\.com)?|推特|Twitter)(?=$|[\s：:，,上帖推])(?:上(?:的)?)?(?:帖子|贴子|推文)?|(?:在|去)\s*(?:X(?:\.com)?|推特|Twitter)\s*上?\s*(?:搜索|搜|查)(?:一下)?)[：:，,\s]*(.+)$/iu.exec(text.trim());
+  if(xSearch)return {kind:'search',query:xSearch[1].trim(),research:'x'};
   const specialist=/^(?:(?:绯月|请|帮我|替我)[，,\s]*)*(?:问(?:问|一下)?|请教)\s*deepsee+k[\s：:，,]+(.+)$/iu.exec(text.trim());
   if(specialist)return {kind:'search',query:specialist[1].trim(),research:'deepseek'};
   const page=/^(?:(?:请|帮我|绯月)[，,\s]*)*(?:打开|阅读|读取|提取|抓取)(?:这个|该)?(?:网页|页面|链接)?[\s：:，,]*(https:\/\/[^\s，。]+)(?:[\s，,]+(.*))?$/iu.exec(text.trim());

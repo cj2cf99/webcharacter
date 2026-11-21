@@ -31,6 +31,15 @@ export async function searchPublicWeb(query,signal,read=runReader,{mode='web',pa
       :sources.map((s,i)=>'['+(i+1)+'] '+s.title+'\n'+s.snippet.slice(0,280)).join('\n\n');
     return {state:'answer',text,sources};
   }catch(err){
+    const tavilyErrors={
+      TAVILY_NOT_CONFIGURED:'X 搜索需要在本机设置 TAVILY_API_KEY。',
+      TAVILY_QUOTA:'Tavily 免费额度已用完，本次查询已停止。',
+      TAVILY_FREE_UNVERIFIED:'无法确认 Tavily 免费账户额度，请核对 Researcher 套餐及按量付费设置。',
+      TAVILY_NO_POSTS:'Tavily 暂未收录匹配的 X 帖子。',
+      TAVILY_HTTP_401:'Tavily 拒绝了本机密钥，请核对 TAVILY_API_KEY。',
+      TAVILY_HTTP_429:'Tavily 请求过于频繁，请稍后再查。'
+    };
+    if(tavilyErrors[err.message])return {state:err.message==='TAVILY_NO_POSTS'?'answer':'error',code:err.message,text:tavilyErrors[err.message]};
     if(!err.message.includes('GOOGLE_NOT_CONFIGURED'))throw err;
     const url=new URL('https://www.google.com/search');
     url.searchParams.set('q',query);

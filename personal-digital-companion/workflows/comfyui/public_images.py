@@ -12,6 +12,7 @@ import uuid
 import subprocess
 from urllib.parse import urlencode, urlsplit
 from public_reader import Reader, google_items, news, page_material, discover_images
+import tavily_search
 
 DEFAULT = Path(__file__).with_name("world-tour-sources.json")
 
@@ -156,8 +157,15 @@ if __name__ == "__main__":
         request = json.load(sys.stdin.buffer)
         query = request["query"]
         mode = request.get("mode","images")
-        if mode in ("web","news","page"):
-            sources = news(Reader(),query) if mode=="news" else page_material(request.get("page"),query)
+        if mode in ("web","news","page","x"):
+            if mode=="x":
+                sources=tavily_search.search(query,x_only=True)
+                if not sources:
+                    raise ValueError("TAVILY_NO_POSTS")
+            elif mode=="news":
+                sources=news(Reader(),query)
+            else:
+                sources=page_material(request.get("page"),query)
             if mode!="news":
                 file=material_directory()/"excerpts.json"
                 file.write_text(json.dumps(sources,ensure_ascii=False,indent=2),encoding="utf-8")

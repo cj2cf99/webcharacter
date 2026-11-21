@@ -18,6 +18,51 @@ import world_tour
 
 
 class SkillTests(unittest.TestCase):
+    def test_tavily_common_budget_and_x_sources(self):
+        import os
+        import tavily_search as provider
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,{"TAVILY_API_KEY":"fixture"}):
+            account=dict(current_plan="Researcher",plan_usage=0,plan_limit=2,paygo_limit=None,paygo_usage=0)
+            payloads=[]
+            post=str(((int(time.time()*1000)-1288834974657)<<22)+1)
+            def send(key,path,payload=None):
+                if path=="/usage":
+                    return {"account":account}
+                payloads.append(payload)
+                return {"results":[{"url":url,"title":"消息","content":"摘录"} for url in [
+                    "https://example.org/news","https://x.com/a","https://x.com/a/status/"+post+"?s=20",
+                    "https://x.com/i/web/status/"+post,"https://x.com.fake/a/status/"+post]]}
+            def search(x_only):
+                return provider.search("京都",x_only,send=send,directory=Path(tmp))
+            self.assertTrue(search(False))
+            result,=search(True)
+            self.assertIn("近12小时",result["snippet"])
+            self.assertIn("observedAt",result)
+            self.assertEqual(result["url"],"https://x.com/a/status/"+post)
+            self.assertNotIn("include_domains",payloads[0])
+            self.assertEqual(payloads[1]["include_domains"],["x.com"])
+            self.assertEqual(payloads[1]["search_depth"],"basic")
+            with self.assertRaisesRegex(ValueError,"TAVILY_QUOTA"):
+                search(True)
+            account["paygo_limit"]=20
+            with self.assertRaisesRegex(ValueError,"TAVILY_FREE_UNVERIFIED"):
+                search(False)
+            self.assertEqual(len(payloads),2)
+
+    def test_tavily_concurrent_allowance(self):
+        import tavily_search as provider
+        from concurrent.futures import ThreadPoolExecutor
+        account=dict(current_plan="Researcher",plan_usage=999,plan_limit=1000,paygo_limit=0,paygo_usage=0)
+        with tempfile.TemporaryDirectory() as tmp:
+            def attempt(_):
+                try:
+                    provider.reserve(account,"2026-11",Path(tmp))
+                    return "ok"
+                except ValueError as error:
+                    return str(error)
+            with ThreadPoolExecutor(4) as executor:
+                self.assertCountEqual(executor.map(attempt,range(4)),["ok"]+["TAVILY_QUOTA"]*3)
+
     def test_world_tour_uses_distinct_visual_references(self):
         import public_images
         settings=public_images.config()
