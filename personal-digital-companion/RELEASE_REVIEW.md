@@ -481,3 +481,5 @@ Cloudflare、主站、生产云数据库迁移、外部鉴权配置、正式快�
 - 读取到原资料目录的 15 条批次，SQLite quick_check 通过。引导技能 2.8，登记技能 1.7。对正式版代码使用隔离数据库、合成输入和真实模型，日记本地生成及复审通过后云端调用为零，确认后仅一次写入。长 TXT、混合登记、云端不可用时 9B 候补经复审交付，均通过。
 - 修复后第一轮核对安装文件、实际入口、实例、技能和上述四个隔离真实模型场景。第二轮再跑 `node --test agent/tests/local-first-interaction.test.mjs agent/tests/registration-flow.test.mjs agent/tests/screen-question-host.test.mjs`（41/41）及隔离 workerd 元数据、候补、失败和复审路由，均通过，两轮均无新增问题。
 - 此前专项 60/60，API 41/41，技能 19/19。发布分支全量对照为基线 335/360（21 失败、4 取消），候选 357/380（19 失败、4 取消）。剩余失败与取消用例在旧基线已出现。未验证真实外部云模型供应商或 Access 线上界面，线上效果待用户截图确认。花园发布登记按用户指示后补。
+
+Git 代码回执：发布提交 e10f7b32a86f220b14b50a8dadc1c4856d3b1bb4 已推送到 origin/codex/feiyue-local-first-desktop-20261121，并经 git ls-remote 核对一致。
