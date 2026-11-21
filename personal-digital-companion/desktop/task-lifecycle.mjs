@@ -126,8 +126,9 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
     pauseItem:item=>defer('reminder',item.id,item),record});
   const sync=request?createTaskSync({request,executor,deviceId:identity.device_id,pauseBeforeExecute:()=>draining}):null;
   let availableTasks=[],automaticTask=null;
-  function tasksIdle(){
-    if(!canStart()||activeCount()||operations.size||outstanding||resuming)return false;
+  function tasksIdle({allowPendingRequests=false}={}){
+    if(!canStart()||activeCount()||operations.size||resuming)return false;
+    if(outstanding&&!allowPendingRequests)return false;
     if(continuation.entries().length||chainClient.pending().length||executor.hasUnsettledWork())return false;
     return !registration.hasSaved()&&!reminderReview.hasUnknown();
   }

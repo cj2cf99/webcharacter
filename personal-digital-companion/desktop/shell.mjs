@@ -254,7 +254,7 @@ export async function startDesktop(electron,options={}){
   if(hasMemory){
     diary=createPersonalityDiary({profile,memory,model:localModel,request:tasks.weatherRequest,weather:checks.weatherDiary});
     nags=createPersonalityNags({store:diary,show:session=>screenQuestion.showNag(session),idle:()=>memoryIdle()&&win.isVisible(),canContinue:()=>!quitPending&&!work&&!localPool?.active&&!localPool?.pending().some(b=>b.state==='queued')&&
-        !screenQuestion.hasOtherTask&&!tasks.activeCount()&&(!tasks.tasksIdle||tasks.tasksIdle()),
+        !screenQuestion.hasOtherTask&&!tasks.activeCount()&&(!tasks.tasksIdle||tasks.tasksIdle({allowPendingRequests:true})),
       changed:()=>{screenQuestion.notifyPending();if(tray&&!cleaned)menu();},onInterrupted:()=>checks.enqueue('nag')});
     if(nags.pending()?.status==='意外中断')checks.enqueue(nags.pending().source==='audit'?'diaryAudit':'nag');
   }

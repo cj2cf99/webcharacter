@@ -592,6 +592,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   for(const [name,fn]of Object.entries(handlers))ipcMain.handle(name,(event,arg)=>{if(!trusted(event))throw new Error('仅问答窗口可以调用');return fn(event,arg);});
   const dismiss=(event,input)=>{
     if(!trusted(event))return;
+    if(nag&&input?.reason==='idle'&&typeof input.draft?.text==='string'&&input.draft.text.trim())return;
     if(nag?.audit){
       if(input?.reason==='idle'&&busy)return;
       leaveNag(['refuse','later','idle'].includes(input?.reason)?input.reason:'interrupted');hide();return;
