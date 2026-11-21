@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { isSubmissionId } from '../agent/tasks/submissions.mjs';
 import {registrationTypes} from './conversation-routing.mjs';
 import {calendarDate,datePattern,relativePattern,tokyoDate} from './calendar-date.mjs';
+import {registrationDraft} from './registration-draft.mjs';
 
 // “加个提醒，这周日看手顺书，……”只需一个日期、标题和可选正文。
 // 有第二个日期、其它指令或额外字段时，交给原有计划器拆解。
@@ -53,12 +54,13 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
         recordedAt&&'登记时间：'+recordedAt,result.record_id&&'记录编号：'+result.record_id,task.error].filter(Boolean).join('\n')});
   }
 
-  async function call(path, body) {
+  async function call(path, body, signal) {
     if (!request) throw Error('未配置云端登记连接');
     if (!canStart()) throw Error('精灵暂时不能继续领取，登记请求已保留');
     const response = await request(path, {
       method: body === undefined ? 'GET' : 'POST',
       cache: 'no-store',
+      ...(signal?{signal}:{}),
       ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
     });
     let result;
@@ -226,17 +228,18 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
     return promise;
   }
 
-  async function preview(text){
+  async function preview(text,{work,signal,onProgress,submittedAt=now(),localOnly=false,diaryBody=false}={}){
     if(!canStart())throw Error('精灵暂时不能继续领取，登记请求已保留');
+    if(work&&[...text].length>6000)throw Object.assign(Error('登记文字超过 6000 字符，请缩短后重试。'),{code:'MESSAGE_TOO_LARGE'});
     const match=singleReminder.exec(text.trim());
     if(match){
-      const deadline=calendarDate(match[1],tokyoDate(now()));
+      const deadline=calendarDate(match[1],tokyoDate(submittedAt));
       const plan=datedReminder(match,deadline);
       if(plan)return plan;
       // 复杂事项仍走原登记技能，仅将指令日期位置换算为东京日期。
-      text=text.replace(match[1],deadline);
+      if(!work)text=text.replace(match[1],deadline);
     }
-    return call('/api/assistant/recording-plan',{text});
+    return work?registrationDraft(text,{call,work,signal,onProgress,submittedAt,localOnly,diaryBody}):call('/api/assistant/recording-plan',{text},signal);
   }
   return {
     preview,

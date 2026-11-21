@@ -1,6 +1,6 @@
 <!doctype html><html lang="zh-CN" class="fy-panel"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'"><title>绯月 · 轮询设定</title><link rel="stylesheet" href="feiyue-surface.css"><link rel="stylesheet" href="poll-settings.css"></head>
 <body><header class="fy-titlebar"><div class="fy-caption"><h1>轮询设定</h1></div></header>
-<main class="fy-scroll"><p class="intro">遇忙顺延，推延满次数后入队；设 0 则首次遇忙即入队。</p><section id="polls" aria-label="轮询项目"></section>
+<main class="fy-scroll"><p class="intro">设有推延次数的项目遇忙顺延，设 0 则首次遇忙即入队。</p><section id="polls" aria-label="轮询项目"></section>
 <section id="waiting" tabindex="-1"><h2 class="fy-section">📥 本地待处理队列</h2><ul id="queue"></ul><p id="empty" class="fy-empty">暂无等待中的轮询任务</p></section>
 <p id="feedback" class="fy-toast" role="status"></p></main>
 <template id="editor"><form class="fy-card"><div class="heading"><h2></h2><label class="switch"><input type="checkbox" name="enabled"> 启用</label></div>

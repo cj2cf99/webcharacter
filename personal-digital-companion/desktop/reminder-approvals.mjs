@@ -116,8 +116,18 @@ export function createReminderApprovals({profile,safeStorage,request,now=Date.no
     cancelRestart(){pausing=false;},
     hasPending(){return Boolean(db.prepare('SELECT 1 FROM drafts WHERE expires>? LIMIT 1').get(now()));},
     view:()=>serial(async()=>preview(await read())),
-    submit:(question,signal)=>serial(async()=>{
-      const {filter,changes}=parseReminderCommand(question,tokyoDay(now()));
+    submit:(question,signal,planCommand)=>serial(async()=>{
+      const today=tokyoDay(now());
+      let parsed;
+      try{parsed=parseReminderCommand(question,today);}
+      catch(error){
+        if(!planCommand)throw error;
+        const plan=await planCommand(question,today,error.message);
+        signal?.throwIfAborted();
+        if(plan.question)return plan.question;
+        parsed=parseReminderCommand(plan.command,today);
+      }
+      const {filter,changes}=parsed;
       const {items}=await post('',filter,signal);
       signal?.throwIfAborted();
       verifyEdits(items);

@@ -62,7 +62,7 @@ async function main(){
       minimum:{state:'ready',value:{temperature:4,day:today,threshold:0,below:false}},alerts:{state:'ready',value:{values:[alert('大雨警报',4)]}},
       japan:{tracks:{state:'ready',values:[]},bulletins:{state:'ready',values:[]}}},
   ]}),refreshAll:async()=>({rows:[]}),close(){}}});
-  const checkStore=createReminderChecks({profile,isBusy:()=>false,handlers:{tasks:()=>{},due:()=>{},weather:()=>{}},changed:()=>{}});
+  const checkStore=createReminderChecks({profile,isBusy:()=>false,handlers:{tasks:()=>{},due:()=>{},weather:()=>{},aiHeartbeat:()=>{}},changed:()=>{}});
   const polls=attachPollSettings(runtime,{...common,checks:checkStore});
   for(let i=0;i<14;i++)checkStore.saveWeather({},{title:'天气提醒 '+(i+1),body:'未央区：大风预警 '+(i+1)},now-i*600_000);
   const turns=Array.from({length:14},(_,i)=>({id:'t'+i,at:now-i*1800_000,answeredAt:now-i*1800_000+9000,state:'answer',

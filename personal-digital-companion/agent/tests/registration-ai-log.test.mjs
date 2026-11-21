@@ -303,7 +303,7 @@ test('心跳经桌面挂载入口鉴权，固定问候独立于请求数据，�
   assert.equal(received.ai.attempts[0].code,'OK');
   assert.match(received.time,/\+09:00$/);
 });
-test('半小时心跳仅检查当前免费接口，失败后先尝试其余免费接口，成功即供真实问答使用', async t => {
+test('定时心跳先检查当前免费接口，失败后先尝试其余免费接口，成功即供真实问答使用', async t => {
   t.mock.method(console, 'info', () => {});
   const calls = [];
   let healthy = 'cloudflare';

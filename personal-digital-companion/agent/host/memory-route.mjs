@@ -1,4 +1,4 @@
-import {manualTxt} from './txt-files.mjs';
+import {listTxtFiles,manualTxt} from './txt-files.mjs';
 import {memoryHtml,memoryScript,memoryStyle} from './memory-page.mjs';
 export function createMemoryPage({shell,authorize}){
   const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'self'; base-uri 'none'"};
@@ -6,6 +6,7 @@ export function createMemoryPage({shell,authorize}){
     const path=new URL(request.url).pathname;
     const page=/^\/companion\/memory\/?$/.test(path);
     const api=/^\/api\/companion\/memory\/(?:diaries|nags)(?:\/[\w.-]+(?:\/original)?)?$/.test(path);
+    const detail=/^\/api\/companion\/memory\/(diaries|nags)\/([\w.-]+)$/.exec(path);
     const script=path==='/assets/companion/memory.js',style=path==='/assets/companion/memory.css';
     const portrait=path==='/assets/companion/journal-portrait.png';
     const files=/^(\/api\/companion\/memory\/(diaries|nags)\/([\w.-]+))\/txt$/.exec(path);
@@ -29,7 +30,14 @@ export function createMemoryPage({shell,authorize}){
     }
     if(portrait)return env.STOCKCHECK_ASSETS.fetch(request);
     if(api){
-      try{return await env.SUBSCRIPTIONS_API.fetchOwner(new Request(request.url),owner.sub);}
+      try{
+        const record=await env.SUBSCRIPTIONS_API.fetchOwner(new Request(request.url),owner.sub);
+        if(!detail||!record.ok||!env.mymaindb)return record;
+        const [,kind,recordId]=detail;
+        const id=kind==='diaries'?recordId.replace(/\.0+(?=\d+$)/u,'.'):recordId;
+        const txtFiles=await listTxtFiles(env.mymaindb,JSON.stringify([owner.sub,kind,id]));
+        return Response.json({...await record.json(),txtFiles},{headers:{'Cache-Control':'private, no-store'}});
+      }
       catch{return fail(503,'暂时无法读取手记');}
     }
     const body=page?shell(memoryHtml,path,env):style?memoryStyle:memoryScript;

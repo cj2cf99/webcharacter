@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRegistrationFlow } from '../../desktop/registration-flow.mjs';
+import {createInteractionWork} from '../../desktop/interaction-work.mjs';
 import {attachScreenQuestion} from '../../desktop/screen-question-host.mjs';
 import {fixture as questionFixture} from './screen-question-fixture.mjs';
 import { createWorker } from '../worker.mjs';
@@ -104,6 +105,144 @@ test('新增随手记只有确认时提供的图库回执进入业务记录',asy
 });
 
 const node = (key, type = 'hu-shi.event.create', params = {}) => ({ key, type, params, target_device_id: null });
+
+test('日记登记从气泡在本机生成并复审，云端只读模板，确认后登记一次',async t=>{
+  const f=await fixture(t);
+  const stages=[],logs=[];
+  const interactionWork=createInteractionWork({model:{async work(input,options){
+    stages.push(options.tier);
+    await new Promise(resolve=>setTimeout(resolve,5));
+    assert.match(input,/江边看见银杏/);
+    return options.schema.properties.selected?{selected:1,feedback:'原文完整'}:
+      {actions:[{type:'diaries.create',params:{}}],pending:[]};
+  }}});
+  const ui=questionFixture();
+  const host=attachScreenQuestion(ui.electron,{win:ui.win,root:join(import.meta.dirname,'../..'),bundle:'unused',profile:'unused',
+    history:ui.history,registration:f.desktop(),interactionWork,log:event=>logs.push(event),visible:false});
+  t.after(()=>host.close());await host.open();
+  const ask=text=>ui.handlers.get('screen-qa:ask')(ui.event(host.panel),{text});
+  const text='帮我登记日记：同事提醒我不要登记重复资料，今天在江边看见银杏。';
+  assert.match((await ask('帮我登记日记')).text,/想记下什么事/);
+  assert.deepEqual(f.calls,[]);
+  const draft=await ask(text);
+  assert.ok(draft.reviewId);
+  assert.match(draft.fields,/标题：绯月助记/);
+  assert.ok(draft.fields.includes(text));
+  assert.deepEqual(stages,['main','main']);
+  assert.ok(logs.at(-1).local_ms>0);
+  assert.equal(logs.at(-1).cloud_ms,0);
+  assert.deepEqual(f.calls,[{path:'/api/assistant/recording-plan',method:'GET'}]);
+  assert.equal(f.env.input,undefined);
+  assert.equal(f.writes.length,0);
+  assert.match((await ask('确认登记')).text,/已登记/);
+  assert.match((await ask('确认登记')).text,/没有待确认/);
+  assert.deepEqual(f.writes.map(write=>[write.path,write.body.content]),[['/api/diaries',text+'❤️']]);
+});
+
+test('明确的两项混合登记限制在原文的事项、顺序与东京日期',async t=>{
+  const f=await fixture(t);
+  const work=createInteractionWork({model:{async work(input,{schema}){
+    if(schema.properties.selected)return {selected:1,feedback:''};
+    const {明确事项:actions}=JSON.parse(input).原始输入;
+    assert.equal(schema.properties.actions.maxItems,2);
+    return {actions,pending:[]};
+  }}});
+  const plan=await f.desktop().preview('帮我登记两项：午餐吃了一碗荞麦面。另外提醒我 明天 检查资料。',
+    {work,submittedAt:Date.parse('2026-11-21T23:59:59+09:00')});
+  const [food,reminder]=plan.chain.nodes;
+  assert.equal(food.type,'hu-shi.food.create');
+  assert.match(food.params.body,/午餐吃了一碗荞麦面/);
+  assert.equal(reminder.type,'reminders.create');
+  assert.equal(reminder.params.deadline,'2026-11-22');
+  assert.equal(reminder.depends_on,undefined);
+  assert.deepEqual(f.calls,[{path:'/api/assistant/recording-plan',method:'GET'}]);
+  assert.equal(f.writes.length,0);
+});
+
+test('只说登记日记时保留正文输入，字段里的其他指令仍只是日记内容',async t=>{
+  const f=await fixture(t),ui=questionFixture(),stages=[];
+  const work=createInteractionWork({model:{async work(input,{schema}){
+    if(schema.properties.selected){stages.push('复审');return {selected:1,feedback:''};}
+    stages.push('生成');
+    assert.equal(schema.properties.actions.maxItems,1);
+    return {actions:[{type:'diaries.create',params:{}}],pending:[]};
+  }}});
+  const host=attachScreenQuestion(ui.electron,{win:ui.win,root:join(import.meta.dirname,'../..'),bundle:'unused',profile:'unused',
+    history:ui.history,registration:f.desktop(),interactionWork:work,visible:false});
+  t.after(()=>host.close());await host.open();
+  const ask=text=>ui.handlers.get('screen-qa:ask')(ui.event(host.panel),{text});
+  const missing=await ask('帮我登记日记：');
+  assert.ok(missing.reviewId);
+  assert.deepEqual(f.calls,[]);
+  const body='今天整理了资料。另外提醒我明天带伞。';
+  const event=ui.event(host.inquiryPanel);
+  const response=await ui.handlers.get('registration-review:decide')(event,missing.reviewId,{action:'send',values:[body]});
+  assert.equal(response.state,'answer');
+  const draft=ui.handlers.get('registration-review:get')(event);
+  assert.ok(draft.canConfirm);
+  assert.ok(draft.fields.includes(body));
+  assert.deepEqual(stages,['生成','复审']);
+  assert.equal(f.writes.length,0);
+  await ask('确认登记');
+  assert.deepEqual(f.writes.map(w=>[w.path,w.body.content]),[['/api/diaries','帮我登记日记：'+body+'❤️']]);
+});
+
+test('混合计划中的第三条独立委托仍可由主力生成并复审',async t=>{
+  const f=await fixture(t);
+  const actions=[all[1],{type:'reminders.create',params:{content:'检查资料',deadline:'tomorrow'}},all[2]];
+  let drafts=0;
+  const work=createInteractionWork({model:{async work(input,{schema}){
+    if(schema.properties.selected)return {selected:1,feedback:''};
+    assert.equal(schema.properties.actions.maxItems,undefined);
+    if(++drafts===1)return {actions:actions.slice(0,2),pending:[]};
+    assert.match(input,/REGISTRATION_COUNT_MISMATCH/);
+    return {actions,pending:[]};
+  }}});
+  const result=await f.desktop().preview('帮我登记三项：午餐吃了面条。另外提醒我明天检查资料。帮我登记运动，散步半小时。',{work});
+  assert.deepEqual(result.chain.nodes.map(node=>node.type),actions.map(action=>action.type));
+  assert.equal(drafts,2);
+  assert.equal(f.calls.length,1);
+  assert.equal(f.writes.length,0);
+});
+
+test('登记候补的最终复审暂时不可用，主动重试只复审原候选，确认后一次写入',async t=>{
+  const f=await fixture(t,{actions:[{type:'diaries.create',params:{}}]});
+  const ui=questionFixture(),stages=[];
+  let online=false;
+  const work=createInteractionWork({model:{async work(_input,options){
+    stages.push(options.tier);
+    return {error:'LOCAL_AI_MODEL_MISSING'};
+  }},request:async()=>{
+    stages.push('review');
+    return online?Response.json({work:{selected:1,feedback:''}}):Response.json({error:{code:'AI_COOLDOWN'}},{status:503});
+  }});
+  const host=attachScreenQuestion(ui.electron,{win:ui.win,root:join(import.meta.dirname,'../..'),bundle:'unused',profile:'unused',
+    history:ui.history,registration:f.desktop(),interactionWork:work,visible:false});
+  t.after(()=>host.close());await host.open();
+  const event=ui.event(host.panel),ask=text=>ui.handlers.get('screen-qa:ask')(event,{text});
+  const pending=await ask('帮我登记日记：今天一起看银杏。');
+  assert.equal(pending.code,'WORK_REVIEW_PENDING');
+  assert.equal(pending.retryable,true);
+  assert.equal(f.writes.length,0);
+  online=true;
+  const draft=await ui.handlers.get('screen-qa:retry')(event);
+  assert.ok(draft.reviewId,draft.text);
+  assert.deepEqual(stages,['main','upgrade','review','review']);
+  assert.equal(f.calls.filter(row=>row.method==='POST').length,1);
+  assert.equal(f.writes.length,0);
+  assert.match((await ask('确认登记')).text,/已登记/);
+  assert.equal(f.writes.length,1);
+});
+
+test('空云端候补按无效响应报告，旧登记协议仍兼容',async t=>{
+  const f=await fixture(t,{actions:[]});
+  const path='/api/assistant/recording-plan',text='登记隔离用例';
+  const empty=await f.call(path,{text,submittedAt:Date.now()});
+  assert.equal(empty.status,502);
+  assert.equal(empty.body.error.code,'INVALID_AI_RESPONSE');
+  assert.equal((await f.call(path,{text})).status,200);
+  assert.equal(f.writes.length,0);
+});
 
 test('附件草案预览零业务写入，确认后复用原计划和提交号机制',async t=>{
   const f=await fixture(t),flow=f.desktop();

@@ -1,15 +1,15 @@
 import {cleanChatOutput} from './chat-output.mjs';
-import {performance} from 'node:perf_hooks';
 import {calendarContext,tokyoDate} from './calendar-date.mjs';
 import {imageSlots,resolveImageChoices} from './image-planning.mjs';
 import {conversationRoute,suppliedSummaryText} from './conversation-routing.mjs';
+import {responseMode,responseInstruction} from '../agent/assistant/response-style.mjs';
 
 const threads = 4;
 const contextSize = 2048;
 const port = process.parentPort;
 const send = value => port.postMessage(value);
 const roleFacts = '在夫妻角色扮演中，用户是绯月的丈夫。绯月是他心爱的妻子、贤内助，是他口中“可爱的心尖肉肉”。绯月称呼丈夫为“老公”。';
-const persona = '你叫绯月。'+roleFacts+'用“我”自称，亲近自然地回应用户。';
+const persona = responseInstruction('speech')+roleFacts;
 const conversationStyle = '对方主动想与你交谈、亲近或分享心情时，先热情回应他这句的具体意思，再顺着话题接一句，让对话能继续。可以分享相关想法或轻轻问一个问题。别只应声，别重复问已经说过的事。用户说要去忙或晚点聊时，温和回应他的安排。';
 const identityQuestion = /^(?:绯月[，, ]*)?(?:(?:告诉我|说说)?(?:你(?:现在)?是谁|你叫什么(?:名字)?|你的名字是什么|我(?:该)?怎么称呼你|你是我的(?:谁|什么人)|(?:对我来说[，, ]*)?你是什么身份|你(?:跟|和)我是什么关系|介绍一下你自己)[呀啊呢吧吗]?[？?。！!，,\s]*)+$/u;
 const userRelationQuestion = /^(?:绯月[，,\s]*)?(?:告诉我|说说)?(?:我是你的(?:谁|什么人)|我(?:跟|和)你是什么关系|我对你来说是谁)[呀啊呢吧吗]?[？?。！!]*$/u;
@@ -53,7 +53,8 @@ function followUpHint(text) {
   return conversationRoute(text.slice(boundary+1).trim()).kind;
 }
 const system = [
-  persona,
+  roleFacts,
+  '只有普通闲聊的 reply 使用以下表达方式：'+persona,
   '桌面精灵是运行背景，只在问到运行方式或谈及桌面动作时提。闲聊用自己的口吻直接回应。',
   conversationStyle,
   '先判断用途。有要求做事时优先判 task，包括登记、设提醒以及指挥自己移动或重启。task 只概括意图，reply 留空。闲聊、感受、邀请你陪聊或询问你的身份是 chat。天气、网页、截图和需核实的事实是 external。看不准用 uncertain。',
@@ -228,8 +229,9 @@ async function start() {
   const rewriteGrammar = await engine.createGrammarForJsonSchema(rewriteSchema);
   const wrapper = new QwenChatWrapper({variation:'3.5',thoughts:'discourage'});
 
-  async function pass(input, signal, systemPrompt, previous, outputGrammar=grammar, maxTokens=160) {
-    const sequence = context.getSequence();
+  async function pass(input, signal, systemPrompt, previous, outputGrammar=grammar, maxTokens=160, promptContext=context) {
+    signal.throwIfAborted();
+    const sequence = promptContext.getSequence();
     const session = new LlamaChatSession({contextSequence:sequence,chatWrapper:wrapper,systemPrompt:[systemPrompt,active?.calendar].filter(Boolean).join('\n')});
     try {
       if (previous?.用户 && previous?.绯月) {
@@ -283,7 +285,7 @@ async function start() {
     return {error:'LOCAL_AI_REPLY_REVIEW_REJECTED'};
   }
 
-  async function analyzeTurn(current, shortened, hint, previous, signal, started, remainingMs, id,skillInstruction) {
+  async function analyzeTurn(current, shortened, hint, previous, signal, id,skillInstruction) {
     const routeHint = hint === 'auto' ? followUpHint(current) : hint;
     const fixedKind = taskHints.has(routeHint) ? 'task' : externalHints.has(routeHint) ? 'external' : null;
     const input = fixedKind ? JSON.stringify({用户输入:current,原有流程:fixedKind}) : current;
@@ -300,15 +302,12 @@ async function start() {
     ].join('\n') : system;
     const instructions=[draftPrompt,skillInstruction?.draft??skillInstruction].filter(Boolean).join('\n');
     let draft = await pass(input,signal,instructions,previous);
-    let lastPassMs = performance.now()-started;
     for (let review=1; review<=2
-      && (draft.review || draft.kind==='uncertain' || (review===1 && (fixedKind ?? draft.kind)==='task'))
-      && remainingMs-(performance.now()-started) > Math.max(600,lastPassMs+150); review++) {
-      const reviewStarted = performance.now();
+      && (draft.review || draft.kind==='uncertain' || (review===1 && (fixedKind ?? draft.kind)==='task')); review++) {
+      signal.throwIfAborted();
       send({type:'review',id,pass:review});
       const reviewInput = JSON.stringify({用户输入:current,原有流程:fixedKind,草稿:draft,要求:'核对是否漏掉最新一句的意图。'});
       draft = await pass(reviewInput,signal,instructions,previous);
-      lastPassMs = performance.now()-reviewStarted;
     }
     const kind = fixedKind ?? draft.kind;
     const reply = draft.reply.trim();
@@ -325,16 +324,12 @@ async function start() {
       send({type:'result',id:data.id,result:{error:'LOCAL_AI_BUSY'}});
       return;
     }
-    const {id,text,hint,previous,intentBudgetMs=6500,remainingMs} = data;
+    const {id,text,hint,previous,remainingMs} = data;
     const controller = new AbortController();
     active = {id,controller,ordinaryChat:hint==='auto',calendar:hint==='auto'?calendarContext(text,tokyoDate()):''};
     const signal = AbortSignal.any([controller.signal,AbortSignal.timeout(remainingMs)]);
-    const draftMs = Math.min(remainingMs,intentBudgetMs);
-    const draftSignal = AbortSignal.any([signal,AbortSignal.timeout(draftMs)]);
-    const started = performance.now();
     void (async () => {
       let result;
-      let activeSignal = draftSignal;
       try {
         const current = truncate(text,900);
         const shortened = Array.from(text).length > 900;
@@ -342,12 +337,23 @@ async function start() {
           ? profileReply(current.trim()) ?? suppliedSummary(current.trim())
             ?? (data.skillInstruction?.profile==='conversation' && straightforwardConversation(current)
               ? recallUserFact(current.trim(),previous) : null) : null;
-        if(hint==='direct'){
-          activeSignal=signal;
-          const reply=cleanChatOutput(await pass(text,signal,'你叫绯月，扮演我的妻子。',previous,null,256),text);
+        const mode = data.replyMode ?? responseMode(text);
+        const direct = hint === 'direct';
+        const formattedAnswer = direct || hint === 'auto' && mode !== 'speech' && !verifiedReply && followUpHint(current) === 'auto';
+        if(formattedAnswer){
+          const instructions=[responseInstruction(mode,{direct}),data.skillInstruction?.response].filter(Boolean).join('\n');
+          const reply=await pass(text,signal,instructions,previous,null,mode==='speech'||mode==='judgment'?256:512);
           result=reply?{kind:'chat',reply}:{error:'LOCAL_AI_RESULT_INVALID'};
+        }else if(hint==='interactionWork'){
+          const {instruction,schema,maxTokens=512}=data.skillInstruction;
+          const required=model.tokenize(text).length+model.tokenize(instruction).length+maxTokens+256;
+          if(required>16384)
+            throw Object.assign(Error('本轮交互资料超出本地上下文'),{code:'LOCAL_AI_CONTEXT_BUDGET'});
+          const workGrammar=await engine.createGrammarForJsonSchema(schema);
+          const workContext=required>contextSize?await model.createContext({contextSize:Math.ceil(required/1024)*1024,threads}):context;
+          try{result=await pass(text,signal,instruction,undefined,workGrammar,maxTokens,workContext);}
+          finally{if(workContext!==context)await workContext.dispose();}
         }else if (hint === 'serverTask' || hint === 'personalityMemory') {
-          activeSignal = signal;
           if(hint==='personalityMemory'&&['emotion-appraisal','initiative-decision','topic-memory'].includes(data.skillInstruction.name)){
             const used=model.tokenize(text).length+model.tokenize(data.skillInstruction.instruction).length;
             if(used+420+32>contextSize)throw Object.assign(Error('本轮人格材料超出上下文'),{code:'LOCAL_AI_CONTEXT_BUDGET'});
@@ -355,7 +361,6 @@ async function start() {
           const taskGrammar = await engine.createGrammarForJsonSchema(data.skillInstruction.schema);
           result = await pass(text,signal,data.skillInstruction.instruction,undefined,taskGrammar,420);
         } else if (hint === 'image-plan') {
-          activeSignal = signal;
           const {slots,question}=imageSlots(text,data.imageSkill.count,data.imageSkill.hasBase);
           if(question){
             result={steps:[],question};
@@ -372,22 +377,21 @@ async function start() {
           }
         } else if(data.revision && hint==='auto'){
           const input=JSON.stringify({用户原话:current,上一模型草稿:data.revision.draft,审核意见:data.revision.feedback});
-          const answer=await pass(input,draftSignal,[persona,data.skillInstruction?.rewrite,'根据用户原话纠正草稿，直接给出完整答复。'].filter(Boolean).join('\n'),previous,rewriteGrammar,120);
+          const answer=await pass(input,signal,[persona,data.skillInstruction?.rewrite,'根据用户原话纠正草稿，直接给出完整答复。'].filter(Boolean).join('\n'),previous,rewriteGrammar,120);
           result={kind:'chat',reply:answer.reply.trim()};
         } else if (verifiedReply) {
           const verifiedGrammar = await engine.createGrammarForJsonSchema({...schema,properties:{
             kind:{enum:['chat']},summary:{enum:['']},reply:{enum:[verifiedReply]},review:{enum:[false]}
           }});
-          const {kind,reply} = await pass(current,draftSignal,persona,undefined,verifiedGrammar);
+          const {kind,reply} = await pass(current,signal,responseInstruction(mode),undefined,verifiedGrammar);
           result = {kind,reply};
         } else {
-          result = await analyzeTurn(current,shortened,hint,previous,draftSignal,started,draftMs,id,data.skillInstruction);
+          result = await analyzeTurn(current,shortened,hint,previous,signal,id,data.skillInstruction);
         }
-        activeSignal = signal;
         if (result.kind==='chat' && typeof result.reply==='string') {
-          if(hint!=='direct')result = await reviewAnswer(current.trim(),previous,result.reply,verifiedReply,signal,id,data.skillInstruction,data.reviewLimit===2?2:3);
+          if(!formattedAnswer && mode==='speech')result = await reviewAnswer(current.trim(),previous,result.reply,verifiedReply,signal,id,data.skillInstruction,data.reviewLimit===2?2:3);
           if(result.kind==='chat'){
-            const clean=cleanChatOutput(result.reply,text);
+            const clean=mode!=='speech'?result.reply.trim():cleanChatOutput(result.reply,text);
             result=clean?{...result,reply:clean}:{error:'LOCAL_AI_RESULT_INVALID'};
           }
         } else if (result.kind) {
@@ -395,7 +399,8 @@ async function start() {
         }
 
       } catch (error) {
-        result = {error:activeSignal.aborted?'LOCAL_AI_TIMEOUT':error?.code === 'LOCAL_AI_RESULT_INVALID'?'LOCAL_AI_RESULT_INVALID':'LOCAL_AI_INFERENCE_FAILED'};
+        result = {error:signal.aborted?'LOCAL_AI_TIMEOUT':hint==='interactionWork'&&error instanceof SyntaxError?'LOCAL_AI_RESULT_INVALID':
+          ['LOCAL_AI_RESULT_INVALID','LOCAL_AI_CONTEXT_BUDGET'].includes(error?.code)?error.code:'LOCAL_AI_INFERENCE_FAILED'};
       } finally {
         active = null;
       }

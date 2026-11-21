@@ -30,7 +30,7 @@ export function menuEntry(text){
 export function menuGuidance(text){
   const purpose=/(?:怎么|怎样|如何)(?:才能|才可以|可以)?(?:登记|记录|写)(?:一(?:篇|条))?(日记|随手记)(?:[呀呢吗？?。！!]|\s)*$/u.exec(text)?.[1];
   if(purpose){
-    const input=purpose==='日记'?'帮我写日记：……':'帮我把……记到随手记';
+    const input=purpose==='日记'?'帮我登记日记：……':'帮我把……记到随手记';
     return '托盘右键绯月，打开「问绯月」，输入「'+input+'」。';
   }
   const entry=menuEntry(text);
@@ -41,7 +41,7 @@ export function menuGuidance(text){
 }
 
 const targets={
-  'resources.create':/资源/u,'hu-shi.food.create':/吃喝|饮食|餐食|用餐/u,'hu-shi.exercise.create':/运动|锻炼/u,
+  'resources.create':/资源/u,'hu-shi.food.create':/吃喝|饮食|餐食|用餐|(?:早餐|午餐|晚餐|早饭|午饭|晚饭)\s*(?:吃|喝)/u,'hu-shi.exercise.create':/运动|锻炼/u,
   'hu-shi.event.create':/一键事件/u,'records.create':/随手记|笔记/u,'diaries.create':/日记/u,'reminders.create':/提醒|待办/u
 };
 export function attachmentRegistration(text){

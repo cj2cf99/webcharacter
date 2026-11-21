@@ -8,6 +8,7 @@
 - 本次工具说明与需求边界：[docs/MEDIA_TOOLS.md](docs/MEDIA_TOOLS.md)。
 - 实际验证及复核：[docs/reviews/MEDIA_TOOLS_REVIEW_2026-11-18.md](docs/reviews/MEDIA_TOOLS_REVIEW_2026-11-18.md)。
 - 当前开发状态：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
+- 绯月交互本地优先：[需求](REQUIREMENTS.md) · [设计](docs/DESIGN.md)。
 
 本目录与既有 Rigby2D、3D 场景等试验隔离，不引用其运行代码或角色素材。不部署、不启动常驻服务、不提交或推送。
 

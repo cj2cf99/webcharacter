@@ -4,7 +4,8 @@ import {AttachmentController} from './attachment.mjs';
 import {watchWindows} from './native-windows.mjs';
 import {screenPosture} from './screen-posture.mjs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {resolve} from 'node:path';
+import {dirname,resolve} from 'node:path';
+import {createInteractionWork} from './interaction-work.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
 import {readFile,stat} from 'node:fs/promises';
@@ -141,8 +142,9 @@ export async function startDesktop(electron,options={}){
   const pcSettings=attachSettings(electron,{win,profile,bundle,root,legacySound:sound,onDisplayChange:applyScreenLock});
   let confineToScreen=pcSettings.store.snapshot().config.confineToScreen;
   const localModel=options.localModel??(!options.benchmark&&electron.utilityProcess?createBalancedLocalModel({
-    utilityProcess:electron.utilityProcess,modelPath:desktopModelPath(app,root),log:tasks.traffic?.write
+    utilityProcess:electron.utilityProcess,modelPath:desktopModelPath(app,root),log:tasks.traffic?.write,localFirst:true
   }):null);
+  const interactionWork=localModel?.work&&createInteractionWork({model:localModel,request:tasks.weatherRequest,log:tasks.traffic?.write});
   let pendingCheckVisible=false,menuUnread=0;
   let writing=false,pollExecuting=false,lastWork,lastContext,wasExecuting=false;
   let farewell=null,nextTicket=0;
@@ -257,12 +259,14 @@ export async function startDesktop(electron,options={}){
     if(checks.takeEveningPraise(day))contextualAction('praise-idle');
   }),
     lastRun:id=>diary?.last(id==='nag'?'nag-shown':id),
-    handlers:{...(hasMemory?Object.fromEntries(['diary','diaryAudit','nag','review','curiosity'].map(k=>[k,(s,step)=>memoryJob(k,s,false,step)])):{}),weather:()=>weather.check(),tasks:()=>{
+    handlers:{...(hasMemory?Object.fromEntries(['diary','diaryAudit','nag','review','curiosity'].map(k=>[k,(s,step)=>memoryJob(k,s,false,step)])):{}),
+      aiHeartbeat:tasks.checkAiHeartbeat,weather:()=>weather.check(),tasks:()=>{
       if(!tasks.pollOnce)throw Object.assign(Error('任务轮询未连接'),{code:'NO_CONNECTION'});
       return tasks.pollOnce();
     }},
     // 任务轮询只看有没有名额（canPoll），不因正式工作、问答或开始工作模式顺延；其余轮询判断不变。
     isBusy:id=>id==='tasks'?quitPending||Boolean(tasks.canPoll&&!tasks.canPoll()):
+      id==='aiHeartbeat'?quitPending:
       (['diary','review','nag','diaryAudit','curiosity'].includes(id)&&(backgroundJob||!memoryIdle()))||quitPending||work||Boolean(localPool?.active)||screenQuestion.hasLocalWork||tasks.activeCount()>0,
     changed:()=>{
       screenQuestion.details?.webContents.send('conversation:checks-changed');
@@ -270,7 +274,7 @@ export async function startDesktop(electron,options={}){
       const unread=checks.unread;
       if(backgroundKind==='curiosity'&&!checks.polls().find(p=>p.id==='curiosity')?.enabled)interruptMemory();
       const running=checks.polls().filter(job=>job.running);
-      pollExecuting=running.some(job=>!['diary','review','due'].includes(job.id));
+      pollExecuting=running.some(job=>!['diary','review','due','aiHeartbeat'].includes(job.id));
       const polling=running.find(job=>['tasks','due','weather'].includes(job.id));
       pollThought=polling?{title:polling.name,stage:'正在查询'}:null;
       if(pendingCheckVisible!==checks.pending||menuUnread!==unread){
@@ -280,11 +284,14 @@ export async function startDesktop(electron,options={}){
     }});
   menuUnread=checks.unread;pendingCheckVisible=checks.pending;
   const pollSettings=attachPollSettings(electron,{root,bundle,checks});
-  const serverTask=createServerTaskCommand({profile,tasks,localModel,dialog:messages});
+  const serverTask=createServerTaskCommand({profile,tasks,localModel,interactionWork,dialog:messages});
+  const modelFolder=dirname(desktopModelPath(app,root));
+  const upgradeVision=options.upgradeVision??(!options.vision&&interactionWork?localVision(resolve(modelFolder,'Qwen3.5-9B-Q4_K_M.gguf'),
+    {projection:resolve(modelFolder,'Qwen3.5-9B-mmproj-F16.gguf')}):undefined);
   const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,checks,emotion:()=>emotion,topics:()=>topics,onForeground:interruptMemory,auditPending:()=>{const n=nags?.pending();return n?.source==='audit'?{id:n.id,title:n.title,status:n.status}:null;},
     resumeAudit:()=>memoryJob('diaryAudit',reminderStartup.signal,true),onRegistration:()=>contextualAction('chat-registration'),serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
     memory,vision:memory&&(options.vision??localVision(desktopModelPath(app,root))),readTasks:memory?.readTasks??tasks.executor?.review.read,
-    readTraffic:tasks.traffic?.readPage,client:options.screenQuestionClient,requestRestart,localModel,log:tasks.traffic?.write});
+    readTraffic:tasks.traffic?.readPage,client:options.screenQuestionClient,requestRestart,localModel,interactionWork,upgradeVision,log:tasks.traffic?.write});
   const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark,recordCheck:checks.record,checks});
   const reminderReview=tasks.reminderReview?attachReminderReview(electron,{bundle,root,flow:tasks.reminderReview}):null;
   const taskInbox=tasks.taskInbox?attachTaskInbox(electron,{bundle,root,flow:{...tasks.taskInbox,
@@ -1057,7 +1064,6 @@ export async function startDesktop(electron,options={}){
       void messages.showMessageBox({type:'warning',title:'绯月本机任务入口',message:'本机 API 未启动，已保存的批次会在下次成功启动时继续。',detail:error.message,buttons:['确定']}).catch(()=>{});
     }
   }
-  tasks.startPolling?.({managed:true});
   taskNotice(Promise.resolve(screenQuestion.resumePaused()));
   const remindersReady=waitForStartupReminders(reminderStartup.signal);
   if(!options.benchmark)checks.start();

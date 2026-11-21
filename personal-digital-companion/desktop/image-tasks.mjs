@@ -2,6 +2,7 @@ import {execFile} from 'node:child_process';
 import {mkdir,mkdtemp,readFile,readdir,rename,rm,writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {validAttachment} from './question-attachment.mjs';
+import {requestWorkCloud} from './interaction-work.mjs';
 
 import {imageSlots,resolveImageChoices,checkEditConstraints,previousImage,tourDestination} from './image-planning.mjs';
 export {imageRequest,literalPlan,checkEditConstraints} from './image-planning.mjs';
@@ -24,7 +25,7 @@ export async function hasLocalImageBackend(root){
   catch{return false;}
 }
 
-export function createImageTasks({root,profile,localModel,onChange,onFinish,archive,runPython=python}){
+export function createImageTasks({root,profile,localModel,interactionWork,request,onChange,onFinish,archive,runPython=python}){
   const cli=resolve(root,'workflows/comfyui/image_chain.py'), waitCli=resolve(root,'../tools/comfy_job.py');
   const receipts=join(profile,'image-tasks'),jobs=new Map();
   let closed=false,restoring=true;
@@ -122,13 +123,15 @@ export function createImageTasks({root,profile,localModel,onChange,onFinish,arch
       return rows.map(({job,text,state,original,width,height,archiveWarning})=>({job,text:[text,archiveWarning].filter(Boolean).join(' '),state,original,width,height}));
     },
     async result(job){await ready;const row=jobs.get(job);return row?.archivedOutput??(row?.state==='done'?row.output:row?.completed?.at(-1)?.output);},
-    async submit(text,attachments){
+    async submit(text,attachments,{signal,onProgress}={}){
       await ready;
+      signal?.throwIfAborted();
       if(text.length>2000)throw Error('图像指令最多 2000 字。');
       const destination=tourDestination(text);
       if(destination!==null){
         if(attachments.length||destination.length>80)throw Error('请用“绯月环球之旅：目的地”启动，参考图由绯月挑选。');
         await mkdir(receipts,{recursive:true});
+        signal?.throwIfAborted();
         const row=await runPython(cli,['submit','--tour'],{original:text,destination});
         return queued(row,text,'绯月环球之旅');
       }
@@ -143,7 +146,20 @@ export function createImageTasks({root,profile,localModel,onChange,onFinish,arch
       if(!skill.instruction)throw Error(skill.error??'无法读取图像 skill。');
       let choices=slots.map(s=>s.ops[0]);
       if(slots.some(s=>s.ops.length>1)){
-        const plan=await localModel?.analyze(text,{hint:'image-plan',imageSkill:{count,hasBase:Boolean(old),instruction:skill.instruction}});
+        const allowed=slots.map(({quote,ops})=>({quote,ops}));
+        const schema={oneOf:[{type:'object',properties:{choices:{type:'array',prefixItems:slots.map(slot=>({enum:slot.ops})),
+          minItems:slots.length,maxItems:slots.length}},required:['choices'],additionalProperties:false},
+          {type:'object',properties:{question:{type:'string'}},required:['question'],additionalProperties:false}]};
+        const plan=interactionWork?await interactionWork({purpose:'图像编排',context:allowed,
+          instruction:skill.instruction+'\n仅为每项原文选择一个可用操作，或返回具体澄清问题。',schema,signal,onProgress,
+          maxTokens:Math.max(80,slots.length*12+24),normalize(raw){
+            if(raw?.question?.trim())return {value:{question:raw.question},review:raw};
+            const steps=resolveImageChoices(slots,raw?.choices);
+            if(!steps)return null;
+            checkEditConstraints(text,steps);
+            return {value:{steps},review:steps};
+          },cloud:(activeSignal,feedback)=>requestWorkCloud(request,'image-plan',{slots:allowed,feedback},activeSignal)}):
+          await localModel?.analyze(text,{hint:'image-plan',signal,imageSkill:{count,hasBase:Boolean(old),instruction:skill.instruction}});
         if(plan?.error)throw Error('本地图像规划未完成（'+plan.error+'），请重试或分句说明。');
         if(plan?.question||!Array.isArray(plan?.steps))throw Error(plan?.question||'请说明每一步要做什么。');
         choices=plan.steps.map(s=>s.op);
@@ -171,6 +187,7 @@ export function createImageTasks({root,profile,localModel,onChange,onFinish,arch
           await writeFile(path,bytes);
           args.push('--image',path);
         }
+        signal?.throwIfAborted();
         const row=await runPython(cli,args,{original:text,steps});
         return await queued(row,text,steps.map(s=>labels[s.op]).join(' → '));
       }finally{await rm(temp,{recursive:true,force:true});}

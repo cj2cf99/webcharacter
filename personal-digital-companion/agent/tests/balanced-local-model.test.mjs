@@ -60,7 +60,10 @@ test('三轮未通过时转交原草稿及反馈，改进模型上限两轮，�
     assert.deepEqual(calls.map(c=>c.limit),[3,2]);
     assert.deepEqual(calls[1].revision,revision);
     assert.equal(calls[0].text,calls[1].text);
-    assert.deepEqual(await m.analyze('过期的问题',{hint:'auto',turnStart:performance.now()-31000}),{error:'LOCAL_CHAT_TIME_LIMIT'});
+    assert.deepEqual(await m.analyze('过期的问题',{hint:'auto',turnStart:performance.now()-61000}),{error:'LOCAL_CHAT_TIME_LIMIT'});
     assert.equal(calls.length,2);
+    assert.deepEqual(await m.analyze('已花了三十五秒的问题',{hint:'auto',turnStart:performance.now()-35000}),
+      {error:'LOCAL_CHAT_REVIEW_FAILED'});
+    assert.deepEqual(calls.slice(2).map(c=>c.limit),[3,2]);
   }finally{await m.close();}
 });

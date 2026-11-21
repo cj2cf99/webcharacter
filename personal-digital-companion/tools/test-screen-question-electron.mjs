@@ -58,6 +58,21 @@ async function run(){try{
     await display();
     await wait(()=>bubble("!document.querySelector('#auditActions').hidden && document.querySelector('#answer').textContent.includes('正式发布')"));
     assert(await bubble("document.querySelector('#mode').disabled && document.querySelector('#withScreen').disabled"));
+    assert.equal(await bubble(`(()=>{
+      const original=window.setTimeout;
+      let idleTimers=0;
+      window.setTimeout=(fn,ms,...args)=>{
+        if(ms===90_000)idleTimers++;
+        return original(fn,ms,...args);
+      };
+      try{
+        const input=document.querySelector('#question');
+        for(const text of ['', '还在写一半', '']){
+          input.value=text;input.dispatchEvent(new Event('input',{bubbles:true}));
+        }
+        return idleTimers;
+      }finally{window.setTimeout=original;}
+    })()`),0,'正在阅读或输入的质询窗口不启动闲置关闭计时');
     await bubble("document.querySelector('#later').click()");
     await wait(()=>!host.panel);await host.openReview('pending');
     await wait(()=>details("document.querySelector('#turns')?.innerText.includes('继续回答')"));
@@ -120,8 +135,15 @@ async function run(){try{
     if(path==='/api/reminder-edits')return Response.json({items:(JSON.parse(options.body).id?[1]:[1,2]).map(id=>({id,title:'周报'+id,content:'初稿',deadline:'2026-11-20',recurrence:null,version:'fixture'}))});
     reminderWrites.push([path,JSON.parse(options.body)]);return Response.json({accepted:true});
   };
+  const localModel={async analyze(text,{hint,replyMode,skillInstruction}){
+    if(hint!=='direct')return null;
+    assert.equal(replyMode,'tool');
+    assert.equal(skillInstruction.name,'tool-response');
+    assert.match(text,/发布公告.*最新版本已公布/);
+    return {kind:'chat',reply:'据发布公告，最新版本已公布。[1]'};
+  }};
   let registrationActions=0;
-  host=attachScreenQuestion(electron,{win:pet,profile,bundle:resolve(root,'output/desktop-bundle'),root,client,registration,search,reminderRequest,visible:false,onRegistration:()=>registrationActions++,
+  host=attachScreenQuestion(electron,{win:pet,profile,bundle:resolve(root,'output/desktop-bundle'),root,client,registration,search,reminderRequest,localModel,visible:false,onRegistration:()=>registrationActions++,
     readTasks:()=>[{at:Date.now(),title:'检查资料',action:'完成提醒 · 已核实完成',task_id:'42',detail:'下次到期：明天'}]});
   await host.open();const panel=host.panel;
   const js=code=>panel.webContents.executeJavaScript(code);
@@ -284,7 +306,7 @@ async function run(){try{
     assert.equal(await fileName(),'');
     assert.ok(await put('drop','notes.txt','text/plain',Buffer.from('测试代号：海棠')));
     await wait(async()=>await fileName()==='notes.txt');
-    await new Promise(resolve=>setTimeout(resolve,30_100));
+    await new Promise(resolve=>setTimeout(resolve,90_100));
     await wait(()=>!host.panel);
     await host.open();
     const restored=code=>host.panel.webContents.executeJavaScript(code);
@@ -299,7 +321,7 @@ async function run(){try{
     const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
     await pause(5500);
     await js("const i=document.querySelector('#question'); i.value='  保留原样的草稿  '; i.dispatchEvent(new Event('input',{bubbles:true}));");
-    await pause(28_000);
+    await pause(88_000);
     assert.equal(host.panel,panel,'输入后应重新计时');
     assert.equal(await js(`(() => {
       const reply=document.querySelector('#reply');
@@ -315,14 +337,14 @@ async function run(){try{
     mode='waitingCapture';
     await resumedJs("document.querySelector('#withScreen').click(); document.querySelector('#questionForm').requestSubmit();");
     await wait(()=>Boolean(release));
-    await pause(30_400);
+    await pause(90_400);
     assert.equal(host.panel,resumed,'查询期间禁止自动关闭');
     release();
     await wait(()=>resumedJs("document.querySelector('#reply').dataset.state==='answer'"));
-    await pause(28_000);
+    await pause(88_000);
     assert.equal(host.panel,resumed,'回复后获得完整一轮计时');
     await wait(()=>!host.panel);
-    console.log('PASS：真实 30 秒空闲自动关闭、输入重新计时、鼠标移动和滚轮不续时、草稿恢复、查询期间保持打开。');
+    console.log('PASS：真实 90 秒空闲自动关闭、输入重新计时、鼠标移动和滚轮不续时、草稿恢复、查询期间保持打开。');
     return;
   }
   assert.equal(await js("document.querySelector('#pending').hidden"),true);
@@ -425,7 +447,7 @@ async function run(){try{
   assert.equal(registrationActions,beforeRegistration+1,'普通查询不触发登记动作');
   const pick=value=>js("document.querySelector('#mode').value="+JSON.stringify(value)
     +";document.querySelector('#mode').dispatchEvent(new Event('change'));true;");
-  assert.deepEqual(await js("Array.from(document.querySelector('#mode').options,x=>x.textContent)"),['自动','登记','查询网络','查询记忆（未开放）']);
+  assert.deepEqual(await js("Array.from(document.querySelector('#mode').options,x=>x.textContent)"),['自动','绯月环球之旅','登记','查询网络','查询记忆（未开放）']);
   assert.equal(await js("document.querySelector('option[value=web]').disabled"),false);
   assert.equal(await js("document.querySelector('option[value=memory]').disabled"),true);
   await pick('memory');

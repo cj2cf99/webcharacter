@@ -10,13 +10,15 @@ function render(rows){
       form.querySelector('h2').textContent=row.name;
       form.elements.enabled.checked=row.enabled;
       if(row.id==='diary')form.elements.minutes.max=720;
-      form.elements.minutes.value=row.minutes;form.elements.maximum.value=row.maximum;
+      if(row.id==='aiHeartbeat')form.elements.maximum.closest('label').remove();
+      else form.elements.maximum.value=row.maximum;
+      form.elements.minutes.value=row.minutes;
       form.onsubmit=async event=>{
         event.preventDefault();
         const button=form.querySelector('button');button.disabled=true;
         try{
           await api.save(row.id,{enabled:form.elements.enabled.checked,minutes:form.elements.minutes.valueAsNumber,
-            maximum:form.elements.maximum.valueAsNumber});
+            maximum:form.elements.maximum?.valueAsNumber});
           feedback.textContent=row.name+'设定已保存';
         }catch{feedback.textContent='保存失败，请核对数值后重试。';}
         finally{button.disabled=false;}

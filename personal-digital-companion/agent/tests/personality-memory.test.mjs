@@ -11,6 +11,7 @@ import {createPersonalityDiary,cleanMemory} from '../../desktop/personality-diar
 import {createPersonalityNags} from '../../desktop/personality-nags.mjs';
 import {createMemoryPage} from '../host/memory-route.mjs';
 import {handleCompanion} from '../host/subscriptions.mjs';
+import {bucketFixture} from './txt-test-bucket.mjs';
 
 import {fixture as screenFixture} from './screen-question-fixture.mjs';
 import {attachScreenQuestion} from '../../desktop/screen-question-host.mjs';
@@ -89,7 +90,7 @@ function fixture(t){
   const {DB,sqlite,close}=openTestDatabase();t.after(close);
   sqlite.exec(readFileSync(new URL('../migrations/016-personality-memory.sql',import.meta.url),'utf8'));
   const req=(path,body,owner='me')=>/^(expenses|sources)\?/.test(path)?Response.json({records:[],complete:true}):personalityMemory(new Request('https://unit.test/api/memory/'+path,body?{method:'POST',body:JSON.stringify(body)}:{}),{DB},owner);
-  return {DB,req};
+  return {DB,sqlite,req};
 }
 test('并发重传只追加一次，5000 字按字符计，检索只看篇首，账户隔离',async t=>{
   const {req}=fixture(t);
@@ -272,6 +273,44 @@ test('网页只读，列表和详情经身份接线，拒绝跨来源改写',asy
   assert.equal((await (await route(new Request(url),env)).json()).total,1);
   const both=await route(new Request('https://unit.test/companion/memory/'),env);assert((await both.text()).includes('id="origin"'));
   const denied=createMemoryPage({shell:s=>s,authorize:()=>null});assert.equal((await denied(new Request(url),env)).status,403);
+});
+
+test('绯月以桌宠身份上传并关联日记及唠叨 TXT，只读详情区分已有和空附件',async t=>{
+  const {DB,sqlite}=fixture(t),myMainStorage=bucketFixture();
+  sqlite.exec(`CREATE TABLE txt_record_files(subject TEXT,id TEXT,object_key TEXT,name TEXT,bytes INTEGER,charset TEXT,PRIMARY KEY(subject,id))`);
+  const env={COMPANION_ENABLED:'true',COMPANION_DB:DB,COMPANION_HOST:{},mymaindb:DB,myMainStorage};
+  env.SUBSCRIPTIONS_API={fetchOwner:(r,owner)=>handleCompanion(r,env,owner,true)};
+  const page=createMemoryPage({shell:s=>s,authorize:()=>({sub:'owner'})});
+  const origin='https://unit.test',base=origin+'/api/companion/memory/';
+  const read=path=>page(new Request(base+path),env);
+  const post=(path,body,role='bot')=>handleCompanion(new Request(base+path,{method:'POST',body}),env,{id:'fixture',role},false);
+  const note='模拟完整原文',id='1'.repeat(32),marker='〔附件原文 '+id+'〕';
+  const nag={id:'txt-test',source:'curiosity',source_id:'fixture',revision:1,title:'测试唠叨',reason:'验证附件',
+    created_at:new Date(start).toISOString(),status:'已解释',mood:'好奇',talk:[{who:'你',text:marker,at:new Date(start).toISOString()}]};
+  assert.equal((await post('diaries',JSON.stringify(packet))).status,200);
+  assert.equal((await post('nags',JSON.stringify({...nag,id:'no-file',source_id:'fixture-empty'}))).status,200);
+  const upload=()=>{const form=new FormData();form.set('file',new File([note],'原文.txt'));return form;};
+  for(const [kind,recordId] of [['diaries',day+'.1'],['nags',nag.id]]){
+    const path=kind+'/'+recordId;
+    assert.equal((await post(path+'/original',upload(),'owner')).status,403);
+    assert.equal((await page(new Request(base+path+'/original',{method:'POST',body:upload()}),env)).status,405);
+    const staged=await post(path+'/original',upload());assert.equal(staged.status,200);
+    const {hash}=await staged.json(),head={hash,ids:[id]};
+    assert.equal((await read(path+'/original')).status,404);
+    const submission=kind==='diaries'?{...packet,batch:'txt-test',body:marker,txtUpdate:{part:1,revision:1,head}}:{...nag,automaticTxt:head};
+    assert.equal((await post(kind,JSON.stringify(submission))).status,200);
+    assert.deepEqual((await (await read(path)).json()).automaticTxt,head);
+    assert.equal(await (await read(path+'/original')).text(),note);
+    await myMainStorage.put(path,new TextEncoder().encode(note));
+    sqlite.prepare('INSERT INTO txt_record_files VALUES (?,?,?,?,?,?)')
+      .run(JSON.stringify(['owner',kind,recordId]),'fixture',path,'已附.txt',new TextEncoder().encode(note).length,'utf-8');
+    const detail=await (await read(kind+'/'+(kind==='diaries'?day+'.01':recordId))).json();
+    assert.deepEqual(detail.txtFiles.map(file=>[file.id,file.name]),[['fixture','已附.txt']]);
+    assert.equal(await (await read(path+'/txt?file=fixture')).text(),note);
+  }
+  assert.deepEqual((await (await read('nags/no-file')).json()).txtFiles,[]);
+  assert.equal((await read('nags/no-file/txt?file=fixture')).status,404);
+  assert(!(await (await read('diaries')).json()).items.some(r=>'txtFiles' in r));
 });
 
 test('气泡真实入口只在显示后记已问，闲置、Esc 和结束按钮传达不同原因',async t=>{

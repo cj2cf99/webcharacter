@@ -13,7 +13,7 @@ const validCode=new Set(['NOT_CONFIGURED','TIMEOUT','RATE_LIMITED','INVALID_REQU
 const modelId=value=>typeof value==='string'&&/^[@a-z0-9_./:-]{1,96}$/i.test(value);
 const fault=code=>Object.assign(Error(code),{code});
 
-export async function runProviderChain({env,ownerId,signal,prompt,createAiClient,parse,heartbeat=false}){
+export async function runProviderChain({env,ownerId,signal,prompt,createAiClient,parse,heartbeat=false,includeInvalidOutput=true}){
   const pool=env.REGISTRATION_AI, db=env.DB;
   const ai={trace_id:crypto.randomUUID(),attempts:[]};
   const failure=code=>({code,ai});
@@ -56,7 +56,7 @@ export async function runProviderChain({env,ownerId,signal,prompt,createAiClient
     const end=Date.now(),row={provider,stage,model,code,at:end,duration_ms:Math.max(0,end-start),upstream_status,provider_code};
     if(replyCheck)row.reply_check=replyCheck;
     if(pool)console.info({event:'companion_ai_attempt',trace_id:ai.trace_id,...row});
-    if(code!=='OK'&&returnedText)row.refusal_response=refusalExcerpt(returnedText);
+    if(code!=='OK'&&returnedText&&(includeInvalidOutput||code!=='INVALID_AI_RESPONSE'))row.refusal_response=refusalExcerpt(returnedText);
     ai.attempts.push(row);
     return code==='OK'?value:null;
   }

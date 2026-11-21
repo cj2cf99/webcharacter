@@ -13,14 +13,14 @@ async function availablePort(){
   await new Promise((resolve,reject)=>listener.close(error=>error?reject(error):resolve()));
   return port;
 }
-export function localVision(modelPath){
+export function localVision(modelPath,{projection=join(runtime,'mmproj-F16.gguf')}={}){
   return async (question,image,signal)=>{
     if(/抠图|抠出|生成透明|透明背景|像素蒙版/.test(question))return {reason:'本地视觉模型无法输出图像蒙版'};
     const port=await availablePort(),key=randomBytes(24).toString('hex'),url='http://127.0.0.1:'+port;
     const exited=new AbortController();
     const stop=AbortSignal.any([signal,exited.signal,AbortSignal.timeout(60000)]);
     stop.throwIfAborted();
-    const proc=spawn(join(runtime,'llama-b12556','llama-server.exe'),['--model',modelPath,'--mmproj',join(runtime,'mmproj-F16.gguf'),
+    const proc=spawn(join(runtime,'llama-b12556','llama-server.exe'),['--model',modelPath,'--mmproj',projection,
       '--alias','feiyue','--offline','--host','127.0.0.1','--port',String(port),'--api-key',key,'--no-webui','--no-warmup',
       '--gpu-layers','0','--threads','4','--parallel','1','--ctx-size','4096','--reasoning','off'],{windowsHide:true,stdio:'ignore'});
     proc.once('error',()=>exited.abort());proc.once('exit',()=>exited.abort());

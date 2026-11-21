@@ -158,6 +158,7 @@ main:has(#nagTab[aria-current]) .stamp {border:0;border-radius:50%}
 .modal .modal-head {background:var(--t-surface);color:var(--t-brand-ink)}
 .modal article {font:16px/1.85 var(--t-font-title);background:var(--t-surface)}
 .modal .thought,.modal .exchange {color:var(--t-ink);background:var(--t-brand-soft);border-left:2px solid var(--t-brand-ink)}
+.modal .txt-files {margin-block:10px 0;padding-inline-start:1.25rem;overflow-wrap:anywhere}
 html[data-theme=cyber] main .cover {background:linear-gradient(105deg,#231e36,#40324a 68%,#65516a)}
 html[data-theme=cyber] main .moon {background:linear-gradient(130deg,#ffddad,#d6ac81)}
 html[data-theme=cyber] main .collection {border:1px solid var(--t-line);border-radius:14px}

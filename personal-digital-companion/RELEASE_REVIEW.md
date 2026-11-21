@@ -750,3 +750,106 @@ Windows 旧 PID 33608 经原生窗口正常退出，安装前备份清单到准�
 另一次 TXT 附件更新随后沿用此次安装为基线。15:02:17 JST，新的正式进程 19436 从同一目录和资料目录启动。当前实际安装文件的隔离专项复测 4/4 通过，实际 Electron 的到期气泡和可编辑轮询设置均通过。该复测不向真实手记写入测试资料，首次真实自然质问待观察。
 
 15:07:07 JST 已通过正式绯月标记回执已取回，并核实本批退出待回执清单。主站执行回执和数据库总账本地提交 `690405fd147253aca2a3bb301a5f4c05ae4b2e0c`。本次收尾提交留在本机 Git。
+
+
+## 2026-11-21 JST · AI 接口心跳轮询设定（本机发布前审核）
+
+### 需求与验收
+
+用户要求「把这个加入轮询设置」「频率默认改为3小时」，随后要求更新正式桌宠、自动提交花园记录并推送收尾代码。Windows 绯月的「设置与维护 → 轮询设定」应显示 AI 接口心跳，默认启用且每 180 分钟检查，可独立启停，间隔范围 10–300 分钟。保存新间隔或重新启用后即时重排，下一次时间显示为 JST，上一轮还在执行则跳过。
+
+### 目标、版本与差异
+
+- 目标为 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion` 下的 Windows 正式桌宠。已核对在运行的 PID 19436、8765 监听进程、15:02:17 JST REST 启动时间、资料目录和原桌面快捷方式及登录入口。无其他部署环境和 Worker 更新。
+- 正式安装树 Git 基线 `39fd098e40ebf7c2c82dd5a6f9944ae98055566e`，并有既有正式补丁。开发来源为 `G:/selftool/WebCharacter/personal-digital-companion`，比较基线 `ab3ac36c01cbcca4a587e523ac2efffc89d4e1ea`。使用开发基线、当前开发文件、实际安装文件三方对照。发布包 `G:/selftool/WebCharacter/personal-digital-companion/output/ai-heartbeat-release-20261121/manifest.json` 列出各文件前后 SHA-256。只按该清单在 `baseline` 和 `candidate` 逐文件执行 `git diff --no-index --ignore-cr-at-eol`。
+- `desktop/poll-scheduler.mjs` 新增 180 分钟心跳，复用既有本机轮询配置及诊断记录。到点遇到在途检查或应用正在退出则跳过，不进待处理队列。`desktop/task-lifecycle.mjs` 去掉独立 30 分钟计时器，保留既有心跳请求、取消及任务通信日志入口。
+- `desktop/shell.mjs` 将心跳接入桌面调度。三方合并时的两处处理均保留正式版现有闲时项目清单和忙碌判断，只加 AI 心跳；开发版的「此刻所想」及并行工作不包含在候选。
+- `desktop/poll-settings.html`、`desktop/poll-settings-ui.mjs` 增加心跳配置显示，沿用公共卡片和 JST 格式。`output/desktop-bundle/poll-settings.html` 和 `output/desktop-bundle/poll-settings-ui.mjs` 为该两份实际加载的资源，共七个运行文件。源码同步另含本次回归测试、需求、指南和审核纪要。
+
+### 数据及兼容性影响
+
+已有本机 `reminder-checks.sqlite` 首次自动插入一条 `local_polls` 配置记录。不需 SQLite 结构迁移、现有数据回填、生产业务数据库变更、Worker 部署或账号经费配置变更。云端已有心跳路由、失败换线及收费线路跳过规则沿用。旧文件回退后忽略该本机设置行。单独的花园元数据登记按实际发布结果、经用户确认的清单执行。
+
+### 实际验证和审核重点
+
+- 开发树两批专项共 87 项通过，2 项既有跳过。桌面构建、桌面 shell 回归、Electron 浅深色与窄窗口、两套截图均通过，命令见 [开发复核](docs/reviews/AI_HEARTBEAT_POLL_REVIEW_2026-11-21.md)（开发树）。
+- 正式版候选按七路径比对 SHA-256 和差异，五个 `.mjs` 执行 `node --check` 通过。在候选 `agent/tests/pending-poller.test.mjs` 执行 `node --test --test-name-pattern 'AI 心跳默认三小时'`，1/1。正式 Electron 对候选执行 `verify-panel.mjs <候选根>`，默认 180 分钟、东京时间、90 分钟即时改期、停用重开、原手记轮询及模拟请求回执通过。
+- 重点核查心跳只有一个定时入口、改期与启停的持久化、在途请求退出取消、原轮询卡片与正式版闲时项目仍可操作。正式实例重启和首次自然触发尚待验证。第三方独立审核未执行。
+
+### 发布、恢复、登记与 Git
+
+用户已要求更新、登记花园并推送。七文件范围的本次安装及受控重启待明确确认。获准后核对监听、原启动入口、活动任务与全部摘要，备份原文件和本机设置库，通过应用流程正常停旧进程，替换清单文件，从原快捷方式启动。核对新 PID、资料路径、8765 `/infoguide`、七项摘要和 SQLite 心跳设置行，在隔离资料下从实际安装目录复跑 Electron 面板。启动或验收失败时先正常停止，再从备份恢复七文件，以旧入口启动并复核。用户正式版界面验收及正式供应商自然心跳结果待后核验。
+
+花园结构同步实际通过，新增结构对象 0，线上只读核实修订 135、项目「网页角色组件」#16、功能「绯月（桌面精灵）」#61、当前版本 17.0，未发现本批发布标记或同名改善。拟登记该功能的已完成改善与实际部署明细。项目、功能定义、种子及其他类别无需更新。安装结果确定且制单时复核线上基线后，展示完整前后值、确切编号、版本和实际时间，取得清单确认。然后提交 SQL 后经重启后的绯月 API 提交一次，回读并留存回执。批次 `feiyue-ai-heartbeat-poll-20261121` 尚未提交。实际发布、登记和远端 Git 验证均待执行。推送只含本次范围，保留已有历史和并行工作。
+
+
+## 2026-11-21 JST · 绯月情绪与主动互动联合发布候选
+
+本次用户要求把情绪模块和等待它的已开发功能一起准备上线，整包做两轮自测及合规检查，并准备花园登记清单。阶段完成标准为三端候选可复核、真实桌宠写入路径及主站列表和正文在隔离资料上贯通、同一包复测、旧功能与本机隐私边界可查证。当前阶段为待用户验收及发布确认。第三方独立审核未执行。
+
+### 目标与差异基线
+
+候选根目录为 `G:/selftool/WebCharacter/work/feiyue-emotion-news-rc-20261121`，三个子目录分别为 personal-digital-companion、api-worker 和 myapp。发布压缩包 feiyue-emotion-news-rc.zip 共 114 个变更文件及一份清单，SHA-256 为 `bcba1573a637094f674c9d07611f5e12ec6eff32c091f5cb692725b79b59afe5`。release-manifest.json 按目标和路径列出旧值、新值及长度。没有删除项。源码留痕副本在 WebCharacter 的 personal-digital-companion/docs/releases/emotion-news-20261121/。
+
+* Windows 目标为 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion。PID 19436、实际启动命令、登录启动项、REST v4 实例与 profile 指向该安装树。Git 基线 39fd098e 加其后的已安装单文件更新。逐文件比较实际安装字节，流程采用 50c178e 的搜索／新闻和 0518e28 的人格工作区，叠加 ab3ac36 保留已安装的手记限时、续办和中断逻辑。搜索费用修正在隔离搜索开发树及本候选同步。正式桌宠发布范围 112 个文件。
+* API subscriptions-api 使用前次实际发布树 G:/chat/2026-11-20/wo-z/work/txt-api-candidate/api-worker。生产控制面只读核对 `433cac21-d356-41f0-8fd2-f2264a37da29` 占 100%。改动仅 src/companion/agent/assistant/personality-memory.mjs。子项目源为 agent/assistant/personality-memory.mjs，前次源码同步 f5bebc0b。
+* 主站 myapp 使用前次实际发布树 C:/Users/asura/AppData/Local/Temp/feiyue-txt-site-24c26fb/myapp。生产控制面只读核对 `6c2f851f-4541-4695-86e4-5be83a680b71` 占 100%。变更仅 src/features/companion/vendor/memory-reader.mjs。子项目源为 agent/host/memory-reader.mjs，前次源码同步 876dccba。两端完整 src、public 及 wrangler.jsonc 已与实际基线目录逐项核对。独立的 AI 接口心跳候选也会改 shell 和轮询文件，哪一包先装，后一包就必须以新基线重新合并并验证。
+
+### 需求、行为与主要文件
+
+| 验收主题 | 之前与本次改动 | 实现及验收依据 |
+|---|---|---|
+| 妻子的情绪与欲望 | 正式版已有手记语气，本次新增跨事件情绪、每周七面骰、当前欲望与同罪累计池。满 100 项触发一次，余系总数随机清除向上取整的一半；欲望满足奖励三次可累积，情绪低落仍履行正式工作。 | desktop/emotion-{core,service,initiative}.mjs、desire-pool.mjs；emotion-appraisal、love-and-reason、initiative-decision 技能。FEIYUE_EMOTIONS、FEIYUE_EMOTION_INTEGRATION 及相关测试。 |
+| 本地专题与表达 | 对话可取本机旧记录，空闲查证、合并并接续专题；备份至多三份，全损可重建并求助。发言、念叨、主动决定、专题日记取同一轮状态和来源。 | desktop/topic-{memory,files}.mjs、personality-{diary,nags}.mjs、diary-audit.mjs、shell.mjs、screen-question-host.mjs，专题、对话及手记技能。 |
+| 此刻所想 | 新增可选的闲时观察、反思、图文分享与回话。自动看屏初始关闭。确认登记的成品念叨在主站显示来源，可筛选；照片和决策文件只存本地。现有消费及手记的原记录链接沿用原入口。 | desktop/scene-*、poll-scheduler.mjs，主站阅读器及 API 来源准入。SCENE_CURIOSITY.md。 |
+| 环球之旅与公开取材 | 新增旅行入口，在本机工作流分别处理目的地、服装、姿势和镜头。公开资料网页上限十条后用本机模型综合，搜图上限五张返回一张。 | desktop/image-{planning,tasks}.mjs、public-search.mjs、conversation-routing.mjs、workflows/comfyui/ 下的 world_tour、tour_*、public_*、tavily_search 和来源配置。 |
+| 半日简报 | 新增 720 分钟新闻轮询，从上次成刊点回看，最长三天；有新报道才提醒。报面卡片、报道缩略图、中文和原文切换使用本机缓存。 | desktop/news-*、reminder-checks、source-updates 和新闻配图，workflows/comfyui/news_watch.py。 |
+| 免费层与日常兼容 | 查新闻统一 RSS；移除检测到 Brave 密钥即调用及搜索后自动改问 DeepSeek 的路径。用户明确点名可询问 DeepSeek。Tavily 查免费账户状态并在 SQLite 预占；SerpApi 查免费档和剩余额度；Google 计费接口未加入。 | public_reader.py、screen-question-host.mjs、test-skills.py。已安装的 TXT、质问五小时对象检查与三分钟硬截止、正式工作队列、登录启动和角色素材均以实际安装基线核对。 |
+
+### 数据、配置及恢复
+
+云端数据库 DDL、历史回填、新增绑定和生产配置变更均为零。按现有 owner 和业务接口上传已成篇日记及正式念叨。情绪状态、周骰、欲求、查证过程、决策复盘、截图和专题备份保留本机。首次使用会在原 profile 和本机记忆目录增建情绪 SQLite、专题及恢复文件，并在轮询库增加新闻设置、去重及刊物表；沿用旧数据和设置。模型和密钥由各自现有本机配置提供；确认版本的免费路径之外未启用 Exa 或 Currents 新主副路由。此包覆盖的免费边界适用于新闻和自动搜索。用户点名调用 DeepSeek 使用其已有账号的计费设置。
+
+安装前须重新核对 Worker 流量版本、桌宠进程和清单每一项旧哈希。遇基线漂移先重合。保留两端原 Worker 版本及绑定；桌宠正常退出后备份清单旧文件、既有资料库一致性备份并记录新增路径。只按本目标清单安装。若失败，恢复旧应用文件、移走本次新增程序文件，保留用户产生的资料；检查在途任务、待传念叨和真实回执，再按实际情况决定是否恢复 Worker。避免旧读取器遇到新来源的窗口。独立项目的更改须与本次分别核对。
+
+### 两轮实测、合规和限制
+
+两轮均在隔离资料中通过桌宠 Node 344/344、Python 技能 17/17、主站 843/843、API 41/41。命令为桌宠 `node --test 'agent/tests/*.test.mjs'`（主站契约环境变量 COMPANION_HU_SHI_MAIN_SOURCE 指向 G:/cloudflare/myapp）、`python -B tools/test-skills.py`，两 Worker 各 `npm.cmd test` 及 Wrangler `deploy --dry-run`。两轮主站入口 bundle SHA-256 为 059251148c528cc7aff3af78bc197eeb63d722b78260aea2a6c117b73e56b3fb，API 为 3e10da6a19fbda8780cda3d498e7da28b2f1fd548d6cb8a68ed7b441bdb1d454。
+
+两轮均通过桌宠 shell 的 --garden-api、Electron 标题栏、新闻、原生场景、--topic-recovery 和真实 Aggressive 9B --emotion 测试。两次专题查证均取得五条样本，真实情绪均为“欣慰”；主动决定各为 done 与 wait。综合测试 combined-reader.mjs 使用真实桌宠写入、重建实例、模拟服务身份、候选 API 处理器与主站阅读路由，在离屏 Electron 中实际打开念叨列表和正文，验证两次提交仍一条、双方原话、分类和跨账户拒绝。合成截图和复盘标记未出现在云端正文。线上 Access 效果待用户截图确认。
+
+两轮均用 check-bundle.py 检查封包路径、旧／新哈希、两个 Worker 的完整运行树差异、免费路径和主动看屏默认关闭。首轮清理了可付费搜索回退，修订原有 Brave 测试为“即使有密钥仍走 RSS”，并修复跨端测试驱动的启动时序。隔离用例首次受沙箱禁止回环影响，改为授权的临时回环端口后复测通过。第二轮未发现新增阻断。逐项原始结果在候选根目录的 r1-*.log、r2-*.log、electron-results.log 和对应模型日志。未以生产账户写样例、未重新抓取用户画面。环球之旅本轮验证参考选择和工作流，未重新实拍或渲染一张成片；外部搜索覆盖率、新闻时延和旅行成片观感需在真实使用时核验。
+
+### 发布顺序与授权状态
+
+本地联调从候选 personal-digital-companion 目录设置 FEIYUE_MAIN_DIR 为相邻 myapp 的绝对路径，使用 `node tools/personality-memory-preview.mjs --integrated --serve` 启动内存 D1 和本地 Worker，地址 http://127.0.0.1:8796/companion/memory/。另以 --integrated --visual 在实际 workerd、临时 D1 和 Electron 验证浅深主题、桌面及手机尺寸、旧念叨原记录回链及正文，已通过并自动退出。持续运行的本地手动验收服务按用户启动指令提供。准备好的原型、dry-run、离屏用例各有独立记录。
+
+待用户确认部署范围后，先发布兼容旧客户端的 API，再发布主站阅读器并核实两端配置、版本和流量；最后按基线更新 Windows 桌宠并受控重启、核对 PID、启动入口和 /infoguide。使用正常入口打开报面、检查轮询和专题恢复，云端以真实结果及用户截图确认。用户同意准备花园草案；线上实际基线修订 135，草案见 GARDEN_DRAFT.md。具体清单、生产发布授权、安装及发布后的 Git 提交与推送、正式花园写入和最终回执均尚待后续。
+
+
+## 2026-11-21 JST　情绪、新闻和 AI 心跳联合提交
+
+用户要求两项一起提交，并允许覆盖重叠文件。交付目标为 WebCharacter 的 Windows 绯月、subscriptions-api 与主站 myapp 的同名本地发布分支 `codex/feiyue-emotion-news-heartbeat-20261121`。验收要求、原有功能范围、技术设计、回退与发布顺序见同目录 ORIGINAL_REVIEW.md；程序包资产、双端基线和两轮对照如下。若从根目录阅读，附件在 docs/releases/emotion-news-20261121。第三方独立审核未执行。
+
+**实际基线。** 正式桌宠位于 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion。心跳独立安装回执记录 16:23 JST 已经启动 PID 4348，旧设置库保留 12 个批次；现场逐项 SHA-256 匹配全部七个心跳文件，设置为启用、180 分钟。heartbeat-baseline.json 保存这七项的正式及合并后摘要。桌宠 Git 发布工作树合并搜索分支 50c178e 和手记修复 ab3ac36；只接入本次已核对的安装件、测试与纪要。保留两份开发与需求文档的独立历史条目。
+
+**合并差异。** poll-scheduler.mjs 同时管理心跳 180 分钟、简报 720 分钟以及初始关闭的主动看屏。心跳在途时跳过，可在面板即时改期。shell.mjs 连接唯一 checkAiHeartbeat 入口，阻止旧计时器重复启动，心跳亦不占正式工作位。poll-settings-ui.mjs 与其构建副本保留心跳专用表单及新闻的 720 分钟上限。已安装且最终相同的设置 HTML、构建 HTML 和 task-lifecycle.mjs 无需再次复制。打包文件与用户资料、日志、模型、密钥分离。保留妻子身份、情绪、专题、念叨来源、手记与新闻流程。程序有效范围及逐文件发布前后摘要见 release-manifest.json。
+
+**云端。** API 仓库以 f5bebc0b 为 Git 基线，程序变更仅 api-worker/src/companion/agent/assistant/personality-memory.mjs，接受新来源 curiosity。主站以 876dccba 为 Git 基线，程序变更仅 myapp/src/features/companion/vendor/memory-reader.mjs，用中文展示及筛选此来源。已对照上次实际生产源码核验这两处的 Git 前像。此前候选核实的线上 API 版本为 433cac21-d356-41f0-8fd2-f2264a37da29，主站为 6c2f851f-4541-4695-86e4-5be83a680b71。心跳合并没有云端运行代码差异。云端 DDL、业务回填、配置和绑定变更均为零。桌宠启动后复用现存轮询表、心跳行和用户已保存的间隔，新情绪和记忆数据按原审核存本机。
+
+**两轮验证。** 在 G:/selftool/WebCharacter/work/feiyue-combined-heartbeat-20261121 使用临时资料。每轮桌宠 `node --test 'agent/tests/*.test.mjs'` 344/344，`python -B tools/test-skills.py` 17/17，API `npm.cmd test` 41/41，主站 `node --disable-warning=ExperimentalWarning --test --test-concurrency=2 'tests/*.test.mjs'` 843/843。每轮另通过 test-desktop-shell.mjs --garden-api、Electron 的 verify-heartbeat-panel.mjs 与 test-news-panel-electron.mjs，以及 combined-reader.mjs 走真实候选宿主写入、重建实例、跨端读回、打开列表和正文、跨账户拒绝。面板实际验证默认时间、改为 90 分钟、停用重开、模拟心跳回执。check-bundle.py 两轮逐项验证当前正式基线、归档内容、免费路径和两个 Worker 的运行树差异。
+
+首轮主站有一次从目录联接启动导致 CLI 无输出，改用物理路径后另有一次临时 Git 仓库子进程失败。固定物理路径与测试并发数后两轮全量均通过。第二轮离屏 Electron 心跳面板退出时有 GPU 状态日志，其 UI 断言及进程退出码通过。自然三小时心跳、正式环境新版本数据及 Access 页面效果待发布后核实，线上效果由用户截图确认。真实 9B 及旅行照片验证边界见原审核。
+
+**提交物与发布。** 发布包 G:/selftool/WebCharacter/work/feiyue-combined-heartbeat-20261121/feiyue-emotion-news-rc.zip，SHA-256 `edf4de17bb06d747e27124fb26f229d1687d85b1fba091b0bf384dc1c6977b0d`。114 个变动文件，其中桌宠 112、两个 Worker 各 1。另附清单。程序包以已安装心跳版为覆盖起点。将来发布前复核三端实际版本和逐文件前像；先 API、再主站，最后受控重启桌宠。若需回退，Worker 回到核验的旧版本并保留绑定，桌宠恢复本次替换前的心跳版文件和原启动入口，保留用户实际数据和设置。安装授权及上线效果与 Git 提交分开记载。花园意愿为准备草案；先前修订 135 的草案属于上一基线。心跳有独立安装记录，最终清单须重读花园实际版本并去重，依实际发布结果确认后再登记。
+
+
+## 2026-11-21 16:37 JST · 三端实际发布与花园最终回执
+
+用户已确认发布和覆盖安装。API 16:36:31 JST 上线 e506e723-b78e-41b8-96e8-9dd1ccb8ae2d，主站 16:36:43 JST 上线 1993378e-42a8-43da-9f8c-c7d8d75d28ba，各承载 100% 流量。逐项核对两端 14、42 项绑定相同。无业务库迁移或回填。桌宠安装前已备份程序和资料库，覆盖 112 项并核对 SHA-256，16:37:42 JST 核实正式进程 12220、REST v4 和原有 12 个批次。保留心跳 180 分钟、新闻 720 分钟、主动看屏关闭。
+
+发布前同包两轮全量测试及合规复核通过。发布后在隔离测试资料上载入正式桌宠文件，心跳设置、简报中文/原文切换与重开、手记写入与重启重试、经配套 API 和主站读取列表与正文均通过。Access 线上界面待用户截图确认，自然三小时心跳及半日出刊待观察。第三方独立审核未执行。
+
+花园根据修订 135 单独确认并提交 SQL，批次 feiyue-emotion-news-heartbeat-20261121 的两个步骤分别回读修订 136、137，16:45:58 JST 完成。独立重读线上改善 #77、部署 #68、明细 #142，与确认字段逐项一致。项目 #16、功能 #61，从 17.0 经 17.1 到 18.1。既有心跳未重复登记。
+
+已向三个仓库独立发布分支推送，并用 git ls-remote 核验。桌宠从已同步的正式安装基线 4922336 提取本次安装清单、对应构建源、文档与测试，发布源码提交 99e0219 与本地候选 d700383 的安装清单逐项比对。API ab9e11a，主站程序 7365d0c，含确认 SQL 的主站发布分支提交 9885d19。绯月实际执行其配置工作树中的相同 SQL 包 ab22375。回退基线和原恢复步骤继续适用，当前没有回退。

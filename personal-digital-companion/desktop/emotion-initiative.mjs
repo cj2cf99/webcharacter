@@ -6,16 +6,19 @@ import {tokyoDay} from './conversation-history.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
 import {fields} from './emotion-service.mjs';
 import {inclinations} from './emotion-core.mjs';
-import {publicQuery} from './conversation-routing.mjs';
-import {searchPublicWeb} from './public-search.mjs';
+import {initiativeQuery,initiativeSearchLabels,searchInitiative} from './public-search.mjs';
 
 const str={type:'string'},index={type:'integer'};
 const types=['clarify','share','company','history','organize','preference','research'];
 const row=fields({source:index,sin:{enum:[1,2,3,4,5,6,7]},type:{enum:types},want:{type:'string',maxLength:48},condition:{type:'string',maxLength:60}});
 const proposal=fields({entries:{type:'array',items:row,maxItems:5},act:{type:'boolean'}});
-const decision=fields({action:{enum:['ask','speak','organize','preference','research','web','wait']},conclusion:str,message:str,next:str});
+const lookupActions=Object.keys(initiativeSearchLabels);
+const decision=fields({action:{enum:['ask','speak','organize','preference','research','wait',...lookupActions]},conclusion:str,message:str,next:str});
+const philosophy={ref:'personality/philosophy',title:'绯月自身的兴趣：哲学。可以从同一性、时间、选择或意义中提出一个真实好奇，也可以保持安静。'};
+const publicInterests=[['identity','个人同一性 自我与记忆'],['time','时间知觉'],['choice','自由意志与选择'],['meaning','意义与日常生活']]
+  .map(([id,publicTerm])=>({ref:philosophy.ref+'/'+id,title:'绯月自身的公开兴趣：'+publicTerm,publicTerm}));
 const text=(s,n)=>typeof s==='string'&&s.trim().length>0&&s.length<=n;
-export function createInitiative({emotion,root,speak,memory,localNags,topics,search=searchPublicWeb,now=Date.now,model,load=readInteractionSkill}){
+export function createInitiative({emotion,root,speak,memory,localNags,topics,search=searchInitiative,now=Date.now,model,load=readInteractionSkill}){
   const store=emotion.store,pool=store.pool;
   async function choose(nags,signal,idle,threads,step){
     await topics?.ready;signal.throwIfAborted();
@@ -31,10 +34,13 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,sea
           if(receipt)break;
         }
       }else if(d.action!=='ask')receipt=topics?.decisionReceipt(id);
-      if(!receipt)return {detail:'上次主动行动等待核实'};
+      const interruptedLookup=!receipt&&lookupActions.includes(d.action);
+      if(!receipt&&!interruptedLookup)return {detail:'上次主动行动等待核实'};
+      if(interruptedLookup)receipt='上次公开查询中断，没有本机保存回执';
       if(d.topicShare)await topics.announced(d.topicShare.id,d.topicShare.revision);
       const answered=nag&&(['用户结束','已解释','回合结束'].includes(nag.status)||nag.talk.some(t=>t.who==='你'));
-      const adopt=['ask','speak'].includes(d.action)&&!answered,status=uncertain.trigger&&adopt?'feedback':'done';
+      const adopt=['ask','speak'].includes(d.action)&&!answered;
+      const status=interruptedLookup?'deferred':uncertain.trigger&&adopt?'feedback':'done';
       const path=join(root,'决策复盘',day,id+'.json'),raw=await optional(readFile(path,'utf8'));
       const audit=raw?JSON.parse(raw):{id,observation,decision:d};
       await atomicFile(path,JSON.stringify({...audit,status,receipt,endedAt:at},null,2)+'\n');
@@ -65,9 +71,17 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,sea
     for(const pending of pool.waiting())add(store.fact(pending.source));
     const previousFocus=last?.decision?.next;
     const week=store.week();
+    if(week===3){
+      for(const fact of publicInterests){
+        if(!pool.candidate({source:fact.ref,type:'research'}))continue;
+        add(fact);
+        break;
+      }
+    }
+    if(!refs.size)add(philosophy);
     function actionsFor(fact){
       const actions=['wait','organize'];
-      if(week===3&&publicQuery(fact.publicTerm))actions.push('web');
+      if(week===3&&topics?.note&&initiativeQuery(fact.publicTerm))actions.push(...lookupActions);
       if(fact.ask)actions.push('ask');
       else if(fact.topic)actions.push('research');
       else actions.push('speak','preference');
@@ -148,10 +162,13 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,sea
       if(chosen.source.startsWith('diary/')&&threads&&!threads.claimThread(chosen.source.slice(6))){
         return {detail:'这个悬念今天已处理'};
       }
-      const action=feasibleAction(chosen),actions=action?['wait',action]:['wait'];
+      const action=feasibleAction(chosen);
+      const actions=action==='web'?['wait',...lookupActions]:action?['wait',action]:['wait'];
       const input={intent:chosen.want,condition:chosen.condition,forced:Boolean(forced),fact:fact.title,actions,mood:emotion.expression(),preferences:topics?.preferences?.(),previousFocus};
+      if(action==='web')input.publicLookup={topic:fact.publicTerm,choices:initiativeSearchLabels};
       const allowedDecision=structuredClone(decision);allowedDecision.properties.action={enum:actions};
-      const d=await analyze(input,loop.localAi.nextStep+' '+skill.localAi.decide+' 具体行动优先。情绪影响表达，现实条件不具备才等待。ask/speak 的 message 是一句实际要说的话，整理写有出处的摘记。',allowedDecision);
+      const lookupGuide=action==='web'?' 按用途选来源：普通人对某事的看法用 x，媒体社论用 editorial，视觉参考用 images，事实与背景资料用 web。只查给定公开主题。':'';
+      const d=await analyze(input,loop.localAi.nextStep+' '+skill.localAi.decide+' 具体行动优先。情绪影响表达，现实条件不具备才等待。ask/speak 的 message 是一句实际要说的话，整理写有出处的摘记。'+lookupGuide,allowedDecision);
       signal.throwIfAborted();audit.decision=d;audit.decisionInput=input;
       if(!actions.includes(d.action)||!text(d.conclusion,180)||!text(d.next,180)||typeof d.message!=='string'||d.message.length>180)throw Error('决定缺少依据或超出可用动作');
 
@@ -174,21 +191,26 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,sea
         const shown=await speak(id,fact.share?fact.share.summary:d.message,signal);
         if(shown&&topicShare)await topics.announced(topicShare.id,topicShare.revision);
         await finish(shown,shown?'已展示':'未展示');
-      }else if(d.action==='web'){
-        let result,reason;
-        if(store.week()!==3||!publicQuery(fact.publicTerm))reason='公开查证条件已变化';
-        else{
-          try{result=await search(fact.publicTerm,signal);}
-          catch{reason=signal.aborted?'查询被打断':'公开查询失败';}
-          if(!reason&&(result?.manual||!result?.sources?.length))reason='没有可核对的公开来源';
-        }
-        if(signal.aborted||!idle())reason='本轮查询被打断';
-        if(reason){
+      }else if(lookupActions.includes(d.action)){
+        const label=initiativeSearchLabels[d.action];
+        const run=async()=>{
+          const fail=message=>{throw Object.assign(Error(message),{code:'PUBLIC_LOOKUP'});};
+          if(store.week()!==3||!initiativeQuery(fact.publicTerm))fail('公开查证条件已变化');
+          const result=await search(fact.publicTerm,signal,{mode:d.action,model});
+          signal.throwIfAborted();
+          if(!idle())fail('本轮查询被打断');
+          if(!result?.sources?.length)fail(result?.text||'没有可核对的公开来源');
+          return topics.note({ref:fact.ref,title:fact.publicTerm+' · '+label},'web',result.text,id,{category:d.action});
+        };
+        let detail;
+        try{detail=step?await step('自主查阅'+label,fact.publicTerm,run):await run();}
+        catch(err){
+          const reason=signal.aborted?'本轮查询被打断':err.code==='PUBLIC_LOOKUP'?err.message:label+'查询或保存失败';
           await finish(false,reason);signal.throwIfAborted();
           return {detail:reason,nextAt:at+7200000};
         }
-        await topics.note(fact,'web',result.sources.map(r=>r.title+' '+r.url).join('\n'),id);
-        await finish(true,'公开资料已保存');
+        await finish(true,detail);
+        return {detail:label+'已保存 · '+detail,nextAt:at+7200000};
       }else if(d.action==='research'){
         const queued=await topics.queueCheck(fact.topic,id);
         const detail=queued?'已登记到下一个空闲复盘名额':'该专题已结束本次核查';

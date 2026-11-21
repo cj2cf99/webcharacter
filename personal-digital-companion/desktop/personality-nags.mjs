@@ -17,7 +17,7 @@ const iso=at=>new Date(at).toISOString();
 export function createPersonalityNags({store,emotion,initiative,show,idle,canContinue=()=>true,onInterrupted=()=>{},changed=()=>{},now=Date.now,random=Math.random}){
   let active=null,syncJob=null,stopped=false;
   const lifetime=new AbortController();
-  const pending=()=>store.nags().find(n=>openStates.includes(n.status)&&(n.source!=='audit'||audit.eligible(n)));
+  const pending=()=>store.nags().find(n=>openStates.includes(n.status));
   for(const n of store.nags())if(n.status==='提问中'){
     n.status='意外中断';n.interruptions++;store.saveNag(n);
   }

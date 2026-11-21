@@ -1,10 +1,11 @@
 import {stat} from 'node:fs/promises';
 import {basename,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {chatTotalMs} from './chat-budget.mjs';
 
 export const LOCAL_MODEL_FILE = 'Qwen3.5-0.8B-Q4_K_M.gguf';
 const entry = fileURLToPath(new URL('./local-model-process.mjs', import.meta.url));
-export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 15000,device='cpu',intentBudgetMs=6500,replyBudgetMs=12000}) {
+export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 15000,device='cpu',intentBudgetMs=6500}) {
   const modelName=basename(modelPath).replace(/-Q4_K_M\.gguf$/i,'');
   let status = {state: 'idle'};
   let child, loading, finishLoad, request, loadTimer, exited;
@@ -66,9 +67,9 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
     return loading;
   }
 
-  async function analyze(text, {hint, previous, signal, onProgress, imageSkill,skillInstruction,reviewLimit=3,revision} = {}) {
+  async function analyze(text, {hint, previous, signal, onProgress, imageSkill,skillInstruction,replyMode,reviewLimit=3,revision} = {}) {
     const started = performance.now();
-    const budgetMs = hint==='personalityMemory'?120000:['image-plan','serverTask'].includes(hint) ? Math.max(16000,intentBudgetMs) : ['auto','direct'].includes(hint) ? replyBudgetMs : intentBudgetMs;
+    const budgetMs = hint==='personalityMemory'?120000:['image-plan','serverTask'].includes(hint) ? Math.max(16000,intentBudgetMs) : ['auto','direct','interactionWork'].includes(hint) ? chatTotalMs : intentBudgetMs;
     const deadline = AbortSignal.timeout(budgetMs);
     const wait = signal ? AbortSignal.any([signal,deadline]) : deadline;
     signal?.throwIfAborted();
@@ -105,7 +106,7 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
       }};
       wait.addEventListener('abort',abort,{once:true});
       try {
-        worker.postMessage({type:'analyze',id,text,hint,previous,imageSkill,skillInstruction,reviewLimit,revision,intentBudgetMs,remainingMs:Math.max(1, Math.floor(budgetMs-(performance.now()-started)))});
+        worker.postMessage({type:'analyze',id,text,hint,previous,imageSkill,skillInstruction,replyMode,reviewLimit,revision,remainingMs:Math.max(1, Math.floor(budgetMs-(performance.now()-started)))});
       } catch {
         finish({error:'LOCAL_AI_PROCESS_EXITED'});
       }

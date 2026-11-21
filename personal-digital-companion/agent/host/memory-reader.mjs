@@ -32,6 +32,16 @@ export const memoryScript=String.raw`
     }
     p.append(text.slice(pos));return p;
   }
+  function showTxtFiles(container,r,kind,id){
+    if(!r.txtFiles?.length)return;
+    const list=node('ul',null,'txt-files');list.setAttribute('aria-label','已附加的 TXT 文件');
+    for(const file of r.txtFiles){
+      const item=node('li'),link=node('a',file.name);
+      link.href=base+kind+'/'+encodeURIComponent(id)+'/txt?file='+encodeURIComponent(file.id);
+      link.target='_blank';link.rel='noopener';item.append(link);list.append(item);
+    }
+    container.append(list);
+  }
   function renderDiary(container,r,focus){
     container.append(node('h2',r.day+' · 第 '+r.part+' 篇'),node('p',r.summary),node('div',[r.mood,r.weather,...r.tags.map(t=>'@#'+t)].join('　'),'badges'));
     const sections=new Map();
@@ -53,6 +63,7 @@ export const memoryScript=String.raw`
       container.append(block);
       if(thread.no===focus)requestAnimationFrame(()=>block.scrollIntoView({block:'nearest'}));
     }
+    showTxtFiles(container,r,'diaries',r.day+'.'+r.part);
   }
   const sourceName=s=>({curiosity:'此刻所想',audit:'手记质问',diary:'悬念',paylog:'消费'})[s]??s;
   async function origin(n){
@@ -101,8 +112,7 @@ export const memoryScript=String.raw`
     try{
       const r=await fetchJson(base+kind+'/'+encodeURIComponent(id));
       if(token!==readToken)return;
-      const files=node('a','TXT 附件');files.href=base+kind+'/'+encodeURIComponent(id)+'/txt';files.target='_blank';files.rel='noopener';
-      container.replaceChildren(files);if(kind==='diaries'){renderDiary(container,r);return;}
+      container.replaceChildren();if(kind==='diaries'){renderDiary(container,r);return;}
       container.append(node('h2',r.title),node('p',[r.status,r.reason,r.stats].filter(Boolean).join('\n')));
       if(r.source!=='curiosity')container.append(button(r.source==='audit'?'查看主篇 →':'查看原记录 →',()=>origin(r)));
       if(r.source==='audit'){
@@ -111,6 +121,7 @@ export const memoryScript=String.raw`
       }else container.append(node('h3','开口的时候'),node('p',[r.before,r.beforeEvaluation].filter(Boolean).join(' · ')));
       for(const line of r.talk)container.append(showOriginal(node('p',null,'exchange'),stamp(line.at)+'　'+line.who+'\n'+line.text,r,'nags',r.id));
       if(r.afterEvaluation)container.append(node('h3','听完以后'),node('p',r.mood+' · '+r.afterEvaluation));
+      showTxtFiles(container,r,kind,id);
     }catch(error){if(token===readToken)failed(container,error,()=>read(id,kind));}
   }
   let month=localDay(new Date().toISOString()).slice(0,7),knownDays=new Set();

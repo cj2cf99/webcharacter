@@ -1,5 +1,6 @@
 """Bounded public HTTPS reader. No browser state, JavaScript, form submission or local tools."""
 import http.client
+from contextlib import closing
 import ipaddress
 import json
 import os
@@ -31,6 +32,20 @@ def target(url):
             p.username is not None or p.password is not None or p.port not in (None,443)):
         raise ValueError("仅支持无登录凭据的公开 HTTPS 地址")
     return p
+
+
+def provider_json(host, key, path, body=None):
+    with closing(http.client.HTTPSConnection(host, timeout=10)) as conn:
+        conn.request("GET" if body is None else "POST", path,
+                     body=json.dumps(body).encode() if body is not None else None,
+                     headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
+        response = conn.getresponse()
+        if response.status != 200:
+            return response.status, None
+        raw = response.read(1_000_001)
+        if len(raw) > 1_000_000:
+            raise ValueError("SEARCH_RESPONSE_TOO_LARGE")
+        return response.status, json.loads(raw)
 
 
 class Reader:
@@ -185,7 +200,11 @@ def discover(reader, query):
     return (item["link"] for item in google_items(reader,query) if item.get("link","").startswith("https://"))
 
 
-def news(reader,query):
+EDITORIAL_TAG = r"社[论論説说]|时评|時評|評論|评论|觀點|观点|オピニオン|editorials?|opinion|op-ed|commentary"
+EDITORIAL_TITLE = re.compile(rf"(?:^|[【\[｜|])\s*(?:{EDITORIAL_TAG})(?=$|[】\]：:｜|\s])", re.I)
+
+
+def news(reader,query,*,editorials=False):
     def stamp(value):
         if not value:
             return ""
@@ -200,7 +219,7 @@ def news(reader,query):
             pass
         return ""
     key=os.getenv("BRAVE_SEARCH_API_KEY")
-    if key:
+    if key and not editorials:
         url="https://api.search.brave.com/res/v1/news/search?"+urlencode(dict(q=query,count=5,freshness="pd",country="ALL"))
         status,_,raw=reader.get(url,1_000_000,{"X-Subscription-Token":key})
         if status!=200:
@@ -214,7 +233,14 @@ def news(reader,query):
         if not rows:
             raise ValueError("最近 24 小时没有找到相关新闻")
         return rows[:3]
-    url="https://news.google.com/rss/search?"+urlencode(dict(q=query+" when:1d",hl="zh-CN",gl="CN",ceid="CN:zh-Hans"))
+    qualifiers=' (社论 OR 社論 OR 社説 OR 评论 OR Editorial OR Opinion)' if editorials else ''
+    window=' when:3d' if editorials else ' when:1d'
+    edition=("zh-CN", "CN", "CN:zh-Hans")
+    if editorials and re.search(r"[\u3040-\u30ff]",query):
+        edition=("ja", "JP", "JP:ja")
+    elif editorials and query.isascii():
+        edition=("en-US", "US", "US:en")
+    url="https://news.google.com/rss/search?"+urlencode(dict(q=query+qualifiers+window,hl=edition[0],gl=edition[1],ceid=edition[2]))
     status,_,raw=reader.get(url,1_500_000)
     if status!=200:
         raise ValueError("Google 新闻暂不可用")
@@ -222,13 +248,17 @@ def news(reader,query):
     for item in ElementTree.fromstring(raw).findall("./channel/item"):
         link=item.findtext("link","")
         title=item.findtext("title","")
+        publisher=item.findtext("source") or ""
+        headline=title.removesuffix(" - "+publisher) if publisher else title
+        if editorials and not EDITORIAL_TITLE.search(headline):
+            continue
         if title and link.startswith("https://"):
             rows.append(dict(title=title[:200],url=link,snippet=" · ".join(filter(None,[
-                item.findtext("source"),stamp(item.findtext("pubDate"))]))))
-        if len(rows)==3:
+                publisher,stamp(item.findtext("pubDate"))]))))
+        if len(rows)==(5 if editorials else 3):
             break
     if not rows:
-        raise ValueError("Google 新闻没有返回相关报道")
+        raise ValueError("EDITORIAL_NO_RESULTS" if editorials else "Google 新闻没有返回相关报道")
     return rows
 
 

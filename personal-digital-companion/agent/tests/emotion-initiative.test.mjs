@@ -8,6 +8,7 @@ import {createDesirePool} from '../../desktop/desire-pool.mjs';
 import {createEmotionStore} from '../../desktop/emotion-core.mjs';
 import {createInitiative} from '../../desktop/emotion-initiative.mjs';
 import {createTopicMemory} from '../../desktop/topic-memory.mjs';
+import {searchInitiative} from '../../desktop/public-search.mjs';
 
 test('分系列达标才指定，同系清空、异系五件清三件；重复提交保留相同结果',()=>{
   const db=new DatabaseSync(':memory:');
@@ -110,7 +111,7 @@ test('公开查询写入前失败可在下轮重试，只传公开词且有结�
   try{
     store.accept({key:'chat/bird',at,kind:'chat',user:'我在家附近看到了翠鸟',publicTerm:'翠鸟习性'});
     const runner=createInitiative({root,emotion:{store,expression:()=>({word:'好奇'})},now:()=>at,load:async()=>({localAi:{}}),
-      search:async q=>{assert.equal(q,'翠鸟习性');attempts++;if(attempts===1)throw Error('离线');return {sources:[{title:'翠鸟',url:'https://example.org/bird'}]};},
+      search:async q=>{assert.equal(q,'翠鸟习性');attempts++;if(attempts===1)throw Error('离线');return {text:'翠鸟习性 https://example.org/bird',sources:[{title:'翠鸟',url:'https://example.org/bird'}]};},
       topics:{note:async()=>{writes++;}},model:{memory:async(_i,_p,s)=>s.properties.entries?
         {act:true,entries:[{source:0,sin:3,type:'research',want:'了解翠鸟',condition:'找到公开出处'}]}:
         {action:'web',conclusion:'查公开资料',message:'',next:'核实公开来源'}}});
@@ -118,6 +119,80 @@ test('公开查询写入前失败可在下轮重试，只传公开词且有结�
     assert.equal(writes,0);assert.equal(store.pool.recent().status,'deferred');
     at+=7200001;await runner.choose([],signal,()=>true);
     assert.equal(store.pool.recent().status,'done');assert.equal(attempts,2);assert.equal(writes,1);
+  }finally{store.close();await rm(root,{recursive:true,force:true});}
+});
+test('绯月无需用户提问也能选择四种查证，四套来源可在重启后回读',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'feiyue-lookups-'));
+  let at=Date.parse('2026-11-20T01:00:00Z'),mode;
+  const store=createEmotionStore(root,{now:()=>at,roll:()=>3}),signal=new AbortController().signal;
+  const options={profile:root,memory:{root,archiveDays:async()=>[]}},rounds=[];
+  const expected={x:'个人同一性 自我与记忆',editorial:'时间知觉',images:'自由意志与选择',web:'意义与日常生活'};
+  let topics=createTopicMemory(options);
+  try{
+    const runner=createInitiative({root,topics,emotion:{store,expression:()=>({word:'好奇'})},now:()=>at,
+      load:async()=>({localAi:{}}),search:async(query,_signal,choice)=>{
+        assert.equal(query,expected[mode]);assert.equal(choice.mode,mode);
+        return {text:`${mode} 的公开材料 https://example.org/${mode}`,sources:[{title:mode,url:`https://example.org/${mode}`}]};
+      },model:{memory:async(_input,_prompt,schema)=>{
+        if(schema.properties.entries)return {act:true,entries:[{source:0,sin:3,type:'research',want:'了解记忆与身份',condition:'读到公开来源'}]};
+        assert.deepEqual(new Set(schema.properties.action.enum),new Set(['wait','x','editorial','images','web']));
+        return {action:mode,conclusion:'查一个公开观点',message:'',next:'整理来源'};
+      }}});
+    const trace=[];
+    for(mode of ['x','editorial','images','web']){
+      const result=await runner.choose([],signal,()=>true,undefined,async(name,goal,run)=>{
+        trace.push([name,goal]);return run();
+      });
+      assert.match(result.detail,/已保存/);
+      const record=store.pool.recent();rounds.push([mode,record.id,topics.decisionReceipt(record.id)]);
+      at+=7200001;
+    }
+    assert.equal(new Set(trace.map(entry=>entry[0])).size,4);
+    assert.equal(new Set(rounds.map(entry=>entry[2])).size,4);
+    await topics.close();topics=createTopicMemory(options);await topics.ready;
+    for(const [kind,round,id] of rounds){
+      assert.equal(topics.decisionReceipt(round),id);
+      const saved=await readFile(join(root,'专题记忆',id+'.md'),'utf8');
+      assert.ok(saved.includes(`https://example.org/${kind}`));
+    }
+  }finally{await topics.close();store.close();await rm(root,{recursive:true,force:true});}
+});
+
+test('自主搜索拒绝私密词及仿 X 链接，图片只让本机模型从五项选一项，网页只综合十项',async()=>{
+  const signal=new AbortController().signal;
+  const privateResult=await searchInitiative('我的病历',signal,{mode:'web'},()=>assert.fail('私密词不应外发'));
+  assert.equal(privateResult.sources,undefined);
+  const post=await searchInitiative('公共议题',signal,{mode:'x'},async request=>{
+    assert.deepEqual(request,{initiative:true,mode:'x',query:'公共议题'});
+    return [{title:'其他站',url:'https://x.com.example.org/abc/status/123'},{title:'非帖子',url:'https://x.com/abc'},
+      {title:'讨论样本',url:'https://x.com/abc/status/123',snippet:'公开摘录'}];
+  });
+  assert.equal(post.sources.length,1);assert.match(post.text,/公开帖子样本/);
+
+  const fixture=Array.from({length:12},(_,i)=>({title:`候选 ${i+1}`,url:`https://example.org/${i+1}`,imageUrl:`https://example.org/${i+1}.jpg`}));
+  const image=await searchInitiative('鸟类图鉴',signal,{mode:'images',model:{async memory(input){
+    assert.equal(JSON.parse(input).候选.length,5);return {index:2};
+  }}},async()=>fixture);
+  assert.equal(image.sources.length,1);assert.equal(image.sources[0].title,'候选 2');
+
+  const web=await searchInitiative('鸟类行为研究',signal,{mode:'web',model:{async memory(input){
+    assert.equal(JSON.parse(input).资料.length,10);return {summary:'已整理要点 [2]'};
+  }}},async()=>fixture.map(({title,url})=>({title,url})));
+  assert.equal(web.sources.length,10);assert.match(web.text,/已整理要点 \[2\]/u);
+});
+
+test('重启发现上轮公开查询没有保存回执时释放本轮，不影响后续轮询',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'feiyue-lookup-interrupted-')),at=Date.parse('2026-11-20T01:00:00Z');
+  const store=createEmotionStore(root,{now:()=>at,roll:()=>3});
+  try{
+    const entry={source:'personality/philosophy',type:'research',sin:3,want:'找资料',condition:'有出处'};
+    store.pool.prepare('interrupted',[entry],0,{at});
+    store.pool.dispatch('interrupted',store.pool.candidate(entry).id,undefined,{action:'editorial'});
+    const examine=createInitiative({root,now:()=>at,emotion:{store},topics:{decisionReceipt:()=>undefined},
+      search:()=>assert.fail('恢复时不重发搜索')});
+    const result=await examine.choose([],new AbortController().signal,()=>true);
+    assert.match(result.detail,/名额已使用/);
+    assert.equal(store.pool.unsettled(),undefined);assert.equal(store.pool.record('interrupted').status,'deferred');
   }finally{store.close();await rm(root,{recursive:true,force:true});}
 });
 test('专题在决定期间已查完，不产生新的核查成功回执',async()=>{
