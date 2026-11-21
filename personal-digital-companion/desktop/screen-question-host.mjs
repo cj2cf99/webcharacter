@@ -20,6 +20,7 @@ import {missingRows,uploadInquiryPhoto} from './inquiry-input.mjs';
 import {answerSchema,requestWorkCloud} from './interaction-work.mjs';
 import {cleanChatOutput,repeatsPreviousChatReply} from './chat-output.mjs';
 import {parseReminderCommand} from './reminder-command.mjs';
+import {createBubbleVoice} from './bubble-voice.mjs';
 
 const inputModes = new Set(['registration','supplement','web','memory','tour']);
 function searchSummaryPrompt(query, sources) {
@@ -42,9 +43,10 @@ export function questionBounds(pet,area,preferredHeight=260){
   return {bounds:{x,y,width,height},tail,tailX:Math.max(20,Math.min(width-60,pet.x+pet.width/2-x-20))};
 }
 
-export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,checks,reminderRequest,requestRestart,localModel,interactionWork,log,emotion=()=>null,topics=()=>null,auditPending=()=>null,resumeAudit,openNews,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,visible=true}={}){
+export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,checks,reminderRequest,requestRestart,localModel,interactionWork,log,emotion=()=>null,topics=()=>null,auditPending=()=>null,resumeAudit,openNews,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,visible=true,voice=createBubbleVoice({root,profile})}={}){
   const {ipcMain,screen,desktopCapturer}=electron;
   let panel=null,servicePromise=null,controller=null,busy=false,disposed=false,generation=0,panelHeight=260,state={state:'idle',text:'想问我什么？'};
+  const entry=resolve(bundle,'screen-question.html'),entryUrl=pathToFileURL(entry).href;
   const records=history??memory??createConversationHistory(profile,electron.safeStorage);
   let details,reviewedGroup='',nag=null;
   function leaveNag(reason){const session=nag;nag=null;session?.leave(reason);}
@@ -657,9 +659,9 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     return display;
   }
   function cancel(){lastRequest=null;generation++;controller?.abort();controller=null;busy=false;panelHeight=260;state={state:'idle',text:'想问我什么？'};servicePromise?.then(api=>api.forget()).catch(()=>{});}
-  function hide(){leaveNag('interrupted');if(!draining&&!pendingQuestion)cancel();if(panel&&!panel.isDestroyed()){const closing=panel;panel=null;closing.destroy();}}
+  function hide(){voice.stopSpeaking();leaveNag('interrupted');if(!draining&&!pendingQuestion)cancel();if(panel&&!panel.isDestroyed()){const closing=panel;panel=null;closing.destroy();}}
   function abandon(){idleDraft=null;supplement='';reviewedGroup='';chainActions=[];hide();}
-  const view=()=>({...state,directInput:true,mode:inputMode,actions:chainActions,canSupplement:Boolean(supplement),
+  const view=()=>({...state,directInput:true,voiceReply:voice.enabled,mode:inputMode,actions:chainActions,canSupplement:Boolean(supplement),
     webSearch:true,attachmentInput:true,hasPending:pending(),idleDraft});
   async function decideRegistration(id,approve,photoTarget,images=[]){
       const draft=registrationDraft;
@@ -742,6 +744,9 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(error)throw Error(error);
   }
   const handlers={
+    'screen-qa:voice-synthesize':(_event,text)=>state.state==='answer'&&!draining
+      ?voice.render(text):{error:'当前没有可朗读的回复。'},
+    'screen-qa:voice-stop-reading':()=>{voice.stopSpeaking();},
     'screen-qa:attachment-review':(_e,value)=>typeof value?.approve==='boolean'?inquiry.respond(value.id,{action:value.approve?'confirm':'cancel'}):{state:'error',text:'无效的登记操作。'},
     'screen-qa:image-list':async()=>{
       const [row]=await images.list(state.imageJob??null);
@@ -794,9 +799,10 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const created=createPanelWindow(electron,{width:360,height:260,show:false,frame:false,transparent:true,resizable:false,hasShadow:false,skipTaskbar:true,alwaysOnTop:true,title:'绯月 · 提问',
       webPreferences:{preload:resolve(root,'desktop/screen-question-preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,offscreen:!visible}},root);
     ready=false;
-    panel=created;const entry=resolve(bundle,'screen-question.html'),url=pathToFileURL(entry).href;
-    created.webContents.setWindowOpenHandler(()=>({action:'deny'}));created.webContents.on('will-navigate',(event,target)=>{if(target!==url)event.preventDefault();});
-    created.on('closed',()=>{if(panel===created){leaveNag('interrupted');panel=null;idleDraft=null;if(!draining)cancel();}});
+    panel=created;
+    created.webContents.setWindowOpenHandler(()=>({action:'deny'}));created.webContents.on('will-navigate',(event,target)=>{if(target!==entryUrl)event.preventDefault();});
+    created.webContents.on('did-start-loading',()=>{if(panel===created)voice.stopSpeaking();});
+    created.on('closed',()=>{if(panel===created){voice.stopSpeaking();leaveNag('interrupted');panel=null;idleDraft=null;if(!draining)cancel();}});
     const today=tokyoDay(Date.now());
     if(!latest||tokyoDay(latest.at)!==today){
       let stored;
@@ -848,6 +854,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     get hasLocalWork(){return Boolean(nag)||this.executing||Boolean(registrationDraft)||edits?.hasPending()===true;},
     async drainForRestart(){
       draining=true;
+      voice.stopSpeaking();
       const results=await Promise.allSettled([edits?.drainForRestart(),...activeCommands]);
       // 在途问答收尾时可能刚登记了最后一笔归档写入。
       await Promise.allSettled([...activeCommands]);

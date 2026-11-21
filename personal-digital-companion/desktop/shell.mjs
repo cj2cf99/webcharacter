@@ -30,6 +30,8 @@ import {attachScenePanel} from './scene-panel.mjs';
 import {createSceneCuriosity} from './scene-curiosity.mjs';
 import {localVision} from './local-vision.mjs';
 import {attachScreenQuestion} from './screen-question-host.mjs';
+import {createBubbleVoice} from './bubble-voice.mjs';
+import {attachDictation} from './dictation-host.mjs';
 import {attachWeather} from './weather-host.mjs';
 import {createReminderChecks,checkDueItems} from './reminder-checks.mjs';
 import {attachPollSettings} from './poll-settings-host.mjs';
@@ -302,7 +304,9 @@ export async function startDesktop(electron,options={}){
   const modelFolder=dirname(desktopModelPath(app,root));
   const upgradeVision=options.upgradeVision??(!options.vision&&interactionWork?localVision(resolve(modelFolder,'Qwen3.5-9B-Q4_K_M.gguf'),
     {projection:resolve(modelFolder,'Qwen3.5-9B-mmproj-F16.gguf')}):undefined);
-  const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,checks,emotion:()=>emotion,topics:()=>topics,onForeground:interruptMemory,auditPending:()=>{const n=nags?.pending();return n?.source==='audit'?{id:n.id,title:n.title,status:n.status}:null;},
+  const voice=createBubbleVoice({root,profile});
+  const dictation=attachDictation(electron,{root,bundle,voice,model:localModel,onForeground:interruptMemory});
+  const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,voice,checks,emotion:()=>emotion,topics:()=>topics,onForeground:interruptMemory,auditPending:()=>{const n=nags?.pending();return n?.source==='audit'?{id:n.id,title:n.title,status:n.status}:null;},
     openNews:newsPanel.open,resumeAudit:()=>memoryJob('diaryAudit',reminderStartup.signal,true),onRegistration:()=>contextualAction('chat-registration'),serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
     memory,vision:memory&&(options.vision??localVision(desktopModelPath(app,root))),readTasks:memory?.readTasks??tasks.executor?.review.read,
     readTraffic:tasks.traffic?.readPage,client:options.screenQuestionClient,requestRestart,localModel,interactionWork,upgradeVision,log:tasks.traffic?.write});
@@ -940,7 +944,7 @@ export async function startDesktop(electron,options={}){
     ipcMain.removeListener('desktop:elevator-playback',onElevatorPlayback);
     stopWindows?.();stopWindows=null;
     messages.close();
-    screenQuestion.close();
+    screenQuestion.close();dictation.close();voice.close();
     if(diary)void Promise.allSettled([backgroundJob,nags.close(),emotion?.close(),topics?.close()]).then(()=>diary.close());
     localModel?.close();
     reminderReview?.close();

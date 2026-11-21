@@ -1,7 +1,10 @@
+import {bindDictation,cancelDictation} from './dictation-ui.mjs';
+
 const api=window.feiyueScene;
 const images=document.querySelector('#images'),dialog=document.querySelector('dialog'),zoom=document.querySelector('#zoom');
 const reply=document.querySelector('#reply'),status=document.querySelector('[role=status]');
 let scene,submitting=false;
+const voice=bindDictation(reply,{blocked:()=>submitting||!scene});
 function picture(frame,large=false){
   const figure=document.createElement('figure'),btn=document.createElement('button'),img=document.createElement('img');
   btn.className='picture';btn.type='button';btn.setAttribute('aria-label',(large?'关闭大图':'放大')+' · '+frame.label);
@@ -23,10 +26,11 @@ async function finish(answer){
   try{await api.finish(scene.id,answer);status.textContent=answer?'已收到回应':'已收起';}
   catch{status.textContent='保存失败，可以重试。';}finally{submitting=false;}
 }
-document.querySelector('#skip').onclick=()=>finish('');
+document.querySelector('#skip').onclick=()=>{cancelDictation();return finish('');};
 document.querySelector('form').onsubmit=e=>{e.preventDefault();if(reply.value.trim())void finish(reply.value);else reply.focus();};
 async function render(){
   scene=await api.get();if(!scene)return;
+  voice.update();
   document.querySelector('#thought').textContent=scene.text;
   const stamp=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(scene.at);
   document.querySelector('time').textContent=stamp+' JST';

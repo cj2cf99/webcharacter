@@ -1,8 +1,11 @@
 import {readAttachment} from './question-attachment.mjs';
+import {bindDictation,cancelDictation,dictating} from './dictation-ui.mjs';
 const api=window.registration,el=id=>document.getElementById(id);
 let draft,attachment=null,reading=false;
 const photos=Array(3).fill(null);
 let pickIndex=null;
+const fieldVoice=[];
+const answerVoice=bindDictation(el('answer'),{blocked:()=>draft?.status!=='pending'||reading});
 const inputs=()=>[...el('missing').querySelectorAll('input')];
 function setFile(file){
   attachment=file;el('filename').textContent=file?.name??'';el('removeFile').hidden=!file;
@@ -38,15 +41,20 @@ function controls(){
   el('discardRecord').disabled=!pending;
   el('discardRecord').hidden=el('sendInput').hidden=finished;
   el('closeReview').hidden=!finished;
-  for(const element of el('editor').querySelectorAll('input,button,textarea,select'))element.disabled=!pending;
+  for(const element of el('editor').querySelectorAll('input,button,textarea,select')){
+    if(!element.classList.contains('fy-dictation-button'))element.disabled=!pending;
+  }
+  answerVoice.update();fieldVoice.forEach(field=>field.update());
 }
 function field(parent,label){
   const wrap=document.createElement('label'),input=document.createElement('input');
-  wrap.append(document.createTextNode(label),input);parent.append(wrap);input.maxLength=3500;return input;
+  wrap.append(document.createTextNode(label),input);parent.append(wrap);input.maxLength=3500;
+  fieldVoice.push(bindDictation(input,{blocked:()=>draft?.status!=='pending'||reading}));return input;
 }
 function render(data){
   if(!data)return;
   if(draft?.id!==data.id){
+    cancelDictation();fieldVoice.splice(0).forEach(field=>field.close());
     el('answer').value='';setFile(null);
     const lastTarget=el('photoTarget').selectedOptions[0]?.textContent;
     const sameTarget=data.parentId===draft?.id&&data.targets.find(t=>t.label===lastTarget);
@@ -120,7 +128,7 @@ document.addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('Files
 document.addEventListener('drop',e=>acceptFiles(e,e.dataTransfer.files));
 for(const [id,action] of [['approveRecord','confirm'],['discardRecord','cancel'],['sendInput','send']]){
   el(id).onclick=async()=>{
-    if(!draft||el(id).disabled)return;
+    if(!draft||el(id).disabled||dictating())return;
     const selected=photos.filter(Boolean).map(file=>file.source?'source':file);
     const answer={action};
     if(action==='send')Object.assign(answer,{text:el('answer').value,values:inputs().map(i=>i.value),attachment,

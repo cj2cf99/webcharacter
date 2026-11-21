@@ -8,6 +8,10 @@ contextBridge.exposeInMainWorld('screenQuestion',{
   openImage:job=>ipcRenderer.invoke('screen-qa:image-open',job),
   onImages:callback=>subscribe('screen-qa:images-changed',callback),
   attachmentInput:true,
+  voice:{
+    synthesize:text=>ipcRenderer.invoke('screen-qa:voice-synthesize',text),
+    stopReading:()=>ipcRenderer.invoke('screen-qa:voice-stop-reading'),
+  },
   details:full=>ipcRenderer.invoke('screen-qa:details',full),
   pending:empty=>ipcRenderer.invoke('screen-qa:pending',empty===true),
   decide:action=>ipcRenderer.invoke('screen-qa:decision',action),
