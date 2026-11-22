@@ -5,7 +5,8 @@ import {watchChanges,warnLiveUpdate} from './live-files.mjs';
 
 // 构建与热加载使用同一份页面依赖。每次只更新受影响的窗口。
 export const pages = {
-  'news-panel.html':['feiyue-surface.css','news-panel.css','news-weekly.css','news-layout.mjs','news-panel-ui.mjs'],
+  'study.html':['feiyue-surface.css','study.css','study-ui.mjs','pair-choice.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
+  'news-panel.html':['feiyue-surface.css','news-panel.css','news-weekly.css','news-editorial.css','news-layout.mjs','news-panel-ui.mjs','news-heatmap.mjs'],
   'scene.html':['feiyue-surface.css','scene.css','scene-ui.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
   'poll-settings.html':['feiyue-surface.css','poll-settings.css','poll-settings-ui.mjs'],
   'index.html':['style.css','configured-renderer.mjs','renderer.mjs','companion-player.mjs','companion-state.mjs','behavior-controller.mjs','screen-posture.mjs','sound.mjs','window-nodes.mjs'],
@@ -17,7 +18,7 @@ export const pages = {
   'reminder-review.html':['feiyue-surface.css','reminder-review.css','reminder-review-ui.mjs'],
   'task-inbox.html':['feiyue-surface.css','task-inbox.css','task-inbox-ui.mjs'],
   'sound-settings.html':['feiyue-surface.css','sound-settings.css','sound-settings.mjs','sound.mjs'],
-  'conversation.html':['feiyue-surface.css','conversation-ui.mjs','conversation.css'],
+  'conversation.html':['feiyue-surface.css','conversation-ui.mjs','emotion-prompt.mjs','conversation.css'],
   'private-chat.html':['feiyue-surface.css','private-chat.css','private-chat-ui.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
   'screen-question.html':['feiyue-surface.css','screen-question.css','question-attachment.mjs','screen-question-ui.mjs',
     'bubble-voice-ui.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs','bubble-voice-segments.mjs'],

@@ -242,8 +242,21 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
     }
     return work?registrationDraft(text,{call,work,signal,onProgress,submittedAt,localOnly,diaryBody}):call('/api/assistant/recording-plan',{text},signal);
   }
+  async function submitReminder({id,title,content,deadline},submissionId,onIssued){
+    // 云端提醒模板使用东京当地时分，REST 入队已校验明确的 +09:00。
+    const params={title,content,deadline:deadline.slice(0,-6)};
+    const plan={pending:[],chain:{name:'临时登记',nodes:[{key:'entry-1',type:'reminders.create',params,target_device_id:null}]}};
+    const result=await once('本机 REST 提醒 '+id,undefined,plan,{owner:'rest-reminder:'+id,submissionId,onIssued});
+    const task=result?.chain?.nodes?.[0]?.current_task;
+    const recordId=task?.result?.record_id;
+    if(result?.status!=='completed'||result.chain?.nodes?.length!==1||task?.type!=='reminders.create'||task.status!=='COMPLETED'
+        ||!Number.isSafeInteger(recordId)||recordId<1
+        ||!Object.entries(params).every(([key,value])=>task.params?.[key]===value))throw Error('提醒尚未取得有效的登记回执');
+    return recordId;
+  }
   return {
     preview,
+    submitReminder,
     submitReviewed:(text,plan)=>once(text,undefined,plan),
     submitBatch:(owner,plan,submissionId,onIssued)=>once('对话内容转录 '+owner,undefined,plan,{owner,submissionId,onIssued}),
     submit(text) {

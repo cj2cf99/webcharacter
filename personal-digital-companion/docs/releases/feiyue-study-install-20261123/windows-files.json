@@ -1,0 +1,133 @@
+{
+  "formalRoot": "G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion",
+  "installedGit": "39fd098e40ebf7c2c82dd5a6f9944ae98055566e",
+  "formalBuild": "cafa85c28ea2",
+  "sourceBase": "03942463b3de924c380ae45a0c29a30bfbbee1c6",
+  "items": [
+    {
+      "path": "desktop/study-host.mjs",
+      "before": null,
+      "after": "46fc52459a24bfe0676855bd9b232a3c980147001f2df5e0f9c294c99cc595fd"
+    },
+    {
+      "path": "desktop/study-materials.mjs",
+      "before": null,
+      "after": "054cedfeb8b14a6000811f7e0207d8c59797fd6f65819770efb10e64df4f2efc"
+    },
+    {
+      "path": "desktop/study-preload.cjs",
+      "before": null,
+      "after": "d9d16aec482070e3c01d4b5f9a13516b77a153324421fa36c0c69b128d3ced9e"
+    },
+    {
+      "path": "desktop/study-relay.mjs",
+      "before": null,
+      "after": "ce82c19f9c1d110835e0e680cae989cc43b1e38fdbe7d02022ff00586ef520aa"
+    },
+    {
+      "path": "desktop/study-store.mjs",
+      "before": null,
+      "after": "686a23260034fffff7ade4a5744cbd8314d0dd335fec5707fcb6d0d8dfce15f0"
+    },
+    {
+      "path": "desktop/study-ui.mjs",
+      "before": null,
+      "after": "4a9b85a50f9380db192b5c01cb33db665d7f1a033dcdbaa93f31835270e0d70f"
+    },
+    {
+      "path": "desktop/study.css",
+      "before": null,
+      "after": "f9141d8a0772704f71a7d6c471d51baa59fb69dfa3e2f9cd7afcabb2393b13c2"
+    },
+    {
+      "path": "desktop/study.html",
+      "before": null,
+      "after": "fd082a7609ea236718370c4d8cd1d8f82fb3174aebd803443539748ce1ff2a72"
+    },
+    {
+      "path": "desktop/pair-choice.mjs",
+      "before": null,
+      "after": "fb894f349ba9bab17c5606f918f8dce20a4b007368ab69ca912d3391391e2aff"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "before": "1750df3a59999444ebfe3a154a85dc0f6c727cbfe4774caa08f43eb8280b75c8",
+      "after": "2171ecf9e78b600c9d7717fd8fc4945b4c0a36fe7672109b2cfc441a6cd8b376"
+    },
+    {
+      "path": "desktop/screen-question-host.mjs",
+      "before": "778c34d93ae855748b6c87620450624c87ee6366c9139a1f1260c24656409ca2",
+      "after": "e3c88c22c734c773c0a7d72eb10ba72368f11c311b35a66fbe95c1265b7d0a11"
+    },
+    {
+      "path": "desktop/conversation-routing.mjs",
+      "before": "1b224e44a345dfdcdb483264baf11a7648f9f14c0247e899290c25b808170f8c",
+      "after": "7ec92617d559e874c1e8c078238d501221b837cac30083b4e9e6bc3cdd95c7f5"
+    },
+    {
+      "path": "desktop/menu-layout.json",
+      "before": "52055dcf73bade6382deffb3deb99c412c66a1fd31bafae6b1e044b6619a640a",
+      "after": "62c6bda58fc609b99f0b9cd574fc749c905a9beb43afa2875987a5617c160da9"
+    },
+    {
+      "path": "desktop/source-updates.mjs",
+      "before": "c1328e60a8a4b3a82a9a0dcaa6ea0f77db55f9e220714fd257a2e54fdf127bc6",
+      "after": "f7c71a805f1b5121132d54b7c6316a7c97b901aa1ece50d9c9f8841993a93084"
+    },
+    {
+      "path": "desktop/cloud-connection.mjs",
+      "before": "3743651a3e0ac8c2719e417fce4b06ab2a7f7b35a92b40ec5a7bb1579a3376c6",
+      "after": "71cacdca5223c5c9468886bf45fbdfd8dcf888bf70bcbe384dcbe172559428ef"
+    },
+    {
+      "path": "desktop/dictation-host.mjs",
+      "before": "16b0dcb89ece8393a9ed4a78d2e2240f164adef027eb103becff37061a150969",
+      "after": "473a10e3600c97d3f51e644de134861d0da4833bc264bbf45d948440e0d6519a"
+    },
+    {
+      "path": "desktop/bubble-voice.mjs",
+      "before": "5d813405cfe57730511dde7eecee98570b9dace20faa174fca4fd004de2a0d6e",
+      "after": "7840c55e6046de414c6d2f6175a557591eb5cc1a7d95d8065a90e7ebe3f34e96"
+    },
+    {
+      "path": "desktop/bubble-voice-worker.py",
+      "before": "1704c3df4670c7edc5d97d2f8a84dafd8dba7791b4d87a7ca9fc77d5a893c5cf",
+      "after": "2165b96492cf3821c735fb6a7aa288f063f3fa06aec22a9dc7a21b1eceef286c"
+    },
+    {
+      "path": "assets/study-initial.v1.json",
+      "before": null,
+      "after": "8508388a079c918eea7a2d075e1a312649a5ccb930b7397ca74c41c43c4ed595"
+    },
+    {
+      "path": "output/desktop-bundle/study-initial.v1.json",
+      "before": null,
+      "after": "8508388a079c918eea7a2d075e1a312649a5ccb930b7397ca74c41c43c4ed595"
+    },
+    {
+      "path": "output/desktop-bundle/study.html",
+      "before": null,
+      "after": "fd082a7609ea236718370c4d8cd1d8f82fb3174aebd803443539748ce1ff2a72"
+    },
+    {
+      "path": "output/desktop-bundle/study-ui.mjs",
+      "before": null,
+      "after": "4a9b85a50f9380db192b5c01cb33db665d7f1a033dcdbaa93f31835270e0d70f"
+    },
+    {
+      "path": "output/desktop-bundle/study.css",
+      "before": null,
+      "after": "f9141d8a0772704f71a7d6c471d51baa59fb69dfa3e2f9cd7afcabb2393b13c2"
+    },
+    {
+      "path": "output/desktop-bundle/pair-choice.mjs",
+      "before": null,
+      "after": "fb894f349ba9bab17c5606f918f8dce20a4b007368ab69ca912d3391391e2aff"
+    },
+    {
+      "path": "tools/build-desktop.mjs",
+      "before": "e0b6ea1c7f741d336662dc8812e0725aa685c1fdd0346abc1ff837b1d101b808",
+      "after": "a37138aa0a0149aefbafc667395e9e744d8e23e5e2db9b953f437c2461d50c5a"
+    }
+  ]
+}

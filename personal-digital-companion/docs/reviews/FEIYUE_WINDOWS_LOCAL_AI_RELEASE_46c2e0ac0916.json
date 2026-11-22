@@ -1,0 +1,26 @@
+{
+  "base": "4d9363ffee01a97551953cfcf523f4b3258f0ec2",
+  "versionBefore": "49023239b9ad",
+  "items": [
+    {
+      "path": "desktop/ai-request-queue.mjs",
+      "before": "ab0a7a4aad8a5815d98d10aad19454779d8dcb6e7f88c306065bc3d43f1a3dd5",
+      "after": "a6caba9d0c8659d1c7524dc8927887fb5970a13c5851869ec436ceeb9da983fb"
+    },
+    {
+      "path": "desktop/emotion-service.mjs",
+      "before": "4973bbcbf310efa06ea6f7a7bc4aa78487bfba08b20b52862a7ece24b106080f",
+      "after": "2469dc939ef84a320c18829e096b6ac0cc8967e9f6057b86422374cfa35ec54f"
+    },
+    {
+      "path": "desktop/local-model-process.mjs",
+      "before": "75b743f32996941a92c4d76047251e4ed860779942dc597653a7dafe56d20364",
+      "after": "9708e7a79e398f3141a0e6dc479ecae23deb7984ca2b4edf5c7fc4d2a977bdd4"
+    },
+    {
+      "path": "desktop/task-traffic-log.mjs",
+      "before": "a1f8be32d0ce1f2aa6b68cc74e3f7441220d8c3ce5f50e9aaa21176232b6890c",
+      "after": "6ba687345c23bdb7509c53a48bf7d088d3660abd7b2c811ab804f7ef8eb06f5b"
+    }
+  ]
+}

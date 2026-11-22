@@ -1,10 +1,12 @@
 const memoryPolls=new Set(['diary','nag','review','diaryAudit','curiosity','refinement']);
 const memoryLimit=10*60_000;
+const queueRetryMs=15_000;
 const pauseDetail='闲置整理已满 10 分钟，等下一轮轮询继续';
 const types=[
   {id:'tasks',name:'任务轮询',minutes:15},
   {id:'due',name:'到期事项',minutes:20},
   {id:'news',name:'关注新闻简报',minutes:720},
+  {id:'newsEditorial',name:'新闻编辑与社论风向',minutes:10},
   {id:'curiosity',name:'此刻所想 · 允许自主看屏',minutes:60},
   {id:'weather',name:'三地天气',minutes:60},
   {id:'aiHeartbeat',name:'AI 接口心跳',minutes:180},
@@ -13,13 +15,14 @@ const types=[
   {id:'diary',name:'写日记',minutes:720},
   {id:'review',name:'补行动评价',minutes:60},
   {id:'refinement',name:'修订手记与唠叨',minutes:60},
+  {id:'inspection',name:'分析专家巡检',minutes:60},
 ];
 
 const goals={tasks:'检查云端待办并处理可领取任务',due:'检查今日到期和逾期事项',weather:'核对三地天气变化与预警',
   aiHeartbeat:'检查当前云端 AI 接口是否可用',
   diaryAudit:'核对近七天的手记，找出待确认的疑点',curiosity:'按设置观察当前场景并判断是否分享',nag:'核对待续事项并决定本轮主动行动',
-  news:'查阅关注主题的公开报道，有新消息时提醒',diary:'整理未入册的素材并跟进未解悬念',review:'核查待整理专题并补写缺失的行动评价',
-  refinement:'逐条核对绯月已保存的手记或唠叨，修订后保存'};
+  news:'查阅关注主题的公开报道，有新消息时提醒',newsEditorial:'推进一项新闻编辑或社媒查询阶段',diary:'整理未入册的素材并跟进未解悬念',review:'核查待整理专题并补写缺失的行动评价',
+  refinement:'逐条核对绯月已保存的手记或唠叨，修订后保存',inspection:'检查最近的本机任务完成与失败记录'};
 
 export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,clearTimer,add,audit,onIdleResult,weatherLastAt,lastRun=()=>null}){
   db.exec(`CREATE TABLE IF NOT EXISTS local_polls (
@@ -80,8 +83,13 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
   }
   function drain(){
     const waiting=queue();
-    if(waiting.some(j=>j.running))return true;
-    const candidate=waiting.find(j=>!isBusy(j.id)&&(j.id==='tasks'||now()>=warmUntil));
+    const at=now();
+    const ready=j=>!j.running&&j.resumeAt<=at&&!isBusy(j.id)&&(j.id==='tasks'||at>=warmUntil);
+    const inspection=waiting.find(j=>j.id==='inspection'&&ready(j));
+    if(inspection)void execute(inspection,inspection.queuedAt);
+    const work=waiting.filter(j=>j.id!=='inspection');
+    if(work.some(j=>j.running))return true;
+    const candidate=work.find(ready);
     if(candidate)void execute(candidate,candidate.queuedAt);
     return Boolean(candidate);
   }
@@ -91,7 +99,7 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
       retry=null;
       drain();
       retryLater();
-    },15_000);
+    },queueRetryMs);
     retry?.unref?.();
   }
   function postpone(j,due,existing=null){
@@ -144,7 +152,16 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
     if(round&&(!blocked||idleStarted)){
       onIdleResult?.({id:j.id,status:outcome,detail,durationMs:Math.max(0,finishedAt-at)});
     }
-    if(blocked&&j.enabled){postpone(j,due,id);return;}
+    if(blocked&&j.enabled){
+      if(j.id==='diaryAudit'&&idleStarted){
+        j.resumeAt=finishedAt+queueRetryMs;
+        j.queuedAt??=due;
+        db.prepare('INSERT OR REPLACE INTO idle_poll_resume VALUES(?,?)').run(j.id,j.resumeAt);
+        db.prepare('UPDATE checks SET status=?,detail=? WHERE id=?').run(outcome,detail,id);
+        persist(j);changed();retryLater();
+      }else postpone(j,due,id);
+      return;
+    }
     db.prepare('UPDATE checks SET status=?,detail=? WHERE id=?').run(blocked?'未执行':status,detail,id);
     j.queuedAt=null;j.misses=0;persist(j);
     if(!queue().length){clearTimer(retry);retry=null;}
@@ -163,11 +180,13 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
       return;
     }
     if(isBusy(j.id)){postpone(j,due);return;}
+    if(j.id==='inspection'){void execute(j,j.queuedAt??due);return;}
     if(j.queuedAt!==null){retryLater();changed();return;}
     if(drain()){postpone(j,due);return;}
     void execute(j,due);
   }
   function initial(j){
+    if(j.id==='refinement')return Math.max(now(),warmUntil)+memoryLimit+60_000;
     if(j.id==='aiHeartbeat')return now()+j.minutes*60_000;
     // 避免手记核对从同一分钟耗尽共享预算，导致修订每轮都排不到。
     if(j.id==='refinement')return Math.max(now(),warmUntil)+memoryLimit+60_000;

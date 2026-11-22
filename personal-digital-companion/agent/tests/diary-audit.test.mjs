@@ -22,7 +22,7 @@ async function fixture(t,{withTaskRuntime=false}={}){
   const req=(path,options)=>personalityMemory(new Request('https://test/api/memory/'+path,options),{DB,myMainStorage},'fixture');
   const post=(path,body)=>req(path,{method:'POST',body:JSON.stringify(body)});
   async function diary(day,body,batch='one'){
-    assert((await post('diaries',{day,batch,body,summary:body,mood:'好奇',tags:[],weather:'晴',threads:[]})).ok);
+    assert((await post('diaries',{day,batch,body,summary:body.slice(0,60),mood:'好奇',tags:[],weather:'晴',threads:[]})).ok);
   }
   await diary('2026-11-21','花园部署在周三首次上线。');
   await diary('2026-11-15','同一版花园部署在周一首次上线。');
@@ -37,6 +37,7 @@ async function fixture(t,{withTaskRuntime=false}={}){
     }
     assert.equal(skill.name,'diary-audit');
     const data=JSON.parse(input);f.calls.push(data);
+    if(s.required.includes('a'))return {a:data.slice(0,36),b:'',c:''};
     if(s.required.includes('score')){
       f.generated++;assert(data.every(r=>r.page>='2026-11-15'));
       f.compareEntered?.resolve();
@@ -81,7 +82,7 @@ async function fixture(t,{withTaskRuntime=false}={}){
       show:async s=>{if(!f.show)return false;f.session=s;s.visible();return true;}});
   }
   init();
-  f.poll=(outer=signal)=>f.nags.pollAudit(outer);
+  f.poll=(outer=signal,progress)=>f.nags.pollAudit(outer,progress);
   f.resume=(id=f.nags.pending()?.id)=>f.nags.resume(id,signal);
   f.restart=async()=>{await f.nags.flush();await f.nags.close();f.store.close();init();};
   Object.assign(f,{req,post,diary,tasks});
@@ -89,6 +90,24 @@ async function fixture(t,{withTaskRuntime=false}={}){
   f.original=async id=>(await req('nags/'+id+'/original')).text();
   return f;
 }
+test('长手记每次最多投入两次推理，显示已保存步数并跨重启续办',async t=>{
+  const f=await fixture(t),progress=[];
+  await f.diary('2026-11-20',Array.from({length:16},(_,i)=>`第${i+1}段记录了当天不同的整理动作。${'资料已经核对，余项继续准备。'.repeat(14)}`).join('\n'));
+  const first=await f.poll(signal,value=>progress.push(value.stage));
+  assert.equal(first.deferred,true);
+  assert.equal(f.calls.length,2);
+  assert.match(first.detail,/已保存 2 步/);
+  assert.ok(progress.some(line=>line.includes('已保存 2 步')));
+  assert.equal(Object.keys(f.store.auditState().run.steps).length,2);
+  const prior=[...f.calls];
+  await f.restart();
+  const second=await f.poll(signal,value=>progress.push(value.stage));
+  assert.equal(second.deferred,true);
+  assert.equal(f.calls.length,4);
+  assert.match(second.detail,/已保存 4 步/);
+  assert.ok(f.calls.slice(2).every(input=>!prior.includes(input)));
+  assert.equal(Object.keys(f.store.auditState().run.steps).length,4);
+});
 test('回答和追问结束之前没有写请求，补传在途也能完成同一回合',async t=>{
   const f=await fixture(t,{withTaskRuntime:true});
   assert.deepEqual(await f.poll(),{detail:'已新增 1 个手记质问'});

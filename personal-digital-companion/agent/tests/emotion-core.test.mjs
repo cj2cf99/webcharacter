@@ -66,13 +66,14 @@ test('历史情绪按东京日期送入评价，只取日期、情绪和强度',
   const emotions=createEmotionService({profile:fixture(t),now:()=>at,skill:async()=>({localAi:{}}),
     diary:{emotionalHistory:()=>({pages:[{at:'2026-11-20',mood:'开心',body:'私有正文'}],
       nags:[{at:'2026-11-20T15:05:00Z',mood:'担忧',strength:3},{at:'2026-11-21T00:05:00+09:00',mood:'疲惫'},{at:null,mood:'未知'}]})},
-    model:{memory:async s=>{input=JSON.parse(s);return assessment;}}});
+    model:{memory:async s=>{input=s;return assessment;}}});
   try{
     emotions.chat({id:'turn',state:'answer',question:'你好',text:'你好',at});
     await emotions.drain();
-    assert.deepEqual(input.手记,[['2026-11-20','开心',null]]);
-    assert.deepEqual(input.念叨,[['2026-11-21','担忧',3],['2026-11-21','疲惫',null],[null,'未知',null]]);
-    assert.doesNotMatch(JSON.stringify(input),/私有正文/);
+    assert.match(input,/用户原话：你好\n绯月回复：你好/);
+    assert.match(input,/手记：2026-11-20 开心/);
+    assert.match(input,/念叨：2026-11-21 担忧（强度 3）、疲惫 \/ 日期未知 未知/);
+    assert.doesNotMatch(input,/私有正文|事实标题：/);
   }finally{await emotions.close();}
 });
 test('每组历史独立加权，最近十条；旧档缺失强度保留未知',()=>{

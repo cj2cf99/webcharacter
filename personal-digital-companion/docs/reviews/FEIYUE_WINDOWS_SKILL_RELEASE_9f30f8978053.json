@@ -1,0 +1,93 @@
+{
+  "formal": "G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion",
+  "formalRevision": "1a04985f6789",
+  "formalRestVersion": 5,
+  "sourceCommit": "90f672b73e02894122955289f7837578edcb8cea",
+  "items": [
+    {
+      "path": "desktop/conversation-transcription.mjs",
+      "before": "dd214c53ad277da0367cea27cd7066871e8932608a9d5ec96dc1d5becc14b969",
+      "after": "f752d66b6e0bd3b5ccdd3e2f40d2287a300747e8137496d2f7a3168f3c1121ea",
+      "source": "f752d66b6e0bd3b5ccdd3e2f40d2287a300747e8137496d2f7a3168f3c1121ea"
+    },
+    {
+      "path": "desktop/image-tasks.mjs",
+      "before": "acadb5fc0790489964b09e4735a88b4f7ebcc262c0b99892b9e683927303bb25",
+      "after": "36e43ede5437eac39881355324623f0470bd18b145b95975c0ad3a70515a9c1d",
+      "source": "36e43ede5437eac39881355324623f0470bd18b145b95975c0ad3a70515a9c1d"
+    },
+    {
+      "path": "desktop/interaction-skills.mjs",
+      "before": "253b268ab353b2401e4a661d568ed23742e8f89b6c948c44926f2e968fdcb6ca",
+      "after": "7f8d0bb73cc158da147e8cf4680d420ec0e87482edb8a305546f93d28dbad9ae",
+      "source": "7f8d0bb73cc158da147e8cf4680d420ec0e87482edb8a305546f93d28dbad9ae"
+    },
+    {
+      "path": "desktop/local-rest.mjs",
+      "before": "affe0b25456d93adf8dfda5f06174075220295582bd8690a4b7b7164f1c7171e",
+      "after": "19e482eda2d91edeed576d228d87b224bde5e94fdc3be3ee82b6772df2c402a7",
+      "source": "0abe3ab5801707c96b84f67464aa953b80262e4da9d80721250b16761d7d8c07"
+    },
+    {
+      "path": "desktop/screen-question-host.mjs",
+      "before": "a703e608758ef663aedfc9afa1c980c0a1230dcac07df51aa801cfe36d4d3f4b",
+      "after": "ae6a139ea88156c7f0027b415abd24b29ab09e5bb8adadba2a502621c47782f9",
+      "source": "74b48b6620ea3d770c9149648a04306ab058b2f2f9cd5af3963163ebdb8fe68b"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "before": "6a938d3f4059f3c6a9ed4fd20272317c5333f84ab9a87f6d4cf02a8a3015dd73",
+      "after": "6c0c1c465c7ed08d1ec07ae56e6f8366d24ae1412c7a2a27b08f69f4d94a09a7",
+      "source": "a277eabeb8162a6b5b1f8d3584284fcf492f0925e8072122b8947ec62d471527"
+    },
+    {
+      "path": "skills/catalog.py",
+      "before": "a2d79059981a5c8da582bed39108a7d0d98c1f0035623568b68903f7ad3116c9",
+      "after": "f5083557c082199d0b609ec4e29e6951d4272ff788c49f43338dc12834249c79",
+      "source": "f5083557c082199d0b609ec4e29e6951d4272ff788c49f43338dc12834249c79"
+    },
+    {
+      "path": "skills/skill_updates.py",
+      "before": null,
+      "after": "e46cc29f40a1568dfc8097b875c1764eb252c807d757db86bb499c79e492490e",
+      "source": "e46cc29f40a1568dfc8097b875c1764eb252c807d757db86bb499c79e492490e"
+    },
+    {
+      "path": "skills/feiyue-interaction/capabilities.json",
+      "before": null,
+      "after": "5adeda56a51f1a6ced601b7e7d2693989a4d1053b48bf5f96f11b329deefe475",
+      "source": "5adeda56a51f1a6ced601b7e7d2693989a4d1053b48bf5f96f11b329deefe475"
+    },
+    {
+      "path": "workflows/comfyui/image_chain.py",
+      "before": "aa69c7a2315f83be28f4471bb3daea461e5ab620b1dc7fda394f0f9a297985b2",
+      "after": "17572d03fe76cce627997e71f2eda0f3328a9ee05e820b5ad95e7de49bccc5c8",
+      "source": "17572d03fe76cce627997e71f2eda0f3328a9ee05e820b5ad95e7de49bccc5c8"
+    },
+    {
+      "path": "docs/LOCAL_GARDEN_API.md",
+      "before": "3916f33efcf9624518bc4f87b8ef4f3e93c16774f077ced06fd5045b2e41b422",
+      "after": "771d0bcaf031815792b4d5041aea608b8c5598fd7189412cce1705fce47e79fb",
+      "source": "bd753729a002d54b473ae4b95c4db2bfb7df958fcbb4aa6507de8a515cbaf6d8"
+    },
+    {
+      "path": "docs/SKILL_HOT_UPDATE.md",
+      "before": null,
+      "after": "5512b369417be6c508b8f3d21e89fe84e1ebdc08f7e67f8efb9dcf008d1df5bb",
+      "source": "5512b369417be6c508b8f3d21e89fe84e1ebdc08f7e67f8efb9dcf008d1df5bb"
+    },
+    {
+      "path": "skills/README.md",
+      "before": "da77c6453b672c34c524fd9680dc60d059e445cadf9c0a6760eca4146042f13d",
+      "after": "ee01a203ec0852e9419baf88da34334d8edcd89df9cca48d55f4ee2b4641917d",
+      "source": "cbfb5ec5a278dcbff7193e8f78b8ee3a952a2ae03e1438a615ed517a4aa3d362"
+    },
+    {
+      "path": "desktop/reminder-command.mjs",
+      "before": "fd0271630be7a8023dd0943c2328568e2cfeacf34f2082806863b4d84117f7d4",
+      "source": "50796594f2a8118f5b8e80e731370c2be95b7a05c46defc2f7889670a571994a",
+      "after": "50796594f2a8118f5b8e80e731370c2be95b7a05c46defc2f7889670a571994a"
+    }
+  ],
+  "auditSourceCommit": "ac7a2b37c6f5485325b235e9cdb60eb457ae27b3"
+}

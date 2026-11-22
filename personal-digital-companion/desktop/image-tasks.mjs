@@ -3,6 +3,7 @@ import {mkdir,mkdtemp,readFile,readdir,rename,rm,writeFile} from 'node:fs/promis
 import {join,resolve} from 'node:path';
 import {validAttachment} from './question-attachment.mjs';
 import {requestWorkCloud} from './interaction-work.mjs';
+import {warnLiveUpdate} from './live-files.mjs';
 
 import {imageSlots,resolveImageChoices,checkEditConstraints,previousImage,tourDestination} from './image-planning.mjs';
 export {imageRequest,literalPlan,checkEditConstraints} from './image-planning.mjs';
@@ -142,8 +143,9 @@ export function createImageTasks({root,profile,localModel,interactionWork,reques
       const count=attachments.length;
       const {slots,question}=imageSlots(text,count,Boolean(old));
       if(question)throw Error(question);
-      const skill=await runPython(cli,['describe']);
+      const skill=await runPython(cli,['describe','--profile',profile]);
       if(!skill.instruction)throw Error(skill.error??'无法读取图像 skill。');
+      for(const warning of skill.warnings??[])warnLiveUpdate('绯月技能',warning);
       let choices=slots.map(s=>s.ops[0]);
       if(slots.some(s=>s.ops.length>1)){
         const allowed=slots.map(({quote,ops})=>({quote,ops}));
@@ -152,6 +154,7 @@ export function createImageTasks({root,profile,localModel,interactionWork,reques
           {type:'object',properties:{question:{type:'string'}},required:['question'],additionalProperties:false}]};
         const plan=interactionWork?await interactionWork({purpose:'图像编排',context:allowed,
           instruction:skill.instruction+'\n仅为每项原文选择一个可用操作，或返回具体澄清问题。',schema,signal,onProgress,
+          skill:{name:'image-task-chain',version:skill.promptVersion??skill.version},
           maxTokens:Math.max(80,slots.length*12+24),normalize(raw){
             if(raw?.question?.trim())return {value:{question:raw.question},review:raw};
             const steps=resolveImageChoices(slots,raw?.choices);

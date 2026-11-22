@@ -39,6 +39,55 @@ test('按 GPU 双指标挑选档位，读数缺失或繁忙时用 CPU',()=>{
   assert.deepEqual(modelChoices(null,true),[{...aggressive,device:'cpu'}]);
 });
 
+test('手动预热只加载 GPU，复用给下一轮并按正常策略继续推理',async()=>{
+  let gpu={utilization:98,freeMiB:4800},layers=20;
+  const starts=[];
+  const model=createBalancedLocalModel({modelPath:'models/test.gguf',readGpu:async()=>gpu,
+    create:({modelPath,device})=>({start:async()=>{starts.push({modelPath,device});},close:async()=>{},
+      snapshot:()=>({state:'ready',gpuLayers:device==='gpu'?layers:0,backend:device==='gpu'?'vulkan':'cpu'}),
+      analyze:async()=>({reply:device})})});
+  try{
+    assert.match((await model.preheatConversation('direct')).error,/GPU/);
+    assert.equal(starts.length,0);
+    assert.deepEqual(await model.preheatConversation('main'),{ready:true,size:'4',backend:'vulkan'});
+    assert.equal((await model.work('收到',{session:{}})).reply,'gpu');
+    assert.equal(starts.length,1);
+    assert.match(starts[0].modelPath,/4B/);
+    assert.equal((await model.work('下一轮',{session:{}})).reply,'cpu');
+    gpu={utilization:10,freeMiB:7100};
+    layers=0;
+    assert.match((await model.preheatConversation('direct')).error,/GPU/);
+    assert.deepEqual(starts.map(x=>x.device),['gpu','cpu','gpu']);
+    assert.match(starts[2].modelPath,/9B.*Aggressive/);
+    assert.equal(model.snapshot().state,'idle');
+  }finally{await model.close();}
+});
+
+test('对话模型连续空闲五分钟才释放，进行中的推理会重置计时',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const entered=Promise.withResolvers(),finish=Promise.withResolvers();
+  let unloaded=0;
+  const model=createBalancedLocalModel({modelPath:'models/test.gguf',readGpu:async()=>({utilization:0,freeMiB:7100}),
+    create:()=>({start:async()=>{},close:async()=>{unloaded++;},
+      snapshot:()=>({state:'ready',gpuLayers:20,backend:'vulkan'}),
+      async analyze(){entered.resolve();await finish.promise;return {reply:'完成'};}})});
+  try{
+    assert.equal((await model.preheatConversation('main')).ready,true);
+    t.mock.timers.tick(299_999);
+    assert.equal(unloaded,0);
+    const running=model.work('合成测试',{session:{}});
+    await entered.promise;
+    t.mock.timers.tick(300_000);
+    assert.equal(unloaded,0);
+    finish.resolve();await running;
+    t.mock.timers.tick(299_999);
+    assert.equal(unloaded,0);
+    t.mock.timers.tick(1);
+    assert.equal(unloaded,1);
+    assert.equal(model.snapshot().state,'idle');
+  }finally{finish.resolve();await model.close();}
+});
+
 test('辨认纠正上一轮和引用纠正用语',()=>{
   for(const text of ['你理解错了','你刚才说反了','不是我的意思','我问的是说这句话的人','不对，重新看一下']){
     assert.ok(correctionTurn(text,{用户:'上一轮'}),text);

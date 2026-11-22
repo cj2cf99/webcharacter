@@ -17,7 +17,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[2] / "tools"))
 import comfy_job as backend
 sys.path.insert(0, str(HERE.parents[1] / "skills"))
-from catalog import resolve_skill, child_skill
+from catalog import resolve_skill, child_skill, route_skill
 
 IMAGE_NUMBER = re.compile(r"图\s*(\d+|[零一二两三四五六七八九十]+)|第\s*(\d+|[零一二两三四五六七八九十]+)\s*张(?:图)?")
 
@@ -172,7 +172,7 @@ def run(job):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("describe")
+    commands.add_parser("describe").add_argument("--profile", type=Path)
     commands.add_parser("availability")
     for command in ("check", "submit"):
         sub = commands.add_parser(command)
@@ -193,6 +193,12 @@ def main():
         version, folder = resolve_skill("image-task-chain")
         _, workflow_version, _ = child_skill(folder, "execute")
         row = {"version": version, "workflowVersion": workflow_version, "instruction": (folder / "SKILL.md").read_text(encoding="utf-8")}
+        if args.profile is not None:
+            selected = route_skill("image", profile=args.profile)
+            if "@" in selected["version"]:
+                row.update(instruction=selected["content"], promptVersion=selected["version"])
+            if selected.get("warnings"):
+                row["warnings"] = selected["warnings"]
     elif args.command in ("status", "_run"):
         job = backend.ROOT / args.job.hex
         if args.command == "_run":

@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="feiyue-surface.css">
   <link rel="stylesheet" href="news-panel.css">
   <link rel="stylesheet" href="news-weekly.css">
+  <link rel="stylesheet" href="news-editorial.css">
   <script type="module" src="news-panel-ui.mjs"></script>
 </head>
 <body>
@@ -43,8 +44,23 @@
             <p id="count"></p>
           </div>
           <div id="status" class="notice" role="status" hidden></div>
-          <div id="event-list"></div>
-          <button id="more-events" type="button" class="paper-button" hidden>显示更多</button>
+          <div id="heat-key" class="heatmap-legend" hidden><span>周内热点</span><span>其他重点新闻</span><small>面积＝收录报道篇数</small></div>
+          <div id="digest-columns">
+          <section class="digest" aria-labelledby="hot-heading" hidden>
+            <h4 id="hot-heading">周内热点</h4>
+            <div id="hot-list" class="event-grid"></div>
+          </section>
+          <section class="digest" aria-labelledby="key-heading" hidden>
+            <h4 id="key-heading">其他重点新闻</h4>
+            <div id="key-list" class="event-grid"></div>
+          </section>
+          </div>
+          <details id="quiet-board" class="quiet-board" hidden>
+            <summary>暂未更新 <span id="quiet-count"></span></summary>
+            <div id="quiet-list" class="event-grid"></div>
+          </details>
+          <div id="event-list" class="event-grid"></div>
+          <button id="more-events" type="button" class="paper-button" aria-controls="event-list" aria-expanded="false" hidden>显示更多新闻</button>
           <div class="back-top-slot">
             <button id="overview-top" type="button" class="back-top" aria-label="回到总览顶部" hidden>↑ 回到顶部</button>
           </div>

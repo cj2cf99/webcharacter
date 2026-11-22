@@ -1,5 +1,7 @@
 # 绯月本地技能目录
 
+在支持外置 Skill 的桌面版中，可从默认总纲发布新的子 Skill 版本并即时切换。总纲的用途、调用方式和范例也供本机 `GET /v1/skills` 查询。[外置更新与新增方法](../docs/SKILL_HOT_UPDATE.md)
+
 总体入口是 `feiyue-interaction`，图像编排入口是 `image-task-chain`。代码和父 skill 使用稳定标识查找子 skill。例如，问答选择登记后加载 `record-submission`，图像任务再按操作使用 `comfy-image-workflows` 的图。桌面规则决定可执行的动作，模型只在该动作范围内理解输入。
 
 新增登记参照绯月已经使用的[图像编排指令](image-task-chain/source/SKILL.md)和[工作流执行指令](comfy-image-workflows/source/SKILL.md)。正文写给本地 AI，说明它收到什么、应提取什么、输出给谁、何时需要追问，以及以哪种回执报告完成。父技能的 `children.json` 以用途对应稳定标识，例如附件识读的 registration 指向 record-submission。编辑 source 后由解析器生成带版本的快照。
@@ -17,6 +19,7 @@
 | 普通会话关窗后的登记意向 | [conversation-transcription](conversation-transcription/source/SKILL.md) | 关窗后触发本地转录，完成提醒用户核对，按勾选交给登记链 |
 | 今日任务、已有提醒的查询和修改 | reminder-review | 使用现有列表和整组修改审批 |
 | 联网搜索、三地天气 | public-lookup、weather-lookup | 各自调用已有查询接口 |
+| 七日新闻与社论风向 | [news-editorial](news-editorial/source/SKILL.md) | 共享 AI 队列分段拟标题、复核、提词与归纳。取样分别使用 X 和 Reddit，按同一话题续写并归档 |
 | 云端任务、服务器任务 | server-pc-task | 在「问绯月」输入「服务器任务：具体事项」。本机按已有 PC 模板提案，确认后在服务器创建；“派给 all”由任意一台支持模板的空闲电脑领取，默认由当前 PC 领取；单发关键词查看可用模板。 |
 | 接取、执行、补传、中断恢复 | task-lifecycle | 现有任务链、设备归属和确认流程 |
 | 动作、依附、设置、显示、连接、重启、退出 | desktop-controls | 对话或菜单中已存在的入口 |

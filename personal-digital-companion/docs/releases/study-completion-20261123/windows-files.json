@@ -1,0 +1,42 @@
+{
+  "formalRoot": "G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion",
+  "formalBuild": "247f3713f3f2",
+  "sourceBase": "03942463b3de924c380ae45a0c29a30bfbbee1c6",
+  "items": [
+    {
+      "path": "desktop/cloud-connection.mjs",
+      "before": "71cacdca5223c5c9468886bf45fbdfd8dcf888bf70bcbe384dcbe172559428ef",
+      "after": "af284a64317f3b1f61ddbe83ce0f8bd0316d937cf6892771d39171b7229ca1ab"
+    },
+    {
+      "path": "desktop/study-host.mjs",
+      "before": "46fc52459a24bfe0676855bd9b232a3c980147001f2df5e0f9c294c99cc595fd",
+      "after": "30424287899375b742373219ae891bbb481b4e1744d2e14217dd7b3d707e414e"
+    },
+    {
+      "path": "desktop/study-materials.mjs",
+      "before": "054cedfeb8b14a6000811f7e0207d8c59797fd6f65819770efb10e64df4f2efc",
+      "after": "44dd56837d1d485a309cd70d6bc44c3fe50489905a621afe319fd1fbf063d756"
+    },
+    {
+      "path": "desktop/study-relay.mjs",
+      "before": "ce82c19f9c1d110835e0e680cae989cc43b1e38fdbe7d02022ff00586ef520aa",
+      "after": "2a3e42001cbb8049e15f6471e39acc0230d2308f51bd8a50a374a133845a9aef"
+    },
+    {
+      "path": "desktop/study-store.mjs",
+      "before": "686a23260034fffff7ade4a5744cbd8314d0dd335fec5707fcb6d0d8dfce15f0",
+      "after": "ee1f9d95878d4092e16fb3634606df632bfe1b2fc570b36b0296b05828f56fbf"
+    },
+    {
+      "path": "desktop/study-ui.mjs",
+      "before": "4a9b85a50f9380db192b5c01cb33db665d7f1a033dcdbaa93f31835270e0d70f",
+      "after": "f8c4345e62a153e1cb87b1b647566b72f231aa14f7f9ad9b95070de8442f2f4b"
+    },
+    {
+      "path": "output/desktop-bundle/study-ui.mjs",
+      "before": "4a9b85a50f9380db192b5c01cb33db665d7f1a033dcdbaa93f31835270e0d70f",
+      "after": "f8c4345e62a153e1cb87b1b647566b72f231aa14f7f9ad9b95070de8442f2f4b"
+    }
+  ]
+}

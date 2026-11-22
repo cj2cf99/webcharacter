@@ -19,6 +19,46 @@ import world_tour
 
 
 class SkillTests(unittest.TestCase):
+    def test_news_editorial_social_query_window_and_shared_budget(self):
+        import sqlite3
+        from contextlib import closing
+        import news_social
+        root = route_skill("newsEditorial")
+        self.assertEqual(root["skill"], "news-editorial")
+        self.assertEqual(route_skill("news", "menu")["version"], root["version"])
+        now = datetime(2026, 11, 23, 4, tzinfo=timezone.utc)
+        end = int(now.timestamp()*1000)
+        sleep = timedelta(hours=72)
+        post_id = lambda dt: str((int(dt.timestamp()*1000)-1288834974657)<<22)
+        older = post_id(now-sleep-timedelta(seconds=1))
+        fresh = post_id(now-sleep)
+        payloads = []
+        def send(key, path, payload=None):
+            if path == "/usage":
+                return {"account":{"current_plan":"Researcher","plan_limit":1000,"plan_usage":0,"paygo_limit":None,"paygo_usage":0}}
+            payloads.append(payload)
+            if payload["include_domains"] == ["x.com"]:
+                rows = [{"url":f"https://x.com/news/status/{id}", "content":"市场下跌"} for id in (fresh, older, fresh)]
+            else:
+                rows = [{"url":"https://www.reddit.com/r/stocks/comments/abc/a-title", "content":"市场走势"},
+                        {"url":"https://www.reddit.com/r/stocks/", "content":"版面"}]
+            return {"results": rows, "usage":{"credits":1}}
+        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"TAVILY_API_KEY":"test-only"}):
+            directory=Path(tmp)
+            settings=dict(send=send, directory=directory, now=now)
+            x=news_social.search("X",["AI markets"],end,**settings)
+            reddit=news_social.search("Reddit",["AI markets"],end,**settings)
+            self.assertEqual([row["at"] for row in x["posts"]],[end-72*3600000])
+            self.assertEqual([row["at"] for row in reddit["posts"]],[None])
+            self.assertTrue(all(p["max_results"] == 20 and p["start_date"] == "2026-11-20" for p in payloads))
+            self.assertEqual(x["credits"]+reddit["credits"],2)
+            with closing(sqlite3.connect(directory/"tavily-budget.sqlite3")) as db, db:
+                self.assertEqual(db.execute("SELECT used FROM search_allocation").fetchone()[0],2)
+                db.execute("UPDATE search_allocation SET used=700")
+            stopped=news_social.search("Reddit",["AI markets"],end,**settings)
+            self.assertEqual(stopped["state"],"unavailable")
+            self.assertEqual(len(payloads),2)
+
     def test_world_tour_uses_distinct_visual_references(self):
         import public_images
         settings=public_images.config()

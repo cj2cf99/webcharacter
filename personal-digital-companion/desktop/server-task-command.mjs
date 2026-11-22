@@ -9,6 +9,7 @@ import {isSubmissionId} from '../agent/tasks/submissions.mjs';
 import {encodeJson} from '../agent/execution/json.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
 import {PC_IMAGE_GENERATE} from '../agent/tasks/pc-types.mjs';
+import {chatTotalMs} from './chat-budget.mjs';
 
 const resumeHint='输入“服务器任务：恢复上次提交”可按原提交号核对。';
 
@@ -182,7 +183,22 @@ export function createServerTaskCommand({profile,tasks,localModel,interactionWor
           return {type:template.type,params,target_device_id:target};
         }
         const instruction=[skill.content,skill.localAi?.work].filter(Boolean).join('\n');
-        if(work)return work({purpose:'服务器任务参数',context,instruction,schema,signal,onProgress:progress,redraft:skill.workRedrafts,
+        const start=performance.now();
+        if(localModel?.groupedWork){
+          const limit=AbortSignal.timeout(chatTotalMs);
+          const wait=signal?AbortSignal.any([signal,limit]):limit;
+          try{
+            const draft=await localModel.groupedWork(JSON.stringify(context),{instruction,schema,signal:wait,priority:3,
+              onProgress:progress,skill:{name:skill.skill,version:skill.version}});
+            const checked=normalize(draft);
+            if(checked)return checked;
+          }catch(error){
+            signal?.throwIfAborted();
+            if(!work||error.code==='AI_REVIEW_REJECTED')throw error;
+            progress('本机分档校对未得到可用方案，正在核对候补…');
+          }
+        }
+        if(work)return work({purpose:'服务器任务参数',context,instruction,schema,signal,onProgress:progress,redraft:skill.workRedrafts,start,
           skill:{name:skill.skill,version:skill.version},normalize(raw){const value=normalize(raw);return value&&{value};},
           async cloud(activeSignal,feedback){
             const messages=[...(feedback?[{role:'user',content:'上轮复审反馈：'+feedback.slice(0,600)}]:[]),

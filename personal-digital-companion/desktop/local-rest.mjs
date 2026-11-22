@@ -5,12 +5,16 @@ import {join} from 'node:path';
 import {batchId,inputFields} from './garden-registration.mjs';
 import {gardenRepo,loadPackage} from './garden-backend.mjs';
 import {firstUse} from './garden-guide.mjs';
+import {readSkillDirectory} from './interaction-skills.mjs';
+import {normalizeDeadline} from '../agent/tasks/deadline.mjs';
 
 export const host='127.0.0.1',port=8765;
 const tokenFile='local-api.token';
 const routes=[
   {method:'GET',path:'/',auth:false,summary:'从监听地址发现本实例的调用说明',response:'与 /infoguide 相同'},
   {method:'GET',path:'/infoguide',auth:false,summary:'读取本实例的调用说明',response:'此说明'},
+  {method:'GET',path:'/v1/skills',summary:'从绯月总纲读取技能、可做的事、调用方式、示例及当前版本',
+    response:'{ router, skills: [{id, name, does, call, examples, version, source, workflow?}], warnings }'},
   {method:'GET',path:'/v1/batches',summary:'按新到旧查看批次，limit 为 1–100，before 为上页末项 cursor；unacknowledged=1 时只列已完成或暂停、尚未取回回执的批次',response:'{ batches: Batch[] }'},
   {method:'GET',path:'/v1/batches/:id',summary:'查看一个批次及各步回执；未完成时附 queue',response:'Batch'},
   {method:'POST',path:'/v1/batches',summary:'提交已经用户逐项确认、已提交 Git 的花园登记包；本地待处理有名额即入队，不必等绯月空闲，满员返回 429',
@@ -20,10 +24,15 @@ const routes=[
     body:{reviewHash:'原确认摘要'},response:'Batch'},
   {method:'POST',path:'/v1/batches/:id/revise',summary:'基线变化后，以原批次已核对步骤和重新确认的剩余清单续办。在途步骤须按新确认的当前修订核实终值及归属。制单请求的 continues 填旧 reviewHash，Git 包目录使用原 id',
     body:{id:'原批次编号',commit:'新提交号',reviewHash:'新确认摘要',userConfirmed:true},response:'Batch'},
+  {method:'POST',path:'/v1/reminders',summary:'将已获用户授权的一次性提醒放入同一正式工作队列。新建 202，原编号与相同内容重交 200，内容冲突 409，满员 429。',
+    body:{id:'稳定编号，同花园批次格式',title:'复盘 PE Band 同步',content:'可选，保留提醒正文原文',deadline:'2026-12-07T09:30+09:00'},response:'{ existing: boolean, reminder: Reminder }'},
+  {method:'GET',path:'/v1/reminders/:id',summary:'按原编号查询提醒登记。done 表示取得既有提醒记录编号，找不到返回 404。任何状态都不返回正文。',response:'Reminder'},
+  {method:'POST',path:'/v1/reminders/:id/retry',summary:'恢复 blocked 提醒并核对原登记，沿用原编号和正文，无需提交正文。',response:'Reminder'},
 ];
 export function infoGuide(address,repo=gardenRepo){
-  return {version:4,baseURL:address,firstUse:firstUse(repo),auth:'除本说明外均使用 Authorization: Bearer <token>；从已独立核实的 instance.profile 下读取 '+tokenFile+'，勿打印或提交令牌。',
+  return {version:6,baseURL:address,firstUse:firstUse(repo),auth:'除本说明外均使用 Authorization: Bearer <token>；从已独立核实的 instance.profile 下读取 '+tokenFile+'，勿打印或提交令牌。',
     contentType:'application/json',routes:routes.map(r=>({auth:true,...r})),
+    skillDirectory:{method:'GET',path:'/v1/skills',auth:true,usage:'技能描述和调用示例来自总纲。workflow 的 entry、steps、exit 表示当前对话转录流程。按每项 call 说明通过相应入口调用。'},
     prepare:'依次执行 firstUse.commands 中的 sync、inspect、prepare，使用对应 cwd 与 args。制单只在调用侧生成 registration.json、逐步 SQL 和 reviewHash。先向用户展示归属、前后值、版本、实际结果和无需更新项，取得明确确认；内容改变须重新展示。',
     package:'将确认的 registration.json 和 step-001.sql 等原样放入主项目 database/changes/<id>/，先提交 Git。实际发布结果明确后，一批只 POST 一次。桌宠更新交给完成受控重启并验收后的实例。',
     prepareInput:{id:'稳定的发布或批次编号，小写字母、数字、下划线或短横线，最多 80 位',title:'批次名称',kind:'garden | desktop-update',
@@ -39,6 +48,9 @@ export function infoGuide(address,repo=gardenRepo){
     resourceFields:inputFields,fieldNotes:'时间使用带时区的 ISO 8601；外键使用已核对的实际编号。land 的 id 是待落地种子编号。deploy.items 每项包含 flower_id 和 note，版本由既有花园模型计算，先展示给用户。续办在制单请求中附 continues（原摘要）。',
     batch:{id:'稳定批次编号',title:'名称',reviewHash:'确认摘要',commit:'审核包提交',state:['queued','running','verifying','archiving','blocked','done'],steps:'有序 [{ label, state: pending|checking|applying|verified, at?, revision?, commit? }]。checking 表示正在核对基线，写入尚未发送。',created:'UTC ISO',finished:'整批回读确认 UTC ISO 或 null',error:'暂停原因或 null',acknowledged:'调用方取回回执的 UTC ISO 或 null',
       queue:'仅未完成批次：{ position: 1 起，1 为正在执行或下一个, used: 已占名额, limit: 20, running: 当前执行中的正式工作标题或 null }'},
+    reminder:{id:'调用方生成并保存的稳定编号',title:'标题',deadline:'东京时间 YYYY-MM-DDTHH:mm+09:00',state:['queued','running','blocked','done'],
+      recordId:'done 时为既有提醒记录编号，否则为 null',error:'暂停原因或 null',created:'UTC ISO',finished:'取得登记回执的 UTC ISO 或 null',
+      retry:'请求结果未知时先 GET 原编号。404 才按原内容重交。blocked 可调用原编号的 retry，云端回执不明时核对原登记。正文只用于登记，完成后清除本地队列副本。'},
     retry:'202 代表已持久入队，200 为查询、重复提交或恢复回执。超时先按 id 查询。blocked 保留现场；基线变化先查实际状态，只对剩余变更重新制单确认。done 表示最终回读一致，复盘已写入。错误体 {error}；400 参数，401 鉴权，403 来源，404 未找到，409 清单或状态冲突，413 过大，415 正文格式，429 本地待处理已满（稍后按同一编号重交）。',
   };
 }
@@ -58,6 +70,16 @@ async function bodyOf(req){
   try{const v=JSON.parse(Buffer.concat(parts));if(v&&typeof v==='object'&&!Array.isArray(v))return v;}catch{}
   fail(400,'JSON 请求体无效');
 }
+function reminderInput(input){
+  const {id,title,content='',deadline}=input;
+  if(Object.keys(input).some(key=>!['id','title','content','deadline'].includes(key))||typeof id!=='string'||!batchId.test(id)
+      ||typeof title!=='string'||!title.trim()||title.trim().length>300||typeof content!=='string'
+      ||typeof deadline!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\+09:00$/.test(deadline)){
+    fail(400,'请提供有效编号、标题、可选正文和带 +09:00 的东京日期及时分');
+  }
+  try{normalizeDeadline(deadline);}catch{fail(400,'提醒日期或时分无效');}
+  return {id,title:title.trim(),content,deadline};
+}
 export async function openLocalREST({profile,pool,listenPort=port,repo=gardenRepo,load=input=>loadPackage(input,repo)}){
   const expected=credential(profile);
   const instance={pid:process.pid,started:new Date().toISOString(),profile};
@@ -73,7 +95,21 @@ export async function openLocalREST({profile,pool,listenPort=port,repo=gardenRep
       if(route.auth===false)return reply(200,{...infoGuide('http://'+authority,repo),instance});
       const actual=Buffer.from(req.headers.authorization??'');
       if(actual.length!==expected.length||!timingSafeEqual(actual,expected))fail(401,'需要本机令牌');
+      if(route.path==='/v1/skills'){
+        const directory=await readSkillDirectory(profile).catch(()=>null);
+        if(!directory)fail(503,'技能总纲暂不可读取');
+        return reply(200,directory);
+      }
       const id=parts[3];
+      if(parts[2]==='reminders'){
+        if(!id){
+          const result=pool.submitReminder(reminderInput(await bodyOf(req)));
+          return reply(result.existing?200:202,result);
+        }
+        const reminder=pool.getReminder(id);
+        if(!reminder)fail(404,'提醒登记不存在');
+        return reply(200,req.method==='GET'?pool.withQueue(reminder):pool.retryReminder(id));
+      }
       if(req.method==='GET'){
         if(id){const batch=pool.get(id);if(!batch)fail(404,'批次不存在');return reply(200,pool.withQueue(batch));}
         if(url.searchParams.get('unacknowledged')==='1')return reply(200,{batches:pool.unacknowledged()});

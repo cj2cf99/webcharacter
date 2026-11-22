@@ -1,0 +1,43 @@
+{
+  "sourceBase": "90f672b73e02894122955289f7837578edcb8cea",
+  "formalGit": "39fd098e40ebf7c2c82dd5a6f9944ae98055566e",
+  "installedBase": "b8cc72a294b1",
+  "restVersion": 5,
+  "items": [
+    {
+      "path": "desktop/ai-request-queue.mjs",
+      "scope": "whole-file",
+      "before": "a6caba9d0c8659d1c7524dc8927887fb5970a13c5851869ec436ceeb9da983fb",
+      "after": "08baf9816774bed01963215099c76d236bb652b1481d4f31cbfa9ea6bc8763e1",
+      "source": "08baf9816774bed01963215099c76d236bb652b1481d4f31cbfa9ea6bc8763e1"
+    },
+    {
+      "path": "desktop/ai-workflow-model.mjs",
+      "scope": "whole-file",
+      "before": "be977274653368767a5c8bae2e3a002a3bbd3a6fd19bb1d963d933614fa32e7d",
+      "after": "0bd7b654f409b8fc6a8c9d058554fe836827657e70c931654519b1044b6c3a41",
+      "source": "0bd7b654f409b8fc6a8c9d058554fe836827657e70c931654519b1044b6c3a41"
+    },
+    {
+      "path": "desktop/local-model.mjs",
+      "scope": "whole-file",
+      "before": "d467e24061c030fb1050fd1f45d5fb03e0b6c638d718574fd47c514e86f51f04",
+      "after": "55a16166f8a881c627484ddd1a293ae48223e5da4ac610dec81581439a1ea586",
+      "source": "55a16166f8a881c627484ddd1a293ae48223e5da4ac610dec81581439a1ea586"
+    },
+    {
+      "path": "desktop/personality-diary.mjs",
+      "scope": "review-and-reviewMaterials",
+      "before": "a79d74f05d9b5d9f8704f45cfcc87add432fbefad1242a960673d8f174ba7cda",
+      "after": "6774d2e41e53323eb7ae189816d4150fb48d295139e536d7d36029e19349274d",
+      "source": "5bb0306f4313c746baa5380e176b67e1394004a91156ecf173af276b59bd4b96"
+    },
+    {
+      "path": "desktop/task-traffic-log.mjs",
+      "scope": "whole-file",
+      "before": "6ba687345c23bdb7509c53a48bf7d088d3660abd7b2c811ab804f7ef8eb06f5b",
+      "after": "d0c19e06d2cfb61771e5ad7f3104085a0e53bfc36031f185b3512a1e5a8a5270",
+      "source": "036bd014b7cce6235144a944fa6303029fd17b3da9511dbd121c5b427b1fa333"
+    }
+  ]
+}

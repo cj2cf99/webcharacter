@@ -2,6 +2,7 @@ const {contextBridge,ipcRenderer}=require('electron');
 contextBridge.exposeInMainWorld('conversations',{
   read:(day,view,cursor)=>ipcRenderer.invoke('conversation:read',day,view,cursor),
   resumeAudit:id=>ipcRenderer.invoke('conversation:resume-audit',id),
+  questionCitation:id=>ipcRenderer.invoke('conversation:question-citation',id),
   decide:input=>ipcRenderer.invoke('conversation:reminder-decision',input),
   reviewed:token=>ipcRenderer.send('conversation:reviewed',token),
   onPending:callback=>ipcRenderer.on('conversation:pending-changed',()=>callback()),
@@ -14,4 +15,12 @@ contextBridge.exposeInMainWorld('conversations',{
   reportFullscreen:enable=>ipcRenderer.invoke('conversation:report-fullscreen',enable),
   onTasks:callback=>ipcRenderer.on('conversation:tasks-changed',()=>callback()),
   onSelect:callback=>ipcRenderer.on('conversation:select',()=>callback()),
+  thread:id=>ipcRenderer.invoke('conversation:thread-detail',id),
+  openThread:id=>ipcRenderer.invoke('conversation:thread-open',id),
+  newThread:()=>ipcRenderer.invoke('conversation:thread-new'),
+  note:(id,input)=>ipcRenderer.invoke('conversation:thread-note',id,input),
+  retryThread:id=>ipcRenderer.invoke('conversation:thread-retry',id),
+  threadDraft:(id,job)=>ipcRenderer.invoke('conversation:thread-draft',id,job),
+  onThreads:callback=>ipcRenderer.on('conversation:threads-changed',(_event,id)=>callback(id)),
+  aiStep:id=>ipcRenderer.invoke('conversation:ai-step',id),
 });

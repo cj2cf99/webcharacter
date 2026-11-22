@@ -63,12 +63,16 @@ export function attachNewsPanel(electron,{root,bundle,checks,model,compile,readI
       contextWork?.abort();
       const {id,topic,at,title,latest,timeKind,nodes,reports,paragraphs}=event;
       const context=contexts.get(id);
+      const recent=nodes.at(-1);
       return {id,topic,at,title,latest,timeKind,paragraphs:context?[context,...paragraphs]:paragraphs,
-        hasImage:Boolean(imageReport(event)),canEnrich:Boolean(compile&&!context&&(nodes.at(-1).evidence.length<50)),
+        coverageFrom:reports.at(-1).publishedAt,coverageTo:reports[0].publishedAt,
+        hasImage:Boolean(imageReport(event)),canEnrich:Boolean(compile&&!contexts.has(id)&&
+          (recent.evidence.length<50 || (recent.reports.length>1&&recent.excerpts.join('').length<80))),
         nodes:nodes.map(node=>({at:node.at,timeKind:node.timeKind,title:node.title,evidence:node.evidence,
           reports:node.reports.map(publicReport)})),
         reports:reports.map(({url,title,source,publishedAt})=>({url,title,source,publishedAt}))};
     },
+    wind(event){return checks.newsEditorialHistory?.(event.id)??[];},
     async context(event){
       if(!compile)return '';
       if(contexts.has(event.id))return contexts.get(event.id);
@@ -77,7 +81,11 @@ export function attachNewsPanel(electron,{root,bundle,checks,model,compile,readI
       const signal=AbortSignal.any([controller.signal,contextWork.signal]);
       const value=await compile(event,signal);
       signal.throwIfAborted();
-      if(value)contexts.set(event.id,value);
+      if (!value || event.paragraphs.some(paragraph=>paragraph.includes(value))) {
+        contexts.set(event.id,'');
+        return '';
+      }
+      contexts.set(event.id,value);
       return value;
     },
     async translate(event,url,field){
@@ -92,8 +100,8 @@ export function attachNewsPanel(electron,{root,bundle,checks,model,compile,readI
       return value;
     },
     source(event,reportUrl){
-      const row=reportFor(event,reportUrl);
-      const url=newsSourceUrl(row.url);
+      const isEditorial=checks.newsEditorialHistory?.(event.id).some(period=>period.refs.some(row=>row.url===reportUrl));
+      const url=newsSourceUrl(isEditorial?reportUrl:reportFor(event,reportUrl).url);
       if(url)return electron.shell.openExternal(url.href);
       throw Error('来源地址无效');
     }

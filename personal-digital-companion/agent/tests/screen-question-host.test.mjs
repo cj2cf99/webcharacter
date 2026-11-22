@@ -15,6 +15,24 @@ import {attachmentRegistration,menuGuidance,validatePreview} from '../../desktop
 import {attachScreenQuestion,questionBounds} from '../../desktop/screen-question-host.mjs';
 import {conversationRoute} from '../../desktop/conversation-routing.mjs';
 
+test('仅有效提交问答打断自主任务，开窗、空输入和阅读缓存新闻不打断',async t=>{
+  const f=fixture();
+  let interrupts=0,news=0;
+  const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:'unused',
+    onForeground:()=>{interrupts++;},openNews:()=>{news++;},
+    localModel:{async analyze(){return {kind:'chat',reply:'收到问题'};}}});
+  t.after(()=>host.close());
+  await host.open();
+  const ask=(text,mode)=>f.handlers.get('screen-qa:ask')(f.event(host.panel),{text,mode});
+  assert.equal(interrupts,0);
+  assert.equal((await ask(' ')).state,'error');
+  assert.equal((await ask('打开新闻简报')).state,'answer');
+  assert.equal(news,1);
+  assert.equal(interrupts,0);
+  assert.equal((await ask('请解释这句话','direct')).state,'answer');
+  assert.equal(interrupts,1);
+});
+
 test('直连只走本地文字对话，传递同模式上一轮，退出后恢复自动识别',async t=>{
   const f=fixture(),calls=[];
   const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:'unused',

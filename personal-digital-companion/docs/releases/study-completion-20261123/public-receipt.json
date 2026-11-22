@@ -1,0 +1,22 @@
+{
+  "gateway": {
+    "version": "496a10e4-6b8d-44ce-b65f-3f3af17e5341",
+    "previous": "c56920a9-8f20-4a9b-b781-36eb854c31ff",
+    "at": "2026-11-22T20:05:42.866474Z",
+    "bindings": 16,
+    "digest": "55c455f6965402b93470e2316a0cb5580cf7d9f4646c6f8b72b8c01e6c017147"
+  },
+  "desktop": {
+    "installedAt": "2026-11-23T05:06:19.6332895+09:00",
+    "version": "d035d8bc77b2",
+    "files": 7,
+    "manifest": "d035d8bc77b21c77e5b560cddb2f66ca6ed068ab51c2664d5be4454c2a5473b9",
+    "oldPid": 25224,
+    "newPid": 9756,
+    "startedJst": "2026-11-23T05:06:18.47+09:00"
+  },
+  "installedSmoke": "passed",
+  "access": "待用户截图确认",
+  "garden": "本次暂缓",
+  "git": "仅本地提交"
+}

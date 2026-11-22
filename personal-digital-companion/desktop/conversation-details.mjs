@@ -5,10 +5,12 @@ import {tokyoDay} from './conversation-history.mjs';
 import {createPanelWindow} from './panel-window.mjs';
 import {readTaskReviews} from './personality-diary.mjs';
 
-export function attachConversationDetails(electron,{root,profile,bundle,history,memory,readTasks,readTraffic,checks,edits,auditPending=()=>[],resumeAudit,visible,onReview}) {
+export function attachConversationDetails(electron,{root,profile,bundle,history,memory,readTasks,readTraffic,readAiStep,checks,edits,auditPending=()=>[],readQuestionCitation,resumeAudit,visible,onReview,threads}) {
   const {ipcMain,shell}=electron;
   let initialView='chat';
-  let panel=null, selection=null, shownSources=new Set(), loading=null;
+  let panel=null, selection=null, selectedThread=null, shownSources=new Set(), loading=null;
+  let shownThreads=new Set(),threadRead=0;
+  let shownAiSteps=new Set();
   let reportDay='',shownTasks=new Set(),activeReport=null,imageFullscreen=false;
   const entry=resolve(bundle,'conversation.html');
   const trusted = event => panel && !panel.isDestroyed() && event.sender===panel.webContents && event.senderFrame===panel.webContents.mainFrame;
@@ -16,14 +18,43 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
     if (!trusted(event)) throw Error('仅对话记录窗口可读');
     const selected=selection;
     day=day??(selected?tokyoDay(selected.at):tokyoDay(Date.now()));
+    if(threads&&view==='chat'){
+      const request=++threadRead;
+      const category=cursor?.category??(selectedThread?'history':'questions');
+      if(!cursor&&selectedThread)day=tokyoDay(threads.store.get(selectedThread)?.latest??Date.now());
+      threads.questions(category==='history'?day:undefined);
+      const result=threads.store.list(category,day,cursor?.page);
+      const id=cursor?.target??(!cursor?selectedThread:null);
+      const target=id&&threads.store.get(id);
+      let legacy=[];
+      if(category==='history'){
+        legacy=(await history.read(day)).filter(turn=>!turn.threadId||!threads.store.get(turn.threadId));
+        if(request===threadRead){
+          shownSources=new Set(legacy.flatMap(turn=>(turn.sources??[]).map(source=>source.url)));
+          reportDay=day;shownTasks=new Set(legacy.filter(turn=>turn.report?.job===turn.id).map(turn=>turn.id));
+        }
+      }
+      if(request===threadRead){
+        shownThreads=new Set(result.rows.map(line=>line.id));
+        if(target)shownThreads.add(target.id);
+      }
+      return {day,view,category,...result,legacy,target:target?.id,
+        special:category==='questions'?auditPending().filter(item=>item.privateChat):[]};
+    }
     if(view==='checks')return {day,view,...checks.read(day,cursor)};
     if(view==='notices')return {day,view,...checks.notices(cursor?.filter,cursor?.page)};
     if(view==='log'){
-      try{return {day,view,dated:Boolean(memory),...await readTraffic(cursor,day)};}
+      try{
+        const page=await readTraffic(cursor,day);
+        shownAiSteps=new Set(page.lines.flatMap(line=>{
+          try{const id=JSON.parse(line).ai_step_id;return id?[id]:[];}catch{return [];}
+        }));
+        return {day,view,dated:Boolean(memory),...page};
+      }
       catch{return {day,view,lines:[],next:null,warning:'日志已轮转或暂时无法读取，请刷新日志。'};}
     }
     if(view==='pending'){
-      return {day,view,choices:[],entries:[],...await edits?.view(),questions:auditPending()};
+      return {day,view,choices:[],entries:[],...await edits?.view(),questions:(threads?[]:auditPending(true))};
     }
     if(view==='tasks'){
       if(!readTasks)throw Error('任务记录未连接');
@@ -44,9 +75,36 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
     reportDay=day;shownTasks=new Set(turns.filter(t=>t.report?.job===t.id).map(t=>t.id));
     return {day,view:'chat',turns,selectedId:selected?.id,warning};
   });
+  const threadHandlers={
+    'thread-detail':id=>{
+      const line=threads.store.detail(id);
+      for(const source of [line?.source,...(line?.messages.flatMap(message=>message.sources??[])??[])])
+        if(source?.url)shownSources.add(source.url);
+      return line&&{...line,organizationId:threads.store.organizationId(id)};
+    },
+    'thread-open':id=>threads.open(id),
+    'thread-note':(id,input)=>threads.note(id,input),
+    'thread-retry':id=>{void threads.retry(id);},
+    'thread-new':()=>threads.newLine(),
+    'thread-draft':(id,job)=>{
+      if(threads.store.organizationId(id)===job||threads.store.detail(id)?.messages.some(message=>message.transcriptId===job))return threads.openTranscript?.(job);
+    },
+  };
+  ipcMain.handle('conversation:ai-step',(event,id)=>{
+    if(!trusted(event)||!shownAiSteps.has(id))throw Error('请从任务日志打开这次调用');
+    return readAiStep?.(id);
+  });
+  for(const [key,handler] of Object.entries(threadHandlers))ipcMain.handle('conversation:'+key,(event,id,input)=>{
+    if(!trusted(event)||!threads||key!=='thread-new'&&!shownThreads.has(id))throw Error('请选择当前页的对话');
+    return handler(id,input);
+  });
   ipcMain.handle('conversation:resume-audit',(event,id)=>{
     if(!trusted(event)||!id||!auditPending().some(n=>n.id===id))throw Error('这条质问已经结束。');
     return resumeAudit(id);
+  });
+  ipcMain.handle('conversation:question-citation',(event,id)=>{
+    if(!trusted(event)||typeof id!=='string')throw Error('仅待确认窗口可查看悬念引用。');
+    return readQuestionCitation?.(id);
   });
   ipcMain.handle('conversation:report',async(event,day,id)=>{
     if(!trusted(event)||day!==reportDay||!shownTasks.has(id))throw Error('请选择任务复盘中的记录');
@@ -96,9 +154,10 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
       return text;
     }catch(error){return error.message;}
   });
-  async function open(turn,view='chat') {
+  async function open(turn,view='chat',threadId=null) {
     initialView=view;
     selection=turn??null;
+    selectedThread=threadId;
     const opening=!panel || panel.isDestroyed();
     if (opening) {
       const created = createPanelWindow(electron,{width:560,height:540,minWidth:330,minHeight:300,show:false,autoHideMenuBar:true,
@@ -106,7 +165,7 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
       panel=created;
       created.webContents.setWindowOpenHandler(()=>({action:'deny'}));
       created.webContents.on('will-navigate',(event,url)=>{if(url!==pathToFileURL(entry).href)event.preventDefault();});
-      created.on('closed',()=>{if(panel===created){panel=null;selection=null;shownSources.clear();shownTasks.clear();activeReport=null;imageFullscreen=false;}});
+      created.on('closed',()=>{if(panel===created){panel=null;selection=null;selectedThread=null;shownThreads.clear();shownSources.clear();shownTasks.clear();shownAiSteps.clear();activeReport=null;imageFullscreen=false;threadRead++;}});
       loading=created.loadFile(entry).catch(error=>{if(!created.isDestroyed())created.destroy();throw error;});
     }
     const current=panel;
@@ -122,7 +181,9 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
   }
   return {open,get panel(){return panel;},close(){
     ipcMain.removeHandler('conversation:read-notices');
-    for(const name of ['report','report-image','report-fullscreen','resume-audit'])ipcMain.removeHandler('conversation:'+name);
+    ipcMain.removeHandler('conversation:ai-step');
+    for(const name of ['report','report-image','report-fullscreen','resume-audit','question-citation'])ipcMain.removeHandler('conversation:'+name);
+    for(const name of Object.keys(threadHandlers))ipcMain.removeHandler('conversation:'+name);
     ipcMain.removeHandler('conversation:read');ipcMain.removeHandler('conversation:source');ipcMain.removeHandler('conversation:reminder-decision');ipcMain.removeHandler('conversation:image');
     ipcMain.removeListener('conversation:reviewed',reviewed);
     if(panel&&!panel.isDestroyed())panel.destroy();
