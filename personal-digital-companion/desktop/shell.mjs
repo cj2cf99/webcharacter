@@ -295,7 +295,7 @@ export async function startDesktop(electron,options={}){
     }
   }
   const compileNews=createNewsEditor(localModel);
-  const checks=createReminderChecks({profile,compileNews,log:tasks.traffic?.write,check:signal=>checkDueItems(tasks.weatherRequest,signal,day=>{
+  const checks=createReminderChecks({profile,compileNews,newsEditorial:{model:localModel},log:tasks.traffic?.write,check:signal=>checkDueItems(tasks.weatherRequest,signal,day=>{
     if(checks.takeEveningPraise(day))contextualAction('praise-idle');
   }),
     lastRun:id=>diary?.last(id),inspectRecent:options.benchmark?undefined:tasks.traffic?.inspectRecent,

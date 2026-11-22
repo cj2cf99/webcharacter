@@ -22,7 +22,7 @@ export async function checkDueItems(request,signal,onStudyComplete){
 
 // 复盘窗口多数只看最新几条：检查记录和提醒每页 8 条，由新到旧。
 const PAGE=8;
-export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,log,inspectRecent,notifyNews,compileNews,onIdleResult,changed=()=>{},now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout}){
+export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,log,inspectRecent,notifyNews,compileNews,newsEditorial,onIdleResult,changed=()=>{},now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout}){
   const db=new DatabaseSync(join(profile,'reminder-checks.sqlite'));
   db.exec(`CREATE TABLE IF NOT EXISTS checks(
     id INTEGER PRIMARY KEY, day TEXT NOT NULL, at INTEGER NOT NULL, due INTEGER NOT NULL,
@@ -45,7 +45,7 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
   const due=check&&((signal)=>check(AbortSignal.any([signal,AbortSignal.timeout(30_000)])));
   const audit=log&&createAutonomousAudit(db,log,now);
   const newsArchive=join(profile,'news-archive');
-  const news=notifyNews&&createNewsBriefing(db,now,notifyNews,undefined,{archiveDir:newsArchive,compile:compileNews});
+  const news=notifyNews&&createNewsBriefing(db,now,notifyNews,undefined,{archiveDir:newsArchive,compile:compileNews,editorial:newsEditorial});
   const inspection=inspectRecent&&async function(signal){
     const through=now();
     const previous=db.prepare('SELECT through FROM log_inspection WHERE id=1').get()?.through??0;
@@ -63,7 +63,8 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
     }catch(error){db.exec('ROLLBACK');throw error;}
     changed();return detail;
   };
-  const scheduler=createPollScheduler({db,handlers:{due,...handlers,inspection,news:news&&(signal=>news.poll(signal,()=>scheduler.get('news').enabled))},isBusy,changed,now,setTimer,clearTimer,add,audit,onIdleResult,
+  const scheduler=createPollScheduler({db,handlers:{due,...handlers,inspection,news:news&&(signal=>news.poll(signal,()=>scheduler.get('news').enabled)),
+    newsEditorial:news?.editorialStep&&(signal=>scheduler.get('news').enabled?news.editorialStep(signal):'新闻关注已暂停')},isBusy,changed,now,setTimer,clearTimer,add,audit,onIdleResult,
     lastRun:id=>id==='news'?news?.last():lastRun?.(id),weatherLastAt:()=>{const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value).lastCheck;}});
   return {
     start:scheduler.start,enqueue:scheduler.enqueue,polls:scheduler.snapshot,configure:scheduler.configure,
@@ -71,6 +72,7 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
     newsEdition:()=>news?.edition()??{at:null,items:[]},
     newsFeed:()=>news?.feed()??{at:now(),from:now(),pendingArchive:0,items:[]},
     newsEvent:id=>news?.event(id),
+    newsEditorialHistory:id=>news?.editorialHistory(id)??[],
     newsArchive,
     saveNewsChinese:(...args)=>news?.saveChinese(...args),
     get pending(){return scheduler.pending;},

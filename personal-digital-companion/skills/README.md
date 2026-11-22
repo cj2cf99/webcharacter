@@ -19,6 +19,7 @@
 | 普通会话关窗后的登记意向 | [conversation-transcription](conversation-transcription/source/SKILL.md) | 关窗后触发本地转录，完成提醒用户核对，按勾选交给登记链 |
 | 今日任务、已有提醒的查询和修改 | reminder-review | 使用现有列表和整组修改审批 |
 | 联网搜索、三地天气 | public-lookup、weather-lookup | 各自调用已有查询接口 |
+| 七日新闻与社论风向 | [news-editorial](news-editorial/source/SKILL.md) | 共享 AI 队列分段拟标题、复核、提词与归纳。取样分别使用 X 和 Reddit，按同一话题续写并归档 |
 | 云端任务、服务器任务 | server-pc-task | 在「问绯月」输入「服务器任务：具体事项」。本机按已有 PC 模板提案，确认后在服务器创建；“派给 all”由任意一台支持模板的空闲电脑领取，默认由当前 PC 领取；单发关键词查看可用模板。 |
 | 接取、执行、补传、中断恢复 | task-lifecycle | 现有任务链、设备归属和确认流程 |
 | 动作、依附、设置、显示、连接、重启、退出 | desktop-controls | 对话或菜单中已存在的入口 |

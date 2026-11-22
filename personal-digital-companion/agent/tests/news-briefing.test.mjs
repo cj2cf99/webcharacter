@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {briefNews,createNewsBriefing} from '../../desktop/news-briefing.mjs';
 import {conversationRoute} from '../../desktop/conversation-routing.mjs';
-import {arrangeNews,needsChinese} from '../../desktop/news-layout.mjs';
+import {arrangeNews,needsChinese,newsHighlights} from '../../desktop/news-layout.mjs';
 import {newsWindowStart} from '../../desktop/news-history.mjs';
 import {createNewsEditor} from '../../desktop/news-editor.mjs';
 
@@ -25,6 +25,86 @@ test('新闻排版随内容影响调整，跨栏目同一事件排相邻栏',()=
   assert.equal(needsChinese('OpenAI 发布新模型'),false);
   assert.equal(needsChinese('Local rail services resume'),true);
   assert.equal(needsChinese('運行開始','ja'),true);
+});
+
+test('周内热点和其他重点各最多五件，未选事件仍可翻阅且不重复',()=>{
+  const items=Array.from({length:13},(_,i)=>({
+    id:'story'+i, at:100-i, days:i<6?2:1, publishers:i<6?3:1, importance:i===12?5:1
+  }));
+  const {hot,key,rest}=newsHighlights(items);
+  assert.deepEqual(hot.map(row=>row.id),items.slice(0,5).map(row=>row.id));
+  assert.equal(key.length,5);
+  assert.equal(key[0].id,'story12');
+  assert.equal(rest.length,3);
+  assert.equal(new Set([...hot,...key,...rest].map(row=>row.id)).size,13);
+  for(const rows of [[],items.slice(0,2),items.slice(11)]) {
+    const digest=newsHighlights(rows);
+    assert.equal(digest.hot.length+digest.key.length,rows.length);
+  }
+});
+
+test('已收录的转载、跨栏市场评论和隔天进展重新归并，保留原始链接',async()=>{
+  const db=new DatabaseSync(':memory:');
+  const stamp=time=>Date.parse('2026-'+time+':00+09:00');
+  const make=(name,title,time,topic='美国股市',excerpt='')=>({
+    url:'https://example.org/news/'+name,source:name,title,topic,excerpt,publishedAt:stamp(time)
+  });
+  const items=[
+    make('early','美股科技股集体下挫，Nova IPO 首秀波动','11-20T09:00'),
+    make('indices','美国科技股暴跌，英伟达重挫约14%，Nova跌幅8.5%！纳指今年涨幅全部回吐','11-21T12:00'),
+    make('indices-copy','美国科技股暴跌，英伟达重挫约14%，Nova跌幅8.5%！纳指今年涨幅全部回吐','11-22T08:42'),
+    make('market','Nova上市未能止住美股暴跌，11月21日纳指大跌5.28%','11-22T07:52'),
+    make('quote','英伟达股价暴跌14%，市场恐慌情绪蔓延','11-22T08:16'),
+    make('recap','纳指单周暴跌超10%，此前只发生过10次！','11-22T08:39'),
+    make('recap-copy','美股纳指单周暴跌超10%，此前只发生过10次！','11-22T08:51'),
+    make('review','美股大跌，国家才敢救市！','11-22T13:06'),
+    make('world','全球股市暴跌！下周A股还会跌吗？','11-22T14:15','中国股市'),
+    make('ipo','市场热评 | 巨型IPO之后美股大跌，历史现象又一次复现？','11-22T14:50'),
+    make('tech','美股科技股集体跳水，Nova 受关注','11-22T15:52'),
+    make('company','蔚来美股大跌7.9%，股价报2.45美元','11-22T08:04'),
+    make('forecast','分析师：美股暴跌风险有多大？','11-22T11:00'),
+    make('other-session','11月22日美股盘前暴跌，道指跌3%','11-22T13:20'),
+    make('shoot','美国俄亥俄州发生枪击事件 3死1伤','11-22T14:08','美国社会','警方已封锁事发街区，调查仍在进行。'),
+    make('shoot-copy','美国俄亥俄州发生枪击事件 致3人死亡、1人受伤','11-22T14:08','美国社会','当地医疗机构接收一名伤者，尚未公布后续情况。'),
+    make('other-shoot','美国俄亥俄州发生枪击事件 致2死1伤','11-22T14:12','美国社会')
+  ];
+  let now=stamp('11-23T12:00'), incoming=[], notifications=[];
+  const connect=()=>createNewsBriefing(db,()=>now,rows=>notifications.push(rows),async()=>({items:incoming,failed:[]}));
+  try{
+    connect();
+    db.prepare('DELETE FROM news_history_migration WHERE id=2').run();
+    const save=db.prepare('INSERT INTO news_events(id,at,version,content) VALUES(?,?,1,?)');
+    const index=db.prepare('INSERT INTO news_event_urls VALUES(?,?)');
+    for(const [id,report] of items.entries()){
+      const at=report.publishedAt, key=String(id);
+      save.run(key,at,JSON.stringify({id:key,topic:report.topic,at,nodes:[{at,timeKind:'报道时间',reports:[report]}]}));
+      index.run(report.url,key);
+    }
+    let news=connect();
+    const hot=news.feed().items.find(row=>row.title==='全球股市下挫，美股科技股走低');
+    assert.ok(hot);
+    assert.equal(hot.days,3);
+    const detail=news.event(hot.id);
+    assert.deepEqual(detail.reports.map(row=>row.url).sort(),items.slice(0,11).map(row=>row.url).sort());
+    assert.deepEqual(detail.nodes.map(node=>node.at),[items[0].publishedAt,items[1].publishedAt]);
+    assert.match(detail.paragraphs.join(' '),/英伟达跌约?14%/u);
+    assert.match(detail.paragraphs.join(' '),/纳指跌5\.28%.*IPO.*A 股后续走势/u);
+    assert.doesNotMatch(detail.paragraphs.join(' '),/国家救市|历史现象又一次复现/u);
+    const shooting=news.feed().items.find(row=>row.title.includes('3死1伤'));
+    assert.equal(news.event(shooting.id).reports.length,2);
+    assert.match(news.event(shooting.id).paragraphs.join(' '),/警方.*医疗机构/u);
+    assert.equal(news.feed().items.length,6);
+    assert.equal(db.prepare('SELECT count(*) AS total FROM news_event_urls').get().total,items.length);
+    news=connect();
+    assert.equal(news.event(hot.id).reports.length,11);
+    const late=make('late-copy',items[1].title,'11-23T09:00');
+    now=stamp('11-23T10:00');incoming=[late];await news.poll(new AbortController().signal);
+    assert.equal(news.event(hot.id).reports.length,12);
+    assert.equal(news.event(hot.id).at,detail.at);
+    assert.deepEqual(notifications.at(-1),[]);
+    news.saveChinese(undefined,late.url,'title',late.title,'译文缓存仍找到合并后事件');
+    assert.ok(news.event(hot.id).reports.find(row=>row.url===late.url).chinese);
+  } finally {db.close();}
 });
 
 test('新闻简报跨栏去重、空轮静默，重启可读回',async()=>{

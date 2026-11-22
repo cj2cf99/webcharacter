@@ -1653,3 +1653,38 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 绯月 Windows 记录复审源码提交 `9c3183d8bd206183edfc282f7085b5a0b5e9f9be` 已普通推送至 `origin/codex/workspace-checkpoint-20261120` 并回读确认。来源测试档在隔离 Git 基线上通过 30 项专项及 1 项手记成文回归，三项 Skill 解析为正式随附版本。仅同步本次 Windows 范围，独立 Worker 发布和花园登记继续待办。
 
 同步复核发现一份已有工作流用例重复出现在本次差异，随后清理重复并单独复测新增的手记成文用例。本次补记只更新测试和发布纪要。
+
+## 2026-11-23 JST · Windows 绯月七日新闻与社论候选 cafa85c28ea2
+
+**用户需求与验收。** 按拟真页续编跨天新闻，全部、社会、科技和市场各保留五条热点及五条其他重点的席位。同一事件只有一个主题，标题随最新实质进展更新。满 48 小时无进展移到「暂未更新」，连续 168 小时才撤榜。新闻发展和社媒两条历史随话题归档，来源区可独立滚动。社论按同一近 72 小时窗口，最多三组关键词查 X 和 Reddit，合并摘要、标注原帖与变化，两站合计占用至多 70% 免费额度。验收还要求真实本机模型的标题质量、逐阶段落盘与恢复。完整口径见 REQUIREMENTS.md 的「七日新闻编辑与社论风向」及 docs/reviews/NEWS_EDITORIAL_SKILL_REVIEW_2026-11-23.md。
+
+**目标及基线。** Windows 本机正式绯月，应用根目录 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion。当前实装版本 0279cbf32be3，知识库安装回执为 2026-11-23 04:32:26.808 JST。实测 Electron PID 30888，启动 2026-11-23 04:32:24.194 JST，沿用原应用和 output/desktop-profile，回环 REST v6。安装工作树 Git HEAD 39fd098e40ebf7c2c82dd5a6f9944ae98055566e，已有多次后续实装内容，采用实际文件 SHA-256 作前像。开发来源为 G:/selftool/WebCharacter/personal-digital-companion 工作区、Git HEAD 03942463b3de924c380ae45a0c29a30bfbbee1c6。cafa85c28ea2 取代未安装的 ea7695ce5088、0585430f5e6d 与 20bc621f3af4。预检拦住了重叠文件变动，以知识库后的实装前像重新合入新闻接线，保留情绪、手记和知识库。
+
+**精确比较与范围。** 候选和安装工具位于 G:/selftool/WebCharacter/work/feiyue-news-release-20261123。windows-files.json 的 SHA-256 为 cafa85c28ea21822de9dedb6ab2dc0dc514f4d0e352e4d0ae3eb2dd19b049e75，35 项，20 项替换、15 项新增。用 git diff --no-index before candidate 查看差异，以当前清单路径为准，逐文件核对 before 和 after 哈希。源仓清单为 docs/reviews/FEIYUE_WINDOWS_NEWS_EDITORIAL_cafa85c28ea2.json。
+
+- desktop/news-briefing.mjs、news-history.mjs、news-layout.mjs、news-market.mjs、news-board.mjs 将已有报道按事件续写，持久保存各栏席位和本机归并标记。首轮收拢已收录事件的重复分组，保留各来源原链接；后续持续累计节点。
+- desktop/news-editor.mjs、news-editorial.mjs 通过共享 AI 池分离拟标题、复核、汇总、提词和社媒归纳。只有程序校验和审核通过的标题替换当期标题。流转按话题编号和实质进展保存；已保存的平台回包可复用。
+- desktop/news-panel-host.mjs、news-panel-preload.cjs、news-panel-ui.mjs、news-panel.html、news-editorial.css、news-heatmap.mjs 以及相应五项 output/desktop-bundle 页面资源，提供按报道数占比的热力图、独立话题图、暂未更新折叠区、两条时间流、引用和来源独立滚动。社论历史按需读取。
+- desktop/shell.mjs、reminder-checks.mjs、poll-scheduler.mjs、source-updates.mjs 仅移植本次新闻接线。加入每 10 分钟至多推进一步的编辑轮询，停用新闻关注时暂停。保留其余已装轮询、页面模块和功能。
+- workflows/comfyui/news_social.py、tavily_search.py、search_budget.py 接入共享预算和两路限域查询，按帖子时间截取。有预占但无回执时保存待核对状态。
+- skills/news-editorial 变更为随附 Skill 1.6。skills/feiyue-interaction 的能力目录与发布快照从正式 3.2 增到 3.3，仅登记本次新闻编辑入口。
+
+**数据库、回填和配置。** 首次启动自动新增本机 reminder-checks.sqlite 的 news_boards、news_editorial 两表、缺失的新闻迁移标记 2 和 3，以及编辑轮询条目。既有新闻事件按证据归并，来源索引保留，现有社媒历史无回填。第一次有效社媒请求在既有本机预算库按用量预占能力新增 news-editorial 记账。保留原资料目录、凭据、模型、监听端口和启动方式。其余业务库迁移、Cloudflare Worker 发布、远端业务库写入和服务配置改动均无。花园发布元数据另按确认清单办理，适用备份豁免。
+
+**已执行检查。** 隔离候选从真实安装文件组装，JS 逐文件语法检查通过，随附目录加载总纲 3.3 和新闻技能 1.6。候选里执行 node --test --test-concurrency=1 agent/tests/news-editorial.test.mjs agent/tests/news-briefing.test.mjs，21/21 通过；开发工作区新闻和共用队列回归 35/35 通过，Python 限域日期与共享预算专项通过。未改动的七日新闻页面此前在基于实际安装版的独立 Electron 验证通过主题折叠、热力图、社论历史懒加载、原帖、来源独立滚动。check-migration.mjs 使用正式 SQLite 的只读隔离副本，迁入前 425 个事件、438 个来源索引，迁入后 360 个事件、438 个来源索引，无孤立链接，quick_check 和重入通过。真实本机模型对四类标题及保存的 X、Reddit 回包验证见上述开发复核。本次准备未发起新社媒请求。
+
+**审核重点与未完成项。** 检查同一话题改名时的编号与归档、新闻迁移对旧节点的影响、热力块及图资源按需载入、两站共用账户的额度预占。部分缺少事件线索的笼统标题仍可能留为独立项。Reddit 原帖时间缺证据时显示待核实。正式安装后实机视觉和真实查询计费尚待验证，第三方独立审核未执行。
+
+安装工具的 -Mode Rehearse 已在隔离目录通过 35 项安装、模拟中断回退及完整回退。capture-news-change.mjs 对正式库只读模拟精准范围，当前 67 条会变更的新闻和 75 条直接关联来源索引，两个缺失迁移标记、两个新表和一个新轮询键均已核对。备份脚本语法、逐键复核及合成材料的 Windows DPAPI 加密回读通过。正式安装前会再核对原实例、文件前像和实际影响。
+
+**安装及回退。** 候选目录 install.ps1 先核对完整审核、SHA-256、实例、桌面快捷方式和登录入口，等待在途事务。备份逐个旧文件，通过应用正常退出。新闻库只将模拟计算出的受影响旧行、直接关联索引、必要结构定义和拟新增键的原状态写进 Windows DPAPI 加密局部备份，其他 SQLite 仅做只读完整性检查。本次不启动整库备份。逐项原子替换后，用备份逐键核对写入目标旧值，再从原入口受控启动。后检核对新 PID、同一资料目录、REST v6、未认证 401、正式技能目录 1.6、两张本机表、一次性迁移、编辑间隔、旧轮询和来源索引完整性。安装失败按清单恢复原文件，移除本次新增并重启原入口。正常代码回退保留候选期间产生的新资料，如确需数据回退，先核对现值，再据局部备份恢复实际受影响的目标。正式实装结果、版本、时间、Git 提交与推送回读待实际执行后追加。
+
+**花园及确认。** 按用户规则默认登记。已执行主项目现行结构同步，远端仅导出结构，本机补项 0。只读当前花园修订 157，归属「网页角色组件」#16 →「绯月（桌面精灵）」#61，现值 32.0，历史 32 次，当前批次 feiyue-news-editorial-20261123 没有登记。按当前编号，拟在成功后新增发布 #83 及一条关联 #61 的发布明细 #161，用实际版本、JST 时间和结果，功能版本 32.0 → 32.1。项目、种子、改善、Bug、关系和既有发布无需更新。若实际失败，登记发布中并记失败原因，保留成功版本。现行花园模型以发布总次数作为主版本，成功发布会写成 33.0，无法执行新步长。待模型支持及同批次最终清单确认后再提交。候选实装与重启待用户确认。
+
+### 七日新闻候选 cafa85c28ea2 正式安装回执
+
+用户明确回复「安装」。2026-11-23 04:36:26.675 JST 完成 35 项文件安装及后检，正式 PID 由 30888 变更为 14308，新进程于 04:36:25.386 JST 由同一应用目录启动，沿用原快捷方式、登录入口及资料目录。完整候选 SHA-256 为 cafa85c28ea21822de9dedb6ab2dc0dc514f4d0e352e4d0ae3eb2dd19b049e75，逐项安装文件与清单一致。REST v6 回读正式新闻 Skill 1.6、记录修订 1.6、对话转录 1.7、情绪复盘 2.3。未认证技能目录返回 401。
+
+正常退出后，按局部备份规则以 Windows DPAPI 加密保存 67 条受影响新闻记录和 75 条直接关联来源索引，以及迁移标记、选定目标表定义和新增轮询键的原状态。加密备份已回读，启动前逐键核对了目标旧值。备份与旧代码位于 work/feiyue-news-release-20261123/install-backup-20261123-043613，安装回执为其上级 install-receipt.json。七个本机资料库完整性检查通过，未启动整库备份。新闻迁移完成，来源索引 438 条全部保留，两张新表已建立，新闻编辑轮询启用，间隔 10 分钟。原有轮询配置回读一致。正式新闻窗口目视体验和下一次实际社媒计费待日常使用确认。
+
+花园批次 feiyue-news-editorial-20261123 保留待登记。现行版本算法仍与 0.1 新规则不一致，本次花园未提交写入。待算法支持后重新核对实际旧值和记录编号，展示最终清单后单批提交。

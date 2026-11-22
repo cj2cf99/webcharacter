@@ -6,15 +6,30 @@ export function cleanNewsTitle(title){
     .replace(/\s*(?:[|｜]\s*)?(?:#[^#\r\n]+#\s*)+$/u,'').trim()||title;
 }
 const signals=[
-  /紧急状态|紧急疏散|重大事故|遇难|海啸|熔断|evacuation order|tsunami warning|非常事態|避難(?:指示|命令)/i,
-  /全国|生效|实施|暴跌|重挫|暴涨|state of emergency|record plunge|急落/i,
+  /紧急状态|紧急疏散|重大事故|遇难|海啸|熔断|\d+死|evacuation order|tsunami warning|非常事態|避難(?:指示|命令)/i,
+  /全国|生效|实施|全球股市|暴跌|重挫|暴涨|state of emergency|record plunge|急落/i,
   /开源|首发|量产|部署|新高|地震|open.source|release|earthquake|発売/i
 ];
+export function newsImportance(title) {
+  return 1+(signals[0].test(title)?4:0)+(signals[1].test(title)?2:0)+(signals[2].test(title)?1:0);
+}
+
+export function newsHighlights(items,held={hot:[],key:[]}) {
+  const byImpact=(a,b)=>b.importance-a.importance||b.at-a.at;
+  const retained=new Set([...held.hot,...held.key].map(row=>row.id));
+  const hot=held.hot.concat(items.filter(row=>!retained.has(row.id)&&(row.days>1||row.publishers>=3)).sort((a,b)=>
+    b.days-a.days||b.importance-a.importance||b.publishers-a.publishers||b.at-a.at).slice(0,5-held.hot.length));
+  const featured=new Set([...hot,...held.key].map(row=>row.id));
+  const key=held.key.concat(items.filter(row=>!featured.has(row.id)).sort(byImpact).slice(0,5-held.key.length));
+  for (const row of key) featured.add(row.id);
+  return {hot,key,rest:items.filter(row=>!featured.has(row.id))};
+}
+
 function features(item,at) {
   const original=cleanNewsTitle(item.chinese?.title||item.title).normalize('NFKC').toLowerCase();
   const text=item.headline||original;
   const percent=Number(text.match(/(\d+(?:\.\d+)?)\s*%/)?.[1]||0);
-  const score=1+(signals[0].test(original)?4:0)+(signals[1].test(original)?2:0)+(signals[2].test(original)?1:0)
+  const score=newsImportance(original)
     +(families(item.topic)==='市场'?Math.min(3,percent/3):0)+Math.max(0,1-(at-item.publishedAt)/86400000);
   const terms=new Set(text.match(/[a-z][a-z0-9.-]{2,}|[\p{Script=Han}]{2}/gu)||[]);
   for(const [name,aliases] of [['英伟达',/nvidia|英伟达/],['机器人',/robot|机器人|ロボット/],

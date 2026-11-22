@@ -3,6 +3,8 @@ import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {cleanNewsTitle,needsChinese} from './news-layout.mjs';
 import {createNewsHistory,newsSourceUrl} from './news-history.mjs';
+import {describeMarket,followsMarketTrend,marketCoverage,marketGroup,marketSummary,sameMarketUpdate} from './news-market.mjs';
+import {createNewsEditorial} from './news-editorial.mjs';
 
 const exec = promisify(execFile);
 const script = fileURLToPath(new URL('../workflows/comfyui/news_watch.py', import.meta.url));
@@ -24,6 +26,12 @@ export async function fetchNewsImage(url,signal,full=false) {
 }
 
 const key=text=>text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}%.+\-−]/gu,'');
+const casualty=/[\s，,:：]*(?:已?造成|导致|致)?\s*(\d+)\s*(?:人)?(?:死亡|身亡|死)[\s，,、和及]*(\d+)\s*(?:人)?(?:受伤|伤)\s*[。！!]?$/u;
+
+function headlineKey(title) {
+  // 保留主体与伤亡数字，只统一连接词和计数写法。
+  return key(title.normalize('NFKC').replace(/^美股(?=纳指|纳斯达克)/u,'').replace(casualty,' $1死$2伤'));
+}
 
 function stockMove(title,topic){
   if(!topic.endsWith('股市'))return null;
@@ -67,10 +75,12 @@ function excerptSummary(row){
 // 只在阅读时合并，旧期可直接使用，原报道仍按原网址和时间保存。
 function storyEntry(row) {
   const title=cleanNewsTitle(row.title);
-  return {row,title,titleKey:key(title),move:stockMove(title,row.topic)};
+  return {row,title,titleKey:headlineKey(title),move:stockMove(title,row.topic)};
 }
 
-export function briefNews(items){
+export function briefNews(items,{confirmedNode=false}={}){
+  const market=items.length>1&&(confirmedNode?describeMarket(items):marketGroup(items));
+  if(market)return [{...market.core[0].report,reports:items,...marketSummary(market)}];
   const groups=[];
   for(const row of items){
     const entry=storyEntry(row);
@@ -101,7 +111,11 @@ export function createNewsBriefing(db, now, notify, fetchNews=fetchNewsBriefing,
   const mark = db.prepare('INSERT OR IGNORE INTO news_seen VALUES(?,?)');
   const readRetry=db.prepare('SELECT retryAfter FROM news_poll_state WHERE id=1');
   const saveRetry=db.prepare('INSERT INTO news_poll_state VALUES(1,?) ON CONFLICT(id) DO UPDATE SET retryAfter=excluded.retryAfter');
-  const history=createNewsHistory(db,{...options,now,brief:briefNews,sameReport:(a,b)=>sameStory(storyEntry(a),storyEntry(b))});
+  const editorial=options.editorial&&createNewsEditorial(db,{compile:options.compile,...options.editorial,now});
+  const history=createNewsHistory(db,{...options,editorial,now,brief:reports=>briefNews(reports,{confirmedNode:true}),
+    describeMarket,marketGroup,sameMarketUpdate,followsMarketTrend,
+    marketRole:report=>marketCoverage(report)?.kind,canReconcile:report=>casualty.test(report.title.normalize('NFKC')),
+    sameReport:(a,b)=>sameStory(storyEntry(a),storyEntry(b))});
   function edition() {
     const raw=read.get()?.latest;
     return raw?JSON.parse(raw):{at:null,items:[]};
@@ -116,10 +130,12 @@ export function createNewsBriefing(db, now, notify, fetchNews=fetchNewsBriefing,
     db.prepare('UPDATE news_briefing SET latest=? WHERE id=1').run(JSON.stringify(current));
   }
   function latest() {
-    const {at,from,items}=history.list();
+    const {at,from,items,boards}=history.list();
     if(!items.length)return {state:'answer',text:'最近七天暂无新闻。'};
     const sources = [];
-    const stories=items.map(row=>{
+    const entry=boards?.全部;
+    const featured=entry?[...entry.hot,...entry.key].map(id=>items.find(row=>row.id===id)):items;
+    const stories=featured.map(row=>{
       const detail=history.get(row.id);
       const citations=detail.reports.map(report=>{
         sources.push({title:report.title,url:report.url,
@@ -184,6 +200,7 @@ export function createNewsBriefing(db, now, notify, fetchNews=fetchNewsBriefing,
         mark.run(row.url, at);
       }
       changed=history.ingest(fresh,at);
+      if(editorial)history.list(true);
       saveRetry.run(JSON.stringify(retryAfter));
       db.prepare(`INSERT INTO news_briefing VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET
         lastCheck=excluded.lastCheck, latest=coalesce(excluded.latest,latest)`)
@@ -196,5 +213,12 @@ export function createNewsBriefing(db, now, notify, fetchNews=fetchNewsBriefing,
     const detail = failed.length?'；暂时未能读取'+failed.join('、'):'';
     return (fresh.length?'已收录 '+fresh.length+' 条新报道':'本次未收录新报道')+detail+archived;
   }
-  return {latest, edition, feed:history.list, event:history.get, saveChinese, poll, last:()=>read.get()?.lastCheck};
+  return {latest, edition, feed:history.list, event:history.get, saveChinese, poll, last:()=>read.get()?.lastCheck,
+    editorialStep:editorial&&(async signal=>{
+      const result=await editorial.step(history.list(true),history.get,signal);
+      signal.throwIfAborted();
+      if(/^(?:核验新闻标题|汇总新闻事实|合并社论风向)/u.test(result))notify([]);
+      return result;
+    }),
+    editorialHistory:id=>editorial?.history(id)??[]};
 }

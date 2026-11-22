@@ -6,6 +6,7 @@ const types=[
   {id:'tasks',name:'任务轮询',minutes:15},
   {id:'due',name:'到期事项',minutes:20},
   {id:'news',name:'关注新闻简报',minutes:720},
+  {id:'newsEditorial',name:'新闻编辑与社论风向',minutes:10},
   {id:'curiosity',name:'此刻所想 · 允许自主看屏',minutes:60},
   {id:'weather',name:'三地天气',minutes:60},
   {id:'aiHeartbeat',name:'AI 接口心跳',minutes:180},
@@ -20,7 +21,7 @@ const types=[
 const goals={tasks:'检查云端待办并处理可领取任务',due:'检查今日到期和逾期事项',weather:'核对三地天气变化与预警',
   aiHeartbeat:'检查当前云端 AI 接口是否可用',
   diaryAudit:'核对近七天的手记，找出待确认的疑点',curiosity:'按设置观察当前场景并判断是否分享',nag:'核对待续事项并决定本轮主动行动',
-  news:'查阅关注主题的公开报道，有新消息时提醒',diary:'整理未入册的素材并跟进未解悬念',review:'核查待整理专题并补写缺失的行动评价',
+  news:'查阅关注主题的公开报道，有新消息时提醒',newsEditorial:'推进一项新闻编辑或社媒查询阶段',diary:'整理未入册的素材并跟进未解悬念',review:'核查待整理专题并补写缺失的行动评价',
   refinement:'逐条核对绯月已保存的手记或唠叨，修订后保存',inspection:'检查最近的本机任务完成与失败记录'};
 
 export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,clearTimer,add,audit,onIdleResult,weatherLastAt,lastRun=()=>null}){
