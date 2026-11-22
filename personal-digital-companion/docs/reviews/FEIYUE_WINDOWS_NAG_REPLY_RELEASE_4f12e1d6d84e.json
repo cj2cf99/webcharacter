@@ -1,0 +1,17 @@
+{
+  "installedBase": "9f30f8978053",
+  "sourceBase": "03942463b3de924c380ae45a0c29a30bfbbee1c6",
+  "rest": 6,
+  "items": [
+    {
+      "path": "desktop/personality-nags.mjs",
+      "before": "9475f1991bb242c225c49d54992b73e1374d2563220f192a41b69504b869fbef",
+      "after": "d270678c0bfe31a2b356a7f17e43e59a5e5484feb2bcaf78adcc4c4b47582a5d"
+    },
+    {
+      "path": "desktop/personality-diary.mjs",
+      "before": "eec6b9e73f80769fac91b4213bee0798885a56e1d0f412c80780f7dcac52e499",
+      "after": "d14cd0423c2a99ea037f087e36a969e2325f524153267f20d5072a214a1cbabc"
+    }
+  ]
+}

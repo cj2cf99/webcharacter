@@ -13,6 +13,13 @@ const unknown=s=>!s||/未知|其他|不明|未分类|未分類|unknown|other/i.t
 const brief=(s,n)=>Array.from(cleanMemory(s)).slice(0,n).join('');
 const iso=at=>new Date(at).toISOString();
 const citationLength=150;
+const replyKey=text=>text?.normalize('NFKC').toLowerCase().replace(/^(?:夫君|老公|亲爱的|绯月)[,:、\s]+/u,'').replace(/[\p{P}\s]/gu,'');
+
+function repeatsQuestion(text,questions){
+  const key=replyKey(text);
+  const clauses=text.split(/[。！？?!，,；;：:\r\n]/u).map(replyKey);
+  return questions.some(question=>question&&(key===question||clauses.includes(question)||(question.length>=12&&key.includes(question))));
+}
 
 function diaryCitationLines(reading){
   return reading.split(/(?<=[。！？?!；;])|\r?\n/u).flatMap(line=>{
@@ -57,9 +64,9 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     const skill=await readInteractionSkill('basicNag');signal.throwIfAborted();
     const prompt=skill.localAi?.[stage];if(!prompt)throw Error('念叨技能缺少阶段 '+stage);
     const guidance=stage==='open'?' question 写明希望他回答或核实的一件具体事，可用自然的请求语气。若只是关心、分享或事情已核实，question 填空字符串 ""。score 表示绯月现在有多想弄清：1 为稍有好奇，3 为值得关心，5 为关系、处境或安排上特别重要。':
-      stage==='reply'?' 关心或感想放在 reply。有具体缺口才在 next 提出一件要他回答的事。收笔时把 next 填成空字符串 ""。':'';
+      stage==='reply'?' evaluation 简短写清他刚才说自己在担心什么、想做什么或确认了什么，保持原本的人和事。reply 根据该理解直接回复他，先回应「最新发言」，再用自己的话接住他的心意。一两句，最多 150 字。旧问题只供理解，不延续旧猜测，不复述旧问或整句原话。只有具体缺口才在 next 问新问题，否则 next 填成空字符串 ""。':'';
     return store.think(data,prompt+guidance,fields,signal,{name:skill.skill,version:skill.version,stage,
-      aiReview:['open','reply'].includes(stage),aiTier:'2',aiPriority,aiCurrentPriority});
+      aiReview:stage==='open',aiTier:stage==='reply'?'4':'2',aiBudget:stage==='reply'?25000:undefined,aiPriority,aiCurrentPriority});
   }
   const assessments=new Map();
   async function verdict(stage,data,signal){
@@ -178,12 +185,24 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     if(n.localInitiativeRound)emotion?.feedback(n.localInitiativeRound,status);
   }
   async function appraise(n,text,signal,thread){
-    const v=await think('reply',JSON.stringify({事项:n.title,问题:n.next,解释:thread?undefined:brief(text,550),本机现场:n.localContext,
-      此前情绪:n.mood,当前心情:emotion?.expression(),同线依据:thread?.context}),
-      ['reply','evaluation','mood','next'],signal,thread?.priority,thread?.currentPriority);
-    signal.throwIfAborted();
-    if(!v.reply||!v.evaluation||!v.mood||typeof v.next!=='string')throw Error('回应尚未生成');
-    return emptyFollowUp(v.next)?{...v,next:''}:v;
+    const {最新发言:latest,目的:purpose,...history}=thread?.context??{};
+    const currentQuestion=replyKey(n.next);
+    const inHistory=currentQuestion&&history.之前发言?.some(turn=>turn.发言者==='绯月'&&replyKey(turn.原话)===currentQuestion);
+    const input={最新发言:latest??[{发言者:'你',原话:brief(text,550)}],事项:thread?.context?undefined:n.title,旧问题:inHistory?undefined:n.next,本机现场:n.localContext,
+      此前情绪:n.mood,当前心情:emotion?.expression(),同线依据:thread?.context&&{...history,目的:replyKey(purpose)===currentQuestion?undefined:purpose}};
+    const questions=[n.next,n.talk[0]?.who==='绯月'?n.talk[0].text:undefined,
+      ...n.talk.filter(t=>t.who==='绯月'&&/[？?]\s*$/u.test(t.text)).map(t=>t.text)].map(replyKey);
+    const userLines=input.最新发言.map(t=>replyKey(t.原话)).filter(Boolean);
+    const rewrite={改写要求:'先用自己的话接住他刚说的具体顾虑或事实，再给出针对这一点的回应。别用泛泛的安慰代替，也别叙述对话经过。',最新发言:input.最新发言};
+    for(let attempt=0;attempt<2;attempt++){
+      const data=attempt?rewrite:input;
+      const v=await think('reply',JSON.stringify(data),['evaluation','mood','reply','next'],signal,thread?.priority,thread?.currentPriority);
+      signal.throwIfAborted();
+      if(!v.reply?.trim()||!v.evaluation||!v.mood||typeof v.next!=='string')throw Error('回应尚未生成');
+      if(repeatsQuestion(v.reply,questions)||userLines.includes(replyKey(v.reply)))continue;
+      return emptyFollowUp(v.next)||repeatsQuestion(v.next,questions)?{...v,next:''}:v;
+    }
+    throw Object.assign(Error('续答重复了之前的发言，原话已保存，可以重试。'),{code:'NAG_REPLY_REPEATED'});
   }
   function remind(added=false){
     const queue=pendingQuestions(),preferred=queue[0];
@@ -341,8 +360,9 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     if(n.localThreadReceipts?.[key])return n.localThreadReceipts[key];
     if(!isPendingQuestion(n))throw Error('原质问已经收尾');
     const text=messages.filter(message=>!message.legacyPending).map(message=>message.text).join('\n');
-    if(!text&&messages[0].legacyPending&&n.talk.at(-1)?.who==='你'){
-      n.talk.at(-1).threadMessage=key;
+    const last=n.talk.at(-1);
+    if(!text&&messages[0].legacyPending&&last?.who==='你'&&last.threadMessage!==key){
+      last.threadMessage=key;
       save(n);
     }
     if(!n.talk.some(t=>t.threadMessage===key)){
