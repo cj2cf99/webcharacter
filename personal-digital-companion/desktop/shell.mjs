@@ -10,7 +10,9 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
 import {readFile,stat} from 'node:fs/promises';
 import {createMessageBoxes} from './message-box.mjs';
+import {createThoughtOverlay} from './thought-overlay.mjs';
 import {createPanelWindow} from './panel-window.mjs';
+import {attachKnowledge} from './knowledge-host.mjs';
 import {attachSettings} from './settings-host.mjs';
 import {watchFileChanges,setLiveWarningLog,warnLiveUpdate} from './live-files.mjs';
 import {menuTemplate} from './menu-layout.mjs';
@@ -18,6 +20,8 @@ import {createMenuPopup} from './menu-popup.mjs';
 import {pages,watchDesktopSources} from './source-updates.mjs';
 import {DEFAULT_SOUND,validSound,normalizeSound,SOUND_NODES} from './sound.mjs';
 import {createServerTaskCommand} from './server-task-command.mjs';
+import {createAiWorkflowModel} from './ai-workflow-model.mjs';
+import {tokyoDate} from './calendar-date.mjs';
 import {createDesktopTasks} from './task-lifecycle.mjs';
 import {createLocalTaskPool} from './local-task-pool.mjs';
 import {remoteGarden} from './garden-backend.mjs';
@@ -30,14 +34,15 @@ import {attachScenePanel} from './scene-panel.mjs';
 import {createSceneCuriosity} from './scene-curiosity.mjs';
 import {localVision} from './local-vision.mjs';
 import {attachScreenQuestion} from './screen-question-host.mjs';
+import {setInteractionSkillProfile} from './interaction-skills.mjs';
 import {createBubbleVoice} from './bubble-voice.mjs';
 import {attachDictation} from './dictation-host.mjs';
 import {attachWeather} from './weather-host.mjs';
 import {createReminderChecks,checkDueItems} from './reminder-checks.mjs';
 import {attachPollSettings} from './poll-settings-host.mjs';
 import {attachNewsPanel} from './news-panel-host.mjs';
+import {attachStudy} from './study-host.mjs';
 import {createNewsEditor} from './news-editor.mjs';
-import {cleanNewsTitle} from './news-layout.mjs';
 import {attachReminderReview} from './reminder-review-host.mjs';
 import {attachTaskInbox} from './task-inbox-host.mjs';
 import {createConversationTranscription,prepareConversationBatch} from './conversation-transcription.mjs';
@@ -65,8 +70,8 @@ export function waitForStartupReminders(signal){
   });
 }
 export function initialBounds(area,height=360){
-  const h=Math.min(height,area.height-24),w=Math.round(h*464/688);
-  return {x:Math.round(area.x+area.width-w-16),y:Math.round(area.y+area.height-h-12),width:w,height:h};
+  const width=Math.round(height*464/688);
+  return {x:area.x+Math.max(0,area.width-width-16),y:area.y+Math.max(0,area.height-height-12),width,height};
 }
 export async function startDesktop(electron,options={}){
   const {app,BrowserWindow,Tray,Menu,nativeImage,screen,ipcMain,session}=electron;
@@ -86,6 +91,7 @@ export async function startDesktop(electron,options={}){
   let sound=normalizeSound(DEFAULT_SOUND),settingsWindow=null;
   try{const saved=JSON.parse(readFileSync(soundFile,'utf8'));if(validSound(saved))sound=normalizeSound(saved);}catch{}
   app.setPath('userData',profile);
+  setInteractionSkillProfile(profile);
   await app.whenReady();
   const messages=options.messageBoxes??createMessageBoxes(electron,{bundle,root});
   const archive=options.memory??(!options.profile&&!options.benchmark&&process.platform==='win32'?createMemoryArchive():null);
@@ -151,11 +157,18 @@ export async function startDesktop(electron,options={}){
     webPreferences:{preload:resolve(root,'desktop/preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,
       webSecurity:true,backgroundThrottling:true,spellcheck:false,
       additionalArguments:['--feiyue-actions',...(options.benchmark?['--feiyue-benchmark']:[])]}});
+  const thoughtOverlay=createThoughtOverlay(electron,{win,root,bundle});
   const pcSettings=attachSettings(electron,{win,profile,bundle,root,legacySound:sound,onDisplayChange:applyScreenLock});
   let confineToScreen=pcSettings.store.snapshot().config.confineToScreen;
-  const localModel=options.localModel??(!options.benchmark&&electron.utilityProcess?createBalancedLocalModel({
+  const baseLocalModel=options.localModel??(!options.benchmark&&electron.utilityProcess?createBalancedLocalModel({
     utilityProcess:electron.utilityProcess,modelPath:desktopModelPath(app,root),log:tasks.traffic?.write,localFirst:true
   }):null);
+  let localModel=baseLocalModel;
+  if(!options.localModel&&baseLocalModel){
+    try{localModel=createAiWorkflowModel({model:baseLocalModel,file:resolve(profile,'ai-requests.sqlite'),log:tasks.traffic?.write,
+      safeStorage:electron.safeStorage?.isEncryptionAvailable?.()?electron.safeStorage:undefined});}
+    catch(error){void tasks.traffic?.write({direction:'local',route:'AI 询问池',stage:'本机队列暂不可用',error:error.code??error.name});}
+  }
   const interactionWork=localModel?.work&&createInteractionWork({model:localModel,request:tasks.weatherRequest,log:tasks.traffic?.write});
   let pendingCheckVisible=false,menuUnread=0;
   let writing=false,pollExecuting=false,lastWork,lastContext,wasExecuting=false;
@@ -167,7 +180,7 @@ export async function startDesktop(electron,options={}){
     const thought=label('正式 · ',transcription?.active)??(work?null:label('正式 · ',privateChat?.active??localPool?.active??taskThought)??label('闲时 · ',memoryThought??memoryResult)??pollThought);
     const encoded=JSON.stringify(thought);
     if(force||lastThought!==encoded){
-      lastThought=encoded;win.webContents.send('desktop:thought',thought);
+      lastThought=encoded;thoughtOverlay.set(thought);
     }
     const context=writing?'diary-review-idle':menuUnread?'reminder-idle':'';
     const executing=Boolean(transcription?.busy||privateChat?.active||localPool?.active||writing||pollExecuting||['nag','diaryAudit'].includes(backgroundKind)||tasks.activeCount()||screenQuestion.executing);
@@ -187,25 +200,28 @@ export async function startDesktop(electron,options={}){
   let diary,nags,curiosity,scenePanel,backgroundJob,backgroundController,backgroundKind;
   const memoryTitles={curiosity:'此刻所想',diary:'写日记',review:'补行动评价',nag:'准备念叨',diaryAudit:'核对手记',
     refinement:'修订手记与唠叨','task-review':'补写执行评价'};
-  const memoryPolls=['diary','diaryAudit','nag','review','curiosity',...(tasks.weatherRequest?['refinement']:[])];
+  const memoryPolls=['diary','diaryAudit','nag','review','curiosity','refinement'];
   const hasMemory=Boolean(memory?.readTasks&&localModel?.memory&&!options.benchmark);
   const memoryIdle=()=>!transcription?.busy&&!privateChat?.active&&!scenePanel?.panel&&!quitPending&&!work&&!localPool?.active&&!screenQuestion.hasLocalWork&&!screenQuestion.panel&&!screenQuestion.inquiryPanel&&
     !reminderReview?.panel?.isVisible()&&!taskInbox?.panel?.isVisible()&&tasks.activeCount()===0&&(!tasks.canPoll||tasks.canPoll());
   function interruptMemory(){backgroundController?.abort();emotion?.interrupt();}
   async function memoryJob(kind,signal,manual=false,step,questionId,goal){
     if(backgroundJob||!memoryIdle())return {deferred:true};
+    localModel?.aiPulse?.();
     backgroundController=new AbortController();
     const combined=AbortSignal.any([signal,backgroundController.signal]);
     const title=memoryTitles[kind];
+    const pausesEmotion=kind!=='diaryAudit';
     function progress(detail){
       if(manual&&kind==='nag')return;
       memoryThought={title,...detail};syncActivity();
     }
     const work=async()=>{
-      await emotion?.pause();combined.throwIfAborted();
+      if(pausesEmotion)await emotion?.pause();
+      combined.throwIfAborted();
       if(questionId)return nags.resume(questionId,combined);
-      if(kind==='refinement')return diary.refine(combined,progress);
       if(!goal)progress({stage:kind==='task-review'?'查找本机归档':'整理资料'});
+      if(kind==='refinement')return diary.refine(combined,progress);
       if(kind==='task-review'){
         writing=true;syncActivity();
         try{return await diary.run(kind,combined,progress);}finally{writing=false;}
@@ -217,12 +233,15 @@ export async function startDesktop(electron,options={}){
           const known=new Set(diary.nags().filter(n=>n.source==='topic').map(n=>n.source_id));
           const question=await topics.recoveryQuestion(known);
           combined.throwIfAborted();
-          if(question)nags.enqueue({source:'topic',source_id:question.id,title:question.prompt,reason:'专题恢复',priority:4,localOnly:true});
+          if(question){
+            const candidate={source:'topic',source_id:question.id,title:question.prompt,reason:'专题恢复',priority:4,localOnly:true};
+            if(await nags.prepareQuestion(candidate,question.prompt,combined)==='ask')nags.enqueue(candidate);
+          }
         }
         await topics?.runQueued(combined,step);
         await nags?.assessPending(combined);
       }
-      if(kind==='diaryAudit')return nags.pollAudit(combined);
+      if(kind==='diaryAudit')return nags.pollAudit(combined,progress);
       if(kind==='nag')return nags.poll(combined,{progress,step});
       await nags.flush(combined);
       if(kind==='diary'&&!manual){
@@ -248,7 +267,9 @@ export async function startDesktop(electron,options={}){
       return {deferred:true,started:Boolean(goal),detail:state?.stage?'中断时进度：'+state.stage+count:undefined};
     }
     finally{
-      backgroundJob=null;backgroundKind=null;backgroundController=null;memoryThought=null;emotion?.resume();syncActivity();
+      backgroundJob=null;backgroundKind=null;backgroundController=null;memoryThought=null;
+      if(pausesEmotion)emotion?.resume();
+      syncActivity();
     }
   }
   function contextualAction(kind){
@@ -271,7 +292,9 @@ export async function startDesktop(electron,options={}){
     try{
       const result=await memoryJob(kind,reminderStartup.signal,true);
       if(!quitPending&&!cleaned){
-        const message=typeof result==='string'?result:'这次整理已暂停，可以再从「日记与评价」菜单继续。';
+        const message=typeof result==='string'?result:kind==='diary'
+          ?'这次整理已暂停，可从「任务 → 看绯月写日记」继续。'
+          :'这次整理已暂停，可从「任务 → 补写本机任务执行评价」继续。';
         await messages.showMessageBox({type:'info',title,message,buttons:['确定']});
       }
     }
@@ -280,21 +303,19 @@ export async function startDesktop(electron,options={}){
     }
   }
   const compileNews=createNewsEditor(localModel);
-  const checks=createReminderChecks({profile,compileNews,log:tasks.traffic?.write,check:signal=>checkDueItems(tasks.weatherRequest,signal,day=>{
+  const checks=createReminderChecks({profile,compileNews,newsEditorial:{model:localModel},log:tasks.traffic?.write,check:signal=>checkDueItems(tasks.weatherRequest,signal,day=>{
     if(checks.takeEveningPraise(day))contextualAction('praise-idle');
   }),
-    lastRun:id=>diary?.last(id),
+    lastRun:id=>diary?.last(id),inspectRecent:options.benchmark?undefined:tasks.traffic?.inspectRecent,
     notifyNews:options.benchmark?undefined:items=>{
-      newsPanel.update();
-      if(!items.length)return;
-      const title='绯月 · 新闻简报（'+items.length+' 条）';
-      const first=items[0];
-      const content=cleanNewsTitle(first.latest||first.title)+'\n对我说「看新闻简报」可读最近七天要点和出处。';
-      if(process.platform==='win32')tray.displayBalloon({title,content,respectQuietTime:true});
-      else if(electron.Notification?.isSupported())new electron.Notification({title,body:content}).show();
+      if(!quitPending&&!cleaned)void newsPanel.update(items).catch(error=>warnLiveUpdate('绯月新闻提醒',error));
     },
     handlers:{...(hasMemory?Object.fromEntries(memoryPolls.map(k=>[k,(s,step,goal)=>memoryJob(k,s,false,step,undefined,goal)])):{}),
-      aiHeartbeat:tasks.checkAiHeartbeat,weather:()=>weather.check(),tasks:()=>{
+      aiHeartbeat:()=>{
+        localModel?.aiPulse?.();
+        return tasks.checkAiHeartbeat?.();
+      },weather:()=>weather.check(),tasks:()=>{
+      localModel?.aiPulse?.();
       if(!tasks.pollOnce)throw Object.assign(Error('任务轮询未连接'),{code:'NO_CONNECTION'});
       return tasks.pollOnce();
     }},
@@ -308,7 +329,7 @@ export async function startDesktop(electron,options={}){
     },
     // 任务轮询只看有没有名额（canPoll），不因正式工作、问答或开始工作模式顺延；其余轮询判断不变。
     isBusy:id=>id==='tasks'?quitPending||Boolean(tasks.canPoll&&!tasks.canPoll()):
-      id==='aiHeartbeat'?quitPending:
+      ['aiHeartbeat','inspection'].includes(id)?quitPending:
       (memoryPolls.includes(id)&&(backgroundJob||!memoryIdle()))||quitPending||work||Boolean(privateChat?.active||localPool?.active)||screenQuestion.hasLocalWork||tasks.activeCount()>0,
     changed:()=>{
       screenQuestion.details?.webContents.send('conversation:checks-changed');
@@ -327,12 +348,14 @@ export async function startDesktop(electron,options={}){
   menuUnread=checks.unread;pendingCheckVisible=checks.pending;
   const pollSettings=attachPollSettings(electron,{root,bundle,checks});
   const newsPanel=attachNewsPanel(electron,{root,bundle,checks,model:localModel,compile:compileNews});
-  const serverTask=createServerTaskCommand({profile,tasks,localModel,interactionWork,dialog:messages});
+  const study=attachStudy(electron,{root,bundle,profile,model:localModel,connection:options.studyConnection,onForeground:interruptMemory});
+  const knowledge=attachKnowledge(electron,{profile,root,bundle,model:localModel,enabled:!options.benchmark});
+  const serverTask=createServerTaskCommand({profile,tasks,localModel,interactionWork,dialog:messages,knowledge});
   const modelFolder=dirname(desktopModelPath(app,root));
   const upgradeVision=options.upgradeVision??(!options.vision&&interactionWork?localVision(resolve(modelFolder,'Qwen3.5-9B-Q4_K_M.gguf'),
     {projection:resolve(modelFolder,'Qwen3.5-9B-mmproj-F16.gguf')}):undefined);
   const voice=createBubbleVoice({root,profile});
-  const dictation=attachDictation(electron,{root,bundle,voice,model:localModel,onForeground:interruptMemory,
+  const dictation=attachDictation(electron,{root,bundle,voice,model:localModel,
     privateModel:owner=>{
       const id=privatePanel?.owner(owner);
       return id?{work:(text,options)=>privateChat.modelWork(id,text,options)}:null;
@@ -344,17 +367,18 @@ export async function startDesktop(electron,options={}){
     if(!win.isVisible())show();
     return memoryJob('nag',reminderStartup.signal,true,undefined,id);
   }
-  function pendingQuestions(){
-    const questions=nags?.pendingQuestions().map(n=>({id:n.id,title:n.next||n.title,status:n.status,kind:questionKinds[n.source]}))??[];
+  function pendingQuestions(withCitations=false){
+    const questions=nags?.pendingQuestions().map(n=>({id:n.id,title:n.next||n.title,status:n.status,kind:questionKinds[n.source],
+      citation:withCitations?diary.questionCitation(n):undefined}))??[];
     const special=privateChat?.waiting??privateChat?.active;
     if(special)questions.unshift({...special,privateChat:true,active:Boolean(privateChat.active),kind:'绯月专聊',status:privateChat.active?'进行中':'待聊'});
     return questions;
   }
   if(localModel?.withWorkSession&&electron.safeStorage?.isEncryptionAvailable?.()&&!options.benchmark){
-    transcription=createConversationTranscription({profile,safeStorage:electron.safeStorage,model:localModel,registration:tasks.registration,
+    transcription=createConversationTranscription({profile,safeStorage:electron.safeStorage,model:localModel,registration:tasks.registration,log:tasks.traffic?.write,knowledge,
       prepareBatch:rows=>prepareConversationBatch(rows,tasks.weatherRequest),
-      canStart:state=>!quitPending&&!privateChat?.active&&!localPool?.active&&!tasks.activeCount()&&
-        (state==='approved'||(!work&&!backgroundJob&&!screenQuestion.panel&&!screenQuestion.inquiryPanel&&!screenQuestion.hasLocalWork)),
+      canStart:(state,thread)=>!quitPending&&!privateChat?.active&&!localPool?.active&&!tasks.activeCount()&&
+        (state==='approved'||(!work&&!backgroundJob&&(thread||!screenQuestion.panel&&!screenQuestion.inquiryPanel&&!screenQuestion.hasLocalWork))),
       changed:()=>syncActivity(),notify:item=>{
         const title='绯月 · 对话登记待确认',body=`已整理 ${item.count} 项，点击检查结果。`;
         if(electron.Notification?.isSupported()){
@@ -363,9 +387,31 @@ export async function startDesktop(electron,options={}){
         }else tray?.displayBalloon?.({title,content:body,respectQuietTime:true});
       }});
   }
-  const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,voice,checks,emotion:()=>emotion,topics:()=>topics,onForeground:interruptMemory,transcription,
+  const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,voice,checks,emotion:()=>emotion,topics:()=>topics,onForeground:interruptMemory,transcription,knowledge,
+    threadOptions:!options.benchmark&&{
+      questions:day=>{
+        const pending=nags?.pendingQuestions()??[];
+        const rows=day?diary?.nags().filter(n=>n.talk?.some(t=>typeof t.at==='string'&&Number.isFinite(Date.parse(t.at))&&tokyoDate(Date.parse(t.at))===day))??[]:pending;
+        const open=new Set(pending.map(n=>n.id));
+        return rows.map(n=>({...n,closed:!open.has(n.id),citation:n.source==='audit'?{
+          label:'手记质问依据',reference:n.source_id,excerpt:n.refs?.map(ref=>ref.page+' · '+ref.quote).join('\n'),
+        }:diary.questionCitation(n)}));
+      },
+      answerQuestion:(...args)=>nags?.threadAnswer(...args),
+      endQuestion:id=>nags?.threadEnd(id),
+      openTranscript:id=>taskInbox?.open(id),
+      overdue:id=>{
+        if(!electron.Notification?.isSupported())return;
+        const notice=new electron.Notification({title:'绯月 · 整理待处理',body:'这条对话的整理已等待超过 24 小时。'});
+        notice.on('click',()=>taskNotice(screenQuestion.openThreadReview(id)));notice.show();
+      },
+    },
     auditPending:pendingQuestions,
-    openNews:newsPanel.open,resumeAudit:resumeQuestion,onRegistration:()=>contextualAction('chat-registration'),serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
+    readQuestionCitation:id=>{
+      const n=nags?.pendingQuestions().find(item=>item.id===id);
+      return n&&diary.questionCitation(n,true);
+    },
+    openNews:newsPanel.open,openStudy:study.open,resumeAudit:resumeQuestion,onRegistration:()=>contextualAction('chat-registration'),serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
     memory,vision:memory&&(options.vision??localVision(desktopModelPath(app,root))),readTasks:memory?.readTasks??tasks.executor?.review.read,
     readTraffic:tasks.traffic?.readPage,client:options.screenQuestionClient,requestRestart,localModel,interactionWork,upgradeVision,log:tasks.traffic?.write});
   const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark,recordCheck:checks.record,checks});
@@ -376,7 +422,10 @@ export async function startDesktop(electron,options={}){
     local:async()=>[...(localPool?.pending()??[]).map(batch=>({batch:localPool.withQueue(batch),name:batch.title,started_at:batch.created})),...await (tasks.taskInbox?.local()??[])]}}):null;
   if(hasMemory){
     topics=createTopicMemory({profile,memory,model:localModel,safeStorage:electron.safeStorage,traffic:tasks.traffic?.readPage});
-    diary=createPersonalityDiary({profile,memory,topics,reportOriginals:detail=>messages.showMessageBox({type:'info',title:'绯月 · 异常附件',message:'记录已完成。以下 TXT 超过自动上限，已保存到本机，可自行选择是否添加。',detail,buttons:['确定']}),model:localModel,request:tasks.weatherRequest,weather:checks.weatherDiary});
+    const diaryMemory={...memory,async read(day){
+      return [...screenQuestion.threadArchive(day),...(await memory.read(day)).filter(turn=>!turn.threadId)].sort((a,b)=>b.at-a.at);
+    }};
+    diary=createPersonalityDiary({profile,memory:diaryMemory,topics,reportOriginals:detail=>messages.showMessageBox({type:'info',title:'绯月 · 异常附件',message:'记录已完成。以下 TXT 超过自动上限，已保存到本机，可自行选择是否添加。',detail,buttons:['确定']}),model:localModel,request:tasks.weatherRequest,weather:checks.weatherDiary});
     try{
       emotion=createEmotionService({profile,topics,model:localModel,diary,memory,log:tasks.traffic?.write});
       void emotion.recover();emotion.wake();
@@ -384,18 +433,26 @@ export async function startDesktop(electron,options={}){
     scenePanel=attachScenePanel(electron,{root,bundle,finish:(scene,answer)=>curiosity.finish(scene,answer)});
     curiosity=createSceneCuriosity({profile,memory,diary,model:localModel,electron,
       vision:options.vision??localVision(desktopModelPath(app,root)),show:scenePanel.show,draw:screenQuestion.drawScene,
-      queueQuestion:scene=>diary.nags().some(n=>n.source==='curiosity'&&n.source_id===scene.id)||
-        nags.enqueue({source:'curiosity',source_id:scene.id,title:scene.text,reason:'此刻所想',priority:2,
-          localContext:scene.seen,localSceneAt:scene.at,localOnly:scene.record==='none'},{mood:'好奇'}),
+      queueQuestion:async(scene,signal)=>{
+        if(diary.nags().some(n=>n.source==='curiosity'&&n.source_id===scene.id))return true;
+        const candidate={source:'curiosity',source_id:scene.id,title:scene.text,reason:'此刻所想',priority:2,
+          localContext:scene.seen,localSceneAt:scene.at,localOnly:scene.record==='none'};
+        const checked=await nags.prepareQuestion(candidate,scene.text,signal);
+        return checked==='resolved'?'resolved':checked==='ask'&&nags.enqueue(candidate,{mood:'好奇'});
+      },
       context:()=>emotion?.expression()??'平静',wake:()=>checks.enqueue('curiosity'),
       eligible:()=>memoryIdle()&&win.isVisible()&&!menuOpen&&checks.polls().some(p=>p.id==='curiosity'&&p.enabled)&&
         electron.powerMonitor?.getSystemIdleState?.(300)==='active'});
     const initiative=emotion&&createInitiative({emotion,memory,root:memory.root??profile,topics,localNags:diary.nags,model:localModel,speak:screenQuestion.speak,
       queueConversation:electron.utilityProcess&&localModel.suspend?item=>privateChat?.plan(item):undefined,
       conversationPlanned:id=>privateChat?.planned(id),
-      queueClarification:item=>nags.enqueue({source:'curiosity',source_id:'initiative/'+item.ref,title:item.title,
-        reason:'主动确认',priority:3,localInitiativeRound:item.roundId},{mood:emotion.expression().word})});
-    nags=createPersonalityNags({emotion,initiative,store:diary,show:session=>screenQuestion.showNag(session),idle:()=>memoryIdle()&&win.isVisible(),canContinue:()=>!privateChat?.active&&!quitPending&&!work&&!localPool?.active&&!localPool?.pending().some(b=>b.state==='queued')&&
+      queueClarification:async(item,signal)=>{
+        const candidate={source:'curiosity',source_id:'initiative/'+item.ref,title:item.title,
+          reason:'主动确认',priority:3,localInitiativeRound:item.roundId};
+        const checked=await nags.prepareQuestion(candidate,item.title,signal,item.context);
+        return checked==='resolved'?'resolved':checked==='ask'&&nags.enqueue(candidate,{mood:emotion.expression().word});
+      }});
+    nags=createPersonalityNags({emotion,initiative,store:diary,knowledge,show:session=>screenQuestion.showNag(session),idle:()=>memoryIdle()&&win.isVisible(),canContinue:()=>!privateChat?.active&&!quitPending&&!work&&!localPool?.active&&!localPool?.pending().some(b=>b.state==='queued')&&
         !screenQuestion.hasOtherTask&&!tasks.activeCount()&&(!tasks.tasksIdle||tasks.tasksIdle({allowPendingRequests:true})),
       onAnswered:async n=>{
         if(n.source==='topic'){
@@ -408,7 +465,8 @@ export async function startDesktop(electron,options={}){
         if(electron.Notification?.isSupported()){
           const notice=new electron.Notification({title:'绯月 · 待确认',body});
           notice.on('click',()=>taskNotice((async()=>{
-            if(!nags.pendingQuestions().some(n=>n.id===id)||(await resumeQuestion(id))?.deferred)await screenQuestion.openReview('pending');
+            if(!nags.pendingQuestions().some(n=>n.id===id))return screenQuestion.openReview();
+            await screenQuestion.openThreadReview(id);
           })()));
           notice.show();
         }else if(process.platform==='win32')tray?.displayBalloon({title:'绯月 · 待确认',content:body,respectQuietTime:true});
@@ -416,8 +474,6 @@ export async function startDesktop(electron,options={}){
     if(nags.recoverAudit())checks.enqueue('diaryAudit');
   }
   const suspendMemory=()=>{interruptMemory();if(nags?.pendingQuestions().some(n=>n.status==='提问中'))screenQuestion.hide();};
-  const focusMemory=(_event,other)=>{if(other!==win&&other!==screenQuestion.panel&&other!==scenePanel?.panel)suspendMemory();};
-  app.on('browser-window-focus',focusMemory);
   electron.powerMonitor?.on?.('suspend',suspendMemory);
   const lockScene=()=>{suspendMemory();scenePanel?.dismiss();};
   electron.powerMonitor?.on?.('lock-screen',lockScene);
@@ -441,7 +497,7 @@ export async function startDesktop(electron,options={}){
       if(drag?.top)drag=null;
       if(win.isDestroyed())return;
       const current=win.getBounds();
-      const next={...current,width:bounds.width,height:bounds.height};
+      const next={...current,...displaySize(currentDisplay(),bounds)};
       if(reason==='drag-far'){
         const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
         next.x=Math.round(Math.max(area.x,Math.min(area.x+area.width-next.width,current.x+(current.width-next.width)/2)));
@@ -710,10 +766,11 @@ export async function startDesktop(electron,options={}){
     win.showInactive();
     // Windows 下透明且不可聚焦的桌宠需要显式层级才能恢复原生置顶标记。
     win.setAlwaysOnTop(true,'pop-up-menu');
+    thoughtOverlay.sync();
     win.webContents.send('desktop:visible',true);
     updatePosture(true);if(previousReady)beginPoll();
   }
-  function hide(){if(farewell)return;privateChat?.dismiss();interruptMemory();scenePanel?.dismiss();screenQuestion.hide();detachAttachment('hidden');cancelMovement();travelPosture=null;drag=null;stopPoll();ignore(true);win.webContents.send('desktop:visible',false);win.hide();}
+  function hide(){if(farewell)return;privateChat?.dismiss();scenePanel?.dismiss();screenQuestion.hide();detachAttachment('hidden');cancelMovement();travelPosture=null;drag=null;stopPoll();ignore(true);win.webContents.send('desktop:visible',false);win.hide();thoughtOverlay.sync();}
   function setWork(value){
     work=value;if(value)suspendMemory();resetIdle();
     syncActivity();menu();
@@ -839,7 +896,7 @@ export async function startDesktop(electron,options={}){
     onClose:()=>currentMenu?.emit?.('menu-will-close')}):null;
   if(hasMemory&&electron.utilityProcess&&localModel.suspend){
     privatePanel=attachPrivateChatPanel(electron,{root,bundle,win,chat:()=>privateChat});
-    privateChat=createPrivateChat({profile,view:privatePanel,readGpu:readGpuLoad,
+    privateChat=createPrivateChat({profile,view:privatePanel,readGpu:readGpuLoad,knowledge,
       idle:()=>previousReady&&win.isVisible()&&!fullscreen.size&&!backgroundJob&&!pollExecuting&&!transcription?.busy&&
         !quitPending&&!work&&!localPool?.active&&!tasks.activeCount()&&!screenQuestion.panel&&!screenQuestion.inquiryPanel&&!scenePanel?.panel,
       async prepare(){
@@ -890,7 +947,7 @@ export async function startDesktop(electron,options={}){
       weather:{click:()=>{void weather.open().catch(()=>{
         if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'三地天气',message:'天气面板打不开，请重新启动绯月后重试。',buttons:['确定']}).catch(()=>{});
       });}},
-      continueNag:pendingQuestions().length>0&&{label:'待确认（'+pendingQuestions().length+'）',click:()=>taskNotice(screenQuestion.openReview('pending'))},
+      continueNag:pendingQuestions().length>0&&{label:'待确认（'+pendingQuestions().length+'）',click:()=>taskNotice(screenQuestion.openReview('chat'))},
       privateChat:privateChat?.waiting&&{label:privateChat.waiting.title,fyImage:waitingImage,
         click:()=>{if(privateChat.waiting)void privateChat.accept(privateChat.waiting.id).then(result=>{
           if(result.error&&!quitPending)void messages.showMessageBox({type:'info',title:'绯月 · 专聊',message:result.error,buttons:['确定']});
@@ -904,9 +961,11 @@ export async function startDesktop(electron,options={}){
       }},
       today:reminderReview && {click:()=>taskNotice(reminderReview.open())},
       news:{click:()=>taskNotice(newsPanel.open())},
+      study:{click:()=>taskNotice(study.open())},
       tasks:taskInbox&&{click:()=>taskNotice(taskInbox.open())},
       restoreTerminal:electron.dialog?.showOpenDialog&&{click:()=>taskNotice(restoreLocalTerminal())},
       review:{click:()=>taskNotice(screenQuestion.openReview())},
+      knowledge:{click:()=>taskNotice(knowledge.open())},
       notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
       pendingCheck:checks.pending&&{click:()=>taskNotice(pollSettings.open(true))},
       pollSettings:{click:()=>taskNotice(pollSettings.open())},
@@ -1004,9 +1063,9 @@ export async function startDesktop(electron,options={}){
     const media=files.filter(name=>/\.(webm|wav|mp3|ogg|flac|m4a)$/i.test(name));
     if(media.length)pcSettings.mediaChanged(media.map(name=>resolve(bundle,name)));
     if(files.includes('tray.png'))tray.setImage(nativeImage.createFromPath(resolve(bundle,'tray.png')));
-    for(const [page,panel] of [['index.html',win],['settings.html',pcSettings.panel],['weather.html',weather.panel],
+    for(const [page,panel] of [['index.html',win],['thought.html',thoughtOverlay.panel],['settings.html',pcSettings.panel],['weather.html',weather.panel],
       ['conversation.html',screenQuestion.details],['reminder-review.html',reminderReview?.panel],['poll-settings.html',pollSettings.panel],
-      ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],
+      ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],['study.html',study.panel],['knowledge.html',knowledge.panel],
       ['screen-question.html',screenQuestion.panel],['registration-review.html',screenQuestion.inquiryPanel],['sound-settings.html',settingsWindow],
       ...(messages.panels??[]).map(panel=>['message-box.html',panel])]){
       if(!panel||panel.isDestroyed())continue;
@@ -1039,16 +1098,15 @@ export async function startDesktop(electron,options={}){
       const size=displaySize(display,bounds),next={...displayPosition(win.getBounds(),display,size),...size};
       win.setBounds(next,false);
     }
-    updateFullscreen(true);updatePosture(true);
+    updateFullscreen(true);updatePosture(true);thoughtOverlay.place();
   }
   function cleanup(){
-    if(cleaned)return;cleaned=true;
+    if(cleaned)return;cleaned=true;thoughtOverlay.close();
     clearInterval(privateTimer);void privateChat?.close();
     reminderStartup.abort();
-    app.removeListener('browser-window-focus',focusMemory);
     interruptMemory();electron.powerMonitor?.removeListener?.('suspend',suspendMemory);
     electron.powerMonitor?.removeListener?.('lock-screen',lockScene);
-    curiosity?.close();scenePanel?.close();pollSettings.close();newsPanel.close();checks.close();
+    curiosity?.close();scenePanel?.close();pollSettings.close();newsPanel.close();study.close();checks.close();
     stopLayout();
     clearTimeout(refreshTimer);clearTimeout(memoryResultTimer);stopSources?.();
     ipcMain.removeListener('desktop:attachment-done',onAttachmentDone);
@@ -1062,6 +1120,7 @@ export async function startDesktop(electron,options={}){
     reminderReview?.close();
     taskInbox?.close();
     weather.close();
+    knowledge.close();
     movement=null;ipcMain.removeListener('pc:runtime',onMovementRuntime);pcSettings.close();
     stopPoll();ipcMain.removeListener('desktop:sound-ready',soundReady);ipcMain.removeListener('desktop:sound-change',soundChange);ipcMain.removeListener('desktop:sound-preview',soundPreview);
     if(settingsWindow&&!settingsWindow.isDestroyed())settingsWindow.destroy();
@@ -1093,7 +1152,7 @@ export async function startDesktop(electron,options={}){
       // 回执丢失或媒体损坏时取消本次退出，允许修复后重试。
       const timer=setTimeout(()=>finish(false),20000);
       farewell={ticket,finish};
-      win.webContents.send('desktop:thought',null);
+      thoughtOverlay.set(null);
       if(!win.isVisible())show();
       if(previousReady)win.webContents.send('desktop:action',{kind:'farewell',ticket});
     });
@@ -1183,15 +1242,18 @@ export async function startDesktop(electron,options={}){
   if(options.localAPI||(!options.profile&&!options.benchmark&&process.platform==='win32')){
     try{
       localPool=createLocalTaskPool({file:resolve(profile,'local-batches.sqlite'),garden:options.localAPI?.garden??remoteGarden(),
-        record:tasks.recordLocalBatch,onProgress:()=>syncActivity(),
+        record:tasks.recordLocalBatch,registerReminder:tasks.registration?.submitReminder,onProgress:()=>syncActivity(),
         onResult:batch=>{
-          if(batch.state==='done')emotion?.accept({kind:'work',key:'batch/'+batch.id,at:Date.parse(batch.finished),title:batch.title});
-          const title=batch.state==='done'?'花园登记完成':'花园登记已暂停';
-          const content=batch.title+' · '+(batch.error??batch.steps.length+' 步已全部核对');
+          const reminder=batch.kind==='reminder';
+          if(batch.state==='done')emotion?.accept({kind:'work',key:(reminder?'reminder/':'batch/')+batch.id,at:Date.parse(batch.finished),title:batch.title});
+          const type=reminder?'提醒':'花园';
+          const title=type+(batch.state==='done'?'登记完成':'登记已暂停');
+          const content=batch.title+' · '+(batch.error??(reminder?'记录 #'+batch.recordId:batch.steps.length+' 步已全部核对'));
           tray?.displayBalloon?.({title,content,respectQuietTime:true});
         },
         // 登记批次只等正在执行的本机任务（逐个执行）；开工时让闲时工作暂停。问答、生图、轮询、开始工作模式不再阻挡。
-        canWork:()=>!privateChat?.active&&!transcription?.busy&&!quitPending&&!(tasks.executingCount?.()??0),onStart:()=>interruptMemory(),
+        canWork:()=>!privateChat?.active&&!transcription?.busy&&!quitPending&&!(tasks.executingCount?.()??0)
+          &&!(tasks.registration?.activeCount?.()??0),onStart:()=>interruptMemory(),
         hasRoom:()=>formalRoom(),
         queueInfo:()=>({used:formalUsed(),limit:FORMAL_LIMIT,tasks:tasks.formalCount?.()??0,
           running:localPool?.active?.title??((tasks.executingCount?.()??0)?taskThought?.title??'本机任务':null)})});
@@ -1207,6 +1269,6 @@ export async function startDesktop(electron,options={}){
   const remindersReady=waitForStartupReminders(reminderStartup.signal);
   if(!options.benchmark)checks.start();
   taskNotice(tasks.startup(remindersReady));
-  return {win,show,hide,moveTo,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,transcription,
+  return {win,show,hide,moveTo,thoughtOverlay,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,transcription,knowledge,study,
     get localAPIAddress(){return localREST?.address??null;},getStats:()=>({pointerMessages,visible:win.isVisible(),ready:previousReady})};
 }
