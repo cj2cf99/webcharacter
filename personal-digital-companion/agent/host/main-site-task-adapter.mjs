@@ -26,6 +26,11 @@ const operations = {
     body: ({ body, category_id, photos = [] }) => ({ body: body.trim(), category_id, tag_ids: [], photos }),
     recordId: response => typeof response?.id === 'string' && response.id.trim() ? response.id : null,
   },
+  'diaries.create': {
+    path: '/api/diaries',
+    body: ({ title, content }) => ({ title: title.trim(), content: content.trim() }),
+    recordId: response => Number.isSafeInteger(response?.item?.seq) && response.item.seq > 0 ? response.item.seq : null,
+  },
   'reminders.create': {
     path: '/api/reminders',
     body: ({ title, content = '', deadline, level = '中' }) => {
