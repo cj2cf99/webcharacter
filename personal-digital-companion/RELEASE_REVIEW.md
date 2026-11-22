@@ -1538,3 +1538,13 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 在独立工作树基于远端 0394246 组装发布源码，先纳入已实装 REST v5 的提醒兼容依赖，再合并冻结的 14 文件变更，保留基线已提交的其他开发内容。精确暂存 29 项，`git diff --cached --check` 通过。运行 `node --test --test-reporter=spec agent/tests/skill-hot-update.test.mjs agent/tests/skill-directory-question.test.mjs agent/tests/local-rest-garden.test.mjs agent/tests/local-rest-reminders.test.mjs agent/tests/registration-flow.test.mjs tools/test-conversation-transcription.mjs`，51 项通过、0 项失败。发布源码提交 `e817e393651a2d72cf549d71ea144a98763e0e6f` 已推送至 `origin/codex/workspace-checkpoint-20261120`，回读与本地一致。
 
 花园已完成只读结构同步，新增结构对象 0 个。线上修订 156，确认归属「网页角色组件」#16 →「绯月（桌面精灵）」#61，已核对当前版本 31.0 和上次发布 #81。草案 `feiyue-skill-hot-update-20261123` 新增发布 #82 和明细 #160，状态为发布成功，时间为 2026-11-23 03:17:00 JST，推出版本 32.0。审核摘要 `f102031f64319f041d1482a6a2870b5df84e79a1499ea85565ccb7dce78c8c31`。具体清单待用户确认，SQL 尚未提交，花园生产尚未写入。
+
+
+#### 花园实际登记与独立回读
+
+用户在完整清单后回复「登记」。精确清单和 SQL 的本地 Git 提交为 `1d5bc034e23eef52e4eb5ad520aa1566d11e4d2f`，确认摘要 `f102031f64319f041d1482a6a2870b5df84e79a1499ea85565ccb7dce78c8c31`。正式绯月 REST v6 于 2026-11-23 03:31:26.516 JST 接收批次 `feiyue-skill-hot-update-20261123`，2026-11-23 03:31:52.572 JST 整批完成。独立线上读取确认项目 #16、功能 #61、发布 #82、明细 #160 的关联和实际字段全部相符，发布成功标记唯一，版本 31.0 → 32.0，发布历史 31 → 32，花园修订 156 → 157。 本批仅写发布元数据，适用本项目整库快照豁免。
+
+
+#### 花园签收与 Git 同步
+
+2026-11-23 03:33:23.722 JST 正式绯月已签收原批次。花园本地回执及总账提交 `390a3e8c97482f113ad48822e367b7970506c1d2`。从花园远端主分支基线只导出本次 SQL、清单、回执和总账新增条目，推送至 `refs/heads/codex/feiyue-skill-hot-update-20261123` 并回读一致，远端提交 `77ace90ecc285cfd72fbe0edf64ddefb673f2368`。桌宠界面待用户复验。
