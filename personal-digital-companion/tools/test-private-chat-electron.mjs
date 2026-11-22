@@ -50,26 +50,29 @@ async function test(){
   const wav=Uint8Array.from(readFileSync(join(bundle,'voice/private-chat/accepted.wav')));
   const first=Promise.withResolvers(),late=Promise.withResolvers();
   let chat,prepares=0,releases=0,renders=0,transcriptions=0,crashing=false,voiceDraws=0;
+  let warmed=false,delayOpening=false;
   let now=Date.now();
   const panel=attachPrivateChatPanel(electron,{win,root,bundle,chat:()=>chat,visible:false});
   const dictation=attachDictation(electron,{root,bundle,voice:{enabled:true,transcribe(){
-    transcriptions++;return {text:'嗯，嗯，周末去散步'};},stopRecording(){}},
+    throw Error('专聊听写误用了普通录入模型');},stopRecording(){}},
+    privateVoice:owner=>chat.dictationVoice(panel.owner(owner)),
     privateModel:owner=>({work:(text,opts)=>chat.modelWork(panel.owner(owner),text,opts)})});
   const details=attachConversationDetails(electron,{root,profile,bundle,visible:false,
     auditPending:()=>chat.waiting?[chat.waiting]:[],resumeAudit:async id=>(await chat.accept(id)).error??''});
   const menu=createMenuPopup(electron,{root,bundle});
   chat=createPrivateChat({profile,view:panel,readGpu:async()=>({utilization:39,freeMiB:4200}),idle:()=>true,now:()=>now,
     random:()=>draw(voiceDraws++===0?'acceptedCount':'acceptedTail'),
-    prepare(){prepares++;menu.hide();details.panel?.hide();},resume(){releases++;},
+    prepare(){prepares++;},onAccept(){menu.hide();details.panel?.hide();},resume(){releases++;},
     createModel:()=>realCpu?createLocalModel({utilityProcess:electron.utilityProcess,device:'cpu',
       modelPath:join(root,'desktop/models/Qwen3.5-2B-Q4_K_M.gguf'),
       log:event=>{if(event.duration_ms)console.log(event.stage,event.duration_ms+' ms');}}):({start(){},snapshot:()=>({state:'ready',backend:'cpu',gpuLayers:0}),close(){},
       analyze:async(_text,{skillInstruction})=>skillInstruction.schema.properties.text?{text:'周末去散步'}
         :{reply:'今天我看到一只小狗在雨后散步，它一路踩着积水，最后在树下面甩了甩毛。我一下就想到你了，想问你今天有没有碰到一件让你突然笑出来的小事呀。',done:false}}),
-    createVoice:()=>({render(){
+    createVoice:()=>({enabled:true,preheat(){warmed=true;return {ready:true};},preheatSpeaking:()=>({ready:true}),
+      transcribe(){assert.ok(warmed);transcriptions++;return {text:'嗯，嗯，周末去散步'};},render(){
       renders++;
       if(crashing)return late.promise;
-      return renders===1?first.promise:{wav};
+      return delayOpening?first.promise:{wav};
     },close(){}}),
   });
   try{
@@ -85,33 +88,31 @@ async function test(){
     const bubble=windows('绯月 · 专聊');
     await until(()=>inspect(bubble,"document.querySelector('main').dataset.phase==='invite'"),'邀请页没有就绪');
     assert.equal(await inspect(bubble,"document.querySelector('img').complete"),true);
-    assert.equal(prepares,0);
+    assert.equal(prepares,1);
+    assert.ok(warmed);
+    assert.equal(renders,1);
     await until(()=>inspect(bubble,'window.testAudio[0]?.ended'),'首次邀请语音没有完整播出');
     await chat.tick();
     assert.deepEqual(await inspect(bubble,'window.testAudio'),[{src:'invite.wav',loop:false,ended:true}]);
-    now+=7200000;
-    await chat.tick();
-    await until(()=>inspect(bubble,'window.testAudio[1]?.ended'),'两小时后未播新的提醒');
-    await chat.tick();
-    assert.deepEqual(await inspect(bubble,'window.testAudio'),Array.from({length:2},()=>({src:'invite.wav',loop:false,ended:true})));
-
     await inspect(bubble,"document.querySelector('#dismiss').click()");
-    await until(()=>bubble.isDestroyed(),'关闭邀请没有保留待聊');
+    await until(()=>bubble.isDestroyed()&&releases===1,'关闭邀请没有释放资源或保留待聊');
     await details.open(null,'pending');
     await until(()=>inspect(details.panel,"document.querySelector('.private-chat-invite img')?.naturalWidth>0"),'待处理没有显示 B 头像');
     assert.equal(await inspect(details.panel,"document.querySelector('.private-chat-invite').textContent"),waitingLabel);
+    delayOpening=true;
     await inspect(details.panel,"document.querySelector('.private-chat-invite').click()");
-    await until(()=>renders===1,'首段合成未开始');
+    await until(()=>renders===2,'首段合成未开始');
     const accepted=windows('绯月 · 专聊');
     assert.equal(await inspect(accepted,"document.querySelector('main').dataset.phase"),'preparing');
     assert.equal(await inspect(accepted,"document.querySelector('#line').textContent"),voices.lines.acceptedCount.text);
-    assert.equal(prepares,1);
+    assert.equal(prepares,2);
+    delayOpening=false;
     first.resolve({wav});
     await until(()=>inspect(accepted,"document.querySelector('main').dataset.phase==='reply'"),'没有自动播完接话和正文',30000);
     const playback=await inspect(accepted,'window.testAudio');
     assert.equal(playback.filter(clip=>clip.src===voices.lines.acceptedCount.file).length,1);
     const spoken=playback.filter(clip=>clip.src==='正文');
-    assert.equal(spoken.length,renders);
+    assert.equal(spoken.length,renders-1);
     assert.ok(spoken.every(clip=>clip.afterPriorAudio),'长接话播完后才播放正文');
     assert.ok(playback.every(clip=>!clip.loop&&clip.ended));
     assert.equal(await inspect(accepted,"document.querySelector('#mic').hidden"),false);
@@ -124,7 +125,7 @@ async function test(){
     assert.equal(transcriptions,1);
     assert.match(await inspect(accepted,"document.querySelector('#draft').value"),/^周末去散步[。！]?$/);
     await inspect(accepted,"document.querySelector('#dismiss').click()");
-    await until(()=>releases===1,'主动结束没有释放状态');
+    await until(()=>releases===2,'主动结束没有释放状态');
     assert.equal(chat.active,null);
     assert.equal(accepted.isDestroyed(),true);
     console.log('PASS：Electron 菜单及待处理头像、接话页、完整首段自动播放、麦克风采集和校正、主动结束。');
@@ -144,7 +145,7 @@ async function test(){
     assert.deepEqual(await inspect(crashingBubble,'window.testAudio'),[{src:voices.lines.acceptedTail.file,loop:false,ended:true}]);
     console.log('PASS：连续两场覆盖两条接话语音，菜单连点只选择并播放一次。');
     crashingBubble.webContents.forcefullyCrashRenderer();
-    await until(()=>releases===2,'渲染崩溃没有释放状态');
+    await until(()=>releases===3,'渲染崩溃没有释放状态');
     late.resolve({wav});
     await delay(150);
     assert.equal(chat.waiting.id,waitingId);

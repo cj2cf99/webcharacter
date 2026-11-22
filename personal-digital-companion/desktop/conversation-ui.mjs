@@ -187,9 +187,13 @@ function renderChecks(data){
   const counter=document.getElementById('remaining');
   counter.textContent=remaining();
   countdown=setInterval(()=>{if(!document.hidden)counter.textContent=remaining();},1000);
-  document.getElementById('checkState').textContent=[data.running?'正在检查到期事项':data.pending?'提醒检查任务等待空闲执行':'',
+  const queuedChecks=data.queue??[];
+  const waiting=data.queue?queuedChecks.some(row=>!row.running):data.pending;
+  const queue=queuedChecks.map(({name,running,queuedAt})=>name+' · '+(running?'执行中':'待执行')+' · '+clock.format(queuedAt)+' JST');
+  document.getElementById('checkState').textContent=[data.running?'正在检查到期事项':waiting?'提醒检查任务等待空闲执行':'',
     data.nextWeatherAt?'下次天气检查 '+clock.format(data.nextWeatherAt)+' JST':'',
-    data.nextTaskAt?'下次任务轮询 '+clock.format(data.nextTaskAt)+' JST':''].filter(Boolean).join(' · ');
+    data.nextTaskAt?'下次任务轮询 '+clock.format(data.nextTaskAt)+' JST':'',
+    queue.join(' / ')].filter(Boolean).join(' · ');
   list.replaceChildren(...data.events.map((event,i)=>{
     const tone=statusTone(event.status),row=stagger(card('section',tone),i);
     const timing=clock.format(event.at)+(event.at-event.due>=1000?' · 原定 '+clock.format(event.due):'');

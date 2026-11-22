@@ -1,0 +1,39 @@
+{
+  "items": [
+    {
+      "path": "desktop/shell.mjs",
+      "before": "c2c13646d0e24c99634bb200ba1b4fc77c0e81b78f1534ca7a4c74258484960e",
+      "after": "2905f1368f145c49abbd0b25095d7f3186f8dbdd1f72a144e26813dfa3f46601"
+    },
+    {
+      "path": "desktop/menu-layout.json",
+      "before": "8a119354c163fd49e8d654f1c6ddd8609022651287a17bad4c5087c46decc731",
+      "after": "f62112d7b7460b3a8f8e892178c84a509716494cd722b23a4a028f3a8792ffc7"
+    },
+    {
+      "path": "desktop/poll-scheduler.mjs",
+      "before": "a8f0c0da9f7165dfe622006eccc10803a182f0c79ddca7836a34e6d41ce6d3ed",
+      "after": "3773dd6a521bd4b39d9edfadcb491cb21c602bf3b79d6e821a7a2f2f4cb4c4d9"
+    },
+    {
+      "path": "desktop/reminder-checks.mjs",
+      "before": "ee6d10d2255db0a2164ca20621708d6f5950059f8ca4b207c27185181db7afc7",
+      "after": "f9d3f3b1c3a5e49f1db76f56ac43ebd468bf6b86d26f1e805dc73329ff9c461f"
+    },
+    {
+      "path": "desktop/conversation-details.mjs",
+      "before": "20c5a10843229699e4a3e5064219e657d2893de065e6ba7d1a58462380db83fc",
+      "after": "81615878558e4da6d6b67be1caa5fae7436005cd8aa4620446bd7d5faffd9acb"
+    },
+    {
+      "path": "desktop/conversation-ui.mjs",
+      "before": "88f8d8b3baeb0fc162d8316730d22798d9e156879045d0897df6082d6d6459e8",
+      "after": "f17de9d81b3dd84ec848d683d8e0bcae5f20f3fd7448508710b5b11c0bc40433"
+    },
+    {
+      "path": "output/desktop-bundle/conversation-ui.mjs",
+      "before": "88f8d8b3baeb0fc162d8316730d22798d9e156879045d0897df6082d6d6459e8",
+      "after": "f17de9d81b3dd84ec848d683d8e0bcae5f20f3fd7448508710b5b11c0bc40433"
+    }
+  ]
+}

@@ -2,7 +2,7 @@ import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {readFile} from 'node:fs/promises';
 import {tokyoDay} from './conversation-history.mjs';
-import {createPanelWindow} from './panel-window.mjs';
+import {createPanelWindow,showPanel} from './panel-window.mjs';
 import {readTaskReviews} from './personality-diary.mjs';
 
 export function attachConversationDetails(electron,{root,profile,bundle,history,memory,readTasks,readTraffic,readAiStep,checks,edits,auditPending=()=>[],readQuestionCitation,resumeAudit,visible,onReview,threads}) {
@@ -173,9 +173,7 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
     if(panel!==current||current.isDestroyed())return;
     if(!opening)current.webContents.send('conversation:select');
     if(visible){
-      current.show();
-      // Windows 隐藏启动时，第一次 show() 可能仍让窗口保持隐藏。
-      if(process.platform==='win32'&&!current.isVisible())current.show();
+      showPanel(current);
       current.focus();
     }
   }

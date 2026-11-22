@@ -273,7 +273,8 @@ test('正式任务先收尾，专聊期间仍可领取，取消后执行且忽�
       show(data){rendered.push(data.phase);return true;},update(data){rendered.push(data.phase);},close(){},focus(){},
     },createModel:()=>({start(){},close(){},snapshot:()=>({state:'ready',backend:'cpu',gpuLayers:0}),
       analyze:async()=>({reply:'周末一起去公园走走吧，回来喝一杯热茶。路上如果看到好看的树，我想站一会儿，听听风吹树叶的声音，再和你商量晚饭吃什么。',done:false})}),
-    createVoice:()=>({render(){generating.resolve();return lateWav.promise;},close(){}}),
+    createVoice:()=>({preheat:()=>({ready:true}),preheatSpeaking:()=>({ready:true}),
+      render(){generating.resolve();return lateWav.promise;},close(){}}),
   });
   t.after(async()=>{finishFirst.resolve();finishChat.resolve();await chat.close();await runtime.stop();});
   chat.plan({id:'chat-one',topics:['周末散步','茶','做饭']});

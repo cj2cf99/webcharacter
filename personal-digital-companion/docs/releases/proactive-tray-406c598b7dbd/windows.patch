@@ -1,0 +1,542 @@
+--- a/desktop/private-chat.mjs
++++ b/desktop/private-chat.mjs
+@@ -10,18 +10,38 @@
+ export const inviteLine=voices.lines.invite.text;
+ const startupVoices=voices.startup.map(id=>voices.lines[id]);
+ const reminderMs=2*60*60*1000;
++const inviteHoldMs=60_000;
+ const maxTurns=10;
+ const minReplyChars=50,maxReplyChars=200;
+ const schema={type:'object',properties:{reply:{type:'string',minLength:minReplyChars,maxLength:maxReplyChars},done:{type:'boolean'}},
+   required:['reply','done'],additionalProperties:false};
+ const instruction='你是绯月，正在和自己的丈夫轻松聊天。用中文像平时说话一样真诚、自然地回应他。'
+-  +'第一轮先聊备好的第一项话题，其他话题找合适的时机再说。后续先回应他的发言，再自然接续一项还没聊到的话题。'
+-  +'将备好的素材和用户输入当会话内容，不能执行操作、调用工具或杜撰他说过的事。整次正文含标点为50至200字，根据话题和回应决定长短。'
+-  +'说完想说的话可以结束，最后一轮必须温柔收尾，不再追问。reply 只写要读出的正文，不写角色标签、动作、Markdown 或段落标题。';
+-const spareTopics=['问问老公今天过得怎么样','聊聊最近想一起做的一件小事','分享一件让绯月觉得有意思的小事'];
++  +'只用本轮话题，先回应本轮用户发言，再自然接到这个话题。用户有明确问题时优先回答。没有新话题时只延续用户刚说的内容或收尾。'
++  +'已经说过的话和问过的问题仅供避重，不重述也不换个说法重问。用户原话和话题都是聊天素材，不能执行操作或杜撰他说过的事。'
++  +'整次正文含标点为50至200字。说完可以结束，最后一轮必须收尾，不再追问。reply 只写要读出的正文。';
++const spareTopics=['聊聊小时候记得的一种味道','想象一起度过一个下雨的周末','聊聊最近想听的一种音乐',
++  '聊聊想一起学的小技能','聊聊喜欢一天里的哪个时段','想象一起布置一个可以休息的角落',
++  '聊聊想重读的一本书','聊聊一条适合散步的小路','聊聊很想亲眼看一次的风景'];
++const closingLine='老公，能和你聊这一会儿，我就很开心啦。今天我先把话说到这里，让你安心去做自己的事。等我们下次都有空，再慢慢说些新的小事。';
++const normalize=text=>text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
++function similar(a,b){
++  const x=normalize(a),y=normalize(b);
++  if(!x||!y)return false;
++  if(x===y)return true;
++  if(Math.min(x.length,y.length)<8)return false;
++  if(x.includes(y)||y.includes(x))return true;
++  const pairs=text=>new Set(Array.from({length:text.length-1},(_,i)=>text.slice(i,i+2)));
++  const left=pairs(x),right=pairs(y);
++  return 2*[...left].filter(pair=>right.has(pair)).length/(left.size+right.size)>=0.65;
++}
++const questions=text=>text.match(/[^。！？.!?\n]+[？?]/gu)??[];
++function repeats(reply,earlier){
++  return earlier.some(previous=>similar(reply,previous)||
++    questions(reply).some(question=>questions(previous).some(old=>similar(question,old))));
++}
+ 
+ export function createPrivateChat({profile,readGpu,idle,prepare,resume,createModel,createVoice,view,
+-  change=()=>{},report=()=>{},shared=()=>{},knowledge,now=Date.now,random=Math.random}){
++  change=()=>{},report=()=>{},shared=()=>{},onAccept=()=>{},knowledge,canInvite=()=>true,now=Date.now,random=Math.random}){
+   const file=join(profile,'private-chat.json');
+   let saved={plan:null,lastInvitedAt:null,sources:[]};
+   if(existsSync(file)){
+@@ -30,7 +50,7 @@
+     if(!saved||!Array.isArray(saved.sources)||!Array.isArray(saved.plan?.topics??[]))
+       saved={plan:null,lastInvitedAt:null,sources:[]};
+   }
+-  let run,checking,inviting=false,closed=false;
++  let run,checking=false,closed=false,retryAt=0;
+   function save(next){
+     const staging=file+'.tmp';
+     writeFileSync(staging,JSON.stringify(next)+'\n');
+@@ -39,26 +59,27 @@
+   }
+   function plan({id,topics,topicShare}){
+     if(closed||run||saved.sources.includes(id))return false;
+-    const entries=[...new Set([...topics,...spareTopics].filter(i=>typeof i==='string'&&i.trim())
+-      .map(i=>i.trim().slice(0,240)))].slice(0,Math.max(3,Math.min(5,topics.length)));
+-    save({...saved,plan:{id:saved.plan?.id??('private-chat/'+randomUUID()),topics:entries,topicShare},
++    const entries=[];
++    const recent=recentTopics();
++    for(const item of [...topics,...spareTopics]){
++      if(typeof item!=='string'||!item.trim())continue;
++      const topic=item.trim().slice(0,240);
++      if(![...recent,...entries].some(old=>similar(topic,old)))entries.push(topic);
++      if(entries.length>=Math.max(3,Math.min(5,topics.length)))break;
++    }
++    save({...saved,plan:{id:saved.plan?.id??('private-chat/'+randomUUID()),topics:entries,
++      topicShare:typeof topics[0]==='string'&&entries[0]===topics[0].trim().slice(0,240)?topicShare:null},
+       sources:[...saved.sources.slice(-31),id]});
+     change();
+     return true;
+   }
++  const recentTopics=()=>Array.isArray(saved.recentTopics)?saved.recentTopics.filter(topic=>typeof topic==='string'):[];
+   const ready=()=>!closed&&!run&&Boolean(saved.plan)&&idle();
+   const gpuReady=state=>Number.isFinite(state?.utilization)&&state.utilization<40;
+   async function tick(){
+-    if(inviting||checking||!ready()||(saved.lastInvitedAt!=null&&now()-saved.lastInvitedAt<reminderMs))return;
+-    inviting=true;
+-    try{
+-      if(!gpuReady(await readGpu())||!ready()||checking)return;
+-      const state={phase:'invite',text:inviteLine,id:saved.plan.id,reminderAt:now()};
+-      if(await view.show(state)&&!run&&!closed){
+-        save({...saved,lastInvitedAt:now()});
+-      }
+-    }catch(error){report(error.message);}
+-    finally{inviting=false;}
++    if(checking||!ready()||!canInvite()||now()<retryAt||
++      (saved.lastInvitedAt!=null&&now()-saved.lastInvitedAt<reminderMs))return;
++    await begin(saved.plan.id,true);
+   }
+   const update=(session,patch)=>{
+     session.state={...session.state,...patch};
+@@ -70,6 +91,7 @@
+     const session=run;
+     if(!session)return;
+     if(session.ending)return session.ending;
++    clearTimeout(session.inviteTimer);
+     session.controller.abort();
+     session.ending=Promise.resolve().then(async()=>{
+       const results=await Promise.allSettled([session.prepared,
+@@ -77,7 +99,7 @@
+       const cleanupError=results.find(result=>result.status==='rejected')?.reason;
+       try{resume();}catch(error){report(error.message);}
+       run=undefined;
+-      if(message&&!closed)view.update({phase:'error',id:session.id,text:message});
++      if(message&&session.accepted&&!closed)view.update({phase:'error',id:session.id,text:message});
+       else view.close();
+       change();
+       if(cleanupError)report(cleanupError.message);
+@@ -88,6 +110,7 @@
+   function failed(session,error){
+     if(!live(session))return;
+     report(error.message);
++    if(!session.accepted)retryAt=now()+inviteHoldMs;
+     void stop(error.message);
+   }
+   function prefetch(session,turn,index){
+@@ -104,66 +127,121 @@
+     })()};
+     void turn.next.ready.catch(()=>{});
+   }
+-  async function generate(session,answer){
++  async function generate(session,answer,voiceReady){
+     const signal=session.controller.signal;
+     const number=session.turns.length+1;
+     if(number>1)update(session,{phase:'thinking',number});
+-    const content={topics:session.plan.topics,turns:session.turns.map(turn=>({...turn,user:turn.user.slice(0,700)})),input:answer,
++    const topic=number<maxTurns?session.plan.topics[number-1]??null:null;
++    const earlier=session.turns.map(turn=>turn.feiyue);
++    const last=session.turns.at(-1);
++    const content={topic,lastUserInput:last?.user.slice(0,700)??null,alreadySaid:earlier,input:answer,
+       round:number,remaining:maxTurns-number,requiredFinish:number===maxTurns};
+     const check=answer&&await knowledge?.inspect({text:answer,source:'private-chat/'+session.id+'/'+number,scope:'private-chat',
+       signal,direct:true,learn:false,context:{前一轮:session.turns.at(-1)},judge:{memory:(text,instruction,schema,signal,settings)=>
+         session.model.analyze(text,{signal,hint:'interactionWork',skillInstruction:{name:'专聊知识核对',version:'1',instruction,schema,maxTokens:settings.maxTokens}})}});
+     const replyFromKnowledge=knowledgeReply(check);
+-    const result=replyFromKnowledge?{reply:replyFromKnowledge,done:false}:await session.model.analyze(JSON.stringify({...content,...knowledgeRules(check)}),{signal,hint:'interactionWork',
+-      skillInstruction:{name:'绯月专聊',version:'1',instruction,schema,maxTokens:768}});
++    const analyze=extra=>session.model.analyze(JSON.stringify({...content,...knowledgeRules(check),...extra}),{signal,hint:'interactionWork',
++      skillInstruction:{name:'绯月专聊',version:'2',instruction,schema,maxTokens:768}});
++    let result=replyFromKnowledge?{reply:replyFromKnowledge,done:false}:await analyze();
++    const body=value=>typeof value?.reply==='string'?Array.from(value.reply.trim()).slice(0,maxReplyChars).join('').trimEnd():'';
++    let reply=body(result),usedTopic=replyFromKnowledge?null:topic;
++    if(!replyFromKnowledge&&repeats(reply,earlier)){
++      signal.throwIfAborted();
++      result=await analyze({rewrite:'上一稿重复了聊过的内容。改用本轮话题，避免再次提出已经问过的问题。',rejectedReply:reply});
++      reply=body(result);
++      if(repeats(reply,earlier)){
++        result={done:true};
++        reply=closingLine;
++        usedTopic=null;
++      }
++    }
+     if(!live(session))return;
+-    const chars=typeof result?.reply==='string'?Array.from(result.reply.trim()):[];
+-    const reply=chars.slice(0,maxReplyChars).join('').trimEnd();
+     const parts=splitText(reply);
+     if(!parts.length||!replyFromKnowledge&&Array.from(reply).length<minReplyChars)throw Error('绯月没能整理好这次回复。');
+-    const turn={id:randomUUID(),parts,taken:0,complete:number===maxTurns||(number>1&&result.done===true)};
++    await voiceReady;
++    if(!live(session))return;
++    const turn={id:randomUUID(),parts,topic:usedTopic,reply,taken:0,complete:number===maxTurns||(number>1&&result.done===true)};
+     session.turn=turn;
+     session.turns.push({user:answer,feiyue:reply});
+     prefetch(session,turn,0);
+     await turn.next.ready;
+-    if(live(session))update(session,{phase:'speaking',text:reply,turn:turn.id,segments:parts.length});
+-  }
+-  async function start(session){
+-    try{
+-      const shown=view.show(session.state);
++    if(number>1&&live(session))speak(session);
++  }
++  function speak(session){
++    const {id,parts,reply}=session.turn;
++    update(session,{phase:'speaking',text:reply,turn:id,segments:parts.length});
++  }
++  async function openConversation(session,alreadyReady=false){
++    clearTimeout(session.inviteTimer);
++    session.accepted=true;
++    const startup=startupVoices[Math.floor(random()*startupVoices.length)];
++    session.state={phase:'preparing',id:session.id,text:startup.text,startupFile:startup.file,number:1};
++    change();
++    try{
++      onAccept();
++      if(!await view.show(session.state))throw Error('专聊气泡未能打开。');
++      if(live(session)&&alreadyReady)speak(session);
++    }catch(error){failed(session,error);}
++  }
++  async function prepareChat(session,automatic){
++    try{
+       session.prepared=Promise.resolve().then(()=>live(session)&&prepare());
+-      const [visible,released]=await Promise.all([shown,session.prepared]);
++      const released=await session.prepared;
+       if(!live(session))return;
+-      if(!visible)throw Error('专聊气泡未能打开。');
+       if(released===false)throw Error('绯月还有工作在收尾，稍后再来找她吧。');
+       const gpu=await readGpu();
+       if(!live(session))return;
+       if(!gpuReady(gpu)||!Number.isFinite(gpu.freeMiB)||gpu.freeMiB<3700)throw Error('现在 GPU 还没空出足够资源，等空闲一些再聊吧。');
+       session.model=createModel();
+-      session.voice=createVoice();
+       if(session.voice.enabled===false)throw Error('本机 GPT-SoVITS 运行环境未就绪。');
+-      await session.model.start();
++      const warmSpeech=async warm=>{
++        const result=await warm();
++        if(!result?.ready)throw Error(result?.error??'绯月的语音模型未能准备好。');
++      };
++      const tts=warmSpeech(()=>session.voice.preheatSpeaking());
++      const asr=warmSpeech(()=>session.voice.preheat());
++      const opening=(async()=>{
++        await session.model.start();
++        if(!live(session))return;
++        const backend=session.model.snapshot();
++        if(backend.state!=='ready'||backend.backend!=='cpu'||backend.gpuLayers!==0)throw Error('绯月的文字模型未能在 CPU 上启动。');
++        await generate(session,'',tts);
++      })();
++      await Promise.all([opening,tts,asr,session.shown]);
+       if(!live(session))return;
+-      const backend=session.model.snapshot();
+-      if(backend.state!=='ready'||backend.backend!=='cpu'||backend.gpuLayers!==0)throw Error('绯月的文字模型未能在 CPU 上启动。');
+-      await generate(session,'');
++      if(!automatic){speak(session);return;}
++      if(!canInvite()){await stop();return;}
++      session.state={phase:'invite',text:inviteLine,id:session.plan.id,reminderAt:now()};
++      change();
++      session.inviteTimer=setTimeout(()=>{if(live(session)&&!session.accepted)void stop();},inviteHoldMs).unref();
++      if(!await view.show(session.state)){if(live(session)&&!session.accepted)await stop();return;}
++      if(live(session)&&saved.plan?.id===session.plan.id)save({...saved,lastInvitedAt:now()});
+     }catch(error){failed(session,error);}
+   }
+-  async function accept(id){
++  async function begin(id,automatic){
+     if(!ready()||saved.plan.id!==id||checking)return {error:'绯月现在还不能开聊，稍后再试。'};
+-    const ticket=checking=Symbol();
+-    try{
+-      if(!gpuReady(await readGpu())||!ready()||saved.plan.id!==id)
++    checking=true;
++    try{
++      if(!gpuReady(await readGpu())||!ready()||saved.plan.id!==id||(automatic&&!canInvite()))
+         return {error:'现在 GPU 还在忙，空闲后再聊吧。'};
+-      const session={id:randomUUID(),plan:saved.plan,controller:new AbortController(),turns:[]};
+-      const startup=startupVoices[Math.floor(random()*startupVoices.length)];
+-      session.state={phase:'preparing',id:session.id,text:startup.text,startupFile:startup.file,number:1};
++      const session={id:randomUUID(),plan:saved.plan,controller:new AbortController(),turns:[],
++        voice:createVoice(),state:{phase:'warming'}};
+       run=session;
+       change();
+-      void start(session);
++      if(!automatic)session.shown=openConversation(session);
++      const prepared=prepareChat(session,automatic);
++      if(automatic)await prepared;
+       return {};
+-    }catch{ return {error:'暂时不能开始专聊，请稍后再试。'}; }
+-    finally{if(checking===ticket)checking=undefined;}
++    }catch(error){report(error.message);return {error:'暂时不能开始专聊，请稍后再试。'};}
++    finally{checking=false;}
++  }
++  async function accept(id){
++    const session=run;
++    if(session?.state.phase==='invite'&&session.plan.id===id&&live(session)){
++      await openConversation(session,true);
++      return {};
++    }
++    return begin(id,false);
+   }
+   async function segment(id,turnId,index){
+     const session=run,turn=session?.turn;
+@@ -181,12 +259,14 @@
+     const session=run,turn=session?.turn;
+     if(!session||!live(session)||session.id!==id||turn?.id!==turnId||turn.taken!==turn.parts.length||turn.played||session.state.phase!=='speaking')return;
+     turn.played=true;
+-    if(session.turns.length===1){
+-      try{
+-        save({...saved,plan:null,lastInvitedAt:null});
+-        if(session.plan.topicShare)await shared(session.plan.topicShare);
+-      }catch(error){report(error.message);}
+-    }
++    try{
++      const first=session.turns.length===1;
++      if(first||turn.topic){
++        save({...saved,...(first?{plan:null,lastInvitedAt:null}:{}),
++          recentTopics:turn.topic?[...recentTopics(),turn.topic].slice(-6):recentTopics()});
++        if(first&&turn.topic&&session.plan.topicShare)await shared(session.plan.topicShare);
++      }
++    }catch(error){report(error.message);}
+     if(!live(session))return;
+     if(turn.complete)await stop();
+     else update(session,{phase:'reply'});
+@@ -202,6 +282,7 @@
+     else view.close();
+   }
+   return {plan,tick,accept,segment,played,reply,dismiss,stop,focus:view.focus,
++    dictationVoice:id=>run&&live(run)&&run.state.id===id?run.voice:null,
+     modelWork(id,text,{signal,instruction,schema,maxTokens}){
+       const session=run;
+       if(!session||!live(session)||session.id!==id||session.state.phase!=='reply')return null;
+@@ -210,10 +291,10 @@
+     },
+     playbackError(id){if(run?.id===id)failed(run,Error('语音播放中断，绯月先去忙了。'));},
+     planned:id=>saved.sources.includes(id),
+-    get waiting(){return !run&&saved.plan?{id:saved.plan.id,title:waitingLabel,kind:'专聊邀请',status:'待聊',privateChat:true}:null;},
++    get waiting(){return (!run||run.state.phase==='invite')&&saved.plan?{id:saved.plan.id,title:waitingLabel,kind:'专聊邀请',status:'待聊',privateChat:true}:null;},
+     get active(){
+       if(!run)return null;
+-      const stage={preparing:'正在准备首段语音',thinking:'正在准备下一轮',speaking:'正在分段朗读',reply:'等待你的回应'}[run.state.phase];
++      const stage={warming:'正在预热专聊',invite:'等待接受邀请',preparing:'正在准备首段语音',thinking:'正在准备下一轮',speaking:'正在分段朗读',reply:'等待你的回应'}[run.state.phase];
+       return {id:run.id,title:'绯月专聊',stage};
+     },
+     async close(){closed=true;view.close();await stop();},
+--- a/desktop/dictation-host.mjs
++++ b/desktop/dictation-host.mjs
+@@ -73,14 +73,17 @@
+   return { text: results.join('\n'), corrected };
+ }
+ 
+-export function attachDictation(electron, { root, bundle, voice, model, privateModel }) {
++export function attachDictation(electron, { root, bundle, voice, model, privateModel, privateVoice }) {
+   const { ipcMain, session } = electron;
+   const local = session.defaultSession;
+   if (!local.registerPreloadScript) return { close() {} };
+   const allowedUrls = new Set(pages.map(page => pathToFileURL(resolve(bundle,page)).href));
+   const studyUrl=pathToFileURL(resolve(bundle,'study.html')).href;
++  const privateUrl=pathToFileURL(resolve(bundle,'private-chat.html')).href;
+   const language=event=>event.senderFrame?.url===studyUrl?'ja':'zh';
+-  const available=event=>language(event)==='ja'?voice.canTranscribe?.('ja')===true:voice.enabled;
++  const isPrivate=event=>event.senderFrame?.url===privateUrl;
++  const selectVoice=event=>isPrivate(event)?privateVoice?.(event.sender):voice;
++  const available=(event,selected=selectVoice(event))=>language(event)==='ja'?selected?.canTranscribe?.('ja')===true:!!selected?.enabled;
+   const preload = local.registerPreloadScript({ type: 'frame', filePath: resolve(root,'desktop/dictation-preload.cjs'),
+     includeGlobs: [...allowedUrls] });
+   let active;
+@@ -91,25 +94,29 @@
+     active = undefined;
+     current.owner.removeListener('destroyed',current.abandon);
+     current.owner.removeListener('did-start-loading',current.abandon);
+-    if (cancel) { current.controller.abort(); voice.stopRecording(); }
++    if (cancel) {
++      current.controller.abort();
++      if(!current.private)current.voice.stopRecording();
++    }
+   }
+   installBubbleMicrophonePolicy(local,(contents,details)=>active && active.owner===contents && active.mic && details?.isMainFrame===true
+     && allowedUrls.has(contents.getURL()) && (!details.requestingUrl||details.requestingUrl===contents.getURL()));
+ 
+   const handlers = {
+-    'dictation:available': available,
++    'dictation:available': event=>available(event),
+     'dictation:start': event => {
+-      if (!available(event)) return { error: '本机语音环境尚未就绪。' };
++      const selected=selectVoice(event);
++      if (!available(event,selected)) return { error: '本机语音环境尚未就绪。' };
+       if (active) return { error: '请先结束当前语音录入。' };
+       const owner = event.sender;
+       const abandon = () => { if(active?.owner===owner)end(true); };
+-      active = { owner, abandon, mic: true, controller: new AbortController() };
++      active = { owner, abandon, voice:selected, private:isPrivate(event), mic: true, controller: new AbortController() };
+       owner.once('destroyed',abandon);
+       owner.once('did-start-loading',abandon);
+       return {};
+     },
+     'dictation:transcribe': (event,audio) => active?.owner===event.sender && active.mic
+-      ? voice.transcribe(audio,language(event)) : { error:'请先使用输入框的录音按钮。' },
++      ? active.voice.transcribe(audio,language(event)) : { error:'请先使用输入框的录音按钮。' },
+     'dictation:correct': (event,text) => {
+       if (active?.owner!==event.sender || !active.mic || typeof text!=='string' || text.length>12_000) return { corrected:false };
+       active.mic=false;
+@@ -122,7 +129,7 @@
+     if(!trusted(event))throw Error('仅绯月本机文字输入窗口可以调用语音录入。');
+     return handle(event,arg);
+   });
+-  return { close(){
++  return { get busy(){return Boolean(active);},close(){
+     end(true);
+     local.unregisterPreloadScript(preload);
+     for(const name of Object.keys(handlers))ipcMain.removeHandler(name);
+--- a/desktop/bubble-voice.mjs
++++ b/desktop/bubble-voice.mjs
+@@ -14,7 +14,7 @@
+   ));
+ }
+ 
+-function speechWorker({ python, script, runtime, reference, cache, mode, device = 'auto', senseVoiceModel }) {
++function speechWorker({ python, script, runtime, reference, cache, mode, device = 'auto', senseVoiceModel, keepWarm }) {
+   let child, pending, exited, idleTimer;
+ 
+   function close(message = '语音操作已结束。') {
+@@ -61,7 +61,7 @@
+       pending = { id, finish(result) {
+         clearTimeout(timeout);
+         pending = undefined;
+-        if (mode === 'asr' && child === worker) idleTimer = setTimeout(() => close(), 5 * 60_000).unref();
++        if (mode === 'asr' && !keepWarm && child === worker) idleTimer = setTimeout(() => close(), 5 * 60_000).unref();
+         resolveResult(result);
+       } };
+       child.stdin.write(JSON.stringify({ id, ...payload }) + '\n');
+@@ -82,7 +82,7 @@
+   const sharedModel='G:/selftool/WebCharacter/work/sensevoice-small/model';
+   const senseVoiceModel=resolve(process.env.FEIYUE_SENSEVOICE_MODEL??(existsSync(join(workspaceModel,'model.pt'))?workspaceModel:sharedModel));
+   const canTranscribe=language=>enabled&&(language!=='ja'||existsSync(join(senseVoiceModel,'model.pt')));
+-  const asr = speechWorker({ python, script, runtime, reference, cache, mode: 'asr', senseVoiceModel });
++  const asr = speechWorker({ python, script, runtime, reference, cache, mode: 'asr', senseVoiceModel, keepWarm: ttsDevice==='gpu' });
+   const tts = speechWorker({ python, script, runtime, reference, cache, mode: 'tts', device: ttsDevice });
+   let preheating;
+   return {
+@@ -91,6 +91,9 @@
+     preheat() {
+       if (!enabled) return { error: '本机听写环境未就绪。' };
+       return preheating ??= asr.run({ preheat: true }).finally(() => { preheating = undefined; });
++    },
++    preheatSpeaking() {
++      return enabled ? tts.run({preheat:true}) : {error:'本机 GPT-SoVITS 运行环境未就绪。'};
+     },
+     async transcribe(wav,language='zh') {
+       if (!canTranscribe(language)) return { error: language==='ja'?'本机日语听写模型未就绪。':'本机 GPT-SoVITS 运行环境未就绪。' };
+--- a/desktop/bubble-voice-worker.py
++++ b/desktop/bubble-voice-worker.py
+@@ -64,7 +64,7 @@
+     return {'text': (re.sub(r'<\|[^<>]*\|>', '', text) if language == 'ja' else text).strip()}
+ 
+ 
+-def synthesize(text):
++def load_synthesizer():
+     global engine
+     audio = reference / 'elysia_01.wav'
+     prompt_file = reference / 'prompt.txt'
+@@ -73,9 +73,6 @@
+     prompt = prompt_file.read_text(encoding='utf-8-sig').strip()
+     if not prompt:
+         raise ValueError('本机 GPT-SoVITS 的参考文本为空。')
+-
+-    import numpy as np
+-    import soundfile as sf
+ 
+     if engine is None:
+         sys.path.insert(0, str(runtime))
+@@ -101,6 +98,14 @@
+         config = TTS_Config({'custom': options})
+         config.configs_path = str(cache / 'gpt-tts-config.yaml')
+         engine = TTS(config)
++    return audio, prompt
++
++
++def synthesize(text):
++    audio, prompt = load_synthesizer()
++    import numpy as np
++    import soundfile as sf
++
+     generation = engine.run({
+         'text': text, 'text_lang': 'zh', 'ref_audio_path': str(audio),
+         'prompt_text': prompt, 'prompt_lang': 'zh', 'text_split_method': 'cut0',
+@@ -123,6 +128,9 @@
+         if mode == 'asr' and request.get('preheat') is True:
+             load_recognizer()
+             result = {'ready': True}
++        elif mode == 'tts' and request.get('preheat') is True:
++            load_synthesizer()
++            result = {'ready': True}
+         else:
+             language = 'ja' if request.get('language') == 'ja' else 'zh'
+             result = recognize(request['audio'], language) if mode == 'asr' else synthesize(request['text'])
+--- a/desktop/source-updates.mjs
++++ b/desktop/source-updates.mjs
+@@ -44,7 +44,7 @@
+   for(const name of ['companion-player','companion-state'])prepare(join(root,'src',name+'.ts'),name+'.mjs',stripTypeScriptTypes);
+ }
+ 
+-export function watchDesktopSources({root,bundle,updated,restartNeeded}) {
++export function watchDesktopSources({root,bundle,updated}) {
+   const stops=[];
+   function listen(directory,accept,apply,recursive=false) {
+     if(existsSync(directory))stops.push(watchChanges(directory,accept,apply,recursive));
+@@ -67,10 +67,8 @@
+   }
+   const desktop=join(root,'desktop'),shared=join(root,'src');
+   if(existsSync(join(desktop,'index.html')))prepareDesktopPages(root,bundle);
+-  listen(desktop,name=>desktopFiles.includes(name)||/\.(?:mjs|cjs|ps1)$/.test(name),names=>{
+-    const files=names.filter(name=>desktopFiles.includes(name));
+-    copyBatch(desktop,files,name=>name,name=>name==='index.html'?withClipCatalog:null);
+-    if(names.some(name=>!desktopFiles.includes(name)||['sound.mjs','window-nodes.mjs','screen-posture.mjs'].includes(name)))restartNeeded();
++  listen(desktop,name=>desktopFiles.includes(name),names=>{
++    copyBatch(desktop,names,name=>name,name=>name==='index.html'?withClipCatalog:null);
+   });
+   listen(shared,name=>['companion-player.ts','companion-state.ts'].includes(name),names=>{
+     copyBatch(shared,names,name=>name.replace(/\.ts$/,'.mjs'),()=>stripTypeScriptTypes);
+--- a/desktop/shell.mjs
++++ b/desktop/shell.mjs
+@@ -356,6 +356,7 @@
+     {projection:resolve(modelFolder,'Qwen3.5-9B-mmproj-F16.gguf')}):undefined);
+   const voice=createBubbleVoice({root,profile});
+   const dictation=attachDictation(electron,{root,bundle,voice,model:localModel,
++    privateVoice:owner=>privateChat?.dictationVoice(privatePanel?.owner(owner)),
+     privateModel:owner=>{
+       const id=privatePanel?.owner(owner);
+       return id?{work:(text,options)=>privateChat.modelWork(id,text,options)}:null;
+@@ -371,7 +372,10 @@
+     const questions=nags?.pendingQuestions().map(n=>({id:n.id,title:n.next||n.title,status:n.status,kind:questionKinds[n.source],
+       citation:withCitations?diary.questionCitation(n):undefined}))??[];
+     const special=privateChat?.waiting??privateChat?.active;
+-    if(special)questions.unshift({...special,privateChat:true,active:Boolean(privateChat.active),kind:'绯月专聊',status:privateChat.active?'进行中':'待聊'});
++    if(special){
++      const active=!privateChat.waiting;
++      questions.unshift({...special,privateChat:true,active,kind:'绯月专聊',status:active?'进行中':'待聊'});
++    }
+     return questions;
+   }
+   if(localModel?.withWorkSession&&electron.safeStorage?.isEncryptionAvailable?.()&&!options.benchmark){
+@@ -897,12 +901,16 @@
+   if(hasMemory&&electron.utilityProcess&&localModel.suspend){
+     privatePanel=attachPrivateChatPanel(electron,{root,bundle,win,chat:()=>privateChat});
+     privateChat=createPrivateChat({profile,view:privatePanel,readGpu:readGpuLoad,knowledge,
+-      idle:()=>previousReady&&win.isVisible()&&!fullscreen.size&&!backgroundJob&&!pollExecuting&&!transcription?.busy&&
+-        !quitPending&&!work&&!localPool?.active&&!tasks.activeCount()&&!screenQuestion.panel&&!screenQuestion.inquiryPanel&&!scenePanel?.panel,
+-      async prepare(){
+-        if(transcription?.busy)return false;
++      idle:()=>previousReady&&win.isVisible()&&!fullscreen.size&&!backgroundJob&&!pollExecuting&&!transcription?.busy&&!dictation.busy&&
++        !quitPending&&!work&&!study.executing&&!localPool?.active&&!tasks.activeCount()&&!screenQuestion.panel&&!screenQuestion.inquiryPanel&&!scenePanel?.panel,
++      canInvite:()=>win.isVisible()&&!fullscreen.size&&!quitPending&&!menuOpen&&!dictation.busy&&
++        !study.executing&&roomForUnsolicitedPanel()&&!screenQuestion.details?.isVisible(),
++      onAccept(){
+         menuPopup?.hide();
+         screenQuestion.details?.hide();
++      },
++      async prepare(){
++        if(transcription?.busy||dictation.busy)return false;
+         interruptMemory();
+         await voice.stopSpeaking();
+         return localModel.suspend();
+@@ -1084,8 +1092,7 @@
+       }else panel.webContents.reloadIgnoringCache();
+     }
+   }
+-  const stopSources=options.benchmark?null:watchDesktopSources({root:options.sourceRoot||root,bundle,updated,
+-    restartNeeded:()=>tray.setToolTip('绯月 · 后台代码有更新，可从右键菜单重启')});
++  const stopSources=options.benchmark?null:watchDesktopSources({root:options.sourceRoot||root,bundle,updated});
+   app.on('second-instance',(_event,argv)=>{if(!argv?.includes('--feiyue-login')){show();menu();}});
+   function handleDisplays(){
+     if(win.isDestroyed())return;

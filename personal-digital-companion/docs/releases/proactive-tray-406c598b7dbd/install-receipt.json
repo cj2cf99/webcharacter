@@ -1,0 +1,12 @@
+{
+  "version": "406c598b7dbd",
+  "manifest": "406c598b7dbd91eb4989f44fe08566a8273e121611d29070ee242726d7510ca2",
+  "installedAt": "2026-11-23T08:35:20.9062680+09:00",
+  "files": 6,
+  "oldPid": 4128,
+  "newPid": 10652,
+  "restVersion": 7,
+  "databaseQuickChecksPassed": 8,
+  "installedChecks": "专聊控制器 8 项、托盘提示、完整首段和模拟听写、菜单连点、渲染崩溃释放",
+  "garden": "待确认"
+}

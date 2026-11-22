@@ -351,6 +351,7 @@ export async function startDesktop(electron,options={}){
     {projection:resolve(modelFolder,'Qwen3.5-9B-mmproj-F16.gguf')}):undefined);
   const voice=createBubbleVoice({root,profile});
   const dictation=attachDictation(electron,{root,bundle,voice,model:localModel,
+    privateVoice:owner=>privateChat?.dictationVoice(privatePanel?.owner(owner)),
     privateModel:owner=>{
       const id=privatePanel?.owner(owner);
       return id?{work:(text,options)=>privateChat.modelWork(id,text,options)}:null;
@@ -366,7 +367,10 @@ export async function startDesktop(electron,options={}){
     const questions=nags?.pendingQuestions().map(n=>({id:n.id,title:n.next||n.title,status:n.status,kind:questionKinds[n.source],
       citation:withCitations?diary.questionCitation(n):undefined}))??[];
     const special=privateChat?.waiting??privateChat?.active;
-    if(special)questions.unshift({...special,privateChat:true,active:Boolean(privateChat.active),kind:'绯月专聊',status:privateChat.active?'进行中':'待聊'});
+    if(special){
+      const active=!privateChat.waiting;
+      questions.unshift({...special,privateChat:true,active,kind:'绯月专聊',status:active?'进行中':'待聊'});
+    }
     return questions;
   }
   if(localModel?.withWorkSession&&electron.safeStorage?.isEncryptionAvailable?.()&&!options.benchmark){
@@ -884,12 +888,17 @@ export async function startDesktop(electron,options={}){
   if(hasMemory&&electron.utilityProcess&&localModel.suspend){
     privatePanel=attachPrivateChatPanel(electron,{root,bundle,win,chat:()=>privateChat});
     privateChat=createPrivateChat({profile,view:privatePanel,readGpu:readGpuLoad,
-      idle:()=>previousReady&&win.isVisible()&&!fullscreen.size&&!backgroundJob&&!pollExecuting&&!transcription?.busy&&
-        !quitPending&&!work&&!localPool?.active&&!tasks.activeCount()&&!screenQuestion.panel&&!screenQuestion.inquiryPanel&&!scenePanel?.panel,
-      async prepare(){
-        if(transcription?.busy)return false;
+      idle:()=>previousReady&&win.isVisible()&&!fullscreen.size&&!backgroundJob&&!pollExecuting&&!transcription?.busy&&!dictation.busy&&
+        !quitPending&&!work&&!study.executing&&!localPool?.active&&!tasks.activeCount()&&!screenQuestion.panel&&!screenQuestion.inquiryPanel&&!scenePanel?.panel,
+      canInvite:()=>win.isVisible()&&!fullscreen.size&&!quitPending&&!menuOpen&&!dictation.busy&&
+        !study.executing&&!screenQuestion.hasLocalWork&&!screenQuestion.panel&&!screenQuestion.inquiryPanel&&!scenePanel?.panel&&
+        !reminderReview?.panel?.isVisible()&&!taskInbox?.panel?.isVisible()&&!screenQuestion.details?.isVisible(),
+      onAccept(){
         menuPopup?.hide();
         screenQuestion.details?.hide();
+      },
+      async prepare(){
+        if(transcription?.busy||dictation.busy)return false;
         interruptMemory();
         await voice.stopSpeaking();
         return localModel.suspend();
@@ -953,7 +962,7 @@ export async function startDesktop(electron,options={}){
       restoreTerminal:electron.dialog?.showOpenDialog&&{click:()=>taskNotice(restoreLocalTerminal())},
       review:{click:()=>taskNotice(screenQuestion.openReview())},
       notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
-      pendingCheck:checks.pending&&{click:()=>taskNotice(pollSettings.open(true))},
+      pendingCheck:checks.pending&&{click:()=>taskNotice(screenQuestion.openReview('checks'))},
       pollSettings:{click:()=>taskNotice(pollSettings.open())},
       retry:{click:()=>{taskNotice(tasks.retryPending());}},
       connection:tasks.showCloudConnection && {click:()=>taskNotice(tasks.showCloudConnection(localModel))},
@@ -1070,8 +1079,7 @@ export async function startDesktop(electron,options={}){
       }else panel.webContents.reloadIgnoringCache();
     }
   }
-  const stopSources=options.benchmark?null:watchDesktopSources({root:options.sourceRoot||root,bundle,updated,
-    restartNeeded:()=>tray.setToolTip('绯月 · 后台代码有更新，可从右键菜单重启')});
+  const stopSources=options.benchmark?null:watchDesktopSources({root:options.sourceRoot||root,bundle,updated});
   app.on('second-instance',(_event,argv)=>{if(!argv?.includes('--feiyue-login')){show();menu();}});
   function handleDisplays(){
     if(win.isDestroyed())return;

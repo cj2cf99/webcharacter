@@ -2,6 +2,7 @@
   {"action":"question","label":"问绯月","icon":"💬"},
   {"action":"privateChat","tone":"hot"},
   {"action":"notices","icon":"🔔","tone":"hot"},
+  {"action":"pendingCheck","label":"提醒检查 · 待执行","icon":"⏱","tone":"hot"},
   {"action":"continueNag","label":"待确认","icon":"💭","tone":"hot"},
   {"action":"today","label":"今日任务","icon":"📋"},
   {"action":"weather","label":"三地天气","icon":"⛅"},
@@ -14,7 +15,6 @@
   {"label":"任务","icon":"🧩","items":[
     {"action":"writeDiary","label":"看绯月写日记","icon":"✍"},
     {"action":"reviewLocalTasks","label":"补写本机任务执行评价","icon":"📝"},
-    {"action":"pendingCheck","label":"提醒检查 · 待执行","icon":"⏱","tone":"hot"},
     {"action":"tasks","label":"绯月任务管理","icon":"🗂"},
     {"action":"retry","label":"中断任务与补传","icon":"🔁"},
     {"action":"log","label":"任务日志","icon":"📜"},

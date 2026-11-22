@@ -73,14 +73,17 @@ export async function correctDictation(text, { model, signal, session }) {
   return { text: results.join('\n'), corrected };
 }
 
-export function attachDictation(electron, { root, bundle, voice, model, privateModel }) {
+export function attachDictation(electron, { root, bundle, voice, model, privateModel, privateVoice }) {
   const { ipcMain, session } = electron;
   const local = session.defaultSession;
   if (!local.registerPreloadScript) return { close() {} };
   const allowedUrls = new Set(pages.map(page => pathToFileURL(resolve(bundle,page)).href));
   const studyUrl=pathToFileURL(resolve(bundle,'study.html')).href;
+  const privateUrl=pathToFileURL(resolve(bundle,'private-chat.html')).href;
   const language=event=>event.senderFrame?.url===studyUrl?'ja':'zh';
-  const available=event=>language(event)==='ja'?voice.canTranscribe?.('ja')===true:voice.enabled;
+  const isPrivate=event=>event.senderFrame?.url===privateUrl;
+  const selectVoice=event=>isPrivate(event)?privateVoice?.(event.sender):voice;
+  const available=(event,selected=selectVoice(event))=>language(event)==='ja'?selected?.canTranscribe?.('ja')===true:!!selected?.enabled;
   const preload = local.registerPreloadScript({ type: 'frame', filePath: resolve(root,'desktop/dictation-preload.cjs'),
     includeGlobs: [...allowedUrls] });
   let active;
@@ -91,25 +94,29 @@ export function attachDictation(electron, { root, bundle, voice, model, privateM
     active = undefined;
     current.owner.removeListener('destroyed',current.abandon);
     current.owner.removeListener('did-start-loading',current.abandon);
-    if (cancel) { current.controller.abort(); voice.stopRecording(); }
+    if (cancel) {
+      current.controller.abort();
+      if(!current.private)current.voice.stopRecording();
+    }
   }
   installBubbleMicrophonePolicy(local,(contents,details)=>active && active.owner===contents && active.mic && details?.isMainFrame===true
     && allowedUrls.has(contents.getURL()) && (!details.requestingUrl||details.requestingUrl===contents.getURL()));
 
   const handlers = {
-    'dictation:available': available,
+    'dictation:available': event=>available(event),
     'dictation:start': event => {
-      if (!available(event)) return { error: '本机语音环境尚未就绪。' };
+      const selected=selectVoice(event);
+      if (!available(event,selected)) return { error: '本机语音环境尚未就绪。' };
       if (active) return { error: '请先结束当前语音录入。' };
       const owner = event.sender;
       const abandon = () => { if(active?.owner===owner)end(true); };
-      active = { owner, abandon, mic: true, controller: new AbortController() };
+      active = { owner, abandon, voice:selected, private:isPrivate(event), mic: true, controller: new AbortController() };
       owner.once('destroyed',abandon);
       owner.once('did-start-loading',abandon);
       return {};
     },
     'dictation:transcribe': (event,audio) => active?.owner===event.sender && active.mic
-      ? voice.transcribe(audio,language(event)) : { error:'请先使用输入框的录音按钮。' },
+      ? active.voice.transcribe(audio,language(event)) : { error:'请先使用输入框的录音按钮。' },
     'dictation:correct': (event,text) => {
       if (active?.owner!==event.sender || !active.mic || typeof text!=='string' || text.length>12_000) return { corrected:false };
       active.mic=false;
@@ -122,7 +129,7 @@ export function attachDictation(electron, { root, bundle, voice, model, privateM
     if(!trusted(event))throw Error('仅绯月本机文字输入窗口可以调用语音录入。');
     return handle(event,arg);
   });
-  return { close(){
+  return { get busy(){return Boolean(active);},close(){
     end(true);
     local.unregisterPreloadScript(preload);
     for(const name of Object.keys(handlers))ipcMain.removeHandler(name);

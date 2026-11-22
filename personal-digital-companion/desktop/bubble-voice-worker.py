@@ -64,7 +64,7 @@ def recognize(audio, language='zh'):
     return {'text': (re.sub(r'<\|[^<>]*\|>', '', text) if language == 'ja' else text).strip()}
 
 
-def synthesize(text):
+def load_synthesizer():
     global engine
     audio = reference / 'elysia_01.wav'
     prompt_file = reference / 'prompt.txt'
@@ -73,9 +73,6 @@ def synthesize(text):
     prompt = prompt_file.read_text(encoding='utf-8-sig').strip()
     if not prompt:
         raise ValueError('本机 GPT-SoVITS 的参考文本为空。')
-
-    import numpy as np
-    import soundfile as sf
 
     if engine is None:
         sys.path.insert(0, str(runtime))
@@ -101,6 +98,14 @@ def synthesize(text):
         config = TTS_Config({'custom': options})
         config.configs_path = str(cache / 'gpt-tts-config.yaml')
         engine = TTS(config)
+    return audio, prompt
+
+
+def synthesize(text):
+    audio, prompt = load_synthesizer()
+    import numpy as np
+    import soundfile as sf
+
     generation = engine.run({
         'text': text, 'text_lang': 'zh', 'ref_audio_path': str(audio),
         'prompt_text': prompt, 'prompt_lang': 'zh', 'text_split_method': 'cut0',
@@ -122,6 +127,9 @@ for line in sys.stdin:
     try:
         if mode == 'asr' and request.get('preheat') is True:
             load_recognizer()
+            result = {'ready': True}
+        elif mode == 'tts' and request.get('preheat') is True:
+            load_synthesizer()
             result = {'ready': True}
         else:
             language = 'ja' if request.get('language') == 'ja' else 'zh'

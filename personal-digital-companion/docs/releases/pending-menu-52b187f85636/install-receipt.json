@@ -1,0 +1,12 @@
+{
+  "version": "52b187f85636",
+  "manifest": "52b187f8563665f28af502fd38207749b90cb5b5f3b633dffa3ae1d276714b58",
+  "installedAt": "2026-11-23T08:46:50.3847575+09:00",
+  "files": 7,
+  "oldPid": 13548,
+  "newPid": 3240,
+  "restVersion": 7,
+  "databaseQuickChecksPassed": 8,
+  "installedChecks": "角色待执行首击、托盘待执行首击补显、独立的轮询设定，三项实际安装树测试",
+  "garden": "待确认"
+}

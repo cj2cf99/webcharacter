@@ -4,6 +4,7 @@ import {mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {DatabaseSync} from 'node:sqlite';
 import {setTimeout as delay} from 'node:timers/promises';
 
 // 每个进程只测一个入口，避免第二次打开复用已可见的窗口。
@@ -11,6 +12,7 @@ const [target,source,mode,base]=process.argv.slice(2);
 const root=resolve(base??join(import.meta.dirname,'..'));
 const cases={
   poll:['设置与维护','轮询设定','poll-settings.html'],
+  pending:['','提醒检查 · 待执行','conversation.html'],
   inbox:['任务','绯月任务管理','task-inbox.html'],
   settings:['设置与维护','动画与声音','settings.html'],
   question:['','问绯月','screen-question.html'],
@@ -20,13 +22,19 @@ const cases={
 const [group,label,page]=cases[target];
 const profile=mkdtempSync(join(tmpdir(),'feiyue-first-popup-'));
 electron.app.setPath('userData',profile);
+if(target==='pending'){
+  const db=new DatabaseSync(join(profile,'reminder-checks.sqlite'));
+  db.exec('CREATE TABLE local_polls (id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, minutes INTEGER NOT NULL, maximum INTEGER NOT NULL, misses INTEGER NOT NULL, queuedAt INTEGER)');
+  db.prepare('INSERT INTO local_polls VALUES (?,1,15,3,3,?)').run('tasks',Date.now());
+  db.close();
+}
 const tray={};
 class TestTray{
   on(name,callback){tray[name]=callback;}
   setToolTip(){} destroy(){}
 }
 const preload={
-  poll:'poll-settings-preload.cjs',inbox:'task-inbox-preload.cjs',settings:'preload.cjs',
+  poll:'poll-settings-preload.cjs',pending:'conversation-preload.cjs',inbox:'task-inbox-preload.cjs',settings:'preload.cjs',
   question:'screen-question-preload.cjs',message:'message-box-preload.cjs',menu:'menu-preload.cjs',
 };
 let created=0,loads=0,shows=0,window;
@@ -78,10 +86,20 @@ async function run(){
     console.log('PASS 确认框两次显示均失败后已移除，原系统对话框回退一次');
     return;
   }
+  if(target==='pending')await until(()=>{
+    const pollWindow=electron.BrowserWindow.getAllWindows().find(w=>w.isVisible()&&w.getTitle().includes('轮询设定'));
+    assert.ok(!pollWindow,'待执行入口打开了轮询设定');
+    return loads>0;
+  },'待执行入口未打开本地复盘');
   await until(()=>loads&&window.isVisible()&&!window.isMinimized()&&window.isFocused(),'首击后窗口未显示或未获得焦点');
   assert.ok(window.webContents.getURL().endsWith('/'+page));
   assert.equal(created,1);assert.equal(loads,1);
   if(mode==='drop-first')assert.equal(shows,2,'首次显示被吞后，同一次点击应完成补显');
+  if(target==='pending'){
+    await until(()=>window.webContents.executeJavaScript(
+      `document.querySelector('#checks').getAttribute('aria-pressed')==='true' &&
+        /任务轮询 · 待执行.*JST/.test(document.querySelector('#checkState').textContent)`),'提醒检查未显示当前待执行任务');
+  }
   console.log('PASS',target,source,mode,{created,loads,shows});
 }
 run().then(()=>electron.app.exit(0),e=>{console.error(target,source,mode,{created,loads,shows},e);electron.app.exit(1);});

@@ -14,7 +14,7 @@ export function installBubbleMicrophonePolicy(session, allowed) {
   ));
 }
 
-function speechWorker({ python, script, runtime, reference, cache, mode, device = 'auto', senseVoiceModel }) {
+function speechWorker({ python, script, runtime, reference, cache, mode, device = 'auto', senseVoiceModel, keepWarm }) {
   let child, pending, exited, idleTimer;
 
   function close(message = '语音操作已结束。') {
@@ -61,7 +61,7 @@ function speechWorker({ python, script, runtime, reference, cache, mode, device 
       pending = { id, finish(result) {
         clearTimeout(timeout);
         pending = undefined;
-        if (mode === 'asr' && child === worker) idleTimer = setTimeout(() => close(), 5 * 60_000).unref();
+        if (mode === 'asr' && !keepWarm && child === worker) idleTimer = setTimeout(() => close(), 5 * 60_000).unref();
         resolveResult(result);
       } };
       child.stdin.write(JSON.stringify({ id, ...payload }) + '\n');
@@ -82,7 +82,7 @@ export function createBubbleVoice({ root, profile, ttsDevice = 'auto' }) {
   const sharedModel='G:/selftool/WebCharacter/work/sensevoice-small/model';
   const senseVoiceModel=resolve(process.env.FEIYUE_SENSEVOICE_MODEL??(existsSync(join(workspaceModel,'model.pt'))?workspaceModel:sharedModel));
   const canTranscribe=language=>enabled&&(language!=='ja'||existsSync(join(senseVoiceModel,'model.pt')));
-  const asr = speechWorker({ python, script, runtime, reference, cache, mode: 'asr', senseVoiceModel });
+  const asr = speechWorker({ python, script, runtime, reference, cache, mode: 'asr', senseVoiceModel, keepWarm: ttsDevice==='gpu' });
   const tts = speechWorker({ python, script, runtime, reference, cache, mode: 'tts', device: ttsDevice });
   let preheating;
   return {
@@ -91,6 +91,9 @@ export function createBubbleVoice({ root, profile, ttsDevice = 'auto' }) {
     preheat() {
       if (!enabled) return { error: '本机听写环境未就绪。' };
       return preheating ??= asr.run({ preheat: true }).finally(() => { preheating = undefined; });
+    },
+    preheatSpeaking() {
+      return enabled ? tts.run({preheat:true}) : {error:'本机 GPT-SoVITS 运行环境未就绪。'};
     },
     async transcribe(wav,language='zh') {
       if (!canTranscribe(language)) return { error: language==='ja'?'本机日语听写模型未就绪。':'本机 GPT-SoVITS 运行环境未就绪。' };

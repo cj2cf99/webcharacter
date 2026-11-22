@@ -123,7 +123,7 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
       const events=db.prepare('SELECT at,due,project,status,detail FROM checks WHERE day=? ORDER BY id DESC LIMIT ? OFFSET ?').all(day,PAGE,page*PAGE);
       const due=scheduler.get('due');
       return {nextAt:due?.nextAt,nextWeatherAt:scheduler.get('weather')?.nextAt,nextTaskAt:scheduler.get('tasks')?.nextAt,
-        first:due?.first,running:due?.running,pending:scheduler.pending,events,page,pages};
+        first:due?.first,running:due?.running,pending:scheduler.pending,queue:scheduler.readQueue(),events,page,pages};
     },
     close(){
       closed=true;scheduler.close();audit?.close();db.close();

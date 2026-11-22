@@ -220,6 +220,7 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
     j.queuedAt??=now();persist(j);retryLater();
   }
   return {snapshot,configure,enqueue,get pending(){return queue().length>0;},get(id){return jobs.get(id);},
+    readQueue:()=>queue().map(({name,queuedAt,running})=>({name,queuedAt,running})),
     start(){if(started||closed)return;started=true;warmUntil=now()+60_000;
       for(const j of jobs.values())if(j.enabled)arm(j,Math.max(j.resumeAt,initial(j)));
       retryLater();

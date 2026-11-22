@@ -1,0 +1,108 @@
+--- a/desktop/shell.mjs
++++ b/desktop/shell.mjs
+@@ -975,7 +975,7 @@
+       review:{click:()=>taskNotice(screenQuestion.openReview())},
+       knowledge:{click:()=>taskNotice(knowledge.open())},
+       notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
+-      pendingCheck:checks.pending&&{click:()=>taskNotice(pollSettings.open(true))},
++      pendingCheck:checks.pending&&{click:()=>taskNotice(screenQuestion.openReview('checks'))},
+       pollSettings:{click:()=>taskNotice(pollSettings.open())},
+       retry:{click:()=>{taskNotice(tasks.retryPending());}},
+       connection:tasks.showCloudConnection && {click:()=>taskNotice(tasks.showCloudConnection(localModel))},
+--- a/desktop/menu-layout.json
++++ b/desktop/menu-layout.json
+@@ -2,6 +2,7 @@
+   {"action":"question","label":"问绯月","icon":"💬"},
+   {"action":"privateChat","tone":"hot"},
+   {"action":"notices","icon":"🔔","tone":"hot"},
++  {"action":"pendingCheck","label":"提醒检查 · 待执行","icon":"⏱","tone":"hot"},
+   {"action":"continueNag","label":"待确认","icon":"💭","tone":"hot"},
+   {"action":"today","label":"今日任务","icon":"📋"},
+   {"action":"weather","label":"三地天气","icon":"⛅"},
+@@ -15,7 +16,6 @@
+   {"label":"任务","icon":"🧩","items":[
+     {"action":"writeDiary","label":"看绯月写日记","icon":"✍"},
+     {"action":"reviewLocalTasks","label":"补写本机任务执行评价","icon":"📝"},
+-    {"action":"pendingCheck","label":"提醒检查 · 待执行","icon":"⏱","tone":"hot"},
+     {"action":"tasks","label":"绯月任务管理","icon":"🗂"},
+     {"action":"retry","label":"中断任务与补传","icon":"🔁"},
+     {"action":"log","label":"任务日志","icon":"📜"},
+--- a/desktop/poll-scheduler.mjs
++++ b/desktop/poll-scheduler.mjs
+@@ -218,6 +218,7 @@
+     j.queuedAt??=now();persist(j);retryLater();
+   }
+   return {snapshot,configure,enqueue,get pending(){return queue().length>0;},get(id){return jobs.get(id);},
++    readQueue:()=>queue().map(({name,queuedAt,running})=>({name,queuedAt,running})),
+     start(){if(started||closed)return;started=true;warmUntil=now()+60_000;
+       for(const j of jobs.values())if(j.enabled)arm(j,Math.max(j.resumeAt,initial(j)));
+       retryLater();
+--- a/desktop/reminder-checks.mjs
++++ b/desktop/reminder-checks.mjs
+@@ -137,7 +137,7 @@
+       const events=db.prepare('SELECT at,due,project,status,detail FROM checks WHERE day=? ORDER BY id DESC LIMIT ? OFFSET ?').all(day,PAGE,page*PAGE);
+       const due=scheduler.get('due');
+       return {nextAt:due?.nextAt,nextWeatherAt:scheduler.get('weather')?.nextAt,nextTaskAt:scheduler.get('tasks')?.nextAt,
+-        first:due?.first,running:due?.running,pending:scheduler.pending,events,page,pages};
++        first:due?.first,running:due?.running,pending:scheduler.pending,queue:scheduler.readQueue(),events,page,pages};
+     },
+     close(){
+       closed=true;scheduler.close();audit?.close();db.close();
+--- a/desktop/conversation-details.mjs
++++ b/desktop/conversation-details.mjs
+@@ -2,7 +2,7 @@
+ import {pathToFileURL} from 'node:url';
+ import {readFile} from 'node:fs/promises';
+ import {tokyoDay} from './conversation-history.mjs';
+-import {createPanelWindow} from './panel-window.mjs';
++import {createPanelWindow,showPanel} from './panel-window.mjs';
+ import {readTaskReviews} from './personality-diary.mjs';
+ 
+ export function attachConversationDetails(electron,{root,profile,bundle,history,memory,readTasks,readTraffic,readAiStep,checks,edits,auditPending=()=>[],readQuestionCitation,resumeAudit,visible,onReview,threads}) {
+@@ -173,9 +173,7 @@
+     if(panel!==current||current.isDestroyed())return;
+     if(!opening)current.webContents.send('conversation:select');
+     if(visible){
+-      current.show();
+-      // Windows 隐藏启动时，第一次 show() 可能仍让窗口保持隐藏。
+-      if(process.platform==='win32'&&!current.isVisible())current.show();
++      showPanel(current);
+       current.focus();
+     }
+   }
+--- a/desktop/conversation-ui.mjs
++++ b/desktop/conversation-ui.mjs
+@@ -187,9 +187,13 @@
+   const counter=document.getElementById('remaining');
+   counter.textContent=remaining();
+   countdown=setInterval(()=>{if(!document.hidden)counter.textContent=remaining();},1000);
+-  document.getElementById('checkState').textContent=[data.running?'正在检查到期事项':data.pending?'提醒检查任务等待空闲执行':'',
++  const queuedChecks=data.queue??[];
++  const waiting=data.queue?queuedChecks.some(row=>!row.running):data.pending;
++  const queue=queuedChecks.map(({name,running,queuedAt})=>name+' · '+(running?'执行中':'待执行')+' · '+clock.format(queuedAt)+' JST');
++  document.getElementById('checkState').textContent=[data.running?'正在检查到期事项':waiting?'提醒检查任务等待空闲执行':'',
+     data.nextWeatherAt?'下次天气检查 '+clock.format(data.nextWeatherAt)+' JST':'',
+-    data.nextTaskAt?'下次任务轮询 '+clock.format(data.nextTaskAt)+' JST':''].filter(Boolean).join(' · ');
++    data.nextTaskAt?'下次任务轮询 '+clock.format(data.nextTaskAt)+' JST':'',
++    queue.join(' / ')].filter(Boolean).join(' · ');
+   list.replaceChildren(...data.events.map((event,i)=>{
+     const tone=statusTone(event.status),row=stagger(card('section',tone),i);
+     const timing=clock.format(event.at)+(event.at-event.due>=1000?' · 原定 '+clock.format(event.due):'');
+--- a/output/desktop-bundle/conversation-ui.mjs
++++ b/output/desktop-bundle/conversation-ui.mjs
+@@ -187,9 +187,13 @@
+   const counter=document.getElementById('remaining');
+   counter.textContent=remaining();
+   countdown=setInterval(()=>{if(!document.hidden)counter.textContent=remaining();},1000);
+-  document.getElementById('checkState').textContent=[data.running?'正在检查到期事项':data.pending?'提醒检查任务等待空闲执行':'',
++  const queuedChecks=data.queue??[];
++  const waiting=data.queue?queuedChecks.some(row=>!row.running):data.pending;
++  const queue=queuedChecks.map(({name,running,queuedAt})=>name+' · '+(running?'执行中':'待执行')+' · '+clock.format(queuedAt)+' JST');
++  document.getElementById('checkState').textContent=[data.running?'正在检查到期事项':waiting?'提醒检查任务等待空闲执行':'',
+     data.nextWeatherAt?'下次天气检查 '+clock.format(data.nextWeatherAt)+' JST':'',
+-    data.nextTaskAt?'下次任务轮询 '+clock.format(data.nextTaskAt)+' JST':''].filter(Boolean).join(' · ');
++    data.nextTaskAt?'下次任务轮询 '+clock.format(data.nextTaskAt)+' JST':'',
++    queue.join(' / ')].filter(Boolean).join(' · ');
+   list.replaceChildren(...data.events.map((event,i)=>{
+     const tone=statusTone(event.status),row=stagger(card('section',tone),i);
+     const timing=clock.format(event.at)+(event.at-event.due>=1000?' · 原定 '+clock.format(event.due):'');

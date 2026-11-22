@@ -43,7 +43,7 @@ export function prepareDesktopPages(root,bundle) {
   for(const name of ['companion-player','companion-state'])prepare(join(root,'src',name+'.ts'),name+'.mjs',stripTypeScriptTypes);
 }
 
-export function watchDesktopSources({root,bundle,updated,restartNeeded}) {
+export function watchDesktopSources({root,bundle,updated}) {
   const stops=[];
   function listen(directory,accept,apply,recursive=false) {
     if(existsSync(directory))stops.push(watchChanges(directory,accept,apply,recursive));
@@ -66,10 +66,8 @@ export function watchDesktopSources({root,bundle,updated,restartNeeded}) {
   }
   const desktop=join(root,'desktop'),shared=join(root,'src');
   if(existsSync(join(desktop,'index.html')))prepareDesktopPages(root,bundle);
-  listen(desktop,name=>desktopFiles.includes(name)||/\.(?:mjs|cjs|ps1)$/.test(name),names=>{
-    const files=names.filter(name=>desktopFiles.includes(name));
-    copyBatch(desktop,files,name=>name,name=>name==='index.html'?withClipCatalog:null);
-    if(names.some(name=>!desktopFiles.includes(name)||['sound.mjs','window-nodes.mjs','screen-posture.mjs'].includes(name)))restartNeeded();
+  listen(desktop,name=>desktopFiles.includes(name),names=>{
+    copyBatch(desktop,names,name=>name,name=>name==='index.html'?withClipCatalog:null);
   });
   listen(shared,name=>['companion-player.ts','companion-state.ts'].includes(name),names=>{
     copyBatch(shared,names,name=>name.replace(/\.ts$/,'.mjs'),()=>stripTypeScriptTypes);

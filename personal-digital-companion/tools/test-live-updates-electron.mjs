@@ -30,7 +30,8 @@ async function until(check,message){
   for(let i=0;i<100;i++){if(await check())return;await delay(50);}
   throw Error(message);
 }
-let nativeMenu,popup,startCount=0,stopCount=0,tip='';
+let nativeMenu,popup,startCount=0,stopCount=0;
+const trayTips=[];
 const traffic=createTaskTrafficLog(profile);
 let busyTasks=1,checksRequested=0;
 const tasks={traffic,startup:async()=>{startCount++;},activeCount:()=>busyTasks,beginQuitCheck(){},stop:async()=>{stopCount++;},
@@ -44,7 +45,7 @@ class HiddenWindow extends electron.BrowserWindow{
   show(){} showInactive(){} focus(){}
 }
 class TestTray{
-  on(){} destroy(){} setToolTip(text){tip=text;}
+  on(){} destroy(){} setToolTip(text){trayTips.push(text);}
   setContextMenu(menu){nativeMenu=menu;} popUpContextMenu(){popup=nativeMenu;}
 }
 async function run(){
@@ -63,6 +64,17 @@ async function run(){
   });
   const wc=shell.win.webContents,winId=shell.win.id,initialBounds=shell.win.getBounds();
   await until(()=>shell.getStats().ready,'角色未就绪');
+  async function verifyTrayTip(index){
+    replace(join(desktop,'main.mjs'),'// 后台代码变更');
+    replace(join(desktop,'index.html'),index.replace('<title>','<title>托盘提示复核 '));
+    await until(()=>wc.getTitle().includes('托盘提示复核'),'后台源码变更后页面热加载失效');
+    assert.deepEqual(trayTips,['绯月 · 右键打开菜单']);
+  }
+  if(process.argv.includes('--tray-tip')){
+    await verifyTrayTip(readFileSync(join(root,'desktop/index.html'),'utf8'));
+    console.log('PASS 隔离 Electron：后台源码变更时，托盘提示保持正常，角色页仍可热加载。');
+    return;
+  }
   if(process.argv.includes('--check-schedule')){
     const notice=nativeMenu.items.find(item=>item.label==='提醒（1 条未读）');assert.ok(notice);
     notice.click();
@@ -125,7 +137,7 @@ async function run(){
   mkdirSync(join(voice,'nodes-20261118'));copyFileSync(join(root,'assets/voice',soundFile),join(voice,soundFile));
   await until(()=>wc.executeJavaScript("window.desktopHost.getSettings().then(s=>s.assets.some(a=>a.id==='voice:greeting-dear'&&a.url.includes('?v=')))"),'新素材未送到角色');
   assert.deepEqual(readFileSync(join(voice,soundFile)),readFileSync(join(bundle,'voice',soundFile)));
-  replace(join(desktop,'main.mjs'),'// 后台代码变更');await until(()=>tip.includes('后台代码'),'后台更新未提示');
+  await verifyTrayTip(index);
   assert.equal(startCount,1);assert.equal(stopCount,0);
   if(process.argv.includes('--check-schedule')){
     await shell.screenQuestion.openReview();
@@ -142,6 +154,6 @@ async function run(){
     assert.equal(next.events.find(row=>row.project==='到期事项')?.status,'已检查');
     console.log('PASS 实际桌宠宿主首分钟后只读查询、复盘自动刷新及下一轮 20 分钟时点。');
   }
-  console.log('PASS 隔离 Electron：原生菜单改组和动作、双入口、坏文件恢复、外部 PC 设置、草稿保存后更新、角色同窗刷新、媒体版本、后台重启提示。');
+  console.log('PASS 隔离 Electron：原生菜单改组和动作、双入口、坏文件恢复、外部 PC 设置、草稿保存后更新、角色同窗刷新、媒体版本、托盘提示保持正常。');
 }
 run().then(()=>electron.app.exit(0),error=>{console.log(error.stack??error);electron.app.exit(1);});

@@ -1,0 +1,34 @@
+{
+  "items": [
+    {
+      "path": "desktop/private-chat.mjs",
+      "before": "d98aeddb14cea3785a59e15b11c8b5edbe39fea401dc0c282e73ba5f48be6816",
+      "after": "7b7a09ff598f5382c20e6be95c1eef8c848a56baf5f40015accef1e94f4090f0"
+    },
+    {
+      "path": "desktop/dictation-host.mjs",
+      "before": "473a10e3600c97d3f51e644de134861d0da4833bc264bbf45d948440e0d6519a",
+      "after": "8bfbe3435605fc6b549d437accd7c6598329ea3482d237702539528a347a8ea3"
+    },
+    {
+      "path": "desktop/bubble-voice.mjs",
+      "before": "7840c55e6046de414c6d2f6175a557591eb5cc1a7d95d8065a90e7ebe3f34e96",
+      "after": "d2039c0e39c69321694b465bef2520f7ae2d523043f615569773a5a34bde9d81"
+    },
+    {
+      "path": "desktop/bubble-voice-worker.py",
+      "before": "2165b96492cf3821c735fb6a7aa288f063f3fa06aec22a9dc7a21b1eceef286c",
+      "after": "30ec360608191614226bae9f1ed79f0751186bf891387dedc691cf8278b590bc"
+    },
+    {
+      "path": "desktop/source-updates.mjs",
+      "before": "f85915e82c8b26488c86d14d28e5df5611f44f62504d50f5dfd509274f32088e",
+      "after": "9114881e67b98729229acd2362703e268f0c55e73733fe0034da905ae635f931"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "before": "29c7d57d7434e20464dd9fdc63d21ee93bc5185d42235c8f63fa2e9aa9cd245c",
+      "after": "c2c13646d0e24c99634bb200ba1b4fc77c0e81b78f1534ca7a4c74258484960e"
+    }
+  ]
+}
