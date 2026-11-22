@@ -1301,3 +1301,36 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 **花园终态回执。** 批次 feiyue-threads-budget-20261122 于 2026-11-22 23:53:45 JST 完成，状态 done，1/1 verified。于 2026-11-22 23:54:08 JST 独立回读生产，网页角色组件 #16 → 绯月（桌面精灵）#61，部署 #75 及明细 #153 所有字段与确认清单一致。花园版本 24.0 → 25.0，修订 145 → 146，本次发布标记仅 1 条。已核对 SQL 提交 94dd90b42133d84d1de77a4d0253dba39942929b 和用户确认摘要 7599c46b74174c05cd3bc2e77efee171cd365e3f919bf53dc015b3742386b34a。
 
 **花园回执已取回。** 2026-11-22 23:54:38 JST 通过原批次的 REST 签收并回读确认。完整执行回执位于主项目 database/changes/feiyue-threads-budget-20261122/execution-receipt.json。
+
+
+## 本机 REST 一次性提醒（2026-11-23 JST，候选）
+
+**需求与验收。** 用户要求「在rest把这个功能也放开」。调用端能用标题、可复制的原文提示词和明确的东京日期及时分创建一次性提醒，按稳定编号查询登记状态，成功返回既有提醒记录编号。原编号重交或在重启后恢复，只创建一条记录。花园原接口和原批次数据兼容。
+
+**环境、来源及比较。** 发布目标为 Windows 正式安装 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，使用该安装自己的原 `output/desktop-profile`。安装基线为 `46c2e0ac0916`，正式 `/infoguide` 为 v4，最近只读核对 PID 19400，启动于 2026-11-23 00:23:53 JST。源码为 `G:/selftool/WebCharacter/personal-digital-companion`，以 Git `4d9363f` 为基线对照本次补丁。候选四个文件以正式安装原文件为输入，逐项核对前后 SHA-256。清单位于 `G:/stockcheck/work/feiyue-rest-install-candidate/personal-digital-companion/rest-reminders-install-manifest.json`，完整清单摘要 `d5408e6f17d881f5d968159afdc2924365fbd00c862c53384125621e76a32299`。候选其余运行代码保留正式安装基线。
+
+| 安装文件 | 变化 |
+| --- | --- |
+| `desktop/local-rest.mjs` | 原说明 v4 升为 v5，增设 `POST /v1/reminders`、`GET /v1/reminders/:id` 和 `POST /v1/reminders/:id/retry`。沿用回环地址、请求来源限制、令牌和正文上限。校验东京时分及日历。 |
+| `desktop/local-task-pool.mjs` | 既有队列按入队顺序处理两类任务，共用名额和执行权。单独保存提醒编号、待处理正文、云端提交号和回执。登记完成后清除队列中的正文副本。 |
+| `desktop/registration-flow.mjs` | 使用现有 `reminders.create` 任务，以原文和东京当地时分提交并校验入库回执。恢复时使用同一提交号。 |
+| `desktop/shell.mjs` | 接入正式工作队列，完成时通过既有托盘提示展示提醒记录号。 |
+
+调用手册更新于 `docs/LOCAL_GARDEN_API.md`。来源验证文件为 `agent/tests/local-rest-reminders.test.mjs`、`agent/tests/local-rest-garden.test.mjs`、`agent/tests/registration-flow.test.mjs` 和 `tools/test-desktop-shell.mjs`，开发留痕为 `docs/DEVELOPMENT.md`。安装候选中的新版提醒测试种子与启动测试仅供隔离验证。
+
+**数据、配置与兼容。** 绯月在原 `local-batches.sqlite` 内按需建立独立的 `reminder_requests` 表。原花园批次表、列表、回执和确认流程保持兼容。云端部署、云端迁移、本地历史回填、模型和依赖调整、令牌变更、外部监听及定时任务变更均无。复用正式云端已确认支持 JST 时分的提醒模板。
+
+**实际验证。** 来源的 `node --test --test-reporter=spec agent/tests/*.test.mjs` 为 436 通过、3 跳过、0 失败，`node tools/build-desktop.mjs`、`node tools/test-desktop-shell.mjs --garden-api` 和 `git diff --check` 通过。原相对日期测试随真实日期变化的问题在原基线复现，已固定测试时钟；正式来源工作树已有同一修正。候选用 `node --test --test-reporter=spec agent/tests/local-rest-reminders.test.mjs agent/tests/local-rest-garden.test.mjs` 核对鉴权、时分和原文、重交、丢回执后的重启恢复及花园兼容，共 18 项通过。旧安装树附带的离线种子最初拒绝带时分日期，复核正式发布的模板更新记录后，改用已支持时分的离线种子。候选 `node tools/test-install-rest-reminders.mjs --garden-api` 验证真实桌面主进程模块在模拟窗口下启动 v5、鉴权、花园批次完成及正常退出。旧安装目录附带的全量桌面脚本含过时菜单断言，来源脚本则含与安装基线不同的日记断言，因此候选采用上述聚焦启动脚本。所有测试使用隔离资料和模拟云端，独立第三方审核未执行。
+
+**安装、后检及恢复。** 审核重点为本机鉴权、原文与 JST 时分、云端提交号复用、旧花园批次切换和候选差异范围。获本次明确许可后，复核运行实例和前像摘要，等待在途工作结束并正常退出。备份四个旧文件和本地队列 SQLite，核对完整性，再替换四项文件并从原入口启动。复核新 PID、原资料目录、监听地址、v5 路由、原花园批次及摘要。按用户已授权的实际提醒内容登记，回读原编号和记录号，核对原文及东京时分；受控页面效果由用户自行确认。若安装失败，正常退出、恢复四项前像并核对原入口启动。回退前核实提醒在途状态，已落库提醒保留原记录，防止重复登记。本地 SQLite 备份用于核对，避免覆盖期间新增的任务状态。
+
+**确认与待办。** 本次正式安装及受控重启待明确许可。另待确认本次绯月发布是否登记到花园。Git 提交及推送未执行。正式 v5、真实提醒记录和到期触发待安装及登记后验证。发布结束后追加实际结果、时间、版本、回执和 Git 状态。
+
+
+**用户确认与实装。** 用户明确确认本次安装及受控重启，同意将本次绯月发布登记到花园，并要求先核对具体清单。2026-11-23 00:44:54 JST 完成正式 Windows 安装及后检，版本 `d5408e6f17d8`，旧 PID 19400 正常退出，新 PID 35136 从原入口启动。四项文件摘要、正式资料目录、回环监听、原启动项和快捷方式均通过核对。备份和实装队列 SQLite 完整性均为 `ok`，原花园批次 21 → 21，轮询配置一致。实际 `/infoguide` 为 v5，三条提醒路由在册。只读探针无令牌返回 401，已认证查询不存在的编号返回 404。
+
+**正式提醒回读。** 2026-11-23 00:45:55 JST，通过新接口登记用户授权的一次性提醒，按相同编号读取状态 `done` 及正整数提醒记录号，同一回执的标题和东京日期及时分与请求一致；正文以原文提交，由登记链核对参数。到期通知待到期触发。机器回执保存在 `G:/stockcheck/work/feiyue-rest-install-candidate`。回退备份目录为该路径下的 `install-backup-20261123-004444718`。
+
+**花园登记。** 用 `npm.cmd run db:sync-schema` 和绯月 v5 的 `inspect` 核对线上实际结构及修订 149。由 `prepare` 生成 `feiyue-rest-reminders-20261123` 待确认草案及两步精确 SQL，确认摘要 `02dc5bc17da3c599d241b5e49c1c644323e55d2c7c9f9135c1c7bcf663244511`。归属「网页角色组件 #16 → 绯月（桌面精灵）#61」，拟新增部署 #76、明细 #154 和已完成改善 #81。草案留在调用端，等待用户明确确认具体内容。未提交花园 SQL，未入队，也未写入花园。
+
+来源代码和本次发布记录在独立分支 `codex/feiyue-rest-reminders` 留痕。远端尚未同步。

@@ -177,7 +177,7 @@ test('HTTP 确认、鉴权、固定 Git 清单、整批回读与一次复盘',as
   f.cleanup.push(async()=>{await api.close();await pool.close();});
   const headers={authorization:'Bearer '+readFileSync(join(f.dir,'local-api.token'),'utf8'),'content-type':'application/json'};
   const post=v=>fetch(api.address+'/v1/batches',{method:'POST',headers,body:JSON.stringify(v)});
-  const guide=await (await fetch(api.address+'/infoguide')).json();assert.equal(guide.baseURL,api.address);assert.equal(guide.routes.length,8);assert.equal(guide.version,4);
+  const guide=await (await fetch(api.address+'/infoguide')).json();assert.equal(guide.baseURL,api.address);assert.equal(guide.routes.length,11);assert.equal(guide.version,5);
   assert.deepEqual(await (await fetch(api.address)).json(),guide);
   assert.equal((await fetch(api.address+'/v1/batches')).status,401);
   assert.equal((await fetch(api.address+'/v1/batches',{headers:{...headers,Origin:'https://other.invalid'}})).status,403);
@@ -193,6 +193,20 @@ test('HTTP 确认、鉴权、固定 Git 清单、整批回读与一次复盘',as
   const inspect=new DatabaseSync(f.file);assert.equal(inspect.prepare('SELECT payload FROM batches').get().payload,null);inspect.close();
   writeFileSync(join(pkg,'step-001.sql'),'-- stale SQL\n');git('add','.');git('-c','user.name=fixture','-c','user.email=fixture@localhost','-c','commit.gpgsign=false','commit','-qm','wrong sql');
   await assert.rejects(loadPackage({...input,commit:git('rev-parse','HEAD')},repo),/SQL/);
+});
+test('提醒和花园共用正式工作的名额与顺序，花园查询只返回花园批次',async t=>{
+  const f=fixture(t);
+  const pool=createLocalTaskPool({...f.poolOpts,canWork:()=>false,hasRoom:()=>pool.unfinished()<3,
+    registerReminder:async()=>1});
+  f.cleanup.push(()=>pool.close());
+  const reminder={id:f.plan.id,title:'先排提醒',deadline:'2099-12-07T09:30+09:00',content:''};
+  assert.equal(pool.submitReminder(reminder).reminder.queue.position,1);
+  assert.equal(pool.submit(f.plan,sha,f.digest).batch.queue.position,2);
+  assert.equal(pool.submitReminder({...reminder,id:'last-reminder'}).reminder.queue.position,3);
+  assert.deepEqual(pool.pending().map(row=>row.title),['先排提醒','花园登记','先排提醒']);
+  assert.deepEqual(pool.list().map(row=>row.title),['花园登记']);
+  assert.equal(pool.submitReminder(reminder).existing,true);
+  assert.throws(()=>pool.submitReminder({...reminder,id:'overflow'}),{status:429});
 });
 test('已写入但回执丢失：重开原队列先读回，后续步骤只执行一次',async t=>{
   const f=fixture(t);

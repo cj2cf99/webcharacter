@@ -393,7 +393,8 @@ if(testGarden){
   const headers={Authorization:'Bearer '+readFileSync(join(profile,'local-api.token'),'utf8'),'Content-Type':'application/json'};
   const base=result.localAPIAddress;
   const guide=await (await fetch(base+'/infoguide')).json();
-  assert.equal(guide.instance.profile,profile);assert.match(guide.batch.steps,/checking/);assert.equal(guide.version,4);assert.match(guide.workStates.formal,/上限 20/);
+  assert.equal(guide.instance.profile,profile);assert.match(guide.batch.steps,/checking/);assert.equal(guide.version,5);assert.match(guide.workStates.formal,/上限 20/);
+  assert.ok(guide.routes.some(r=>r.method==='POST'&&r.path==='/v1/reminders'));
   const beforeBatch=win.sent.length;
   const response=await fetch(base+'/v1/batches',{method:'POST',headers,body:JSON.stringify({id:gardenPlan.id,reviewHash:hash(canonical(gardenPlan)),commit:'1'.repeat(40),userConfirmed:true})});
   assert.equal(response.status,202);

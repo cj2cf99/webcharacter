@@ -94,6 +94,26 @@ $pending = (Invoke-RestMethod "$base/v1/batches?unacknowledged=1" -Headers $head
 Invoke-RestMethod "$base/v1/batches/$batchId/ack" -Method Post -Headers $headers
 ```
 
+## v5：本机 REST 创建一次性提醒
+
+用户要求「在rest把这个功能也放开」，以便在桌面窗口无法操作时，由绯月按指定时间登记一条提醒并保留可复制的提示词。客户端直接提供标题、时间和正文。绯月沿用正式工作队列和既有提醒业务链路。调用前核对 `/infoguide` 的实例和版本，并使用同一本机令牌、JSON 请求体及回环地址。
+
+```json
+{
+  "id": "follow-up-example-20261207",
+  "title": "复盘既有同步任务",
+  "deadline": "2026-12-07T09:30+09:00",
+  "content": "请核对最近两轮运行的日志和快照，并比较等待与重试。"
+}
+```
+
+- `POST /v1/reminders` 新建时返回 202 和 `{existing:false, reminder}`。编号沿用小写字母、数字、下划线和短横线，最多 80 位。标题不能为空且最多 300 字符，正文可省略，保留换行，JSON 请求体上限为 8192 字节。使用 `YYYY-MM-DDTHH:mm+09:00` 指定东京时分。新提醒日期不得早于东京今天。登记按次创建，等级沿用现有默认值「中」。
+- 同编号、同内容重交返回 200 及该次登记回执。JSON 键顺序、标题首尾空白不影响匹配。同编号内容不同返回 409。队列满时新编号返回 429，稍后按原编号重交。
+- `GET /v1/reminders/:id` 取回 `queued`、`running`、`blocked` 或 `done` 状态、东京截止时间及进度。`done` 附既有提醒表的 `recordId`，表明取得实际登记回执。查询及重复提交均只回显标题和时间等状态。任务完成后清理本机队列中的正文副本。
+- 请求超时或应用重启后先查原编号。查询返回 404 时，按原编号和原内容重交。暂停时 `POST /v1/reminders/:id/retry` 恢复原提交，无需再次提供正文。登记已经成功时，恢复调用返回原回执。无法从云端确认时保留待核对状态。
+
+本机 SQLite 在首次启动时建立独立的提醒请求表。花园表、原路由和旧批次回执沿用原有格式。两类任务共享 20 个名额及执行顺序。既有云端提醒模板、业务表、主站代码和提醒检查频率保持。正式工作队列及提醒业务的设计依据见 [正式工作队列](FORMAL_WORK_QUEUE.md) 和 [登记链路](RECORDING_CHAIN_RELEASE_DESIGN.md)。
+
 ## 正式安装验收后的全局说明条款
 
 待更新位置为 `C:/Users/asura/.codex/AGENTS.md` 和 `C:/Users/asura/.claude/CLAUDE.md`。本次开发阶段自动审批因正式安装、受控重启和验收尚未完成而拒绝写入。实际切换时在两份文件追加以下条款，并在本次发布纪要记录执行情况。
