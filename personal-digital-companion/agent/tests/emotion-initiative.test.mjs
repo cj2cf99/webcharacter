@@ -6,9 +6,48 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createDesirePool} from '../../desktop/desire-pool.mjs';
 import {createEmotionStore} from '../../desktop/emotion-core.mjs';
+import {createEmotionService} from '../../desktop/emotion-service.mjs';
 import {createInitiative} from '../../desktop/emotion-initiative.mjs';
 import {createTopicMemory} from '../../desktop/topic-memory.mjs';
 import {searchInitiative} from '../../desktop/public-search.mjs';
+
+test('情绪评价超时只延后重试一次，之后的材料先完成，正常让行保留原事件',async()=>{
+  const profile=await mkdtemp(join(tmpdir(),'feiyue-emotion-timeout-'));
+  let now=Date.parse('2026-11-23T00:00:00+09:00');
+  const calls=[],logs=[];
+  const valid={delta:0,status:'keep',quote:'',positive:'平静',negative:'担心',line:'我记下了。',want:'',condition:'',curiosity:''};
+  const service=createEmotionService({profile,now:()=>now,log:row=>logs.push(row),
+    skill:async()=>({skill:'emotion-appraisal',version:'fixture',localAi:{assessment:'评价',assess:'核对'}}),
+    topics:{preferences:()=>[],async remember(){throw new DOMException('专题写入失败','TimeoutError');}},
+    diary:{emotionalHistory:()=>({pages:[],nags:[]})},model:{async memory(input,_prompt,_schema,signal,options){
+      const text=JSON.parse(input).用户;
+      calls.push(text);
+      assert.equal(options.aiBudget,45000);
+      assert.equal(options.backgroundBudget,true);
+      assert.equal(options.maxTokens,384);
+      if(text==='慢材料')throw new DOMException('评价超时','TimeoutError');
+      if(text==='先让行'&&calls.filter(call=>call==='先让行').length===1){
+        service.interrupt();signal.throwIfAborted();
+      }
+      return text==='正常材料'?{...valid,curiosity:'正常材料'}:valid;
+    }}});
+  try{
+    for(const [id,text] of ['慢材料','正常材料'].entries())service.accept({key:'fixture/'+id,kind:'chat',at:now,user:text});
+    await service.drain();await service.drain();
+    assert.deepEqual(calls,['慢材料','正常材料']);
+    assert.equal(logs.filter(row=>row.error).length,0);
+    assert.ok(logs.some(row=>row.stage==='情绪评价已保存，该专题偏好未写入'));
+    now+=30001;
+    await service.drain();await service.drain();
+    assert.deepEqual(calls,['慢材料','正常材料','慢材料']);
+    assert.equal(logs.filter(row=>row.error==='TimeoutError').length,1);
+    service.accept({key:'fixture/yield',kind:'chat',at:now,user:'先让行'});
+    await service.drain();await service.drain();
+    assert.deepEqual(calls.slice(-2),['先让行','先让行']);
+    assert.equal(logs.filter(row=>row.error).length,1);
+    assert.equal(service.store.pending().key,'fixture/0');
+  }finally{await service.close();await rm(profile,{recursive:true,force:true});}
+});
 
 test('分系列达标才指定，同系清空、异系五件清三件；重复提交保留相同结果',()=>{
   const db=new DatabaseSync(':memory:');

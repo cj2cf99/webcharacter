@@ -6,6 +6,8 @@ import {refusalExcerpt} from '../agent/host/refusal-response.mjs';
 const timestamp = new Intl.DateTimeFormat('sv-SE', {timeZone: 'Asia/Tokyo', dateStyle: 'short', timeStyle: 'medium'});
 const id = value => typeof value === 'string' && /^[a-z0-9_-]{1,128}$/i.test(value) ? value : undefined;
 const word = value => typeof value === 'string' && /^[a-z0-9_./@:-]{1,128}$/i.test(value) ? value : undefined;
+const recoveryCodes=new Set(['LOCAL_AI_BATCH_BUDGET','LOCAL_AI_ADAPTIVE_OUTPUT_BUDGET','LOCAL_AI_GPU_DEFERRED','AbortError']);
+const diaryFailures=new Map([['写日记','diary-writing'],['补行动评价','diary-writing'],['手记质问','diary-audit'],['核对手记','diary-audit']]);
 const peek = value => {
   if(typeof value!=='string')return null;
   try { return JSON.parse(value); } catch { return null; }
@@ -76,8 +78,11 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
     await pending;
     const days=[...new Set([tokyoDay(from),tokyoDay(to)])];
     const files=memory?days.flatMap(day=>['任务通信.jsonl','历史通信.jsonl'].map(name=>join(memory.folder(day),'日志',name))):[previous,file];
-    const counts=new Map();
+    const counts=new Map(),paired=new Map();
     let scanned=0,completed=0,failed=0;
+    function report(code,total=1){
+      failed+=total;counts.set(code,(counts.get(code)??0)+total);
+    }
     for(const path of files){
       signal.throwIfAborted();
       const log=await readFile(path,{encoding:'utf8',signal}).catch(error=>{if(error.code!=='ENOENT')throw error;return '';});
@@ -89,12 +94,18 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
         scanned++;
         if(row.category==='绯月自主行动'&&row.stage==='完成')completed++;
         const code=word(row.error??row.code??String(row.result??'').match(/\bLOCAL_AI_[A-Z_]+\b/u)?.[0]);
-        if(code==='LOCAL_AI_BATCH_BUDGET')continue;
+        if(recoveryCodes.has(code)||row.stage==='取消'||row.skill==='emotion-appraisal'&&['AI 询问池','本地 AI'].includes(row.route))continue;
         if(!code&&row.stage!=='失败')continue;
-        failed++;
-        const label=code??'自主任务失败';counts.set(label,(counts.get(label)??0)+1);
+        const ai=row.route==='本地 AI'&&['diary-writing','diary-audit'].includes(row.skill);
+        const skill=ai?row.skill:row.category==='绯月自主行动'&&['失败','查询失败'].includes(row.stage)?diaryFailures.get(row.route):undefined;
+        if(skill&&code){
+          // 旧日志没有共享任务编号；仅合并同秒、同一手记技能的一对推理和任务失败回执。
+          const key=JSON.stringify([at,skill,code]),group=paired.get(key)??{code,ai:0,task:0};
+          group[ai?'ai':'task']++;paired.set(key,group);
+        }else report(code??'自主任务失败');
       }
     }
+    for(const {code,ai,task} of paired.values())report(code,Math.max(ai,task));
     return {scanned,completed,failed,top:[...counts].sort((a,b)=>b[1]-a[1]).slice(0,5)};
   }
   // 恢复前读同一东京日的日志；在写入队列内核对，不能再等待队列自身。

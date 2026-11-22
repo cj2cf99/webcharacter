@@ -79,6 +79,7 @@ async function fixture(t, { actions = all, register, fault, pending = [] } = {})
 test('这周日看手顺书：确认前只有草稿，跨日确认仍只写原日期和完整条件',async t=>{
   const f=await fixture(t);
   let now=Date.parse('2026-11-20T18:00:00+09:00');
+  t.mock.method(Date,'now',()=>now);
   const flow=f.desktop({now:()=>now});
   const text='宝贝，加个提醒，这周日看手顺书，rene的手顺书工作至少推进3个才行';
   const expected={deadline:'2026-11-22',title:'看手顺书',content:'rene的手顺书工作至少推进3个才行'};

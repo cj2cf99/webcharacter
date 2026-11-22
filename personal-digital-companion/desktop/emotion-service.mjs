@@ -7,16 +7,20 @@ const short={type:'string'};
 export function fields(properties){
   return {type:'object',properties,required:Object.keys(properties),additionalProperties:false};
 }
-const assessment=fields({delta:{enum:[-1,0,1]},status:{enum:['keep','release','satisfied']},quote:short,positive:short,negative:short,line:short,want:short,condition:short,curiosity:short});
+const phrase={...short,maxLength:180},emotionWord={...short,minLength:1,maxLength:6};
+const assessment=fields({delta:{enum:[-1,0,1]},status:{enum:['keep','release','satisfied']},quote:phrase,
+  positive:emotionWord,negative:emotionWord,line:{...phrase,minLength:1},want:phrase,condition:phrase,curiosity:{...short,maxLength:40}});
 const word=v=>typeof v==='string'&&/^[\p{Script=Han}]{1,6}$/u.test(v);
+const timeout=code=>code==='TimeoutError'||code==='LOCAL_AI_TIMEOUT';
 export function weightedHistory(records){
   return records.slice(0,10).map(({at,mood,strength},i,items)=>({at,mood,strength:strength??null,
     weight:items.length===1?1:i===0?0.5:0.5/(items.length-1)}));
 }
 export function createEmotionService({profile,model,diary,memory,topics,now=Date.now,skill=readInteractionSkill,log}){
-  const store=createEmotionStore(profile,{now}),skipped=new Set();
+  const store=createEmotionStore(profile,{now}),deferred=new Map();
   let job,timer,controller,closed=false,paused=false,recovering;
-  const warn=stage=>{void log?.({direction:'local',route:'绯月情绪',stage});};
+  const warn=(stage,error)=>{void log?.({direction:'local',route:'绯月情绪',stage,error});};
+  const pending=at=>store.pending([...deferred].filter(([,after])=>after>at).map(([id])=>id));
   function expression(){const {word,grade,line,desire}=store.snapshot();return {word,grade,line,desire:desire?.want};}
   function accept(event){
     if(closed)return;
@@ -54,7 +58,7 @@ export function createEmotionService({profile,model,diary,memory,topics,now=Date
     let retry=false,eventId;
     job=(async()=>{
       store.week();
-      const e=store.pending([...skipped]);if(!e)return;eventId=e.seq;
+      const e=pending(now());if(!e)return;eventId=e.seq;
       const [appraisal,loop]=await Promise.all([skill('emotionAppraisal'),skill('loveAndReason')]);
       signal.throwIfAborted();
       const s=store.snapshot(),facts=JSON.parse(e.payload);
@@ -72,22 +76,38 @@ export function createEmotionService({profile,model,diary,memory,topics,now=Date
       const input=JSON.stringify({事件:e.kind,用户:facts.user,绯月:facts.reply,事实:facts.title,当前情绪:s.word,档位:s.grade,
         事件前欲求:s.desire?.id===e.prior?s.desire:null,本周:inclinations[store.week()-1],
         喜好:topics?.preferences()??[],历史权重:"各组按近到远，最新占半，其余均分；仅一条占全部。列为日期、情绪词、已知强度。",手记:historyGroup(history.pages),念叨:historyGroup(history.nags)});
-      const a=await model.memory(input,loop.localAi.assessment+'\n'+appraisal.localAi.assess,assessment,signal,{name:appraisal.skill,version:appraisal.version});
+      const a=await model.memory(input,loop.localAi.assessment+'\n'+appraisal.localAi.assess+'\n情绪表达、想做的事和满足条件各用一句简短的话。',assessment,signal,
+        {name:appraisal.skill,version:appraisal.version,boundedOutput:true,backgroundBudget:true,maxTokens:384,aiBudget:45000});
       signal.throwIfAborted();
       if(![-1,0,1].includes(a.delta)||!['keep','release','satisfied'].includes(a.status)||!word(a.positive)||!word(a.negative)||
         !['line','quote','want','condition'].every(k=>typeof a[k]==='string'&&a[k].length<=180)||!a.line.trim()){
-        skipped.add(e.seq);warn('评价字段无效，保留待评');return;
+        deferred.set(e.seq,Infinity);warn('评价字段无效，保留待评','EMOTION_RESULT_INVALID');return;
       }
       store.settle(e,a,{skill:appraisal.version,loop:loop.version,model:'Qwen3.5 Aggressive 9B',context:JSON.parse(input)});
+      deferred.delete(e.seq);
       if(topics&&typeof a.curiosity==='string'&&a.curiosity.length>=2&&a.curiosity.length<=40&&facts.user.includes(a.curiosity)){
-        await topics.remember(a.curiosity,e.key);
+        try{await topics.remember(a.curiosity,e.key);}
+        catch{warn('情绪评价已保存，该专题偏好未写入');}
       }
     })().catch(error=>{
-      if(signal.aborted||/忙碌|BUSY|未就绪|NOT_READY|STOPPED/.test(String(error.message))||eventId===undefined)retry=true;
-      else{skipped.add(eventId);warn('这条材料待下次补评');}
+      const code=typeof error?.code==='string'?error.code:error?.name??'EMOTION_EVALUATION_FAILED';
+      if(signal.aborted||code==='LOCAL_AI_GPU_DEFERRED'||/忙碌|BUSY|未就绪|NOT_READY|STOPPED/.test(String(error?.message))||eventId===undefined)retry=true;
+      else if(timeout(code)&&!deferred.has(eventId)){
+        deferred.set(eventId,now()+30000);
+        warn('评价超时，稍后重试');
+      }else{
+        deferred.set(eventId,Infinity);
+        warn('这条材料待下次补评',code);
+      }
     }).finally(()=>{
       job=null;controller=null;
-      if(!closed&&!paused&&store.pending([...skipped]))wake(retry?30000:200);
+      if(closed||paused)return;
+      const at=now();
+      if(pending(at))wake(retry?30000:200);
+      else{
+        const next=Math.min(...[...deferred.values()].filter(after=>after>at));
+        if(Number.isFinite(next))wake(Math.max(200,next-at));
+      }
     });return job;
   }
   function recover(){
@@ -110,6 +130,6 @@ export function createEmotionService({profile,model,diary,memory,topics,now=Date
   }
   return {store,expression,feedback,accept,chat,taskRows,drain,recover,wake,interrupt:()=>controller?.abort(),
     async pause(){paused=true;clearTimeout(timer);timer=null;controller?.abort();await job;},
-    resume(){paused=false;skipped.clear();wake();},
+    resume(){paused=false;for(const [id,after] of deferred)if(after===Infinity)deferred.delete(id);wake();},
     async close(){closed=true;clearTimeout(timer);controller?.abort();await Promise.allSettled([job,recovering]);store.close();}};
 }

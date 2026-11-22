@@ -5,6 +5,9 @@ export const aiPoolLimit=40;
 export const aiWakeCount=20;
 const unavailable=(message,code)=>Object.assign(Error(message),{code});
 const busy=error=>Number.isInteger(error?.errcode)&&(error.errcode&255)===5;
+const errorCode=error=>typeof error?.code==='string'?error.code:error?.name??'Error';
+const snapshotStatus=({cancelled,outcome})=>!outcome.failure?'done':
+  cancelled&&outcome.failure.code==='AbortError'?'cancelled':'failed';
 
 export function createAiRequestQueue({file,execute,interpret,log,safeStorage}){
   const db=new DatabaseSync(file);
@@ -46,7 +49,7 @@ export function createAiRequestQueue({file,execute,interpret,log,safeStorage}){
   const unpack=value=>JSON.parse(typeof value==='string'?value:safeStorage.decryptString(Buffer.from(value)));
   const beginSnapshot=db.prepare("INSERT OR IGNORE INTO ai_attempt_snapshots VALUES(?,?,NULL,'running',?,NULL)");
   const endSnapshot=db.prepare('UPDATE ai_attempt_snapshots SET finished=?,status=?,output=? WHERE id=?');
-  const pruneSnapshots=db.prepare("UPDATE ai_attempt_snapshots SET input=NULL,output=NULL WHERE status='done' AND finished<? AND input IS NOT NULL");
+  const pruneSnapshots=db.prepare("UPDATE ai_attempt_snapshots SET input=NULL,output=NULL WHERE status IN ('done','cancelled') AND finished<? AND input IS NOT NULL");
   const findSnapshot=db.prepare('SELECT * FROM ai_attempt_snapshots WHERE id=?');
   let running,buffer,armed=false,scheduled=false,retryTimer,closed=false,sequence=0;
 
@@ -80,7 +83,7 @@ export function createAiRequestQueue({file,execute,interpret,log,safeStorage}){
       return callback();
     });
     running=task.then(value=>finished({value}),error=>finished({failure:{
-      message:error?.message??String(error),code:error?.code??error?.name}})).finally(()=>{
+      message:error?.message??String(error),code:errorCode(error)}})).finally(()=>{
       running=null;
       schedule();
     });
@@ -129,7 +132,7 @@ export function createAiRequestQueue({file,execute,interpret,log,safeStorage}){
     }
     let result;
     try{result=interpret(unpack(row.input),unpack(row.output));}
-    catch(error){result={output:{failure:{message:error.message,code:error.code??error.name}}};}
+    catch(error){result={output:{failure:{message:error.message,code:errorCode(error)}}};}
     const nextInput=result.next?pack(result.next):null;
     const output=result.output?pack(result.output):null;
     write(()=>{
@@ -176,7 +179,7 @@ export function createAiRequestQueue({file,execute,interpret,log,safeStorage}){
           if(buffer.row.checkpoint)park.run(buffer.row.group_id);
           else erase.run(buffer.row.group_id);
         }else record.run(pack(buffer.outcome),buffer.row.id,buffer.attempt);
-        if(buffer.snapshot)endSnapshot.run(Date.now(),buffer.outcome.failure?'failed':'done',pack(buffer.outcome),buffer.snapshot);
+        if(buffer.snapshot)endSnapshot.run(Date.now(),snapshotStatus(buffer),pack(buffer.outcome),buffer.snapshot);
         buffer=null;
       }
       acknowledgeOutputs();
@@ -228,7 +231,7 @@ export function createAiRequestQueue({file,execute,interpret,log,safeStorage}){
           start(()=>execute(input,signal,job.progress),signal,outcome=>{
             job.active=false;
             buffer={row,attempt,outcome,snapshot,cancelled:outcome.failure&&(job.signal?.aborted||lifetime.signal.aborted)};
-            void log?.({direction:'local',route:'AI 询问池',stage:input.phase==='simple'?input.skill?.stage??'处理':input.phase,
+            void log?.({direction:'local',route:'AI 询问池',stage:snapshotStatus(buffer)==='cancelled'?'取消':input.phase==='simple'?input.skill?.stage??'处理':input.phase,
               skill:input.skill?.name,ai_step_id:snapshot,duration_ms:Math.round(performance.now()-started),error:outcome.failure?.code});
           });
         }else if(!raw.get())armed=false;
@@ -292,7 +295,7 @@ export function createAiRequestQueue({file,execute,interpret,log,safeStorage}){
     if(buffer)try{
       const output=pack(buffer.outcome);
       if(!buffer.cancelled)record.run(output,buffer.row.id,buffer.attempt);
-      if(buffer.snapshot)endSnapshot.run(Date.now(),buffer.outcome.failure?'failed':'done',output,buffer.snapshot);
+      if(buffer.snapshot)endSnapshot.run(Date.now(),snapshotStatus(buffer),output,buffer.snapshot);
     }catch{/* 恢复时由检查点续办。 */}
     try{acknowledgeOutputs();}catch{/* 业务检查点仍保留。 */}
     db.close();

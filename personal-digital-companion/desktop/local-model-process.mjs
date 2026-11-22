@@ -360,24 +360,25 @@ async function start() {
           const instructions=[responseInstruction(mode,{direct}),data.skillInstruction?.response].filter(Boolean).join('\n');
           const reply=await pass(text,signal,instructions,previous,null,mode==='speech'||mode==='judgment'?256:512);
           result=reply?{kind:'chat',reply}:{error:'LOCAL_AI_RESULT_INVALID'};
-        }else if(hint==='interactionWork'||hint==='personalityMemory'&&
-            (data.skillInstruction?.aiTier||data.skillInstruction?.boundedOutput||data.skillInstruction?.name==='memory-refinement')){
-          const {instruction,schema,maxTokens:requested=512,boundedOutput,adaptiveOutput,fullOutputBudget}=data.skillInstruction;
+        }else if(hint==='interactionWork'||hint==='personalityMemory'){
+          const skill=data.skillInstruction;
+          const fixedContext=hint==='personalityMemory'&&!skill.aiTier&&!skill.boundedOutput&&skill.name!=='memory-refinement';
+          const {instruction,schema,maxTokens:requested=512,boundedOutput,adaptiveOutput,fullOutputBudget}=skill;
           const maximum=model.gpuLayers>0?2048:1024;
-          const limit=boundedOutput?Math.max(64,Math.min(requested,maximum)):requested;
+          const limit=fixedContext?420:boundedOutput?Math.max(64,Math.min(requested,maximum)):requested;
           const setup=performance.now();
           const plan=planLocalOutput({text,stage:boundedOutput?adaptiveOutput:undefined,tokenize:value=>model.tokenize(value),
             limit,retry:fullOutputBudget});
           const maxTokens=plan.tokens;
           const inputTokens=model.tokenize(text).length+model.tokenize([instruction,active?.calendar].filter(Boolean).join('\n')).length;
           const required=inputTokens+maxTokens+256;
-          const timing=boundedOutput||data.skillInstruction.name==='memory-refinement'?
+          const timing=fixedContext||boundedOutput||skill.name==='memory-refinement'?
             {input_tokens:inputTokens,output_tokens:0,output_limit:maxTokens,output_ceiling:limit,budget_mode:plan.mode,
               material_tokens:plan.materialTokens,setup_ms:0}:undefined;
           let workContext=context;
           try{
             if(plan.split)throw Object.assign(Error('本批预计输出超出当前设备预算，交给较小分片'),{code:'LOCAL_AI_BATCH_BUDGET'});
-            if(required>16384||boundedOutput&&required>8192)
+            if(required>16384||boundedOutput&&required>8192||fixedContext&&required>contextSize)
               throw Object.assign(Error('本轮交互资料超出本地上下文'),{code:'LOCAL_AI_CONTEXT_BUDGET'});
             const workGrammar=await engine.createGrammarForJsonSchema(schema);
             if(required>contextSize)workContext=await model.createContext({contextSize:Math.ceil(required/1024)*1024,threads});
@@ -391,11 +392,7 @@ async function start() {
             if(workContext!==context)await workContext.dispose();
             if(timing)send({type:'refinement-timing',id,timing});
           }
-        }else if (hint === 'serverTask' || hint === 'personalityMemory') {
-          if(hint==='personalityMemory'&&['emotion-appraisal','initiative-decision','topic-memory'].includes(data.skillInstruction.name)){
-            const used=model.tokenize(text).length+model.tokenize(data.skillInstruction.instruction).length;
-            if(used+420+32>contextSize)throw Object.assign(Error('本轮人格材料超出上下文'),{code:'LOCAL_AI_CONTEXT_BUDGET'});
-          }
+        }else if (hint === 'serverTask') {
           const taskGrammar = await engine.createGrammarForJsonSchema(data.skillInstruction.schema);
           result = await pass(text,signal,data.skillInstruction.instruction,undefined,taskGrammar,420);
         } else if (hint === 'image-plan') {

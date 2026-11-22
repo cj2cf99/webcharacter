@@ -41,6 +41,35 @@ async function eventually(check){
   }
 }
 
+test('模型时限和前台让行保存可区分的回执，取消后前台先拿到时隙',async t=>{
+  const {file,after}=fixture(t),logs=[],started=Promise.withResolvers(),order=[];
+  const ai=createAiWorkflowModel({file,log:event=>logs.push(event),safeStorage:{
+    encryptString:value=>Buffer.from(value),decryptString:value=>Buffer.from(value).toString(),
+  },model:model({async memory(text,_instruction,_schema,wait){
+    order.push(text);
+    if(text==='让行')started.resolve();
+    try{await delay(500,undefined,{signal:wait});}catch{wait.throwIfAborted();}
+    return {text};
+  },async analyze(){order.push('前台');return {reply:'收到'};}})});
+  after(()=>ai.close());
+  const run=(text,wait,options)=>ai.memory(text,'整理',textSchema,wait,options);
+  await assert.rejects(run('时限',signal(),{aiBudget:15}),{code:'TimeoutError'});
+  const controller=new AbortController();
+  const processing=run('让行',controller.signal);
+  const rejected=assert.rejects(processing,{name:'AbortError'});
+  await started.promise;
+  const foreground=ai.analyze('前台',{signal:signal()});
+  controller.abort();
+  await rejected;
+  assert.deepEqual(await foreground,{reply:'收到'});
+  assert.deepEqual(order,['时限','让行','前台']);
+  await eventually(()=>Boolean(ai.readAiStep(logs.at(-1).ai_step_id)?.finished));
+  assert.equal(logs[0].error,'TimeoutError');
+  assert.equal(logs[1].error,'AbortError');
+  assert.equal(logs[1].stage,'取消');
+  assert.equal(ai.readAiStep(logs[1].ai_step_id).status,'cancelled');
+});
+
 test('19 条延后等待，20 条唤醒，独立请求不按正文归并',async t=>{
   const {file,after}=fixture(t),called=[];
   const ai=createAiWorkflowModel({file,model:model({async memory(text){

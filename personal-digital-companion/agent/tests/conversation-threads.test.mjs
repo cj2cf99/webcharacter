@@ -276,6 +276,21 @@ test('旧归档静默跳过损坏 JSON，日志巡检只回看时间窗口内的
   assert.deepEqual(summary,{scanned:3,completed:1,failed:1,top:[['LOCAL_AI_OUTPUT_BUDGET',1]]});
 });
 
+test('巡检合并同一手记的两条失败回执，保留独立失败及补评终态',async t=>{
+  const {profile}=fixture(t),at=Date.parse('2026-11-22T23:46:08+09:00');
+  const log=createTaskTrafficLog(profile,{clock:()=>at});
+  const error='LOCAL_AI_INFERENCE_FAILED';
+  await log.write({route:'本地 AI',skill:'diary-writing',error});
+  await log.write({route:'写日记',category:'绯月自主行动',stage:'查询失败',result:error});
+  await log.write({route:'补行动评价',category:'绯月自主行动',stage:'查询失败',result:error});
+  await log.write({route:'本地 AI',skill:'conversation-transcription',error:'LOCAL_AI_ADAPTIVE_OUTPUT_BUDGET'});
+  await log.write({route:'AI 询问池',skill:'emotion-appraisal',error:'TimeoutError'});
+  await log.write({route:'AI 询问池',stage:'取消',error:'AbortError'});
+  await log.write({route:'绯月情绪',stage:'这条材料待下次补评',error:'TimeoutError'});
+  assert.deepEqual(await log.inspectRecent(at-1000,at+1000,new AbortController().signal),
+    {scanned:7,completed:0,failed:3,top:[[error,2],['TimeoutError',1]]});
+});
+
 test('动态额度按实际待整理的新材料与事项数量计算，预估超限时拆分',()=>{
   const tokenize=text=>text.match(/\S+/gu)??[];
   const estimate=(stage,value,limit=1024,retry=false)=>planLocalOutput({text:JSON.stringify(value),stage,tokenize,limit,retry});

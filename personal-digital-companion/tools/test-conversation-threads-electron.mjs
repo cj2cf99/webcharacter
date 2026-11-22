@@ -57,7 +57,7 @@ async function testReal(){
   const schema={type:'object',properties:{text:{const:exact}},required:['text'],additionalProperties:false};
   const skill={name:'diary-writing',version:'budget-fixture',stage:'reviewAction',instruction:'按格式原样输出完整的行动摘录。',schema};
   const baseline=await worker.analyze(exact,{hint:'personalityMemory',skillInstruction:skill,signal:AbortSignal.timeout(115000)});
-  assert.ok(baseline.error,'旧路由的 420 token 上限应截断该结构化回执');
+  assert.equal(baseline.error,'LOCAL_AI_OUTPUT_BUDGET','固定 420 token 上限应返回具体截断原因');
   const deliberate=await worker.analyze(exact,{hint:'personalityMemory',skillInstruction:{...skill,boundedOutput:true,maxTokens:64},
     signal:AbortSignal.timeout(115000)});
   assert.equal(deliberate.error,'LOCAL_AI_OUTPUT_BUDGET');
