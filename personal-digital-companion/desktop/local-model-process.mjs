@@ -3,6 +3,7 @@ import {calendarContext,tokyoDate} from './calendar-date.mjs';
 import {imageSlots,resolveImageChoices} from './image-planning.mjs';
 import {conversationRoute,suppliedSummaryText} from './conversation-routing.mjs';
 import {responseMode,responseInstruction} from '../agent/assistant/response-style.mjs';
+import {planLocalOutput} from './local-output-budget.mjs';
 
 const threads = 4;
 const contextSize = 2048;
@@ -258,7 +259,9 @@ async function start() {
       try{value=outputGrammar.parse(output);}
       catch(error){
         if(timing)throw Object.assign(Error('本机结构化输出未完整结束'),{
-          code:timing.output_tokens>=maxTokens-1?'LOCAL_AI_OUTPUT_BUDGET':'LOCAL_AI_RESULT_INVALID',cause:error});
+          code:timing.output_tokens>=maxTokens-1
+            ?(timing.budget_mode==='adaptive'&&maxTokens<timing.output_ceiling?'LOCAL_AI_ADAPTIVE_OUTPUT_BUDGET':'LOCAL_AI_OUTPUT_BUDGET')
+            :'LOCAL_AI_RESULT_INVALID',cause:error});
         throw error;
       }
 
@@ -359,21 +362,29 @@ async function start() {
           result=reply?{kind:'chat',reply}:{error:'LOCAL_AI_RESULT_INVALID'};
         }else if(hint==='interactionWork'||hint==='personalityMemory'&&
             (data.skillInstruction?.aiTier||data.skillInstruction?.boundedOutput||data.skillInstruction?.name==='memory-refinement')){
-          const {instruction,schema,maxTokens:requested=512,boundedOutput}=data.skillInstruction;
+          const {instruction,schema,maxTokens:requested=512,boundedOutput,adaptiveOutput,fullOutputBudget}=data.skillInstruction;
           const maximum=model.gpuLayers>0?2048:1024;
-          const maxTokens=boundedOutput?Math.max(64,Math.min(requested,maximum)):requested;
+          const limit=boundedOutput?Math.max(64,Math.min(requested,maximum)):requested;
           const setup=performance.now();
+          const plan=planLocalOutput({text,stage:boundedOutput?adaptiveOutput:undefined,tokenize:value=>model.tokenize(value),
+            limit,retry:fullOutputBudget});
+          const maxTokens=plan.tokens;
           const inputTokens=model.tokenize(text).length+model.tokenize([instruction,active?.calendar].filter(Boolean).join('\n')).length;
           const required=inputTokens+maxTokens+256;
           const timing=boundedOutput||data.skillInstruction.name==='memory-refinement'?
-            {input_tokens:inputTokens,output_tokens:0,output_limit:maxTokens,setup_ms:0}:undefined;
+            {input_tokens:inputTokens,output_tokens:0,output_limit:maxTokens,output_ceiling:limit,budget_mode:plan.mode,
+              material_tokens:plan.materialTokens,setup_ms:0}:undefined;
           let workContext=context;
           try{
+            if(plan.split)throw Object.assign(Error('本批预计输出超出当前设备预算，交给较小分片'),{code:'LOCAL_AI_BATCH_BUDGET'});
             if(required>16384||boundedOutput&&required>8192)
               throw Object.assign(Error('本轮交互资料超出本地上下文'),{code:'LOCAL_AI_CONTEXT_BUDGET'});
             const workGrammar=await engine.createGrammarForJsonSchema(schema);
             if(required>contextSize)workContext=await model.createContext({contextSize:Math.ceil(required/1024)*1024,threads});
-            if(timing)timing.setup_ms=Math.round(performance.now()-setup);
+            if(timing){
+              timing.setup_ms=Math.round(performance.now()-setup);
+              timing.context_tokens=required>contextSize?Math.ceil(required/1024)*1024:contextSize;
+            }
             result=await pass(text,signal,instruction,undefined,workGrammar,maxTokens,workContext,timing);
           }
           finally{
@@ -427,7 +438,8 @@ async function start() {
 
       } catch (error) {
         result = {error:signal.aborted?'LOCAL_AI_TIMEOUT':hint==='interactionWork'&&error instanceof SyntaxError?'LOCAL_AI_RESULT_INVALID':
-          ['LOCAL_AI_RESULT_INVALID','LOCAL_AI_CONTEXT_BUDGET','LOCAL_AI_OUTPUT_BUDGET'].includes(error?.code)?error.code:'LOCAL_AI_INFERENCE_FAILED'};
+          ['LOCAL_AI_RESULT_INVALID','LOCAL_AI_CONTEXT_BUDGET','LOCAL_AI_OUTPUT_BUDGET',
+            'LOCAL_AI_ADAPTIVE_OUTPUT_BUDGET','LOCAL_AI_BATCH_BUDGET'].includes(error?.code)?error.code:'LOCAL_AI_INFERENCE_FAILED'};
       } finally {
         active = null;
       }

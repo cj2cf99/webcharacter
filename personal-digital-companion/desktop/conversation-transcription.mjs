@@ -410,13 +410,14 @@ async function transcribe(data,model,skill,save,signal){
   });
 }
 
-const budgetFailure=error=>/LOCAL_AI_(?:CONTEXT_BUDGET|OUTPUT_BUDGET|RESULT_INVALID)/u.test(error.code??error.message);
+const budgetFailure=error=>/LOCAL_AI_(?:BATCH_BUDGET|CONTEXT_BUDGET|OUTPUT_BUDGET|RESULT_INVALID)/u.test(error.code??error.message);
+const adaptiveUnderflow='LOCAL_AI_ADAPTIVE_OUTPUT_BUDGET';
 function threadSections(text,limit=620){
   const parts=[];
   let rest=Array.from(text);
   while(rest.length>limit){
     let end=limit;
-    while(end>Math.floor(limit/2)&&!/[。！？，；\\n]/u.test(rest[end-1]))end--;
+    while(end>Math.floor(limit/2)&&!/[。！？，；\r\n]/u.test(rest[end-1]))end--;
     if(end<=Math.floor(limit/2))end=limit;
     parts.push(rest.slice(0,end).join(''));rest=rest.slice(end);
   }
@@ -442,13 +443,16 @@ async function transcribeThread(job,model,skill,save){
     if(attempt.state==='split')throw Object.assign(Error(attempt.error),{code:attempt.error});
     if(calls>=2)throw Object.assign(Error('等待下一个整理时隙'),{code:'THREAD_STAGE_YIELD'});
     calls++;
-    const call={at:Date.now(),state:'running'};
+    const priorAttempts=(attempt.attempts??=[]).slice(attempt.manualFrom??0);
+    const fullOutputBudget=priorAttempts.some(item=>item.error===adaptiveUnderflow);
+    const call={at:Date.now(),state:'running',fullOutputBudget};
     (attempt.attempts??=[]).push(call);
     const signal=AbortSignal.timeout(55000);
     attempt.state='running';save(stage);
     try{
       const output=await model.memory(JSON.stringify(attempt.input),instruction,schemaFor(skill.schemas,stage),signal,
-        {name:skill.skill,version:skill.version,stage,aiPriority:4,aiBudget:45000,aiTier:'4',boundedOutput:true,backgroundBudget:true,maxTokens});
+        {name:skill.skill,version:skill.version,stage,aiPriority:4,aiBudget:45000,aiTier:'4',boundedOutput:true,backgroundBudget:true,
+          adaptiveOutput:stage,fullOutputBudget,maxTokens});
       call.raw=output;
       if(!output||output.error)throw Object.assign(Error(output?.error??'模型未返回结果'),{code:output?.error});
       attempt.output=validate(output);call.state=attempt.state='done';delete attempt.error;save(stage);return attempt.output;
@@ -456,7 +460,7 @@ async function transcribeThread(job,model,skill,save){
       if(error.code==='LOCAL_AI_GPU_DEFERRED'){
         call.state=attempt.state='waiting';call.error=error.code;save(stage);throw error;
       }
-      call.state=attempt.state='failed';attempt.error=call.error=error.code??error.message;
+      call.state=attempt.state=error.code==='LOCAL_AI_BATCH_BUDGET'?'split':'failed';attempt.error=call.error=error.code??error.message;
       error.stepsExhausted=attempt.attempts.slice(attempt.manualFrom??0).filter(item=>item.state==='failed'||item.state==='unknown').length>=3;
       save(stage);throw error;
     }
@@ -530,7 +534,7 @@ async function transcribeThread(job,model,skill,save){
   });
   const explicit=job.turns.filter(turn=>turn.registration);
   if(explicit.length){
-    const original=explicit.map(turn=>turn.text).join('\\n\\n');
+    const original=explicit.map(turn=>turn.text).join('\n\n');
     const existing=rows.filter(row=>row.type==='diaries.create');
     const preferred=existing[0];
     const diary={id:preferred?.id??'registration-diary',type:'diaries.create',label:'个人日记',params:{content:original,title:preferred?.params.title},
@@ -682,7 +686,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
       if(job.line)threadFinished(job.line);
       if(job.result.rows.length)try{notify(status(job));}catch{/* 任务管理仍可查看已保存的结果。 */}
     }catch(error){
-      if(error.code==='THREAD_STAGE_YIELD'){
+      if(error.code==='THREAD_STAGE_YIELD'||error.code===adaptiveUnderflow&&!error.stepsExhausted){
         job.yieldedAt=now();save(job,'queued');return;
       }
       job.error=error.message;job.durationMs=now()-job.closedAt;

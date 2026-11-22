@@ -32,6 +32,27 @@ async function testReal(){
   await worker.start();
   assert.equal(worker.snapshot().state,'ready');
   const snapshot=worker.snapshot();
+  if(process.argv.includes('--adaptive-retry')){
+    const exact=Array.from({length:123},(_,i)=>'项'+(i+1)).join(' ');
+    const schema={type:'object',properties:{text:{const:exact}},required:['text'],additionalProperties:false};
+    const skillInstruction={name:'conversation-transcription',version:'budget-fixture',stage:'organize',
+      instruction:'按字段格式输出完整回执。',schema,boundedOutput:true,adaptiveOutput:'organize',maxTokens:1550};
+    const run=(turns,fullOutputBudget=false)=>worker.analyze(JSON.stringify({turns}),{hint:'personalityMemory',
+      skillInstruction:{...skillInstruction,fullOutputBudget},signal:AbortSignal.timeout(105000)});
+    const guard=await run([{text:'红 黄 蓝 绿 白 紫 黑 灰 '.repeat(110)},{text:'另一条材料'}]);
+    assert.equal(guard.error,'LOCAL_AI_BATCH_BUDGET');
+    const short=[{text:'短材料'}];
+    const clipped=await run(short);
+    assert.equal(clipped.error,'LOCAL_AI_ADAPTIVE_OUTPUT_BUDGET');
+    const complete=await run(short,true);
+    assert.equal(complete.text,exact);
+    const info=logs.filter(event=>event.output_limit).map(({error,duration_ms,material_tokens,output_tokens,output_limit,budget_mode,context_tokens})=>
+      ({error,duration_ms,material_tokens,output_tokens,output_limit,budget_mode,context_tokens}));
+    assert.equal(info[0].output_tokens,0);
+    assert.equal(info[2].output_limit,snapshot.gpuLayers>0?1550:1024);
+    console.log(JSON.stringify({backend:snapshot.backend,adaptiveRetry:info}));
+    return;
+  }
   const exact=Array.from({length:220},(_,i)=>'项'+(i+1)).join(' ');
   const schema={type:'object',properties:{text:{const:exact}},required:['text'],additionalProperties:false};
   const skill={name:'diary-writing',version:'budget-fixture',stage:'reviewAction',instruction:'按格式原样输出完整的行动摘录。',schema};
@@ -54,6 +75,7 @@ async function testReal(){
 
 async function testRealOrganization(){
   const logs=[],calls=[];
+  const fixedOutput=process.argv.includes('--fixed-output');
   const modelPath=resolve(desktopModelPath(electron.app,root),'..','Qwen3.5-4B-Q4_K_M.gguf');
   worker=createLocalModel({utilityProcess:electron.utilityProcess,modelPath,device:'gpu',log:event=>logs.push(event),loadTimeout:25000});
   await worker.start();
@@ -62,7 +84,8 @@ async function testRealOrganization(){
     async memory(text,instruction,schema,signal,skill){
       calls.push(skill.stage);
       if(text.includes('隔离截断标记'))throw Object.assign(Error('LOCAL_AI_OUTPUT_BUDGET'),{code:'LOCAL_AI_OUTPUT_BUDGET'});
-      const result=await worker.analyze(text,{hint:'personalityMemory',signal,skillInstruction:{...skill,instruction,schema}});
+      const result=await worker.analyze(text,{hint:'personalityMemory',signal,
+        skillInstruction:{...skill,...(fixedOutput?{adaptiveOutput:undefined}:{}),instruction,schema}});
       if(result.error)throw Object.assign(Error(result.error),{code:result.error});
       return result;
     },async close(){},
@@ -77,14 +100,16 @@ async function testRealOrganization(){
   for(const item of [long,failing,following])transcription.fromThread(item);
   await wait(()=>[long,failing,following].every(item=>['failed','ready','empty'].includes(transcription.detail(item.id).state)),170000);
   const results=[long,failing,following].map(({id})=>transcription.detail(id));
-  const info=logs.filter(event=>event.output_limit).map(({ai_phase,duration_ms,input_tokens,output_tokens,output_limit,error})=>
-    ({ai_phase,duration_ms,input_tokens,output_tokens,output_limit,error}));
-  console.log(JSON.stringify({backend:worker.snapshot().backend,calls,results:results.map(({state,count,claims})=>({state,count,
+  const info=logs.filter(event=>event.output_limit).map(({ai_phase,duration_ms,input_tokens,output_tokens,output_limit,output_ceiling,
+    budget_mode,material_tokens,context_tokens,error})=>
+    ({ai_phase,duration_ms,input_tokens,output_tokens,output_limit,output_ceiling,budget_mode,material_tokens,context_tokens,error}));
+  console.log(JSON.stringify({backend:worker.snapshot().backend,fixedOutput,calls,results:results.map(({state,count,claims})=>({state,count,
     workers:[...new Set(claims.map(claim=>claim.worker))]})),info}));
   assert.equal(results[1].state,'failed');
   assert.ok(results[2].result?.rows.some(row=>row.type==='reminders.create'));
   assert.ok(results[0].result?.rows.some(row=>row.type==='hu-shi.exercise.create'));
   assert.ok(results[0].steps.filter(step=>step.id.includes('organize')).length>=2);
+  if(!fixedOutput)assert.ok(info.some(call=>call.budget_mode==='adaptive'&&call.output_limit<call.output_ceiling&&call.material_tokens>0));
 }
 
 async function testWindows(){
@@ -169,6 +194,20 @@ async function testWindows(){
   const widths=await review('[document.documentElement.scrollWidth,innerWidth]');
   assert.deepEqual(widths,[360,360]);
   writeFileSync(join(out,'threads-'+mode+'.png'),(await host.details.webContents.capturePage()).toPNG());
+  await host.open('registration');
+  await wait(()=>bubble("document.querySelector('#mode').value==='registration'"));
+  await bubble("document.querySelector('#question').value='登记';document.querySelector('#questionForm').requestSubmit()");
+  await wait(()=>bubble("document.querySelector('#answer').textContent.includes('直接输入正文')"));
+  assert.equal(await bubble("document.querySelector('#mode').value"),'registration');
+  const diaryLines=['刚才把窗台上的花挪到了桌边。','傍晚回来发现花开了。'];
+  for(const text of diaryLines){
+    await bubble(`document.querySelector('#question').value=${JSON.stringify(text)};document.querySelector('#questionForm').requestSubmit()`);
+    await wait(()=>bubble("!document.querySelector('#question').value"));
+    assert.equal(await bubble("document.querySelector('#mode').value"),'registration');
+  }
+  const diary=await wait(()=>transcription.list().flatMap(job=>transcription.detail(job.id).result?.rows??[])
+    .find(row=>row.type==='diaries.create'&&row.params.content.includes(diaryLines.join('\n\n'))));
+  assert.equal(diary.params.content,`记录\n${diaryLines.join('\n\n')}\n❤️`);
   console.log('通过 '+mode+'，JST 三页签、主动首问、结束收窗、草稿清空、切线与迟到回复、静默便签、气泡展开时后台整理、360px 布局。');
 }
 

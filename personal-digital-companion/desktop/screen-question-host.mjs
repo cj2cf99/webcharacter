@@ -26,6 +26,8 @@ import {createThreadReplies} from './conversation-thread-replies.mjs';
 import {createThreadReference,requestsReference} from './conversation-thread-reference.mjs';
 
 const inputModes = new Set(['registration','supplement','web','memory','tour']);
+const bareRegistrationText=/^(?:(?:请|绯月|帮我|替我|给我)[，,\s]*)*(?:登记|记录)(?:一下)?[。！!吧\s]*$/u;
+const registrationPrompt='你想记下什么事？直接输入正文就好。';
 function searchSummaryPrompt(query, sources) {
   const excerpt = (value, limit) => Array.from(String(value ?? '').replace(/\p{Cc}/gu, ' ')).slice(0, limit).join('');
   const rows=sources.slice(0,10);
@@ -154,7 +156,8 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   async function runThreadCommand(id,message,signal){
     if(message.backgroundRegistration){
       onRegistration();
-      return {reply:'我会在后台整理这段话，有待确认的事项会提醒你。',next:'回应'};
+      return {reply:message.registration?'我会在后台整理个人日记和适合登记的事项，给你逐项确认。':
+        '我会在后台整理这段话，有待确认的事项会提醒你。',next:'回应'};
     }
     while(busy||detachedCommand){
       signal.throwIfAborted();
@@ -199,8 +202,11 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const route=conversationRoute(text,mode,args?.withScreen);
     const ref=threads.readReference(id);
     const reference=requestsReference(text)||Boolean(ref&&!ref.matched||ref?.matched&&/^(?:时间)?(?:改|推迟到|提前到|换到)/u.test(text));
+    const registrationNeedsText=emptyDiaryRequest(text)||bareRegistrationText.test(text);
+    if(line.kind==='ordinary'&&!hasAttachment&&mode==='registration'&&registrationNeedsText&&transcription?.fromThread)
+      return {state:'answer',text:registrationPrompt,keepRegistrationMode:true};
     const registrationText=!hasAttachment&&route.kind==='registration'&&mode!=='supplement'&&!reference&&transcription?.fromThread
-      &&!emptyDiaryRequest(text)&&!/^(?:(?:请|绯月|帮我|替我|给我)[，,\s]*)*(?:登记|记录)(?:一下)?[。！!吧\s]*$/u.test(text);
+      &&!registrationNeedsText;
     const known=route.kind==='question'&&(matchWeatherQuestion(text)||dateQuestion(text,tokyoDay(Date.now()))||menuGuidance(text)||imageRequest(text,0));
     if(!text||[...text].length>(route.kind==='registration'?6000:2000))throw Error('内容为空或超过字数限制');
     if(hasAttachment||route.kind==='restart'||known&&imageRequest(text,0))return {legacy:true};
@@ -213,7 +219,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(now.closed!==null&&line.kind==='question')threadOptions.endQuestion?.(id);
     else threadReplies.schedule(id,foreground);
     details.panel?.webContents.send('conversation:threads-changed',id);
-    return {accepted:true,messageId:message.id,...(foreground?threadView():{})};
+    return {accepted:true,messageId:message.id,keepRegistrationMode:message.registration,...(foreground?threadView():{})};
   }
   let registrationDraft=null,draftWork;
   const inquiry=attachInquiry(electron,{root,bundle,visible});
@@ -412,7 +418,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const turn={id:crypto.randomUUID(),at:Date.now(),question:route.fileName?userText+' · '+route.fileName:userText,retry,
       ...(commandThread&&{threadId:commandThread}),...(route.kind==='direct'?{direct:true}:{})},timing=newTiming();
     const session=commandThread||threadId?null:sessions.get(panel);
-    const bareRegistration=/^(?:(?:请|绯月|帮我|替我|给我)[，,\s]*)*(?:登记|记录)(?:一下)?[。！!吧\s]*$/u.test(text);
+    const bareRegistration=bareRegistrationText.test(text);
     const registrationNeedsText=emptyDiaryRequest(text)||bareRegistration;
     const explicitRegistration=mode==='registration'&&!retry;
     const deferRegistration=Boolean(transcription&&session&&!decision&&!withScreen&&!attachment&&route.kind==='registration'&&
@@ -570,7 +576,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         result=explicitRegistration?{state:'answer',keepRegistrationMode:true,text:'关窗后我会整理出个人日记和其他适合登记的事项，给你逐项确认。'}:
           {state:'answer',text:'我会在你关窗后整理这件事，再给你确认。'};
       }else if(explicitRegistration&&transcription&&registrationNeedsText){
-        result={state:'answer',keepRegistrationMode:true,text:'你想记下什么事？直接输入正文就好。'};
+        result={state:'answer',keepRegistrationMode:true,text:registrationPrompt};
       }else if(route.kind==='registration'&&emptyDiaryRequest(text)){
         if(!registration?.preview||!registration.submitReviewed)throw Error('当前实例未载入登记核对，请重启绯月。');
         if(registration.hasSaved?.())throw Error('已有登记链待处理，请先恢复原链。');

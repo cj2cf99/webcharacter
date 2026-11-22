@@ -1251,3 +1251,46 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 **实装结果。** 2026-11-22 21:32:41 JST，Windows 正式绯月完成安装和受控重启，版本 `51578f12bb0d`。旧 PID 17588 正常退出，新 PID 19120 经原安装入口启动。已核对 REST、实际资料目录、快捷方式、登录项以及 8 项文件摘要。任务库和转录库完整性检查通过，原 3 个转录作业保留，检查时运行中的转录为 0。轮询配置一致，已有本机批次仍为 19 条。使用实际安装文件在隔离 Electron 复验原地修改、正文与东京提醒时间保存、关窗重开、确认后冻结以及按修改值登记，结果通过。未编辑真实用户作业，真实使用效果待用户验收。
 
 备份位于 G:/selftool/WebCharacter/work/feiyue-transcript-edit-release/install-backup-20261122-213228，含 8 项旧文件和经完整性核对的加密 conversation-transcription.sqlite 副本。机器回执在 G:/selftool/WebCharacter/work/feiyue-transcript-edit-release/install-receipt.json。按用户明确授权执行安装、不登记花园。云端发布、Git 提交和远端推送均未执行。
+
+
+## 2026-11-22 JST · Windows 绯月多线会话与动态整理预算
+
+**需求和验收。** 以 `REQUIREMENTS.md` 的 C、T 组及用户关于本地整理 token 不足阻塞任务、按实际错误隔离模拟、接受动态调整的补充为依据。问绯月支持继续原线、新建和切换，迟到回复只进入对应线；记录窗口保留待聊、进行和 JST 历史入口。不把草稿或旧上下文重复入队。用本机 tokenizer 估算整理输入及输出，对可拆长输入先拆批，对首次动态预算截断按原步骤让到队尾并用完整预算复试。硬上限和同一步最多三次的边界继续生效。超限批次能查到原因，后续批次继续。转录、核对与编辑在本机完成，待确认结果仍通过原入口由用户确认后登记。
+
+**环境、来源和比较。** 目标为 Windows 正式绯月 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`。版本基线为最近一次实装 `51578f12bb0d`，正式树 Git `39fd098e40ebf7c2c82dd5a6f9944ae98055566e`。用户启动后核对旧 PID 768，2026-11-22 23:21:45 JST 开始服务，REST v4 与同一进程、资料目录及快捷方式、登录入口匹配。来源为 WebCharacter 的 `personal-digital-companion`，三方比较起点 `0aa2a6443daf4553955435960ff91ff99c10d55c`、已推送检查点 `86cc16dd4922d5623a62b23c73d4905b91e217c9` 和随后工作区动态预算。以实际安装文件计算旧、新 SHA-256；候选和前像见 `G:/selftool/WebCharacter/work/feiyue-threads-release-20261122/` 下的 `candidate/`、`before/`，组装脚本 `prepare.mjs`、人工解冲突 `resolved/`、精确比较 `windows-files.json`。该清单包含 40 个路径，SHA-256 `49023239b9adb37c79e539fb00b169feda64c35c2c884341042a3fadcca2448b`，候选标识 `49023239b9ad`。只安装清单所列文件，候选目录内的测试支撑、模型联接与测试资料无安装差异。
+
+**变更与前后行为。** 路径以 `desktop/` 为前缀，同名运行副本位于 `output/desktop-bundle/`。
+
+| 范围 | 涉及文件 | 前后行为 |
+| --- | --- | --- |
+| 对话与记录 | `conversation-{details,history,thread-reference,thread-replies,threads,ui}.mjs`、`conversation-preload.cjs`、`conversation.css`、`conversation.html`、`screen-question-{client,host,ui}.mjs`、`screen-question-preload.cjs`、`screen-question.css`、`screen-question.html` | 从单气泡和日期回顾扩展到多线继续、引用、切线、静默便签及三页签。按线隔离后到回复，关窗复用已有挂起会话。 |
+| 转录和提交边界 | `conversation-transcription.mjs`、`task-inbox-ui.mjs` | 新发言触发待整理批，记录已完成步骤和失败回执。编辑、用户确认和原登记回执沿用。保留明确登记模式的原文处理。 |
+| 本机模型和宿主 | `ai-request-queue.mjs`、`ai-workflow-model.mjs`、`balanced-local-model.mjs`、`local-model-process.mjs`、`local-model.mjs`、`local-output-budget.mjs`、`server-task-command.mjs`、`shell.mjs` | 固定额度改为按材料实际 token 预算，模型按已装载层数使用 CPU 1,024／GPU 2,048 的上限，保留前台优先、阶段续办及云端候补边界。 |
+| 行动评价和巡检 | `diary-audit.mjs`、`diary-sources.mjs`、`memory-archive.mjs`、`personality-diary.mjs`、`personality-nags.mjs`、`poll-scheduler.mjs`、`reminder-checks.mjs`、`task-traffic-log.mjs` | 预算故障的部分素材与未受影响素材分开推进，沿用现有评价入口；任务日志巡检默认一小时，只计实际异常，预检拆分留诊断记录。独立的手记和唠叨修订功能与新闻编辑不在清单。 |
+| 运行副本 | `conversation-ui.mjs`、`conversation.css`、`conversation.html`、`screen-question-ui.mjs`、`screen-question.css`、`screen-question.html`、`task-inbox-ui.mjs` | 七个页面和资源副本与桌面源码对应，安装后由正式窗口加载。 |
+
+**数据、配置及兼容。** 云端迁移、云端服务发布、Access、生产业务数据回填、REST 契约、令牌、快捷方式、登录项、模型和依赖影响均无。首次启动在既有资料目录按需增加 `conversations.sqlite` 的线、发言、整理及超期表，`ai-requests.sqlite` 的队列和阶段快照，手记库故障记录表及提醒库巡检游标和 `inspection` 轮询。原转录库已具有 `summary` 列，复用其加密载荷、原编号和用户确认边界。原会话历史保留，无全量历史回放或云端补写。隔离旧登记用最近开发种子中的时分兼容模板重现前一版本验证环境，候选安装不灌入该种子。
+
+**验证过程。** 开发区执行 `node tools/build-desktop.mjs`、`node tools/test-desktop-shell.mjs` 和 `node --test "agent/tests/*.test.mjs"`，报告 433 通过、3 可选项跳过、0 失败。固定和动态的 4B Vulkan 整理均得到 2 项运动候选、1 条后续提醒，同一个注入故障保留待查。五次有效调用的上下文从 3,072–4,096 降至 2,048，累计耗时 16.704→15.394 秒，单次样本未测显存峰值。正式基线候选通过入口模块加载。隔离模拟首次以安装树内旧 SQL 初始化 Worker，18:45 受旧模板拒绝。对比前次正式发布的隔离测试，确认其使用来源项目已支持时分的种子，改回该夹具，恢复三方合并漏掉的显式登记原文处理，并按 C16 修正新多线入口，保持登记模式、合并两条原文且仅生成待确认草稿。候选通过 `test-desktop-shell.mjs`、月印标题栏隔离测试、`check-candidate.mjs --dark` 和 `--light`，并通过 `test-conversation-transcription-electron.mjs --mock` 和 `--mock --registration --dark`，覆盖待确认改时分、重开保留、确认冻结和单链提交，全部使用临时资料。候选真实推理首测未返回模型就绪，核实为合并后的就绪日志引用了丢失的变量。已恢复开发区通过测试的模型生命周期、取消处理和平衡模型调度接线，复核保留原有五项记忆轮询并排除单独的修订任务。
+
+候选真实模型复测执行 Electron `tools/run-electron-check.mjs check-candidate.mjs --real --adaptive-retry` 及 `tools/run-electron-check.mjs check-candidate.mjs --organize`。2B CPU 对 1,763 token 返回预检拆分，用时 3 ms、零生成；另一次实际截断于动态 384 token，完整额度 1,024 内重试生成 510 token。4B Vulkan 两个工作者得到原长批 2 项、注入故障待查、后续批 1 项，五次有效调用均使用 2,048 的上下文。
+
+
+**审核重点及剩余。** 对照 `docs/reviews/FEIYUE_CONVERSATION_THREADS_IMPLEMENTATION_REVIEW_2026-11-22.md` 和 `docs/reviews/FEIYUE_ADAPTIVE_TRANSCRIPTION_BUDGET_REVIEW_2026-11-22.md`。重点核查长句和换行、同线来源、预算让行和三次上限、持久阶段复用、等待状态与单一登记链，以及已实装的待确认编辑、语音预热和原 REST 队列。开发区动态预算自审修正后连续两轮无新问题。安装候选另复核两遍：一查多线登记原文和确认边界，重跑浅深、普通和显式提交；二查模型预算、失败后续行、正式文件摘要和已有应用入口。独立第三方审核未执行。跨旧自主任务的一小时陈旧领取接管、所有旧云端调用合用一个串行入口仍未完成。旧截图模拟回执超时在开发基线复现。未用真实私人长对话作回放，长期语义质量、模型收尾措辞及显存峰值待观察。线上真实模板字段未另行访问，保留上一正式版相同的协议和写入链。
+
+**发布、后检和恢复。** 安装确认后重新核对实际进程、资料目录、在途任务、旧文件与候选摘要。待模型、对话、转录及登记在途工作收尾，走正常退出，备份全部受影响的旧文件和现存 `conversations.sqlite`、`conversation-transcription.sqlite`、`personality-memory.sqlite`、`reminder-checks.sqlite`、`ai-requests.sqlite`，SQLite 备份做 `quick_check`。逐项原子替换，从原入口受控重启。复核新 PID、REST、资料、快捷方式、登录项、40 项摘要、已有批次和转录作业、原轮询配置及预期巡检项，并用实装文件和临时资料重跑会话及既有编辑。失败时正常退出，核对并恢复旧文件或撤回本次新增文件，重新走原入口；保留数据库备份，避免覆盖重启期间产生的资料。用户实际桌面数据效果待上线后验收。
+
+**Git、确认和花园。** Windows 正式安装及受控重启在本记录就绪后待明确确认。开发检查点已推送，动态预算及发布留痕还未提交和推送。用户已明确本次需要登记。使用正式 v4 `infoguide` 所列方式运行 `npm.cmd run db:sync-schema`，只读同步新增 0 项，随后读取实际线上花园目录。基线修订 145，唯一归属「网页角色组件」#16 →「绯月（桌面精灵）」#61，当前 24.0，最后发布 #74。计划只追加本次部署和该功能明细，保留归属及历史。成功预计按花园模型升为 25.0；失败按实际情况登记「发布中」，保留成功版本。项目归属、种子、独立改善、独立缺陷及关系无需更新。发布结果明确后复查现值，生成精确 SQL 和前后值清单，经用户另行确认后先提交 SQL，再向新实例提交一个批次。正式安装、花园 SQL 提交、生产写入和入队当前均未执行。发布后补记版本、时间、实测、Git、批次状态及最终回执。
+
+用户明确回复「确认安装并重启」，批准候选 49023239b9ad 的 Windows 正式安装和受控重启。
+
+**实装结果。** 2026-11-22 23:45:20 JST 完成正式安装及受控重启，版本 49023239b9ad。旧进程 768 正常退出，新进程 33352 从原入口启动。回读本机 REST v4、资料目录、快捷方式、登录项和全部 40 项文件摘要。已存在的受影响 SQLite 安装前备份并通过完整性检查，重启后五个相关数据库均通过检查。对话线、AI 快照和任务巡检表已初始化，原轮询配置保留，巡检为 60 分钟。花园批次 19 → 19、转录作业 3 → 3。
+
+使用实装文件及隔离资料复验多线切换、迟到回复归属、静默便签、JST 历史和显式登记合并原文，结果通过。用本机模拟 Worker 复验待确认正文和时分编辑、确认后冻结、按修改内容以单一登记链提交，结果通过。正式用户历史和真实业务写入未作为测试输入。控件实际使用效果待用户验收，本次无云端服务部署。
+
+备份在 G:/selftool/WebCharacter/work/feiyue-threads-release-20261122/install-backup-20261122-234459，机器回执在同级的 install-receipt.json。来源仓库的已安装清单为 docs/reviews/FEIYUE_WINDOWS_THREADS_RELEASE_49023239b9ad.json，内容摘要与本次版本一致。
+
+
+**实装推理后检。** 实装模块在隔离资料中再次使用 2B CPU 模型。1,763 token 预检 3 ms、生成 0 token。另一输入在 384 token 实际截断，完整额度重试生成 510 token，仍在 1,024 上限内。
+
+**花园待确认。** 新正式实例的 REST v4 已核对，按接口指引只读同步结构，新增 0 项。线上归属网页角色组件 #16 → 绯月（桌面精灵）#61，最近部署 #74，现有版本 24.0，修订 145。精确 SQL 和清单演算仅新增部署 #75 及明细 #153，版本 24.0 → 25.0，记录实装结果和时间。批次 `feiyue-threads-budget-20261122`，审核摘要 `7599c46b74174c05cd3bc2e77efee171cd365e3f919bf53dc015b3742386b34a`。该清单待用户确认，SQL 尚未提交，REST 尚未入队，生产未写入。

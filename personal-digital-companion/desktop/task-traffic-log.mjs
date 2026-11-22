@@ -89,6 +89,7 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
         scanned++;
         if(row.category==='绯月自主行动'&&row.stage==='完成')completed++;
         const code=word(row.error??row.code??String(row.result??'').match(/\bLOCAL_AI_[A-Z_]+\b/u)?.[0]);
+        if(code==='LOCAL_AI_BATCH_BUDGET')continue;
         if(!code&&row.stage!=='失败')continue;
         failed++;
         const label=code??'自主任务失败';counts.set(label,(counts.get(label)??0)+1);

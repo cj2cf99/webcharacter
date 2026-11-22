@@ -13,6 +13,7 @@ import {createAiWorkflowModel} from '../../desktop/ai-workflow-model.mjs';
 import {createScreenQuestionClient} from '../../desktop/screen-question-client.mjs';
 import {createMemoryArchive} from '../../desktop/memory-archive.mjs';
 import {createTaskTrafficLog} from '../../desktop/task-traffic-log.mjs';
+import {planLocalOutput} from '../../desktop/local-output-budget.mjs';
 
 const codec={encryptString:value=>Buffer.from(value),decryptString:value=>value.toString()};
 async function wait(check){
@@ -188,6 +189,7 @@ test('有界转录拆除截断分片，单批重排后后续作业仍产出',asy
   transcription.onThreadFinished(batch=>store.organizationComplete(batch));
   const a=store.create(),b=store.create(),c=store.create();
   store.submit(a.id,{text:'隔离长段。'.repeat(105),registration:true});
+  store.submit(a.id,{text:'保留第二段原话。',registration:true});
   store.submit(b.id,{text:'必失败'});
   store.submit(c.id,{text:'昨天我跑了五公里。'});
   const batches=[a,b,c].map(line=>store.organization(line.id));
@@ -196,6 +198,7 @@ test('有界转录拆除截断分片，单批重排后后续作业仍产出',asy
   const [long,failed,later]=batches.map(batch=>transcription.detail(batch.id));
   assert.equal(long.state,'ready');
   assert.equal(long.result.rows[0].params.content.includes('隔离长段。'.repeat(105)),true);
+  assert.ok(long.result.rows[0].params.content.includes('隔离长段。\n\n保留第二段原话。'));
   assert.equal(later.state,'ready');
   assert.equal(failed.state,'failed');
   assert.equal(notices.length,2);
@@ -267,7 +270,54 @@ test('旧归档静默跳过损坏 JSON，日志巡检只回看时间窗口内的
   now=at+1000;
   await log.write({stage:'完成',category:'绯月自主行动'});
   await log.write({stage:'失败',error:'LOCAL_AI_OUTPUT_BUDGET'});
+  await log.write({route:'本地 AI',stage:'思索后继续处理',error:'LOCAL_AI_BATCH_BUDGET'});
   await log.write({route:'分析专家巡检',stage:'失败',error:'LOCAL_AI_TIMEOUT'});
   const summary=await log.inspectRecent(at,at+5000,new AbortController().signal);
-  assert.deepEqual(summary,{scanned:2,completed:1,failed:1,top:[['LOCAL_AI_OUTPUT_BUDGET',1]]});
+  assert.deepEqual(summary,{scanned:3,completed:1,failed:1,top:[['LOCAL_AI_OUTPUT_BUDGET',1]]});
+});
+
+test('动态额度按实际待整理的新材料与事项数量计算，预估超限时拆分',()=>{
+  const tokenize=text=>text.match(/\S+/gu)??[];
+  const estimate=(stage,value,limit=1024,retry=false)=>planLocalOutput({text:JSON.stringify(value),stage,tokenize,limit,retry});
+  const turn={text:'明天 提醒我 给田中回信'};
+  const short=estimate('organize',{turns:[turn]});
+  assert.equal(short.materialTokens,3);
+  assert.ok(short.tokens<1024);
+  assert.deepEqual(estimate('organize',{turns:[turn,{handled:true,text:'不生成新候选 '.repeat(1000)}],
+    history:'只供参考 '.repeat(1000)}),short);
+  const heavy={turns:Array.from({length:3},()=>({text:'分片内容 '.repeat(340)}))};
+  assert.equal(estimate('organize',heavy).split,true);
+  assert.equal(estimate('organize',heavy,2048).split,false);
+  const items={organized:{requests:Array.from({length:7},()=>({summary:'新事项',conditions:['明天'],evidence:[{quote:'原话'}]}))},
+    templates:'模板不能直接成为输出 '.repeat(1000)};
+  assert.equal(estimate('classify',items).split,true);
+  assert.equal(estimate('classify',items,2048).split,false);
+  assert.deepEqual(estimate('organize',{turns:[turn]},1024,true),{tokens:1024,mode:'full-retry',materialTokens:3});
+  assert.deepEqual(estimate('其它步骤',{}),{tokens:1024,mode:'fixed'});
+});
+
+test('动态额度截断后立即让行并用完整额度重试原步骤，保持同一作业',async t=>{
+  const {profile,store,cleanup}=fixture(t);
+  const calls=[],notices=[];
+  const transcription=createConversationTranscription({profile,safeStorage:codec,notify:item=>notices.push(item),model:{
+    async memory(text,_instruction,_schema,_signal,settings){
+      const material=JSON.parse(text).turns[0].text;
+      calls.push([material,settings.fullOutputBudget]);
+      if(material==='先估一次'&&!settings.fullOutputBudget)
+        throw Object.assign(Error('动态额度估低'),{code:'LOCAL_AI_ADAPTIVE_OUTPUT_BUDGET'});
+      return {actions:[],requests:[],signals:[],recentFactIds:[]};
+    },
+  }});
+  cleanup.push(transcription.close);
+  const first=store.create(),second=store.create();
+  store.submit(first.id,{text:'先估一次',registration:true});
+  store.submit(second.id,{text:'继续其它任务'});
+  const original=store.organization(first.id),later=store.organization(second.id);
+  transcription.fromThread(original);transcription.fromThread(later);
+  const result=await wait(()=>{const item=transcription.detail(original.id);return item.state==='ready'&&item;});
+  assert.deepEqual(calls,[['先估一次',false],['继续其它任务',false],['先估一次',true]]);
+  assert.equal(result.steps.length,1);
+  assert.equal(result.steps[0].attempts[0].error,'LOCAL_AI_ADAPTIVE_OUTPUT_BUDGET');
+  assert.equal(result.steps[0].attempts[1].state,'done');
+  assert.deepEqual(notices.map(item=>item.id),[original.id]);
 });
