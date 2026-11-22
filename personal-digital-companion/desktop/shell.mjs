@@ -41,7 +41,6 @@ import {attachPollSettings} from './poll-settings-host.mjs';
 import {attachNewsPanel} from './news-panel-host.mjs';
 import {attachStudy} from './study-host.mjs';
 import {createNewsEditor} from './news-editor.mjs';
-import {cleanNewsTitle} from './news-layout.mjs';
 import {attachReminderReview} from './reminder-review-host.mjs';
 import {attachTaskInbox} from './task-inbox-host.mjs';
 import {createConversationTranscription,prepareConversationBatch} from './conversation-transcription.mjs';
@@ -301,13 +300,7 @@ export async function startDesktop(electron,options={}){
   }),
     lastRun:id=>diary?.last(id),inspectRecent:options.benchmark?undefined:tasks.traffic?.inspectRecent,
     notifyNews:options.benchmark?undefined:items=>{
-      newsPanel.update();
-      if(!items.length)return;
-      const title='绯月 · 新闻简报（'+items.length+' 条）';
-      const first=items[0];
-      const content=cleanNewsTitle(first.latest||first.title)+'\n对我说「看新闻简报」可读最近七天要点和出处。';
-      if(process.platform==='win32')tray.displayBalloon({title,content,respectQuietTime:true});
-      else if(electron.Notification?.isSupported())new electron.Notification({title,body:content}).show();
+      if(!quitPending&&!cleaned)void newsPanel.update(items).catch(error=>warnLiveUpdate('绯月新闻提醒',error));
     },
     handlers:{...(hasMemory?Object.fromEntries(memoryPolls.map(k=>[k,(s,step,goal)=>memoryJob(k,s,false,step,undefined,goal)])):{}),
       aiHeartbeat:()=>{

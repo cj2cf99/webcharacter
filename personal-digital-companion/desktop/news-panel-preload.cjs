@@ -9,5 +9,5 @@ contextBridge.exposeInMainWorld('newsPanel',{
   translate:(id,url,field)=>ipcRenderer.invoke('news:translate',id,url,field),
   source:(id,url)=>ipcRenderer.invoke('news:source',id,url),
   archive:()=>ipcRenderer.invoke('news:archive'),
-  onNew:fn=>ipcRenderer.on('news:new',()=>fn())
+  onNew:fn=>ipcRenderer.on('news:new',(_event,refresh)=>fn(refresh===true))
 });

@@ -1,0 +1,11 @@
+* {box-sizing:border-box}
+body {margin:0;height:100vh;display:flex;flex-direction:column;border:1px solid var(--fy-line);
+  background:var(--fy-paper);color:var(--fy-ink);font:14px/1.45 var(--fy-sans);cursor:pointer}
+header.fy-titlebar {-webkit-app-region:no-drag}
+#count {color:var(--fy-muted);font-size:12px}
+button {cursor:pointer}
+#open {display:flex;flex:1;align-items:center;justify-content:space-between;gap:12px;padding:7px 14px;
+  border:0;background:transparent;color:inherit;font:inherit;text-align:left}
+#open:hover,#open:focus-visible {background:var(--fy-surface)}
+#headline {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+#open span:last-child {color:var(--fy-accent);font-size:22px}

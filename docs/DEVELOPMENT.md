@@ -133,3 +133,5 @@ node tools/check-project.mjs
 
 2026-11-16 用户继续要求提升观感与场景交互：增加共享风场、同姿态动态阴影/倒影、退水觅食、脚边弱水纹、蟹触须/钳动作，以及水面/花叶/鸟/蟹四类轻点反馈；暂停统一冻结所有动态。调整环境填光、粗糙度、细砂和湿润反光，模型包保持190MB，仅提取37KB鸟头颈数据。运行模块语法、test-living.mjs及实际四类输入/暂停/拖动/390布局通过，1280×900采样约44FPS。仍为局部形变与外观近似，不是完整物理求解或90%验收，无新增依赖/部署/Git同步。详见 [环境联动复核](../tropical-shallows/LIVING_REVIEW.md)。
 绯月桌面精灵的文字提醒修改及整组合并确认见[子项目开发记录](../personal-digital-companion/docs/DEVELOPMENT.md)和[使用说明](../personal-digital-companion/desktop/README.md)。本次完成桌面及两个 Worker 的本地源码接线与隔离验证。
+
+2026-11-23 04:57 JST，绯月正式版已安装新闻提醒修复 948648e620bb，安装后点击回归通过。[安装回执](../personal-digital-companion/RELEASE_REVIEW.md#新闻提醒正式安装回执--948648e620bb)

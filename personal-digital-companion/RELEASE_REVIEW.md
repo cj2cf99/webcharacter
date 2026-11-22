@@ -1736,3 +1736,31 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 ### 安装源码同步 · 247f3713f3f2
 
 已推送已安装学习功能的 29 项源码、测试与文档至 origin/codex/workspace-checkpoint-20261120，2026-11-23 04:50:27 JST 已回读并与 7d848e0a19cde6744bc3f7b53d60a945626319ee 一致。保留并行改动，学习专项 13/13。正式安装完整字节清单见 docs/releases/feiyue-study-install-20261123/windows-files.json。
+
+
+## 2026-11-23 JST · Windows 绯月新闻更新提醒 · 948648e620bb
+
+**需求与验收。** 用户要求“修一下新闻更新提醒，别再弹 Electron 欢迎页了，点提醒就打开绯月的新闻简报”，随后要求安装。新闻入库后仅出现绯月的提醒；点击首次打开，已有窗口恢复并读到新增报道。关闭、超时、空更新均不额外打开简报。
+
+**发布目标与基线。** Windows 本机安装版 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion。准备时正式版本 247f3713f3f2，PID 16124，同一 desktop 入口与 output/desktop-profile。安装树 Git 39fd098e40ebf7c2c82dd5a6f9944ae98055566e，开发来源 G:/selftool/WebCharacter/personal-digital-companion 的 03942463b3de924c380ae45a0c29a30bfbbee1c6 加本次工作区差异。当前已发布学习版源码回执 7eb3f03d0a58a258486d699c60dd92906e59bf0a。安装树含后续发布的实际字节；以清单逐项 SHA-256 校验。
+
+**比较与范围。** 本机候选目录 G:/selftool/WebCharacter/work/feiyue-news-notice-20261123。windows-files.json 的 SHA-256 为 948648e620bb59407b8388fed5a33e100f19ca0154d72cc317f1bdb832325353，候选 11 项，6 项替换、5 项新增。可复核该目录的 before、candidate 以及 git diff --no-index before candidate。仓库清单见 docs/releases/feiyue-news-notice-20261123/windows-files.json。
+
+- desktop/shell.mjs 只改新闻通知回调及其导入。旧入口在入库后调用 Windows 托盘气球；新入口交给现有绯月主进程。desktop/source-updates.mjs 新增提醒页资源登记。逐块移植以上两项，保留正式学习、桌宠和既有功能。
+- desktop/news-panel-host.mjs 新增非抢焦点的单张提醒，在工作区右下角显示，15 秒收起；点击恢复原简报或打开简报。desktop/news-panel-preload.cjs 和 desktop/news-panel-ui.mjs 接入主动读取新增报道。普通后台更新仍保留当前阅读位置并提示可刷新。
+- desktop/news-notice.html、desktop/news-notice.css、desktop/news-notice-preload.cjs 提供月印标题栏、标题纯文本显示及打开或关闭操作。output/desktop-bundle 中交付 news-panel-ui.mjs、news-notice.html、news-notice.css 三项对应页面资源。
+
+**数据库、配置及兼容。** 业务数据库迁移、回填、设置变更、新依赖、云端部署均无。恢复所需资料为 6 项旧应用文件与新增路径原先不存在的记录。按纯代码发布规则跳过业务库备份。沿用原快捷方式、登录项、模型及资料目录。新闻提醒在应用内收起后，可从绯月菜单打开简报；不会进入 Windows 通知历史。
+
+**实测与限制。** 开发版本构建、桌面壳、新闻单测 18/18、新闻报面、标题栏和菜单回归通过；全量 Node 检查 500 项通过、0 项失败。开发环境另有截图问答 UI 回归在等待模拟回答时超时，见 tools/test-screen-question-electron.mjs:375。正式基线候选上运行 Electron tools/run-electron-check.mjs 指向候选 qa/tools/test-news-notice-electron.mjs，隔离资料及模拟稿件，验证非抢焦点、无新事件、重复替换、关闭、第一次打开、最小化恢复并读取新报道、15 秒自动收起，通过。pwsh -File install.ps1 -Mode Rehearse 完成 11 项安装、中断回退、完整回退并核对前像。真实日常新闻通知尚待安装后出现时由用户实点。第三方独立审核未执行。
+
+**安装及恢复。** 安装前运行 install.ps1 -Mode Preflight 复核候选、实际进程、8765 监听、入口、资料目录和已列文件前像；等待在途任务结束，正常退出，保存替换文件，逐项原子安装并从原入口受控启动。核对 11 项哈希、新 PID、启动时间、资料目录、REST 及现有数据库完整性，然后从已安装文件用隔离资料复验新闻提醒。写入或启动验收失败时按反序恢复旧文件、移除本次新增文件，重启原版本。重点复核共享 shell 的差异、IPC 限定、关闭及超时路径，以及新闻之外的菜单行为。
+
+**花园、授权与 Git。** 默认批次 feiyue-news-notice-20261123。db:sync-schema 成功且新增对象 0；正式 inspect 返回 VERSION_MIGRATION_REQUIRED。只读复核线上修订 157、项目「网页角色组件」#16 与功能「绯月（桌面精灵）」#61，上次已登记版本 32.0，本批记录 0；线上 garden_flower 尚无 release_offset。拟新增本次发布及关联明细，并记录本次新闻提醒修正。以实际发布结果、届时旧值及 +0.1 步长出最终清单，现值不变时成功将为 32.1。种子、功能归属及历史无需修改。等待模型与线上结构一致后再制单、取得具体清单确认、提交精确 SQL 并通过绯月一次登记。本次不迁移花园，未执行生产写入。用户已要求安装新闻修复；本记录对应的候选安装结果与 Git 收尾待实际执行后补记。
+
+
+### 新闻提醒正式安装回执 · 948648e620bb
+
+用户明确要求「安装」。安装前预检核对 PID 16124、8 个 SQLite 的只读完整性、快捷方式、登录项与 11 项前像通过，未见在途任务。2026-11-23 04:57:54 JST 完成安装，旧实例正常退出，新 PID 28504 从原入口启动并沿用原资料。正式 REST v6 和 24 项技能回读正常，未认证返回 401。11 项文件 SHA-256 全部匹配。6 项旧应用文件已保留在本机候选目录 install-backup-20261123-045743。本次无数据库或配置变更。
+
+从实际安装版加载模块、页面及预加载脚本，以独立 Electron 资料和模拟新闻运行 installed-check.mjs 通过。覆盖首次点击打开、复用最小化的简报并显示新报道、关闭、超时、重复更新和不抢焦点。Git 交付树新闻单元测试 18/18。日常真实新闻到达时的实点待用户确认。正式 API 对批次 feiyue-news-notice-20261123 回读 404，尚未提交；待花园线上版本迁移及最终清单确认。

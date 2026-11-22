@@ -512,7 +512,8 @@ photoPanel.addEventListener('close',()=>{
   if(!photoPanel.open)fullPhoto.removeAttribute('src');
 });
 byId('archive').addEventListener('click',()=>void api.archive().catch(()=>notice('无法打开本机归档目录。')));
-api.onNew(()=>{
+api.onNew(readNow=>{
+  if(readNow){void load();return;}
   refresh.textContent='有更新 ↻';
   refresh.setAttribute('aria-label','读取新增新闻');
 });

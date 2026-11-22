@@ -1,8 +1,9 @@
 import {join} from 'node:path';
 import {mkdir} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
-import {createPanelWindow} from './panel-window.mjs';
-import {needsChinese} from './news-layout.mjs';
+import {createPanelWindow,showPanel} from './panel-window.mjs';
+import {cleanNewsTitle,needsChinese} from './news-layout.mjs';
+import {warnLiveUpdate} from './live-files.mjs';
 import {fetchNewsImage} from './news-briefing.mjs';
 import {newsSourceUrl} from './news-history.mjs';
 
@@ -24,7 +25,7 @@ export async function translateNews(text,model,signal){
 
 export function attachNewsPanel(electron,{root,bundle,checks,model,compile,readImage=fetchNewsImage}){
   const entry=join(bundle,'news-panel.html');
-  let panel,loading,controller,contextWork;
+  let panel,loading,controller,contextWork,notice;
   let visible=new Set();
   const contexts=new Map();
   function reportFor(event,url){
@@ -114,7 +115,8 @@ export function attachNewsPanel(electron,{root,bundle,checks,model,compile,readI
     if(!story)throw Error('请刷新新闻简报');
     return fn(story,...args);
   });
-  async function open(){
+  async function open(refresh=false){
+    const existing=panel;
     if(!panel||panel.isDestroyed()){
       controller=new AbortController();
       const win=createPanelWindow(electron,{title:'绯月 · 七日新闻',width:980,height:720,minWidth:340,minHeight:320,
@@ -127,8 +129,44 @@ export function attachNewsPanel(electron,{root,bundle,checks,model,compile,readI
       loading=win.loadFile(entry).catch(e=>{if(!win.isDestroyed())win.destroy();throw e;});
     }
     const current=panel;await loading;
-    if(current===panel&&!current.isDestroyed()){current.show();current.focus();}
+    if(current===panel&&!current.isDestroyed()){
+      if(refresh===true&&current===existing)current.webContents.send('news:new',true);
+      if(current.isMinimized())current.restore();
+      showPanel(current);current.focus();
+    }
   }
-  return {open,get panel(){return panel;},update(){panel?.webContents.send('news:new');},
-    close(){for(const name of Object.keys(handlers))electron.ipcMain.removeHandler('news:'+name);panel?.destroy();}};
+  async function update(items=[]){
+    panel?.webContents.send('news:new');
+    if(!items.length)return;
+    notice?.destroy();
+    const area=electron.screen.getDisplayNearestPoint(electron.screen.getCursorScreenPoint()).workArea;
+    const width=Math.min(352,area.width),height=Math.min(110,area.height);
+    const current=createPanelWindow(electron,{title:'绯月 · 新闻更新',width,height,
+      x:area.x+Math.max(0,area.width-width-8),y:area.y+Math.max(0,area.height-height-8),
+      frame:false,show:false,skipTaskbar:true,alwaysOnTop:true,resizable:false,
+      webPreferences:{preload:join(root,'desktop/news-notice-preload.cjs'),sandbox:true,contextIsolation:true,nodeIntegration:false}},root);
+    notice=current;
+    let timeout;
+    current.once('closed',()=>{clearTimeout(timeout);if(notice===current)notice=null;});
+    const contents=current.webContents;
+    contents.setWindowOpenHandler(()=>({action:'deny'}));
+    contents.on('will-navigate',event=>event.preventDefault());
+    contents.ipc.on('news-notice:choose',(event,action)=>{
+      if(notice!==current||event.senderFrame!==contents.mainFrame||!['open','dismiss'].includes(action))return;
+      current.destroy();
+      if(action==='open')void open(true).catch(error=>warnLiveUpdate('打开新闻简报',error));
+    });
+    try{
+      await current.loadFile(join(bundle,'news-notice.html'),{query:{count:String(items.length),
+        headline:cleanNewsTitle(items[0].latest||items[0].title)}});
+      if(notice!==current)return;
+      current.showInactive();
+      timeout=setTimeout(()=>current.destroy(),15000);
+    }catch(error){
+      if(notice!==current)return;
+      current.destroy();throw error;
+    }
+  }
+  return {open,update,get panel(){return panel;},
+    close(){for(const name of Object.keys(handlers))electron.ipcMain.removeHandler('news:'+name);notice?.destroy();panel?.destroy();}};
 }
