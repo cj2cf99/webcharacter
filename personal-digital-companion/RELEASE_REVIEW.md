@@ -1336,3 +1336,6 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 来源代码和本次发布记录在独立分支 `codex/feiyue-rest-reminders` 留痕。远端尚未同步。
 
 **GitHub 推送回执。** 2026-11-23 00:51:22 JST，绯月 REST v5 的来源提交 `38d18513ad45fc9659280d320aeb34ebd78e130f` 已推送至 `cj2cf99/webcharacter` 的 `codex/feiyue-rest-reminders`，并从 GitHub 读回相同提交。花园批次仍待具体清单确认。
+
+
+**花园登记终态。** 用户明确确认部署和功能改善两项清单。正式绯月批次 `feiyue-rest-reminders-20261123` 于 2026-11-23 00:56:10 JST 完成，两步均已核对。2026-11-23 00:57:01 JST 独立回读线上，项目 #16、功能 #61、部署 #76、明细 #154 及已完成改善 #81 的字段均与确认清单一致，发布标记唯一。修订 149 → 151，部署明细版本 25.0 → 26.0，最终功能版本 26.1。2026-11-23 00:57:40 JST 已签收，回读状态仍为 done。精确 SQL 提交 `c5c5daa7d1ef9472fd47ec12adc94f613aac6d3b`，回执提交 `7b8aebc9b8c75d503abb47e424fcb1739836be3e`，已验证远端审计分支。[花园执行回执](https://github.com/cj2cf99/cloudflaremyapp/blob/7b8aebc9b8c75d503abb47e424fcb1739836be3e/myapp/database/changes/feiyue-rest-reminders-20261123/execution-receipt.json)
