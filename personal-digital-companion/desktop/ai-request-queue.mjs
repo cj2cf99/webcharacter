@@ -43,7 +43,9 @@ export function createAiRequestQueue({file,execute,interpret,log,safeStorage}){
   const retry=db.prepare("UPDATE ai_requests SET state='parked',output=NULL WHERE id=? AND state='raw'");
   const erase=db.prepare('DELETE FROM ai_requests WHERE group_id=?');
   const findGroup=db.prepare("SELECT group_id FROM ai_requests WHERE checkpoint=? AND state='output'");
-  const groups=new Map(), waiting=[], foreground=[], acknowledgements=new Set();
+  const reviewEntries=db.prepare("SELECT checkpoint,state FROM ai_requests WHERE checkpoint GLOB 'diary:*:reviewAction:*' OR checkpoint GLOB 'diary:*:reviewSource:*' ORDER BY seq DESC");
+  const reviewedGroup=db.prepare("SELECT group_id FROM ai_requests WHERE checkpoint=? AND (checkpoint GLOB 'diary:*:reviewAction:*' OR checkpoint GLOB 'diary:*:reviewSource:*')");
+  const groups=new Map(), waiting=[], foreground=[], acknowledgements=new Map();
   const lifetime=new AbortController();
   const pack=value=>safeStorage?safeStorage.encryptString(JSON.stringify(value)):JSON.stringify(value);
   const unpack=value=>JSON.parse(typeof value==='string'?value:safeStorage.decryptString(Buffer.from(value)));
@@ -149,8 +151,9 @@ export function createAiRequestQueue({file,execute,interpret,log,safeStorage}){
     if(!result.next)settle(job,result.retry??result.output);
   }
   function acknowledgeOutputs(){
-    for(const key of acknowledgements){
-      const group=findGroup.get(key);
+    for(const [key,reviewed] of acknowledgements){
+      const group=(reviewed?reviewedGroup:findGroup).get(key);
+      if(group&&groups.has(group.group_id))continue;
       if(group)erase.run(group.group_id);
       acknowledgements.delete(key);
     }
@@ -274,9 +277,9 @@ export function createAiRequestQueue({file,execute,interpret,log,safeStorage}){
     pulse();
     return pending.promise;
   }
-  function ack(checkpoint){
+  function ack(checkpoint,reviewed=false){
     if(closed||!checkpoint)return;
-    acknowledgements.add(checkpoint);
+    acknowledgements.set(checkpoint,reviewed||acknowledgements.get(checkpoint)===true);
     schedule();
   }
   async function close(){
@@ -313,5 +316,7 @@ export function createAiRequestQueue({file,execute,interpret,log,safeStorage}){
     if(!row)return null;
     return {started:row.started,finished:row.finished,status:row.status,input:row.input&&unpack(row.input),output:row.output&&unpack(row.output)};
   }
-  return {submit,front,pulse:pulseAndPrune,ack,close,readSnapshot,snapshot:()=>({queued:size.get().n,awake:armed,running:Boolean(running)})};
+  return {submit,front,pulse:pulseAndPrune,ack,close,readSnapshot,
+    reviewCheckpoints:()=>reviewEntries.all(),
+    snapshot:()=>({queued:size.get().n,awake:armed,running:Boolean(running)})};
 }

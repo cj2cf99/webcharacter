@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -250,6 +251,57 @@ test('显卡忙时补评只试一个小批次，恢复后原材料可继续完�
   unavailable=false;
   assert.match(await diary.run('task-review',signal()),/补写 10 条执行评价/);
   assert.equal(attempts,24);
+});
+
+test('补评升级后沿用原阶段和已开始的分片，已入库材料只确认旧队列',async t=>{
+  const {profile,file,after}=fixture(t);
+  const tasks=['领取整条','领取分片','已有评价'].map((title,i)=>({title,task_id:'resume-'+i,at,action:'完成',
+    detail:i===1?'甲乙丙丁'.repeat(96):'核对原件'}));
+  const hash=value=>createHash('sha256').update(value).digest('hex');
+  const shape={type:'object',properties:{text:{type:'string'},review:{type:'string'}},required:['text','review']};
+  const material=tasks.map(task=>{
+    const text=[task.title,task.action,task.detail].join(' · ');
+    return {text,id:hash([day,'task:'+task.task_id,at,0,text].join('|'))};
+  });
+  const original=createAiWorkflowModel({file,model:model({async memory(text,_prompt,schema,_signal,skill){
+    if(skill.aiTier==='9')throw Object.assign(Error('等待显存'),{code:'LOCAL_AI_TIER_WAIT'});
+    return isReviewer(schema)?review(schema,'revise'):{text,review:'旧版草稿'};
+  }})});
+  const expected=new Set();
+  try{
+    for(const [i,item] of material.entries()){
+      const part=i===1,text=part?item.text.slice(0,360):item.text;
+      const key='diary:0.9:'+item.id+(part?'-part-0':'')+':reviewAction:'+hash(text);
+      await assert.rejects(original.memory(text,'补评',shape,signal(),{name:'diary-writing',version:'0.9',stage:'reviewAction',
+        aiReview:true,aiCheckpoint:key}),{code:'LOCAL_AI_TIER_WAIT'});
+      const db=new DatabaseSync(file,{readOnly:true});
+      try{
+        const row=db.prepare('SELECT id,attempt FROM ai_requests WHERE checkpoint=?').get(key);
+        if(i<2)expected.add(row.id+'-'+(row.attempt+1));
+      }finally{db.close();}
+    }
+  }finally{await original.close();}
+  const calls=[],logs=[];
+  const ai=createAiWorkflowModel({file,log:row=>logs.push(row),model:model({async memory(text,_prompt,schema,_signal,skill){
+    calls.push([text,skill.version]);
+    assert(!text.includes('已有评价'));
+    assert(!text.includes(material[1].text),'已拆分的材料重新整条推理');
+    return isReviewer(schema)?review(schema):{text:'核对原件',review:'收到。'};
+  }})});
+  const diary=createPersonalityDiary({profile,model:ai,weather:()=>[],now:()=>at,
+    memory:{archiveDays:()=>[day],read:()=>[],readTasks:()=>tasks}});
+  const db=new DatabaseSync(join(profile,'personality-memory.sqlite'));
+  after(async()=>{db.close();diary.close();await ai.close();});
+  db.prepare('INSERT INTO cleaned VALUES(?,?)').run(material[2].id,'原有正文');
+  db.prepare('INSERT INTO materials(id,day,review) VALUES(?,?,?)').run(material[2].id,day,'原有评价');
+  assert.match(await diary.run('task-review',signal()),/补写 2 条执行评价/);
+  assert(calls.some(([,v])=>v==='0.9'));
+  for(const id of expected)assert(logs.some(row=>row.ai_attempt_id===id&&row.stage==='9-write'&&!row.error));
+  const before=calls.length;
+  assert.match(await diary.run('task-review',signal()),/补写 0 条执行评价/);
+  assert.equal(calls.length,before);
+  assert.equal(db.prepare('SELECT review FROM materials WHERE id=?').get(material[2].id).review,'原有评价');
+  await eventually(()=>ai.aiReviewCheckpoints().length===0);
 });
 
 test('补评审核改写不能绕过短评限制或清空有正文的评价',async t=>{

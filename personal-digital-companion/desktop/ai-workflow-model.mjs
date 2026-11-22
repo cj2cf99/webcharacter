@@ -145,6 +145,6 @@ export function createAiWorkflowModel({model,file,log,safeStorage}){
     analyze:(text,options)=>queue.front(signal=>model.analyze(text,{...options,signal}),options?.signal),
     work:(text,options)=>queue.front(signal=>model.work(text,{...options,signal}),options?.signal),
     withWorkSession:(id,signal,run)=>queue.front(wait=>model.withWorkSession(id,wait,run),signal),
-    aiPulse:queue.pulse,aiAck:queue.ack,aiSnapshot:queue.snapshot,readAiStep:queue.readSnapshot,
+    aiPulse:queue.pulse,aiAck:queue.ack,aiReviewCheckpoints:queue.reviewCheckpoints,aiSnapshot:queue.snapshot,readAiStep:queue.readSnapshot,
     async close(){await queue.close();await model.close();}};
 }

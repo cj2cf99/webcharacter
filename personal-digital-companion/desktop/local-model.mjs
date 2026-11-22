@@ -1,7 +1,7 @@
 import {stat} from 'node:fs/promises';
 import {basename,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {chatTotalMs} from './chat-budget.mjs';
+import {chatTotalMs,memoryInferenceMs} from './chat-budget.mjs';
 
 export const LOCAL_MODEL_FILE = 'Qwen3.5-0.8B-Q4_K_M.gguf';
 const entry = fileURLToPath(new URL('./local-model-process.mjs', import.meta.url));
@@ -71,7 +71,7 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
 
   async function analyze(text, {hint, previous, signal, onProgress, imageSkill,skillInstruction,replyMode,reviewLimit=3,revision} = {}) {
     const started = performance.now();
-    const budgetMs = hint==='personalityMemory'||skillInstruction?.name==='conversation-transcription'?120000:['image-plan','serverTask'].includes(hint) ? Math.max(16000,intentBudgetMs) : ['auto','direct','interactionWork'].includes(hint) ? chatTotalMs : intentBudgetMs;
+    const budgetMs = hint==='personalityMemory'||skillInstruction?.name==='conversation-transcription'?memoryInferenceMs:['image-plan','serverTask'].includes(hint) ? Math.max(16000,intentBudgetMs) : ['auto','direct','interactionWork'].includes(hint) ? chatTotalMs : intentBudgetMs;
     const deadline = AbortSignal.timeout(budgetMs);
     const wait = signal ? AbortSignal.any([signal,deadline]) : deadline;
     signal?.throwIfAborted();

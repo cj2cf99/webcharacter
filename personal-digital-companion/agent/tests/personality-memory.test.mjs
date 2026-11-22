@@ -529,6 +529,7 @@ test('手记首问先核对原题及后文，确认缺项才生成自然问话�
       {reference:day+' · 第 1 篇 · 悬念 1',label:'手记对话摘录',excerpt:n.localQuestionEvidence??excerpt},
     think:async(data,_prompt,fields,_signal,skill)=>{
       if(skill.stage==='diaryOpeningCheck'){
+        assert.equal(skill.aiBudget,180_000);
         checks++;
         const lines=(expectedLines??[excerpt]).map((原文,index)=>({行:index+1,原文}));
         assert.deepEqual(JSON.parse(data),{原题:originalTitle,出处:lines,...(later?{同篇后文:later}:{})});
@@ -536,6 +537,7 @@ test('手记首问先核对原题及后文，确认缺项才生成自然问话�
         return check;
       }
       assert.equal(skill.stage,'diaryOpeningWrite');
+      assert.equal(skill.aiBudget,180_000);
       writes++;
       assert.deepEqual(JSON.parse(data),{已核对的待答信息:target,相关出处:expectedLines?.at(-1)??evidence});
       assert.deepEqual(fields,['question']);

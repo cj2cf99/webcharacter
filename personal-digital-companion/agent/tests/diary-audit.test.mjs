@@ -36,6 +36,7 @@ async function fixture(t,{withTaskRuntime=false}={}){
       return {reply:'我记下来了。',evaluation:'已经明白了。',mood:'释然',next:''};
     }
     assert.equal(skill.name,'diary-audit');
+    if(['extract','compare','verify'].includes(skill.stage))assert.equal(skill.aiBudget,180_000);
     const data=JSON.parse(input);f.calls.push(data);
     if(s.required.includes('a'))return {a:data.slice(0,36),b:'',c:''};
     if(s.required.includes('score')){
@@ -47,6 +48,7 @@ async function fixture(t,{withTaskRuntime=false}={}){
     if(s.required.includes('keep')){
       f.verifyEntered?.resolve();
       await f.holdVerify;
+      if(f.verifyTimeout)throw Object.assign(Error('本机推理超时'),{code:'LOCAL_AI_TIMEOUT'});
       assert(data.本机线索.some(r=>r.snippet.includes('仅本地检索的材料')));
       return {keep:f.explained?'0':'1',question:'首次上线是哪天？'};
     }
@@ -120,6 +122,19 @@ test('回答和追问结束之前没有写请求，补传在途也能完成同�
     assert.equal(f.tasks.tasksIdle(),false);
     assert(result.done);assert.equal(f.store.nags()[0].status,'已解释');
   }finally{hold.resolve();}
+});
+test('质问核对超时后保留比对结果，重启后仅重试未完成的步骤',async t=>{
+  const f=await fixture(t);
+  f.verifyTimeout=true;
+  await assert.rejects(f.poll(),/本机推理超时/);
+  assert.equal(f.generated,1);
+  assert.equal(f.nags.pendingQuestions().length,0);
+  await f.restart();
+  assert(f.nags.recoverAudit());
+  f.verifyTimeout=false;
+  assert.deepEqual(await f.poll(),{detail:'已新增 1 个手记质问'});
+  assert.equal(f.generated,1);
+  assert(!f.nags.recoverAudit());
 });
 test('拟出问题但待确认拒绝写入时，如实反馈未加入',async t=>{
   const f=await fixture(t);

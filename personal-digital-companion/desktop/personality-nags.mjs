@@ -1,4 +1,4 @@
-import {untilAbort} from './chat-budget.mjs';
+import {diaryQuestionBudgetMs,untilAbort} from './chat-budget.mjs';
 import {createDiaryAudit} from './diary-audit.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
 import {createHash} from 'node:crypto';
@@ -164,7 +164,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     signal.throwIfAborted();
     const lines=diaryCitationLines(reading);
     const data={原题:source.title,出处:lines.map((原文,index)=>({行:index+1,原文})),同篇后文:later||undefined};
-    const options={name:skill.skill,version:skill.version,boundedOutput:true,maxTokens:220,aiBudget:45_000};
+    const options={name:skill.skill,version:skill.version,boundedOutput:true,maxTokens:220,aiBudget:diaryQuestionBudgetMs};
     const check=await store.think(JSON.stringify(data),
       '先在 target 简短写出原题所问的一个答复项，再用原文和后文核对它。state 填 answered（已有答复）、open（材料明确说这个答复项还缺）、unrelated（材料没有涉及或无法确认）。只因材料里没有答案，就归 unrelated；不能把没提到的题当成未解。其他事项有缺口也归 unrelated。后文已有答复时填 answered。例：问资料去哪儿找，原文只说更新已验或只是关心，归 unrelated；写了资料在哪个页面归 answered；明确说资料页面还不清楚才归 open。问是否同行，已约好同行就归 answered，即使开门时间未知。answered 时 answer 写真实答复内容，否定答复也算。open 时 answer 留空，line 写说明该答复项还缺的行号整数。没有答复内容也没有原题缺项时归 unrelated。只做答案核对，别改写题目。',
       ['target','state','answer','line'],signal,{...options,stage:'diaryOpeningCheck',citationCount:lines.length});

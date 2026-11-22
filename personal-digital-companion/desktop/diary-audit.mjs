@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {tokyoDay} from './conversation-history.mjs';
 import {cleanMemory} from './personality-diary.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
-import {untilAbort} from './chat-budget.mjs';
+import {diaryQuestionBudgetMs,untilAbort} from './chat-budget.mjs';
 import {isPendingQuestion,pendingLimit,questionTarget,questionText as question,sameQuestion} from './pending-questions.mjs';
 
 const dayMs=86400000;
@@ -47,10 +47,10 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
     state.run.attempt={pages:[...new Set(pages)],stage,question};
     store.saveAuditState(state);
   }
-  function preparationFailure(reason){
+  function preparationFailure(error){
     const {pages,stage,question}=state.run?.attempt??{pages:[],stage:'同步待核查资料'};
-    const failure=Error(`质询准备失败 · ${stage} · 对象：${pages.join('、')||'尚未确定'} · 质问：${question||'尚未生成'} · 原因：${reason}`);
-    stopRun();
+    const failure=Error(`质询准备失败 · ${stage} · 对象：${pages.join('、')||'尚未确定'} · 质问：${question||'尚未生成'} · 原因：${error.message}`);
+    if(error.name!=='TimeoutError'&&!['TimeoutError','LOCAL_AI_TIMEOUT','LOCAL_AI_LOAD_TIMEOUT'].includes(error.code))stopRun();
     return failure;
   }
   async function writer(signal,aiPriority,aiCurrentPriority,{limit=Infinity,progress}={}){
@@ -65,7 +65,7 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
       if(progress)progress({stage:stageLabels[stage]+' · 已保存 '+Object.keys(steps).length+' 步'});
       const prompt=skill.localAi[stage]+(stage==='compare'?' refs 的第一项必须是「主篇可选」为 true 的材料，其余可作为旁证。':'');
       const result=await untilAbort(store.think(input,prompt,fields,signal,{name:skill.skill,version:skill.version,stage,
-        aiPriority,aiCurrentPriority,aiBudget:45000,boundedOutput:true,backgroundBudget:!aiPriority,maxTokens:stage==='compare'?950:460}),signal);
+        aiPriority,aiCurrentPriority,aiBudget:steps?diaryQuestionBudgetMs:45_000,boundedOutput:true,backgroundBudget:!aiPriority,maxTokens:stage==='compare'?950:460}),signal);
       signal.throwIfAborted();
       if(key){
         steps[key]=result;store.saveAuditState(state);
@@ -247,7 +247,7 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
     }catch(error){
       if(signal.aborted)throw error;
       if(error===nextBatch)return {deferred:true,detail:'已保存 '+Object.keys(state.run.steps).length+' 步，下批从原进度继续'};
-      throw preparationFailure(error.message);
+      throw preparationFailure(error);
     }finally{working=false;}
   }
   async function resume(n,signal){
