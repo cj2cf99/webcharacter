@@ -1,5 +1,6 @@
 const memoryPolls=new Set(['diary','nag','review','diaryAudit','curiosity','refinement']);
 const memoryLimit=10*60_000;
+const queueRetryMs=15_000;
 const pauseDetail='闲置整理已满 10 分钟，等下一轮轮询继续';
 const types=[
   {id:'tasks',name:'任务轮询',minutes:15},
@@ -81,8 +82,13 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
   }
   function drain(){
     const waiting=queue();
-    if(waiting.some(j=>j.running))return true;
-    const candidate=waiting.find(j=>!isBusy(j.id)&&(j.id==='tasks'||now()>=warmUntil));
+    const at=now();
+    const ready=j=>!j.running&&j.resumeAt<=at&&!isBusy(j.id)&&(j.id==='tasks'||at>=warmUntil);
+    const inspection=waiting.find(j=>j.id==='inspection'&&ready(j));
+    if(inspection)void execute(inspection,inspection.queuedAt);
+    const work=waiting.filter(j=>j.id!=='inspection');
+    if(work.some(j=>j.running))return true;
+    const candidate=work.find(ready);
     if(candidate)void execute(candidate,candidate.queuedAt);
     return Boolean(candidate);
   }
@@ -92,7 +98,7 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
       retry=null;
       drain();
       retryLater();
-    },15_000);
+    },queueRetryMs);
     retry?.unref?.();
   }
   function postpone(j,due,existing=null){
@@ -145,7 +151,16 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
     if(round&&(!blocked||idleStarted)){
       onIdleResult?.({id:j.id,status:outcome,detail,durationMs:Math.max(0,finishedAt-at)});
     }
-    if(blocked&&j.enabled){postpone(j,due,id);return;}
+    if(blocked&&j.enabled){
+      if(j.id==='diaryAudit'&&idleStarted){
+        j.resumeAt=finishedAt+queueRetryMs;
+        j.queuedAt??=due;
+        db.prepare('INSERT OR REPLACE INTO idle_poll_resume VALUES(?,?)').run(j.id,j.resumeAt);
+        db.prepare('UPDATE checks SET status=?,detail=? WHERE id=?').run(outcome,detail,id);
+        persist(j);changed();retryLater();
+      }else postpone(j,due,id);
+      return;
+    }
     db.prepare('UPDATE checks SET status=?,detail=? WHERE id=?').run(blocked?'未执行':status,detail,id);
     j.queuedAt=null;j.misses=0;persist(j);
     if(!queue().length){clearTimer(retry);retry=null;}
@@ -164,6 +179,7 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
       return;
     }
     if(isBusy(j.id)){postpone(j,due);return;}
+    if(j.id==='inspection'){void execute(j,j.queuedAt??due);return;}
     if(j.queuedAt!==null){retryLater();changed();return;}
     if(drain()){postpone(j,due);return;}
     void execute(j,due);

@@ -206,12 +206,14 @@ export async function startDesktop(electron,options={}){
     backgroundController=new AbortController();
     const combined=AbortSignal.any([signal,backgroundController.signal]);
     const title=memoryTitles[kind];
+    const pausesEmotion=kind!=='diaryAudit';
     function progress(detail){
       if(manual&&kind==='nag')return;
       memoryThought={title,...detail};syncActivity();
     }
     const work=async()=>{
-      await emotion?.pause();combined.throwIfAborted();
+      if(pausesEmotion)await emotion?.pause();
+      combined.throwIfAborted();
       if(questionId)return nags.resume(questionId,combined);
       if(kind==='refinement')return diary.refine(combined,progress);
       if(!goal)progress({stage:kind==='task-review'?'查找本机归档':'整理资料'});
@@ -231,7 +233,7 @@ export async function startDesktop(electron,options={}){
         await topics?.runQueued(combined,step);
         await nags?.assessPending(combined);
       }
-      if(kind==='diaryAudit')return nags.pollAudit(combined);
+      if(kind==='diaryAudit')return nags.pollAudit(combined,progress);
       if(kind==='nag')return nags.poll(combined,{progress,step});
       await nags.flush(combined);
       if(kind==='diary'&&!manual){
@@ -257,7 +259,9 @@ export async function startDesktop(electron,options={}){
       return {deferred:true,started:Boolean(goal),detail:state?.stage?'中断时进度：'+state.stage+count:undefined};
     }
     finally{
-      backgroundJob=null;backgroundKind=null;backgroundController=null;memoryThought=null;emotion?.resume();syncActivity();
+      backgroundJob=null;backgroundKind=null;backgroundController=null;memoryThought=null;
+      if(pausesEmotion)emotion?.resume();
+      syncActivity();
     }
   }
   function contextualAction(kind){
@@ -345,7 +349,7 @@ export async function startDesktop(electron,options={}){
   const upgradeVision=options.upgradeVision??(!options.vision&&interactionWork?localVision(resolve(modelFolder,'Qwen3.5-9B-Q4_K_M.gguf'),
     {projection:resolve(modelFolder,'Qwen3.5-9B-mmproj-F16.gguf')}):undefined);
   const voice=createBubbleVoice({root,profile});
-  const dictation=attachDictation(electron,{root,bundle,voice,model:localModel,onForeground:interruptMemory,
+  const dictation=attachDictation(electron,{root,bundle,voice,model:localModel,
     privateModel:owner=>{
       const id=privatePanel?.owner(owner);
       return id?{work:(text,options)=>privateChat.modelWork(id,text,options)}:null;
@@ -456,8 +460,6 @@ export async function startDesktop(electron,options={}){
     if(nags.recoverAudit())checks.enqueue('diaryAudit');
   }
   const suspendMemory=()=>{interruptMemory();if(nags?.pendingQuestions().some(n=>n.status==='提问中'))screenQuestion.hide();};
-  const focusMemory=(_event,other)=>{if(other!==win&&other!==screenQuestion.panel&&other!==scenePanel?.panel)suspendMemory();};
-  app.on('browser-window-focus',focusMemory);
   electron.powerMonitor?.on?.('suspend',suspendMemory);
   const lockScene=()=>{suspendMemory();scenePanel?.dismiss();};
   electron.powerMonitor?.on?.('lock-screen',lockScene);
@@ -753,7 +755,7 @@ export async function startDesktop(electron,options={}){
     win.webContents.send('desktop:visible',true);
     updatePosture(true);if(previousReady)beginPoll();
   }
-  function hide(){if(farewell)return;privateChat?.dismiss();interruptMemory();scenePanel?.dismiss();screenQuestion.hide();detachAttachment('hidden');cancelMovement();travelPosture=null;drag=null;stopPoll();ignore(true);win.webContents.send('desktop:visible',false);win.hide();}
+  function hide(){if(farewell)return;privateChat?.dismiss();scenePanel?.dismiss();screenQuestion.hide();detachAttachment('hidden');cancelMovement();travelPosture=null;drag=null;stopPoll();ignore(true);win.webContents.send('desktop:visible',false);win.hide();}
   function setWork(value){
     work=value;if(value)suspendMemory();resetIdle();
     syncActivity();menu();
@@ -1085,7 +1087,6 @@ export async function startDesktop(electron,options={}){
     if(cleaned)return;cleaned=true;
     clearInterval(privateTimer);void privateChat?.close();
     reminderStartup.abort();
-    app.removeListener('browser-window-focus',focusMemory);
     interruptMemory();electron.powerMonitor?.removeListener?.('suspend',suspendMemory);
     electron.powerMonitor?.removeListener?.('lock-screen',lockScene);
     curiosity?.close();scenePanel?.close();pollSettings.close();newsPanel.close();checks.close();

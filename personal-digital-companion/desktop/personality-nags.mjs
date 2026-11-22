@@ -157,16 +157,16 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     if(announce)remind(true);
     return true;
   }
-  async function pollAudit(signal){
+  async function pollAudit(signal,progress){
     if(working||active||audit.active||!idle())return {deferred:true};
     if(pendingQuestions().length>=pendingLimit)return {detail:remind()};
     working=true;
     try{
-      const result=await audit.prepare(signal);
+      const result=await audit.prepare(signal,progress);
       if(result.n&&queue(result.n))return {detail:'已新增 1 个手记质问'};
       if(!result.deferred&&pending())remind();
       if(result.n)return {detail:'已拟出手记质问，本轮未能加入待确认'};
-      return result.detail??result;
+      return result.deferred?result:result.detail??result;
     }finally{working=false;}
   }
   async function poll(signal,{progress=()=>{},step}={}){

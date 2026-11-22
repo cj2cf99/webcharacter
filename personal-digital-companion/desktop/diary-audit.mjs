@@ -6,6 +6,8 @@ import {untilAbort} from './chat-budget.mjs';
 import {isPendingQuestion,pendingLimit,questionTarget,questionText as question} from './pending-questions.mjs';
 
 const dayMs=86400000;
+const nextBatch=Symbol('手记核对分批继续');
+const stageLabels={extract:'提取手记线索',compare:'比对手记',verify:'核对拟问依据'};
 const digest=s=>createHash('sha256').update(s).digest('hex');
 const pageKey=p=>p.day+'.'+p.part;
 const segmenter=new Intl.Segmenter('zh',{granularity:'word'});
@@ -51,17 +53,24 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
     stopRun();
     return failure;
   }
-  async function writer(signal,aiPriority,aiCurrentPriority){
+  async function writer(signal,aiPriority,aiCurrentPriority,{limit=Infinity,progress}={}){
     const skill=await untilAbort(loadSkill(),signal);
+    let calls=0;
     return async(stage,data,fields,signal,steps)=>{
       signal.throwIfAborted();
       const input=JSON.stringify(data),key=steps&&digest(stage+'\n'+input);
       if(key&&steps[key])return steps[key];
+      if(calls>=limit)throw nextBatch;
+      calls++;
+      if(progress)progress({stage:stageLabels[stage]+' · 已保存 '+Object.keys(steps).length+' 步'});
       const prompt=skill.localAi[stage]+(stage==='compare'?' refs 的第一项必须是「主篇可选」为 true 的材料，其余可作为旁证。':'');
       const result=await untilAbort(store.think(input,prompt,fields,signal,{name:skill.skill,version:skill.version,stage,
         aiPriority,aiCurrentPriority,aiBudget:45000,boundedOutput:true,backgroundBudget:!aiPriority,maxTokens:stage==='compare'?950:460}),signal);
       signal.throwIfAborted();
-      if(key){steps[key]=result;store.saveAuditState(state);}
+      if(key){
+        steps[key]=result;store.saveAuditState(state);
+        progress?.({stage:stageLabels[stage]+' · 已保存 '+Object.keys(steps).length+' 步'});
+      }
       return result;
     };
   }
@@ -211,7 +220,7 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
     }catch(error){if(active===session)active=null;throw error;}
     return {detail:'本次质问：'+n.title};
   }
-  async function prepare(signal){
+  async function prepare(signal,progress=()=>{}){
     if(working||active||!idle()||!canContinue())return {deferred:true};
     state=store.auditState();
     delete state.checked;
@@ -232,11 +241,12 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
         store.saveAuditState(state);
       }
       if(store.nags().filter(isPendingQuestion).length>=pendingLimit)return {detail:'待确认已满'};
-      const n=await discover(await writer(signal),signal);
+      const n=await discover(await writer(signal,undefined,undefined,{limit:2,progress}),signal);
       stopRun();
       return n?{n}:{detail:'近七天手记没有新的关键疑点'};
     }catch(error){
       if(signal.aborted)throw error;
+      if(error===nextBatch)return {deferred:true,detail:'已保存 '+Object.keys(state.run.steps).length+' 步，下批从原进度继续'};
       throw preparationFailure(error.message);
     }finally{working=false;}
   }

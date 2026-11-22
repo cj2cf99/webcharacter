@@ -213,6 +213,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const handled=!reference&&line.kind==='ordinary'&&(route.kind!=='question'&&route.kind!=='direct'||known);
     const message=threads.submit(id,{messageId:args?.messageId,text,mode,handled:Boolean(handled),reference,
       registration:Boolean(registrationText&&mode==='registration'),backgroundRegistration:Boolean(registrationText)});
+    if(foreground&&route.kind!=='newsBriefing')onForeground();
     if(organizationTimer){clearTimeout(organizationTimer);organizationTimer=null;}
     wakeOrganization();
     const now=threads.get(id);
@@ -304,7 +305,6 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(mode==='tour'&&(input.length>80||/[\r\n？?]/u.test(input)||args.withScreen||args.attachment||args.references?.length))
       return {state:'error',text:'请只填写一个目的地，或留空让绯月选择。'};
     const text=mode==='tour'?'绯月环球之旅'+(input?'：'+input:''):input;
-    onForeground();
     if(nag?.audit&&(!text||direct||mode!=='auto'||args?.withScreen||args?.attachment||args?.references?.length))return {state:'error',text:'请用文字回答这条质问。',audit:true,nag:true,nagReply:true};
     if(direct){
       if(args?.withScreen||args?.attachment||args?.references?.length)return {state:'error',text:'直连仅支持文字对话。'};
@@ -312,6 +312,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     }
     if(nag&&text&&mode==='auto'&&!args?.withScreen&&!args?.attachment){
       if(busy)return {state:'error',text:'正在听你刚才的解释。',nag:true,nagReply:true};
+      onForeground();
       const session=nag;busy=true;
       try{
         const reply=await session.reply(args.text);
@@ -342,6 +343,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(mode==='tour'||mode==='auto'&&!args?.withScreen&&conversationRoute(text).kind==='question'&&files.every(f=>f.kind==='image')&&imageRequest(text,files.length)){
       return track(async()=>{
         if(busy)return {state:'error',code:'BUSY',text:'正在处理上一条。'};
+        onForeground();
         busy=true;controller=new AbortController();const signal=controller.signal;
         const token=++generation;
         publish({state:'waiting',question:text,text:'正在提交图像任务…'},token);
@@ -371,6 +373,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(memory&&args?.withScreen===true||conversationRoute(text,mode,args?.withScreen).kind!=='restart')return track(()=>perform(args?.text,args?.withScreen===true,false,mode));
     if(disposed||!panel)return cancelled();
     if(busy||draining)return {state:'error',code:'BUSY',text:'正在处理上一条。'};
+    onForeground();
     const origin=panel,turn={id:crypto.randomUUID(),at:Date.now(),question:text},timing=newTiming();
     busy=true;const token=++generation;controller=new AbortController();const signal=controller.signal;
     const progress=text=>publish({state:'waiting',text},token);
@@ -412,6 +415,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(!['reminders','reminderConsent'].includes(route?.kind))reviewedGroup='';
     if(!route || (retry && (!state.retryable || !['question','search','registration'].includes(route.kind))))return {state:'error',text:'请重新提交问题。'};
     if(!retry&&!decision&&(!text||[...text].length>(route.kind==='registration'?6000:2000)))return {state:'error',text:'内容为空或超过字数限制。'};
+    if(!commandThread&&route.kind!=='newsBriefing')onForeground();
     const userText=retry?route.text:question;
     const reviewState=retry?route.reviewState??{}:{};
     const inputAt=retry?route.inputAt??route.turn.at:Date.now();
@@ -833,7 +837,6 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   function preheatModels(direct){
     if(preheating)return preheating;
     if(!canPreheat||busy||draining)return {error:'现在无法预热，请稍后重试。'};
-    onForeground();
     const route=direct?'direct':interactionWork?'main':'auto';
     const preheatVoice=async()=>{
       try{return await voice.preheat?.()??{error:'听写环境未就绪'};}
@@ -853,6 +856,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   async function decideRegistration(id,approve,photoTarget,images=[]){
       const draft=registrationDraft;
       if(busy||!draft||draft.id!==id||typeof approve!=='boolean'||approve&&!draft.canConfirm)return {state:'error',text:'核对内容已变更或缺项尚未填写。'};
+    if(approve)onForeground();
       registrationDraft=null;
       const token=++generation;
       busy=true;
@@ -950,7 +954,6 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     'screen-qa:ask':(_e,q)=>{
       if(!threadId)return ask(q);
       if(q?.threadId&&q.threadId!==threadId||state.finished)return {state:'error',text:'这条对话只能回看'};
-      onForeground();
       if(registrationDraft?.threadId===threadId&&/^(?:确认登记|取消登记|确认|同意登记|同意|登记吧|是的|不同意|放弃登记|放弃|取消|不用了|不登记)[。！!]?$/u.test(q?.text?.trim()??''))
         return ask(q);
       try{
@@ -1018,7 +1021,6 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   win.on('move',place);win.on('resize',place);
   async function openThread(id,{fresh=false,mode='auto',foreground=true}={}){
     if(disposed||draining)return;
-    if(foreground)onForeground();
     syncQuestionLines();
     let target=id?threads.get(id):fresh?null:threads.latest();
     if(id&&!target)throw Error('找不到这条对话');
@@ -1041,7 +1043,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   async function open(mode='auto',forNag=false,line=null){
     if(threads&&!forNag&&!line)return openThread(null,{mode});
     if(!forNag&&!line){
-      onForeground();leaveNag('interrupted');
+      leaveNag('interrupted');
       if(state.finished)hide();
     }
     inputMode=mode==='registration'?'registration':'auto';

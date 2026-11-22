@@ -9,6 +9,7 @@ import {createPersonalityNags} from '../../desktop/personality-nags.mjs';
 import {createReminderChecks} from '../../desktop/reminder-checks.mjs';
 import {createAutonomousAudit} from '../../desktop/autonomous-audit.mjs';
 import {createTaskTrafficLog} from '../../desktop/task-traffic-log.mjs';
+import {tokyoDay} from '../../desktop/conversation-history.mjs';
 import {openTestDatabase} from './sqlite-d1.mjs';
 import {personalityMemory} from '../assistant/personality-memory.mjs';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
@@ -116,6 +117,32 @@ test('排队的日记与整理共用十分钟，超时等待正式轮询；任�
   checks.close();checks=createReminderChecks(options);checks.start();
   checks.enqueue('review');await advance(60_000);
   assert.equal(started,1);assert.equal(checks.pending,false);
+});
+
+test('手记占用模型时巡检照常运行，暂停的核对延后再取件',async t=>{
+  const profile=mkdtempSync(join(tmpdir(),'fy-audit-yield-')),timers=new Map(),first=Promise.withResolvers();
+  let at=Date.parse('2026-11-23T00:23:53+09:00'),auditCalls=0,inspections=0;
+  const checks=createReminderChecks({profile,now:()=>at,isBusy:()=>false,
+    setTimer(fn,ms){const key=Symbol();timers.set(key,{fn,at:at+ms});return key;},clearTimer:key=>timers.delete(key),
+    handlers:{diaryAudit:async()=>++auditCalls===1?first.promise:'下一批已处理'},
+    inspectRecent:async()=>{inspections++;return {scanned:4,completed:1,failed:0,top:[]};}});
+  t.after(()=>{checks.close();rmSync(profile,{recursive:true,force:true});});
+  async function advance(ms){
+    at+=ms;
+    for(const [key,timer] of [...timers])if(timers.has(key)&&timer.at<=at){timers.delete(key);timer.fn();}
+    await settle();
+  }
+  checks.enqueue('diaryAudit');checks.start();
+  await advance(60_000);
+  assert.equal(auditCalls,1);
+  assert.equal(inspections,1);
+  assert.equal(checks.polls().find(j=>j.id==='diaryAudit').running,true);
+  assert.ok(checks.read(tokyoDay(at)).events.some(r=>r.project==='分析专家巡检'&&r.status==='已检查'));
+  first.resolve({deferred:true,started:true,detail:'已保存 2 步，下批从原进度继续'});
+  await settle();await advance(14_999);
+  assert.equal(auditCalls,1);
+  await advance(1);
+  assert.equal(auditCalls,2);
 });
 
 test('异常退出后只把无回执的行动标记中断，耗时未知',async()=>{
