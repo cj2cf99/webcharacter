@@ -1398,3 +1398,7 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 **实装结果。** 2026-11-23 01:46:28 JST 完成 Windows 正式安装与受控重启，版本 b8cc72a294b1，旧 PID 3096 正常退出，新 PID 8908 使用原应用入口及原资料目录。五项文件 SHA-256、回环 REST v5、原快捷方式、登录项、天气库完整性和天气记录均核对通过。天气轮询 180 分钟、最大推延 3 次，旧天气检查 108 条、天气通知 15 条均保留。实装文件通过独立 SQLite 和模拟源复验了首封、历史回填、低温、雨雪、警报及同向纪录去重。真实自然轮询待原配置时点（预计 04:06:31 JST）。天气库与旧文件备份于 G:/selftool/WebCharacter/work/feiyue-weather-release/install-backup-20261123-014614，机器回执位于工作区同级发布目录。无需 Worker 部署。
 
 **Git 同步与花园后续。** 本次实装的源码、测试和安装清单已由 GitHub 回读确认，分支 codex/feiyue-weather-reminders-20261123，代码发布提交 47278f6e2b64871225d53adaae65aa86ed573197。用户要求登记后面补充，正式绯月已在授权范围内先行安装。花园批次 feiyue-weather-reminders-20261123 的原始草案和 SQL 保留于 G:/selftool/WebCharacter/work/feiyue-weather-release/garden-draft，摘要 d2ce8a04246e4feb5f7a4126e9c6d4e45d3f8dc258bec3170007afad19181429。花园 SQL 未提交或执行，正式 REST 未入队。后续须重新核对线上修订、记录编号和版本后，取得该时点准确清单的明确确认。
+
+**花园登记与独立回读。** 用户回复「开始登记」，确认先前展示的原清单。重新同步线上结构，新增 0 项，核对旧编号、归属及修订 153。先将清单及 SQL 提交为 `90b8927a9bf4cea91758b2a93895820d39cea190`，再由正式绯月 REST v5 提交原编号 feiyue-weather-reminders-20261123 一次。2026-11-23 01:57:15 JST 批次完成，1/1 已核对。2026-11-23 01:58:50 JST 独立回读确认归属「网页角色组件」#16 →「绯月（桌面精灵）」#61、部署 #79、明细 #157、版本 28.0 → 29.0 和发布成功标记唯一，线上修订 154。审核摘要 `d2ce8a04246e4feb5f7a4126e9c6d4e45d3f8dc258bec3170007afad19181429`。
+
+**花园回执与 Git 同步。** 2026-11-23 01:59:28 JST 已签收回执。 正式 API 回读仍为 done。精确 SQL、清单和执行回执已同步到主仓库独立分支 codex/garden-feiyue-weather-reminders-20261123，远端提交 `5a0baf64db136522f8a2c05fbc19e12bda343838` 与本机回执提交 `61d2557521c62a7f979268e06b6d8b2ba86fbf51` 均已核对。主仓库本机测试及 Wrangler dry-run 通过。
