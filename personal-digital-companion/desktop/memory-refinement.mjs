@@ -278,7 +278,7 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,readLo
     let output;
     try{
       output=await untilAbort(model.memory(JSON.stringify(modelData),instruction,schema,wait,
-        {name:skill.skill,version:skill.version,stage,maxTokens:tokens,...(queued?{aiCheckpoint,aiReview:stage==='draft',aiTier:'2',aiFallback,
+        {name:skill.skill,version:skill.version,stage,maxTokens:tokens,...(queued?{aiCheckpoint,aiReview:stage==='draft',aiRole:stage==='review'||stage==='plan'||data.review?'assist':'main',aiFallback,
           ...(originalDates.length?{aiKeep:{text:originalDates}}:{})}:{})}),wait);
     }catch(error){
       signal.throwIfAborted();

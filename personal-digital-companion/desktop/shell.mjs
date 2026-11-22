@@ -12,6 +12,7 @@ import {readFile,stat} from 'node:fs/promises';
 import {createMessageBoxes} from './message-box.mjs';
 import {createThoughtOverlay} from './thought-overlay.mjs';
 import {createPanelWindow} from './panel-window.mjs';
+import {attachKnowledge} from './knowledge-host.mjs';
 import {attachSettings} from './settings-host.mjs';
 import {watchFileChanges,setLiveWarningLog,warnLiveUpdate} from './live-files.mjs';
 import {menuTemplate} from './menu-layout.mjs';
@@ -219,8 +220,8 @@ export async function startDesktop(electron,options={}){
       if(pausesEmotion)await emotion?.pause();
       combined.throwIfAborted();
       if(questionId)return nags.resume(questionId,combined);
-      if(kind==='refinement')return diary.refine(combined,progress);
       if(!goal)progress({stage:kind==='task-review'?'查找本机归档':'整理资料'});
+      if(kind==='refinement')return diary.refine(combined,progress);
       if(kind==='task-review'){
         writing=true;syncActivity();
         try{return await diary.run(kind,combined,progress);}finally{writing=false;}
@@ -232,7 +233,10 @@ export async function startDesktop(electron,options={}){
           const known=new Set(diary.nags().filter(n=>n.source==='topic').map(n=>n.source_id));
           const question=await topics.recoveryQuestion(known);
           combined.throwIfAborted();
-          if(question)nags.enqueue({source:'topic',source_id:question.id,title:question.prompt,reason:'专题恢复',priority:4,localOnly:true});
+          if(question){
+            const candidate={source:'topic',source_id:question.id,title:question.prompt,reason:'专题恢复',priority:4,localOnly:true};
+            if(await nags.prepareQuestion(candidate,question.prompt,combined)==='ask')nags.enqueue(candidate);
+          }
         }
         await topics?.runQueued(combined,step);
         await nags?.assessPending(combined);
@@ -345,7 +349,8 @@ export async function startDesktop(electron,options={}){
   const pollSettings=attachPollSettings(electron,{root,bundle,checks});
   const newsPanel=attachNewsPanel(electron,{root,bundle,checks,model:localModel,compile:compileNews});
   const study=attachStudy(electron,{root,bundle,profile,model:localModel,connection:options.studyConnection,onForeground:interruptMemory});
-  const serverTask=createServerTaskCommand({profile,tasks,localModel,interactionWork,dialog:messages});
+  const knowledge=attachKnowledge(electron,{profile,root,bundle,model:localModel,enabled:!options.benchmark});
+  const serverTask=createServerTaskCommand({profile,tasks,localModel,interactionWork,dialog:messages,knowledge});
   const modelFolder=dirname(desktopModelPath(app,root));
   const upgradeVision=options.upgradeVision??(!options.vision&&interactionWork?localVision(resolve(modelFolder,'Qwen3.5-9B-Q4_K_M.gguf'),
     {projection:resolve(modelFolder,'Qwen3.5-9B-mmproj-F16.gguf')}):undefined);
@@ -370,7 +375,7 @@ export async function startDesktop(electron,options={}){
     return questions;
   }
   if(localModel?.withWorkSession&&electron.safeStorage?.isEncryptionAvailable?.()&&!options.benchmark){
-    transcription=createConversationTranscription({profile,safeStorage:electron.safeStorage,model:localModel,registration:tasks.registration,log:tasks.traffic?.write,
+    transcription=createConversationTranscription({profile,safeStorage:electron.safeStorage,model:localModel,registration:tasks.registration,log:tasks.traffic?.write,knowledge,
       prepareBatch:rows=>prepareConversationBatch(rows,tasks.weatherRequest),
       canStart:(state,thread)=>!quitPending&&!privateChat?.active&&!localPool?.active&&!tasks.activeCount()&&
         (state==='approved'||(!work&&!backgroundJob&&(thread||!screenQuestion.panel&&!screenQuestion.inquiryPanel&&!screenQuestion.hasLocalWork))),
@@ -382,7 +387,7 @@ export async function startDesktop(electron,options={}){
         }else tray?.displayBalloon?.({title,content:body,respectQuietTime:true});
       }});
   }
-  const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,voice,checks,emotion:()=>emotion,topics:()=>topics,onForeground:interruptMemory,transcription,
+  const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,voice,checks,emotion:()=>emotion,topics:()=>topics,onForeground:interruptMemory,transcription,knowledge,
     threadOptions:!options.benchmark&&{
       questions:day=>{
         const pending=nags?.pendingQuestions()??[];
@@ -428,18 +433,26 @@ export async function startDesktop(electron,options={}){
     scenePanel=attachScenePanel(electron,{root,bundle,finish:(scene,answer)=>curiosity.finish(scene,answer)});
     curiosity=createSceneCuriosity({profile,memory,diary,model:localModel,electron,
       vision:options.vision??localVision(desktopModelPath(app,root)),show:scenePanel.show,draw:screenQuestion.drawScene,
-      queueQuestion:scene=>diary.nags().some(n=>n.source==='curiosity'&&n.source_id===scene.id)||
-        nags.enqueue({source:'curiosity',source_id:scene.id,title:scene.text,reason:'此刻所想',priority:2,
-          localContext:scene.seen,localSceneAt:scene.at,localOnly:scene.record==='none'},{mood:'好奇'}),
+      queueQuestion:async(scene,signal)=>{
+        if(diary.nags().some(n=>n.source==='curiosity'&&n.source_id===scene.id))return true;
+        const candidate={source:'curiosity',source_id:scene.id,title:scene.text,reason:'此刻所想',priority:2,
+          localContext:scene.seen,localSceneAt:scene.at,localOnly:scene.record==='none'};
+        const checked=await nags.prepareQuestion(candidate,scene.text,signal);
+        return checked==='resolved'?'resolved':checked==='ask'&&nags.enqueue(candidate,{mood:'好奇'});
+      },
       context:()=>emotion?.expression()??'平静',wake:()=>checks.enqueue('curiosity'),
       eligible:()=>memoryIdle()&&win.isVisible()&&!menuOpen&&checks.polls().some(p=>p.id==='curiosity'&&p.enabled)&&
         electron.powerMonitor?.getSystemIdleState?.(300)==='active'});
     const initiative=emotion&&createInitiative({emotion,memory,root:memory.root??profile,topics,localNags:diary.nags,model:localModel,speak:screenQuestion.speak,
       queueConversation:electron.utilityProcess&&localModel.suspend?item=>privateChat?.plan(item):undefined,
       conversationPlanned:id=>privateChat?.planned(id),
-      queueClarification:item=>nags.enqueue({source:'curiosity',source_id:'initiative/'+item.ref,title:item.title,
-        reason:'主动确认',priority:3,localInitiativeRound:item.roundId},{mood:emotion.expression().word})});
-    nags=createPersonalityNags({emotion,initiative,store:diary,show:session=>screenQuestion.showNag(session),idle:()=>memoryIdle()&&win.isVisible(),canContinue:()=>!privateChat?.active&&!quitPending&&!work&&!localPool?.active&&!localPool?.pending().some(b=>b.state==='queued')&&
+      queueClarification:async(item,signal)=>{
+        const candidate={source:'curiosity',source_id:'initiative/'+item.ref,title:item.title,
+          reason:'主动确认',priority:3,localInitiativeRound:item.roundId};
+        const checked=await nags.prepareQuestion(candidate,item.title,signal,item.context);
+        return checked==='resolved'?'resolved':checked==='ask'&&nags.enqueue(candidate,{mood:emotion.expression().word});
+      }});
+    nags=createPersonalityNags({emotion,initiative,store:diary,knowledge,show:session=>screenQuestion.showNag(session),idle:()=>memoryIdle()&&win.isVisible(),canContinue:()=>!privateChat?.active&&!quitPending&&!work&&!localPool?.active&&!localPool?.pending().some(b=>b.state==='queued')&&
         !screenQuestion.hasOtherTask&&!tasks.activeCount()&&(!tasks.tasksIdle||tasks.tasksIdle({allowPendingRequests:true})),
       onAnswered:async n=>{
         if(n.source==='topic'){
@@ -883,7 +896,7 @@ export async function startDesktop(electron,options={}){
     onClose:()=>currentMenu?.emit?.('menu-will-close')}):null;
   if(hasMemory&&electron.utilityProcess&&localModel.suspend){
     privatePanel=attachPrivateChatPanel(electron,{root,bundle,win,chat:()=>privateChat});
-    privateChat=createPrivateChat({profile,view:privatePanel,readGpu:readGpuLoad,
+    privateChat=createPrivateChat({profile,view:privatePanel,readGpu:readGpuLoad,knowledge,
       idle:()=>previousReady&&win.isVisible()&&!fullscreen.size&&!backgroundJob&&!pollExecuting&&!transcription?.busy&&
         !quitPending&&!work&&!localPool?.active&&!tasks.activeCount()&&!screenQuestion.panel&&!screenQuestion.inquiryPanel&&!scenePanel?.panel,
       async prepare(){
@@ -952,6 +965,7 @@ export async function startDesktop(electron,options={}){
       tasks:taskInbox&&{click:()=>taskNotice(taskInbox.open())},
       restoreTerminal:electron.dialog?.showOpenDialog&&{click:()=>taskNotice(restoreLocalTerminal())},
       review:{click:()=>taskNotice(screenQuestion.openReview())},
+      knowledge:{click:()=>taskNotice(knowledge.open())},
       notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
       pendingCheck:checks.pending&&{click:()=>taskNotice(pollSettings.open(true))},
       pollSettings:{click:()=>taskNotice(pollSettings.open())},
@@ -1051,7 +1065,7 @@ export async function startDesktop(electron,options={}){
     if(files.includes('tray.png'))tray.setImage(nativeImage.createFromPath(resolve(bundle,'tray.png')));
     for(const [page,panel] of [['index.html',win],['thought.html',thoughtOverlay.panel],['settings.html',pcSettings.panel],['weather.html',weather.panel],
       ['conversation.html',screenQuestion.details],['reminder-review.html',reminderReview?.panel],['poll-settings.html',pollSettings.panel],
-      ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],['study.html',study.panel],
+      ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],['study.html',study.panel],['knowledge.html',knowledge.panel],
       ['screen-question.html',screenQuestion.panel],['registration-review.html',screenQuestion.inquiryPanel],['sound-settings.html',settingsWindow],
       ...(messages.panels??[]).map(panel=>['message-box.html',panel])]){
       if(!panel||panel.isDestroyed())continue;
@@ -1106,6 +1120,7 @@ export async function startDesktop(electron,options={}){
     reminderReview?.close();
     taskInbox?.close();
     weather.close();
+    knowledge.close();
     movement=null;ipcMain.removeListener('pc:runtime',onMovementRuntime);pcSettings.close();
     stopPoll();ipcMain.removeListener('desktop:sound-ready',soundReady);ipcMain.removeListener('desktop:sound-change',soundChange);ipcMain.removeListener('desktop:sound-preview',soundPreview);
     if(settingsWindow&&!settingsWindow.isDestroyed())settingsWindow.destroy();
@@ -1254,6 +1269,6 @@ export async function startDesktop(electron,options={}){
   const remindersReady=waitForStartupReminders(reminderStartup.signal);
   if(!options.benchmark)checks.start();
   taskNotice(tasks.startup(remindersReady));
-  return {win,show,hide,moveTo,thoughtOverlay,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,transcription,study,
+  return {win,show,hide,moveTo,thoughtOverlay,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,transcription,knowledge,study,
     get localAPIAddress(){return localREST?.address??null;},getStats:()=>({pointerMessages,visible:win.isVisible(),ready:previousReady})};
 }

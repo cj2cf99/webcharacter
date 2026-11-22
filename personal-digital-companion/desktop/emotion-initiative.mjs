@@ -193,9 +193,9 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,que
       if(d.action==='ask')return {roundId:id,source:fact.ask,message:d.message,evaluation:d.conclusion,finish};
       if(d.action==='speak'){
         if(queueClarification&&!fact.share&&chosen.type==='clarify'){
-          const queued=queueClarification({ref:fact.ref,title:d.message,roundId:id});
-          const detail=queued?'已加入待确认':'这项确认已登记或留待下轮';
-          await finish(queued,detail,{queuedQuestion:true});
+          const queued=await queueClarification({ref:fact.ref,title:d.message,roundId:id,context:fact.title},signal);
+          const detail=queued==='resolved'?'已用本机知识核对这项疑点':queued?'已加入待确认':'这项确认已登记或留待下轮';
+          await finish(Boolean(queued),detail,{queuedQuestion:true});
           return {detail};
         }
         if(queueConversation){

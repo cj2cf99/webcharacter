@@ -1,0 +1,183 @@
+{
+  "installedBase": "4f12e1d6d84e",
+  "sourceBase": "03942463b3de924c380ae45a0c29a30bfbbee1c6",
+  "rest": 6,
+  "routerVersion": "3.2",
+  "items": [
+    {
+      "path": "desktop/news-board.mjs",
+      "before": null,
+      "after": "de4ecff7cc6e78051c327eaf1c57e07488c9317c65ed9574d2229c394f67063b"
+    },
+    {
+      "path": "desktop/news-briefing.mjs",
+      "before": "be2e5c5b5c35ed64dcc6469e9d47c103033e9bec6d8e7c4353330c08d2dd3d8f",
+      "after": "50fc291784fd7375a22e54e49784d21232de24369fca061c2e395a1d6bdb413b"
+    },
+    {
+      "path": "desktop/news-editor.mjs",
+      "before": "a896cf810e59bb8ddcbabb9725652ffdb1c1839f2dd113a76df9a03f64ea3bb6",
+      "after": "50471fa4aa7b9e1124a33475b62ca11f6475b9d2b8d5def8e3aba8b486f605b3"
+    },
+    {
+      "path": "desktop/news-editorial.css",
+      "before": null,
+      "after": "610bcf6a010b35923b18ecff162ffb7208cae318117aca955fa94d1495e28c10"
+    },
+    {
+      "path": "desktop/news-editorial.mjs",
+      "before": null,
+      "after": "2f473865e3ad232b86e3a195c4de2d85d0c0153bb77008fc8b77d720d992f38b"
+    },
+    {
+      "path": "desktop/news-heatmap.mjs",
+      "before": null,
+      "after": "b0c179e70ec579a8d96ff24b46c6595481088955551337b79708c7bb04211093"
+    },
+    {
+      "path": "desktop/news-history.mjs",
+      "before": "901fd026e160e9b5ab0d46b4ce0b498ecde948f017e6a5754b2ba2c8ff3c3d7f",
+      "after": "86a49b22ba6294deefa860f4cb7733589659d2c221a9701fa49b4a132f1d38bb"
+    },
+    {
+      "path": "desktop/news-layout.mjs",
+      "before": "7f48d6052a4df5b795bf320a26d509eafc7faf81193dbbf2aa4673a3803b30b1",
+      "after": "30de338243b82a1eeb62c7ce50e8fc388d78519ce5ff35e34180dd94f5a13535"
+    },
+    {
+      "path": "desktop/news-market.mjs",
+      "before": null,
+      "after": "b114975dae60f421e58f612870ce08d4a50203613fe11294c5223c43ebb1607a"
+    },
+    {
+      "path": "desktop/news-panel-host.mjs",
+      "before": "4f1fb6c366e3dc64d65589f3e544215955c8fb1192cf7656fe9015a526a1bbe4",
+      "after": "a2fb40847c479e29fe41aac55f824912e314f5c646430214722eaed2913fc00f"
+    },
+    {
+      "path": "desktop/news-panel-preload.cjs",
+      "before": "f0ec01861a99efc1eceddaa44d0ac748cbb155be762d0773ea3681a53b88f9dd",
+      "after": "cffd2e235a4c2effb4722ea438343c91961670961adde1f2af948cd86150011c"
+    },
+    {
+      "path": "desktop/news-panel-ui.mjs",
+      "before": "dbc82be6665d36eeb86dde87cff99b4bc138ed6a7f445f83fc1a7b719948c3e0",
+      "after": "0fc3f1cbd60bd04dd839b3cde71ff85d02d1ad389f497eedca9399989aa72d83"
+    },
+    {
+      "path": "desktop/news-panel.html",
+      "before": "b9a0b80616a26b3cf91e592f99cba020d1d97997821cc5fa35bf49d13f9deb17",
+      "after": "00fddd3a89c4b5b5717c5a08d924ddccd29b671dde2b5da1a3c1aa78fa16b561"
+    },
+    {
+      "path": "output/desktop-bundle/news-editorial.css",
+      "before": null,
+      "after": "610bcf6a010b35923b18ecff162ffb7208cae318117aca955fa94d1495e28c10"
+    },
+    {
+      "path": "output/desktop-bundle/news-heatmap.mjs",
+      "before": null,
+      "after": "b0c179e70ec579a8d96ff24b46c6595481088955551337b79708c7bb04211093"
+    },
+    {
+      "path": "output/desktop-bundle/news-layout.mjs",
+      "before": "7f48d6052a4df5b795bf320a26d509eafc7faf81193dbbf2aa4673a3803b30b1",
+      "after": "30de338243b82a1eeb62c7ce50e8fc388d78519ce5ff35e34180dd94f5a13535"
+    },
+    {
+      "path": "output/desktop-bundle/news-panel-ui.mjs",
+      "before": "dbc82be6665d36eeb86dde87cff99b4bc138ed6a7f445f83fc1a7b719948c3e0",
+      "after": "0fc3f1cbd60bd04dd839b3cde71ff85d02d1ad389f497eedca9399989aa72d83"
+    },
+    {
+      "path": "output/desktop-bundle/news-panel.html",
+      "before": "b9a0b80616a26b3cf91e592f99cba020d1d97997821cc5fa35bf49d13f9deb17",
+      "after": "00fddd3a89c4b5b5717c5a08d924ddccd29b671dde2b5da1a3c1aa78fa16b561"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "before": "6c0c1c465c7ed08d1ec07ae56e6f8366d24ae1412c7a2a27b08f69f4d94a09a7",
+      "after": "d0222acfceeb5a8010b72fbcecb96a8f0cc21d2b02e6899a55521794d0ebe3ef"
+    },
+    {
+      "path": "desktop/reminder-checks.mjs",
+      "before": "bfe1efb84c5bcb73c048b6f5fcd4002c16d300e3b6db0ba4e7cb84ebcabc2fed",
+      "after": "152359e2e2bc4854bf9e7619ec760374051020a0a5344dce91b000455bf1cfc8"
+    },
+    {
+      "path": "desktop/poll-scheduler.mjs",
+      "before": "aa4a8978043807dc2b542e7b994d8eef4bf3bafcc6acd55b325e67cceacaff81",
+      "after": "5e9c5b90e61b12ba79c44f36814089a985c38e2fae332fb46faa1ed69d471290"
+    },
+    {
+      "path": "desktop/source-updates.mjs",
+      "before": "a7c19f6e567fb7b64bda75a3293a1c1ffabdf0d5134b20daa341a403a97973b7",
+      "after": "a7346171e43d51cc6da46caa8977c96362c22f29c1f4046d45b4197f3b5600a1"
+    },
+    {
+      "path": "workflows/comfyui/tavily_search.py",
+      "before": "d668acd976981427074e1d4987194810a75af7bb69a42875edcc3950f498d211",
+      "after": "5ea47888be16a9202393298c4980a71301021c6034d68229e86ee5a2c01ff156"
+    },
+    {
+      "path": "workflows/comfyui/search_budget.py",
+      "before": "b3b7c2ffc737bcc76f6b80f8fc3e35ce05159fb1c42c69b6b2f93b23f03ff713",
+      "after": "25c97ae2bcea75e8d01d8986b7e6721efe7e553f0936c9c83aeda3856a9efd74"
+    },
+    {
+      "path": "workflows/comfyui/news_social.py",
+      "before": null,
+      "after": "e2b7a5ed01b51c91bca61f01bff57e61bdb2fd2e5f9f096e478818fa668d3342"
+    },
+    {
+      "path": "skills/feiyue-interaction/source/routes.json",
+      "before": "3ee8fd63a11da55a9fb1d554ef29b3570af30e0152d47c9534fea8e2aa70dbd5",
+      "after": "351a2fc1493c983f1b82f209243b61431cd9dc96c58c9ce701bd4d04e8b29e28"
+    },
+    {
+      "path": "skills/feiyue-interaction/capabilities.json",
+      "before": "5adeda56a51f1a6ced601b7e7d2693989a4d1053b48bf5f96f11b329deefe475",
+      "after": "ccefbc062ada6888e075db36c9d8906412b0d81a85b40065940862e04dc6ebee"
+    },
+    {
+      "path": "skills/news-editorial/latest.json",
+      "before": null,
+      "after": "500302d7537c1c8b0db269f8db8db05145be766b2d95afe6beea214236886ba0"
+    },
+    {
+      "path": "skills/news-editorial/source/SKILL.md",
+      "before": null,
+      "after": "59da3112b161ed2c9f902948ecfb36b45e661799e3f7d8967d137a24f3939aad"
+    },
+    {
+      "path": "skills/news-editorial/source/local-ai.json",
+      "before": null,
+      "after": "7bb02f3a02d825233f64f8b74afd7485f02401679d49d57fc836268c518e6a01"
+    },
+    {
+      "path": "skills/news-editorial/versions/news-editorial-v1-6/SKILL.md",
+      "before": null,
+      "after": "58c262bd7d6c28a119ccb786f7dc6e9af02fad015905bff35e627fe1ca2dff22"
+    },
+    {
+      "path": "skills/news-editorial/versions/news-editorial-v1-6/local-ai.json",
+      "before": null,
+      "after": "7bb02f3a02d825233f64f8b74afd7485f02401679d49d57fc836268c518e6a01"
+    },
+    {
+      "path": "skills/feiyue-interaction/latest.json",
+      "before": "0f05a89d36bfadaf0953da060abe767b3617efca831fcee802c9780acd0f0888",
+      "after": "c0b33a6eca5be8c4767a0b097b12a49a79b303de76e8fcfe16229af24490a97f"
+    },
+    {
+      "path": "skills/feiyue-interaction/versions/feiyue-interaction-v3-2/SKILL.md",
+      "before": null,
+      "after": "4dd850a3c457c496ee4b5f1ac1be1fd9454168afee5e7cf3691656ad73f619fb"
+    },
+    {
+      "path": "skills/feiyue-interaction/versions/feiyue-interaction-v3-2/routes.json",
+      "before": null,
+      "after": "351a2fc1493c983f1b82f209243b61431cd9dc96c58c9ce701bd4d04e8b29e28"
+    }
+  ]
+}

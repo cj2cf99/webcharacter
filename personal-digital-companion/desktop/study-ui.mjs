@@ -149,9 +149,9 @@ function retry(kind,index,ref){return async()=>{
   const params={id:session.id,index,kind,ref};
   let result=await run(action,params);
   if(result.retryStatus==='missing'){
-    if(!window.confirm('本机缺少该题库。现在取回材料再练？'))return;
     const [type,id]=JSON.parse(result.materialId);
     if(type!=='bank')throw Error('请先重新取回原材料');
+    if(!window.confirm('本机缺少该题库。现在取回材料再练？'))return;
     await run('download',{kind:'bank',id});result=await run(action,params);
   }
   if(result.retryStatus==='changed'){
@@ -222,9 +222,18 @@ function objective(item,live,locked){
   }
   return {group,value:()=>[...selected]};
 }
-function showSession(value){
+function reviewIndexes(value){
+  const indexes=value.items.map((_,index)=>index).filter(i=>filter==='all'||value.items[i].result===filter);
+  if(value.mode==='free'){
+    const marked=i=>Boolean(value.items[i].unsure&&value.items[i].answer&&!value.items[i].draftOnly);
+    indexes.sort((a,b)=>Number(marked(b))-Number(marked(a)));
+  }
+  return indexes;
+}
+function showSession(value,reviewIndex){
   if(!value){notice('正式考试暂无回执');return;}
   if(session?.id!==value.id){filter='all';reviewPage=0;}
+  if(Number.isInteger(reviewIndex)){filter='all';reviewPage=Math.max(0,Math.floor(reviewIndexes(value).indexOf(reviewIndex)/20));}
   dictation?.close();dictation=null;
   session=value;screen='session';nav.replaceChildren();main.replaceChildren();actions.replaceChildren();
   const {mode,status:state,items,position}=session;
@@ -282,7 +291,7 @@ function showSession(value){
   main.append(block);
   if(formal){
     actions.append(button('读取回执',async()=>showSession(await run('formalRefresh',{id:session.id}))));
-    if(!session.writer||session.conflict)actions.append(button('接管',async()=>{if(window.confirm('接管后，原窗口无法继续写入。继续？'))showSession(await formalSend('takeover'));}));
+    if(!session.writer)actions.append(button('接管',async()=>{if(window.confirm('接管后，原窗口无法继续写入。继续？'))showSession(await formalSend('takeover'));}));
     if(session.writer){
       if(state==='running'||session.pending)actions.append(button('提交待同步作答',async()=>showSession(await formalSend('sync'))));
       actions.append(button(locked?'恢复':'暂停',async()=>showSession(await formalSend(locked?'resume':'pause'))),
@@ -349,26 +358,27 @@ function renderReview(){
   const {mode,items,correct,passed,summary,reason}=session;
   const formal=mode==='formal',language=['script','sentence','free'].includes(mode);
   const score=language?`${items.filter(item=>item.answer&&!item.draftOnly).length} / ${items.length} 轮`:`${correct??0} / ${items.length} 答对`;
-  const weakIndex=items.findIndex(item=>item.unsure&&!item.disputed);
+  const weakIndex=items.findIndex(item=>item.unsure&&!item.disputed&&!item.draftOnly&&(mode!=='free'||item.answer));
   const target=weakIndex>=0?weakIndex:items.findIndex(item=>!item.disputed&&['wrong','unanswered'].includes(item.result));
   const counts=['correct','wrong','unanswered'].map(key=>outcomes[key]+' '+items.filter(item=>item.result===key).length).join(' · ');
   main.append(card(row(obj('strong',score,'study-score'),passed===undefined?obj('span'):obj('span',passed?'合格':'未合格','fy-chip'),
     reason==='timeout'?obj('span','到时结算','fy-chip'):obj('span')),
+    paragraph(formal?'知序交卷回执 · 计分采用服务端已收作答':'历史版本 · 本场开场时的材料','study-note'),
     paragraph(language?(session.context?.goal||session.title):counts,'study-note'),
     ...(target>=0?[button(`下次先练 · 第 ${target+1} ${language?'轮':'题'}`,()=>{
-      filter='all';reviewPage=Math.floor(target/20);showSession(session);document.getElementById('study-review-'+target)?.scrollIntoView({block:'center'});
+      showSession(session,target);document.getElementById('study-review-'+target)?.scrollIntoView({block:'center'});
     })]:[]),
     ...[summary,session.closing].filter(Boolean).map(text=>paragraph(text))));
   if(session.sourceTurn)actions.append(button('返回来源作答',async()=>{
     const source=session.sourceTurn;
     const snapshot=await run(source.formal?'formalView':'view',{id:source.id});
-    showSession(snapshot);reviewPage=Math.floor(source.index/20);showSession(snapshot);
+    showSession(snapshot,source.index);
     document.getElementById('study-review-'+source.index)?.scrollIntoView({block:'center'});
   }));
   if(!language)main.append(row(...[['all','全部'],['correct','答对'],['wrong','答错'],['unanswered','未答']].map(([key,label])=>
-    tab(label,filter===key,()=>{filter=key;reviewPage=0;showSession(session);})))); 
+    tab(label,filter===key,()=>{filter=key;reviewPage=0;showSession(session);}))));
   const list=obj('div','','fy-list study-stack');
-  const indexes=items.map((_,index)=>index).filter(i=>filter==='all'||items[i].result===filter);
+  const indexes=reviewIndexes(session);
   indexes.slice(reviewPage*20,reviewPage*20+20).forEach(index=>{
     const item=items[index];
     const block=questionCard(item);
@@ -400,7 +410,7 @@ function renderReview(){
     }
     if(item.mastery)block.append(paragraph(`原题${item.mastery.streak>=3?'已掌握':`独立答对 ${item.mastery.streak} / 3`} · 权重 ${item.mastery.weight}`,'study-note'));
     if(item.repeated?.length)block.append(paragraph('反复误选 · '+item.repeated.map(([id,n])=>`${answerText(item.question,[id])}（${n} 次）`).join('、'),'study-note'));
-    if(language&&item.answer){
+    if(language&&item.answer&&!item.draftOnly){
       if(item.disputed)controls.append(button('恢复原判',async()=>showSession(await command('resolve',{index,result:'original'}))),
         ...(mode!=='free'?[button('改判成立',async()=>showSession(await command('resolve',{index,result:'correct'})))]:[]));
       else for(const [why,label] of [['dictation','听写有误'],['variant','这句也成立']])

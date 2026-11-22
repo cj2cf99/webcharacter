@@ -1,0 +1,36 @@
+{
+  "base": "90f672b73e02894122955289f7837578edcb8cea",
+  "installedBaseline": "f011f0687aec",
+  "items": [
+    {
+      "path": "desktop/weather-brief.mjs",
+      "before": "c9ad204b336aeb2fd9fe5e1b3fb5e96126a597ceb0829e762e213f0489784f45",
+      "after": "e59e049619aa7fe7aeb03bd1d72fe0035d41bf48b95fb774e3faf148653f7ae3",
+      "source": "e59e049619aa7fe7aeb03bd1d72fe0035d41bf48b95fb774e3faf148653f7ae3"
+    },
+    {
+      "path": "desktop/weather-credentials.mjs",
+      "before": "935e0c4efbc1de967ef239cd5162932cd6eb4e434736856b3eab06b01f72a8e3",
+      "after": "2c7a96207472adbbfe9bc6ca4d24ce2853b786869af522200b2694983e23909d",
+      "source": "2c7a96207472adbbfe9bc6ca4d24ce2853b786869af522200b2694983e23909d"
+    },
+    {
+      "path": "desktop/weather-host.mjs",
+      "before": "50d7725786d4b09b747743915208c06f0a0f7d9b2689c897c645f37cad6a3e8b",
+      "after": "e9cd8f4b112a83bf44b4f2c77be9824518dcc71bf8430b4e9200318c4f892375",
+      "source": "e9cd8f4b112a83bf44b4f2c77be9824518dcc71bf8430b4e9200318c4f892375"
+    },
+    {
+      "path": "desktop/weather-service.mjs",
+      "before": "397c8354a4a6890f896bd9a070bc0031d371b9140385d03fbc2754a22f55d2b4",
+      "after": "2a2083e664bfa015e6bb553a38e670808115de931cb061c6825d93faabaa9a29",
+      "source": "67451901db57c75e1bf78b21acce03a28110aeb40c8a237b9b8563826d1ffaef"
+    },
+    {
+      "path": "desktop/reminder-checks.mjs",
+      "before": "ae205b5f749c51c12f58c8ecccbcf65c597d3ef8ef7bbf2834a206d08229d246",
+      "after": "bfe1efb84c5bcb73c048b6f5fcd4002c16d300e3b6db0ba4e7cb84ebcabc2fed",
+      "source": "bfe1efb84c5bcb73c048b6f5fcd4002c16d300e3b6db0ba4e7cb84ebcabc2fed"
+    }
+  ]
+}

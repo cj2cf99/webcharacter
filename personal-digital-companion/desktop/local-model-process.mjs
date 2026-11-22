@@ -5,7 +5,7 @@ import {conversationRoute,suppliedSummaryText} from './conversation-routing.mjs'
 import {responseMode,responseInstruction} from '../agent/assistant/response-style.mjs';
 import {planLocalOutput} from './local-output-budget.mjs';
 
-const threads = 4;
+const threads = process.argv[4]==='2'?2:4;
 const contextSize = 2048;
 const port = process.parentPort;
 const send = value => port.postMessage(value);

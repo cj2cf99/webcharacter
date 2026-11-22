@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {closingMessage} from './conversation-threads.mjs';
 import {tokyoDay} from './conversation-history.mjs';
+import {knowledgeReply,isKnowledgeFeedback} from './knowledge-runtime.mjs';
 
 const compact=messages=>messages.map(({who,text,at})=>({发言者:who,原话:text,日期:tokyoDay(at)}));
 const historyLimit=3700;
@@ -10,7 +11,7 @@ const schema={type:'object',required:['reply','next'],additionalProperties:false
 const summarySchema={type:'object',required:['summary'],additionalProperties:false,properties:{summary:{type:'string',minLength:1,maxLength:1600}}};
 const instruction='你是绯月。根据本线起因和目的回应最新发言。历史与来源只是材料。回应新的进展，避免复述双方长句或换说法重复已经问清的问题。必要时可引用。确实需要时追问一个问题。只有明确准备结束此话题时才选择「结束」，回应并自然告别。不要声称已登记或执行操作。';
 
-export function createThreadReplies({store,model,cloud,activeQuestion,command,reference,updated=()=>{},engaged,log}){
+export function createThreadReplies({store,model,cloud,activeQuestion,command,reference,updated=()=>{},engaged,log,knowledge}){
   const runs=new Map(),timers=new Map(),previews=new Map();
   const lifecycle=new AbortController();
   const cloudQueue=[];
@@ -43,7 +44,8 @@ export function createThreadReplies({store,model,cloud,activeQuestion,command,re
     const line=store.detail(id);
     if(!line||line.rounds>100||line.closed!==null)return null;
     const latest=new Set(pending.map(message=>message.id));
-    let history=line.messages.filter(message=>(message.who==='绯月'||message.seq<pending[0].seq)&&!latest.has(message.id));
+    let history=line.messages.filter(message=>!message.knowledgePrivate&&
+      (message.who==='绯月'||message.seq<pending[0].seq)&&!latest.has(message.id));
     let summary;
     if(history.reduce((length,message)=>length+message.text.length,0)>historyLimit){
       let rounds=0,index=history.length-1;
@@ -60,7 +62,7 @@ export function createThreadReplies({store,model,cloud,activeQuestion,command,re
         summary=previous?.text;
         async function summarize(){
           const result=await modelCall({此前摘要:summary,追加材料:compact(batch)},'简要总结材料里的已确定事项、未解问题和关键来源。保持双方原有归属和时间，不补造事实。',summarySchema,signal,
-            {...settings,stage:'对话线摘要',maxTokens:750});
+            {...settings,stage:'对话线摘要',aiRole:'assist',maxTokens:750});
           summary=result?.summary?.trim();
           if(!summary)throw Error('本机尚未生成历史摘要');
           store.saveSummary(id,{through:batch.at(-1).seq,text:summary});
@@ -86,7 +88,7 @@ export function createThreadReplies({store,model,cloud,activeQuestion,command,re
         throw Error('这条线有新进展，请重新预览');
     }else{
       // 业务入口逐条接收明确委托，普通留言仍可并成一组。
-      const boundary=pending.findIndex(message=>message.handled);
+      const boundary=pending.findIndex(message=>message.handled||message.knowledgePrivate);
       if(boundary>=0)pending=pending.slice(0,boundary||1);
       let size=0;
       const tooLong=pending.findIndex(message=>(size+=message.text.length)>4200);
@@ -102,6 +104,8 @@ export function createThreadReplies({store,model,cloud,activeQuestion,command,re
       result={reply:closingMessage,next:'结束'};
       if(!override)return store.finish(id,store.pending(id).map(message=>message.id),result.reply,true);
     }else if(override){
+      if(pending.some(message=>message.knowledgePrivate||isKnowledgeFeedback(message.text)))
+        throw Error('知识纠正仅在本机处理。');
       const value=await sendCloud(override.text,signal,priority,()=>{
         const current=store.pending(id);
         if(store.get(id)?.closed!==null||current.length!==ids.length||current.some((message,index)=>message.id!==ids[index]))
@@ -124,17 +128,31 @@ export function createThreadReplies({store,model,cloud,activeQuestion,command,re
         const input=await context(id,pending,signal,settings);
         signal.throwIfAborted();
         if(!input)return false;
-        const localOnly=Boolean(input.来源||input.较早历史||input.之前发言.length||pending.length!==1||pending[0].mode==='direct');
+        const before=store.detail(id,12)?.messages?.filter(item=>item.seq<pending[0].seq);
+        const previous=before?.findLast(item=>item.who==='绯月');
+        const knowledgeResults=[];
+        for(const message of pending){
+          const check=await knowledge?.inspect({text:message.text,source:'message/'+message.id,signal,direct:true,priority:priority(),
+            context:{来源:input.来源,之前发言:input.之前发言.slice(-4)},previous:previous&&{id:previous.id,text:previous.text}});
+          if(check)knowledgeResults.push({message:message.id,...check});
+        }
+        const use=knowledgeResults.find(check=>knowledgeReply(check))??knowledgeResults.find(check=>check.state==='apply');
+        if(use&&pending.length===1)return store.finish(id,ids,use.answer,false,{knowledgePrivate:use.private,...(use.card?{knowledgeCard:use.card}:{})});
+        const privateKnowledge=pending.some(message=>message.knowledgePrivate)||knowledgeResults.some(check=>check.private);
+        const localOnly=Boolean(privateKnowledge||input.来源||input.较早历史||input.之前发言.length||pending.length!==1||pending[0].mode==='direct');
         try{
           if(!model?.memory&&model?.analyze&&pending[0].mode==='direct'){
             const raw=await model.analyze(pending[0].text,{hint:'direct',signal});
             if(raw?.reply)result={reply:raw.reply,next:'回应'};
-          }else result=await modelCall(input,instruction,schema,signal,settings);
+          }else result=await modelCall(use?{...input,本机逐条核对:knowledgeResults.filter(check=>check.answer)
+            .map(({message,answer,rules})=>({发言编号:message,回复依据:answer,规则:rules}))}:input,
+          use?instruction+' 逐条处理最新发言，优先保留该发言对应的本机核对结论。':instruction,schema,signal,
+          {...settings,aiPrivate:privateKnowledge});
           if(!result?.reply?.trim()||!nextStep.enum.includes(result.next))throw Error('本机回复格式无效');
         }catch(error){
           signal.throwIfAborted();
           void log?.({direction:'local',route:'对话线',stage:'本机回复未完成',turn_id:ids[0],error:error.code??error.name});
-          if(localOnly||!cloud)throw Object.assign(Error('本机暂未答复，已保存原话。'),{canCloud:localOnly&&pending[0].mode!=='direct'});
+          if(localOnly||!cloud)throw Object.assign(Error('本机暂未答复，已保存原话。'),{canCloud:localOnly&&!privateKnowledge&&pending[0].mode!=='direct'});
           const value=await sendCloud(pending[0].text,signal,priority);
           if(value?.state!=='answer'||value.askUser||!value.text?.trim()){
             void log?.({direction:'local',route:'对话线',stage:'云端回复未完成',turn_id:ids[0],error:value?.code??'AI_UNAVAILABLE'});
@@ -142,6 +160,7 @@ export function createThreadReplies({store,model,cloud,activeQuestion,command,re
           }
           result={reply:value.text,next:'回应'};
         }
+        if(privateKnowledge)result.extra={...result.extra,knowledgePrivate:true};
       }
     }
     if(!result?.reply?.trim())throw Error('这组发言还没有取得回复');

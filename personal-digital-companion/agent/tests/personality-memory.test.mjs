@@ -233,6 +233,27 @@ test('离线草稿恢复，空日记复用；跨日后续与旧篇标记；读�
   assert.equal((await (await req('diaries')).json()).total,7);
   failedDay='2026-11-19';await assert.rejects(store.run('diary',signal),/归档打不开/);
 });
+test('手记按固定栏目保存，模型复述和伪栏目不重复入稿',async t=>{
+  const {req}=fixture(t),profile=mkdtempSync(join(tmpdir(),'feiyue-diary-paragraph-'));
+  const store=createPersonalityDiary({profile,now:()=>start,weather:()=>[],memory:{
+    read:d=>d===day?[{id:'story',at:start,question:'我走到了书店。',text:'欢迎回家。'}]:[],readTasks:()=>[]},
+    request:(url,opts)=>req(url.slice('/api/memory/'.length),opts.body&&JSON.parse(opts.body)),
+    model:{async memory(input,_prompt,schema,_,skill){
+      const values={mood:{mood:'欣慰'},reviewAction:{text:input,review:'我记住了。'},
+        narrate:{text:'你说：我走到了书店。\n我想下次一起去。\n我想下次一起去。\n当时的评价：我记住了。',comment:'绯月私语：我想下次一起去。',thread:'「」？'},
+        summary:{summary:'书店散步',tags:'书店'}};
+      if(skill.stage==='reviewSource')return {review:'已读'};
+      assert(schema.required.every(key=>Object.hasOwn(values[skill.stage],key)));
+      return values[skill.stage];
+    }}
+  });
+  t.after(()=>{store.close();rmSync(profile,{recursive:true,force:true});});
+  await store.run('diary',new AbortController().signal);
+  const page=await (await req('diaries/'+day+'.1')).json();
+  assert.equal(page.body,'你说：我走到了书店。\n绯月当时回复：欢迎回家。\n我想下次一起去。\n当时的评价：我记住了。');
+  assert.deepEqual(page.threads,[]);
+});
+
 test('手记候选先复审，同篇只保留前三，后续追加和旧客户端也不能新增第四个',async t=>{
   const {req}=fixture(t),profile=mkdtempSync(join(tmpdir(),'feiyue-diary-ranking-'));
   const turns=['2','0','1','5','4','3'].map((score,i)=>({id:'q'+i,at:start+i,question:'素材'+score,text:'收到'}));
@@ -319,7 +340,7 @@ test('一轮一件、两日消费与相邻周；继续同一问题、拒绝及�
     saveNag:n=>{n.revision++;local.set(n.id,structuredClone(n));},syncNags:async()=>{},
     api:async()=>({records:raw.map(([id,spendDate,amount])=>({id,spendDate,amount,category:'图书'})),complete:true}),
     think:async(d,_p,keys)=>keys.includes('question')?{question:'这笔是买什么呀？',evaluation:'惦记这笔消费',mood:'担心'}:
-      {reply:'原来如此。',next:'还有后续'+JSON.parse(d).解释+'吗？',evaluation:'听到了理由',mood:'释然'}};
+      {reply:'原来如此。',next:'还有后续'+JSON.parse(d).最新发言.at(-1).原话+'吗？',evaluation:'听到了理由',mood:'释然'}};
   store.queueQuestion=n=>{store.saveNag(n);return true;};
   function structuredCloneSafe(r){return structuredClone(r);}
   const n=createPersonalityNags({store,now:()=>at,random:()=>0,idle:()=>true,show:async s=>{session=s;s.visible();return true;}});t.after(()=>n.close());
@@ -504,6 +525,30 @@ test('只入队并提示，候选排除已问和退款，再从金额前五和�
   assert.equal(archive.at(-1).source_id,'P7');assert(archive.at(-1).stats.includes('资料不全'));assert.equal(stored,1);
   await n.close();
 });
+test('旧念叨跳过复述形成的待续项，只能续问原先未发出的具体问题',async t=>{
+  const talk=[{who:'绯月',text:'下次一起听雨好吗？'},
+    {who:'你',text:'到时候一起坐在床边听雨。'},
+    {who:'绯月',text:'「到时候一起坐在床边听雨？」'},
+    {who:'你',text:'我们再一起看书。'}];
+  const closed={source:'diary',status:'回合结束',talk};
+  const archive=[{...closed,id:'old',source_id:day+'.1/1',remaining:'到时候一起坐在床边听雨。'}];
+  const store={nags:()=>archive,pages:()=>[],syncNags:async()=>{},api:async()=>({records:[],complete:true}),
+    think:()=>assert.fail('念叨待续不得重新拟题'),
+    queueQuestion(n){archive.push(n);return true;}};
+  const engine=createPersonalityNags({store,now:()=>start,random:()=>0,idle:()=>true});
+  t.after(()=>engine.close());
+  const signal=new AbortController().signal;
+  assert.equal(await engine.poll(signal),'没有待问事项');
+  assert.equal(archive.length,1);
+  const remaining='有空告诉我你想看哪一本书就好。';
+  archive.push({...closed,id:'open',source_id:day+'.1/2',remaining});
+  assert.equal((await engine.poll(signal)).detail,'已新增 1 个待确认问题');
+  assert.equal(archive.at(-1).source_id,'open');
+  assert.equal(archive.at(-1).talk[0].text,remaining);
+  await engine.poll(signal);
+  assert.equal(archive.length,3);
+});
+
 test('等待期间留下解释但推理中断，恢复后用已存原话收尾',async()=>{
   const n={id:'test',source:'paylog',source_id:'1',status:'意外中断',revision:3,turns:1,questions:1,interruptions:1,next:'买了什么？',mood:'好奇',
     talk:[{who:'绯月',text:'买了什么？'},{who:'你',text:'一本书。'}]};
@@ -584,7 +629,7 @@ test('手记首问先核对原题及后文，确认缺项才生成自然问话�
   assert(session.prompt.includes(missing+'\n'+question));
 });
 
-test('无追问占位词正常收笔，重启清理仍等待作答的同类旧记录',async()=>{
+test('无追问占位词和重提旧题正常收笔，重启清理仍等待作答的旧占位词',async()=>{
   const opening={who:'绯月',text:'什么时候回来？'};
   const answer={who:'你',text:'吃过晚饭就回来。'};
   const reply={who:'绯月',text:'好，我等你。'};
@@ -611,8 +656,9 @@ test('无追问占位词正常收笔，重启清理仍等待作答的同类旧�
   next='什么时候回来';
   await engine.resume(unresolved.id,new AbortController().signal);
   assert.equal((await session.reply('还不知道。')).finished,true);
-  assert.equal(unresolved.status,'回合结束');
-  assert.equal(unresolved.remaining,next);
+  assert.equal(unresolved.status,'已解释');
+  assert.equal(unresolved.next,'');
+  assert.equal(unresolved.remaining,undefined);
   await engine.close();
 });
 

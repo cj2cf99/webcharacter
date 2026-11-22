@@ -9,6 +9,7 @@
   "-",
   {"label":"阅读与学习","icon":"📚","items":[
     {"action":"news","label":"新闻简报","icon":"📰"},
+    {"action":"knowledge","label":"知识库","icon":"🗂"},
     {"action":"study","label":"陪我学习","icon":"📚"}
   ]},
   {"label":"任务","icon":"🧩","items":[

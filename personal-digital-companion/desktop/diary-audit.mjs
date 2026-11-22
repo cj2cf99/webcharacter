@@ -38,7 +38,7 @@ function formatQuestion(n){
     n.questions===1?'想搞清楚的问题':'追问 '+(n.questions-1)+' / 2',n.next].join('\n');
 }
 
-export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,random=Math.random,loadSkill=()=>readInteractionSkill('diaryAudit')}){
+export function createDiaryAudit({store,show,idle,canContinue,save,protectReply,lookupReply,now=Date.now,random=Math.random,loadSkill=()=>readInteractionSkill('diaryAudit')}){
   let active=null,working=false,state;
   function stopRun(){
     if(state.run){delete state.run;store.saveAuditState(state);}
@@ -190,6 +190,14 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
     n.status=closingStatus;n.afterEvaluation=text;if(!thread)save(n);
     return {text,done:true,finished:true};
   }
+  function knowledgeOutcome(n,checked){
+    if(!checked?.private||!checked.answer)return null;
+    if(checked.state==='apply'){
+      n.status='已解释';save(n);
+      return {text:checked.answer,knowledgePrivate:true,done:true,finished:true};
+    }
+    return {text:checked.answer,knowledgePrivate:true};
+  }
   async function showQuestion(n,signal){
     const controller=new AbortController();
     const replySignal=controller.signal;
@@ -209,6 +217,11 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
         const text=store.nagText?await untilAbort(store.nagText(n,raw,replySignal),replySignal):cleanMemory(raw);
         replySignal.throwIfAborted();
         if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请输入文字回答。',invalid:true};
+        const privateCorrection=await protectReply?.(n,text,replySignal);
+        if(privateCorrection)return privateCorrection;
+        const checked=await lookupReply?.(n,text,replySignal);
+        const assessed=knowledgeOutcome(n,checked);
+        if(assessed){if(assessed.done)active=null;return assessed;}
         line(n,'你',text);save(n);
         const result=await advance(n,await writer(replySignal),replySignal);
         if(result.done)active=null;
@@ -270,6 +283,10 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
   return {prepare,resume,recover:()=>Boolean(store.auditState().run),get active(){return Boolean(active);},
     detachThread:id=>{if(active?.id===id)active.leave('later');},
     async threadAnswer(n,signal,priority,stillLatest,context,isOpen,currentPriority){
+      const checked=await lookupReply?.(n,n.talk.at(-1)?.text,signal,{priority,context});
+      if(!isOpen())return;
+      const assessed=knowledgeOutcome(n,checked);
+      if(assessed)return assessed;
       return advance(n,await writer(signal,priority,currentPriority),signal,{stillLatest,context,isOpen});
     },
     close(){active?.leave('interrupted');}};

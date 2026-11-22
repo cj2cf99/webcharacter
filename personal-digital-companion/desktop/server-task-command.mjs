@@ -10,6 +10,7 @@ import {encodeJson} from '../agent/execution/json.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
 import {PC_IMAGE_GENERATE} from '../agent/tasks/pc-types.mjs';
 import {chatTotalMs} from './chat-budget.mjs';
+import {knowledgeReply,knowledgeRules} from './knowledge-runtime.mjs';
 
 const resumeHint='输入“服务器任务：恢复上次提交”可按原提交号核对。';
 
@@ -31,7 +32,7 @@ function planSchema(templates,exerciseBody) {
   return {oneOf:[...plans,{type:'object',properties:{question:{type:'string'}},required:['question'],additionalProperties:false}]};
 }
 
-export function createServerTaskCommand({profile,tasks,localModel,interactionWork,dialog,readSkill=readInteractionSkill}) {
+export function createServerTaskCommand({profile,tasks,localModel,interactionWork,dialog,knowledge,readSkill=readInteractionSkill}) {
   const file=join(profile,'server-task-submission.json');
   let active=false;
   async function call(path,body,signal) {
@@ -106,7 +107,7 @@ export function createServerTaskCommand({profile,tasks,localModel,interactionWor
     const status={COMPLETED:'已执行完成',FAILED:'执行失败',CANCELLED:'已取消'}[result.status]??result.status;
     return '服务器任务 '+id+' · '+status+(result.error?' · '+result.error:'');
   }
-  return async function run(text,signal,progress=()=>{},work=interactionWork) {
+  return async function run(text,signal,progress=()=>{},work=interactionWork,source,onPrivate=()=>{}) {
     if(active)throw Error('上一条服务器任务指令仍在处理中。');
     active=true;
     try{
@@ -164,7 +165,11 @@ export function createServerTaskCommand({profile,tasks,localModel,interactionWor
         // 旧服务器只有自定义模板时，继续使用其真实清单。
         const candidates=type&&templates.some(t=>t.type===type)?templates.filter(t=>t.type===type):templates;
         if(!candidates.length)throw Error('当前服务器没有运动登记模板。');
-        const context={指令:command,派发目标:target,模板:candidates};
+        const knowledgeCheck=await knowledge?.inspect({scope:'server-task',text:command,source,signal});
+        if(knowledgeCheck?.private)onPrivate();
+        const clarification=knowledgeReply(knowledgeCheck);
+        if(clarification)return {question:clarification};
+        const context={指令:command,派发目标:target,模板:candidates,...knowledgeRules(knowledgeCheck)};
         const schema=planSchema(candidates,exercise?.[1]);
         function normalize(plan){
           if(typeof plan?.question==='string'&&plan.question.trim())return {question:plan.question.trim()};
@@ -184,7 +189,7 @@ export function createServerTaskCommand({profile,tasks,localModel,interactionWor
         }
         const instruction=[skill.content,skill.localAi?.work].filter(Boolean).join('\n');
         const start=performance.now();
-        if(localModel?.groupedWork){
+        if(localModel?.groupedWork&&!knowledgeCheck?.private){
           const limit=AbortSignal.timeout(chatTotalMs);
           const wait=signal?AbortSignal.any([signal,limit]):limit;
           try{
@@ -199,8 +204,9 @@ export function createServerTaskCommand({profile,tasks,localModel,interactionWor
           }
         }
         if(work)return work({purpose:'服务器任务参数',context,instruction,schema,signal,onProgress:progress,redraft:skill.workRedrafts,start,
+          localOnly:knowledgeCheck?.private,allowCloudReview:!knowledgeCheck?.private,
           skill:{name:skill.skill,version:skill.version},normalize(raw){const value=normalize(raw);return value&&{value};},
-          async cloud(activeSignal,feedback){
+          cloud:knowledgeCheck?.private?undefined:async(activeSignal,feedback)=>{
             const messages=[...(feedback?[{role:'user',content:'上轮复审反馈：'+feedback.slice(0,600)}]:[]),
               {role:'user',content:'只根据以下请求准备 PC 任务建议，并限定在这些可用模板：'+JSON.stringify(context)}];
             const result=await call('/api/assistant/message',{messages,target_device_id:target},activeSignal);

@@ -229,7 +229,7 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
     return promise;
   }
 
-  async function preview(text,{work,signal,onProgress,submittedAt=now(),localOnly=false,diaryBody=false}={}){
+  async function preview(text,{work,signal,onProgress,submittedAt=now(),localOnly=false,diaryBody=false,knowledge}={}){
     if(!canStart())throw Error('精灵暂时不能继续领取，登记请求已保留');
     if(work&&[...text].length>6000)throw Object.assign(Error('登记文字超过 6000 字符，请缩短后重试。'),{code:'MESSAGE_TOO_LARGE'});
     const match=singleReminder.exec(text.trim());
@@ -240,7 +240,8 @@ export function createRegistrationFlow({ profile, request, canStart = () => true
       // 复杂事项仍走原登记技能，仅将指令日期位置换算为东京日期。
       if(!work)text=text.replace(match[1],deadline);
     }
-    return work?registrationDraft(text,{call,work,signal,onProgress,submittedAt,localOnly,diaryBody}):call('/api/assistant/recording-plan',{text},signal);
+    if(localOnly&&!work)throw Error('本机拟稿暂不可用，请稍后再试。');
+    return work?registrationDraft(text,{call,work,signal,onProgress,submittedAt,localOnly,diaryBody,knowledge}):call('/api/assistant/recording-plan',{text},signal);
   }
   async function submitReminder({id,title,content,deadline},submissionId,onIssued){
     // 云端提醒模板使用东京当地时分，REST 入队已校验明确的 +09:00。

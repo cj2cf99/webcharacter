@@ -4,6 +4,7 @@ import {calendarDate,datePattern as calendarDatePattern,tokyoDate} from './calen
 import {timeValue} from './reminder-command.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
 import {prepareMainSiteTask} from '../agent/host/main-site-task-adapter.mjs';
+import {isKnowledgeFeedback,knowledgeReply} from './knowledge-runtime.mjs';
 
 const title='对话内容转录';
 const labels={organize:'归纳事项',recover:'逐段核对遗漏',classify:'按模板拟稿',review:'集中复核'};
@@ -314,7 +315,7 @@ function withRegistrationDiary(rows,work,turns){
     dependsOn:row.dependsOn.map(parent=>merged.has(parent)?id:parent)}))];
 }
 
-async function transcribe(data,model,skill,save,signal){
+async function transcribe(data,model,skill,save,signal,rules){
   const {turns}=data,templates=skill.templates.templates;
   const stamp=titleTime.format(turns[0].at);
   for(const turn of turns)turn.tokyo=localTime.format(turn.at)+' JST';
@@ -325,7 +326,7 @@ async function transcribe(data,model,skill,save,signal){
     if(stage==='recover')schema={type:'object',additionalProperties:false,required:input.reviewIds,
       properties:Object.fromEntries(input.reviewIds.map(id=>[id,schema]))};
     if(stage==='classify'&&input.organized.recentFactIds.length)schema.properties.candidates.minItems=1;
-    return call(JSON.stringify(input),{schema,instruction:skill.localAi[stage],
+    return call(JSON.stringify({...input,...rules}),{schema,instruction:skill.localAi[stage],
       skill:{name:skill.skill,version:skill.version},maxTokens}).then(result=>{
       if(result?.error)throw Error(result.error);
       return result;
@@ -433,14 +434,14 @@ function candidateSignature(row){
   return JSON.stringify([row.type,title?.replace(/^\[([^\]]*)\]绯月助记-.*$/u,'$1'),params,row.evidence.map(item=>item.quote).toSorted()]);
 }
 
-async function transcribeThread(job,model,skill,save){
+async function transcribeThread(job,model,skill,save,rules){
   const templates=skill.templates.templates;
   const [organizeCommand,classifyCommand,reviewCommand]=skill.workflow?.steps??[{run:'organize'},{run:'classify'}];
   const prompt=(stage,command,extra='')=>[skill.localAi[stage],command.instruction,extra].filter(Boolean).join('\n');
   const menu=Object.entries(templates).map(([type,t])=>({type,useWhen:t.useWhen,required:t.required,defaults:t.defaults}));
   const history=job.history.slice(-4).map(({who,at,text})=>({speaker:who,text:text.slice(0,110),tokyo:localTime.format(at)+' JST'}));
   const turns=job.turns.flatMap(({id,at,text,handled,reference,backgroundRegistration})=>threadSections(text)
-    .map((part,index)=>({sourceId:id+'-'+index,speaker:'user',text:part,tokyo:localTime.format(at)+' JST',at,
+    .map((part,index)=>({sourceId:id+'-'+index,originalSourceId:id,speaker:'user',text:part,tokyo:localTime.format(at)+' JST',at,
       handled:handled&&!backgroundRegistration||reference})));
   let calls=0;
   async function step(key,stage,input,instruction,maxTokens,validate){
@@ -456,10 +457,11 @@ async function transcribeThread(job,model,skill,save){
     const signal=AbortSignal.timeout(55000);
     attempt.state='running';save(stage);
     try{
-      const output=await model.memory(JSON.stringify(attempt.input),instruction,schemaFor(skill.schemas,stage),signal,
+      const output=await model.memory(JSON.stringify({...attempt.input,...rules}),
+        instruction,schemaFor(skill.schemas,stage),signal,
         {name:skill.skill,version:skill.version,stage,aiPriority:4,aiBudget:45000,aiTier:'4',boundedOutput:true,backgroundBudget:true,
-          adaptiveOutput:stage,fullOutputBudget,maxTokens});
-      call.raw=output;
+          adaptiveOutput:stage,fullOutputBudget,maxTokens,aiPrivate:Boolean(rules)});
+      if(!rules)call.raw=output;
       if(!output||output.error)throw Object.assign(Error(output?.error??'模型未返回结果'),{code:output?.error});
       attempt.output=validate(output);call.state=attempt.state='done';delete attempt.error;save(stage);return attempt.output;
     }catch(error){
@@ -615,7 +617,7 @@ export async function prepareConversationBatch(rows,request,now=Date.now){
   return {missing,plan:{pending:[],chain:{name:title,nodes}}};
 }
 
-export function createConversationTranscription({profile,safeStorage,model,registration,prepareBatch,canStart=()=>true,
+export function createConversationTranscription({profile,safeStorage,model,registration,prepareBatch,knowledge,canStart=()=>true,
   changed=()=>{},notify=()=>{},log,loadSkill=()=>readInteractionSkill('conversationTranscription'),now=Date.now}){
   const db=new DatabaseSync(join(profile,'conversation-transcription.sqlite'));
   db.exec(`CREATE TABLE IF NOT EXISTS transcriptions (
@@ -717,11 +719,32 @@ export function createConversationTranscription({profile,safeStorage,model,regis
       const progress=phase=>{
         job.stage=worker.active.stage=labels[phase];save(job,'running');changed();
       };
-      job.result=job.line?await transcribeThread(job,model,skill,progress):await transcribe(job,model,skill,progress,signal);
+      if(knowledge){
+        job.knowledge??=[];
+        job.knowledgeThrough??=0;
+        // 拆片前按已保存的原始发言核对，每个原事件只检查一次。
+        while(job.knowledgeThrough<job.turns.length){
+          const turn=job.turns[job.knowledgeThrough];
+          const checked=!turn.knowledgePrivate&&!isKnowledgeFeedback(turn.text)&&await knowledge.inspect({
+            text:turn.text,source:'message/'+turn.id,scope:'transcription',signal,priority:4});
+          if(knowledgeReply(checked))throw Object.assign(Error(checked.answer),{code:'KNOWLEDGE_REVIEW_REQUIRED'});
+          if(checked?.state==='apply')job.knowledge.push({sourceId:turn.id,rules:checked.rules.map(({id,revision})=>({id,revision}))});
+          job.knowledgeThrough++;
+          save(job,'running');
+          if(job.knowledgeThrough<job.turns.length&&job.line)throw Object.assign(Error('等待下一次本机知识核对'),{code:'THREAD_STAGE_YIELD'});
+        }
+      }
+      const references=(job.knowledge??[]).flatMap(({sourceId,rules})=>{
+        const current=knowledge?.readRules(rules)??[];
+        return current.length?[{sourceId,rules:current}]:[];
+      });
+      const rules=references.length?{本机知识:references}:undefined;
+      job.result=job.line?await transcribeThread(job,model,skill,progress,rules):await transcribe(job,model,skill,progress,signal,rules);
       job.durationMs=now()-job.closedAt;job.error=undefined;
       if(job.line)removeDuplicates(job);
       if(!job.result.rows.length)setRetention(job);
       delete job.skill;
+      delete job.knowledge;
       save(job,job.result.rows.length?'ready':'empty');
       if(job.line)threadFinished(job.line);
       if(job.result.rows.length)try{notify(status(job));}catch{/* 任务管理仍可查看已保存的结果。 */}
@@ -774,7 +797,9 @@ export function createConversationTranscription({profile,safeStorage,model,regis
         return;
       }
       const {turns,history,...line}=batch;
-      save({id:line.id,at:line.at,closedAt:now(),turns,history,line,steps:{}},'queued');changed();kick();
+      const allowed=turns.filter(turn=>!turn.knowledgePrivate&&!isKnowledgeFeedback(turn.text));
+      if(!allowed.length){threadFinished(batch);return;}
+      save({id:line.id,at:line.at,closedAt:now(),turns:allowed,history:history.filter(turn=>!turn.knowledgePrivate),line,steps:{}},'queued');changed();kick();
     },
     async referencedReminder({id,at,text,title,deadline,revise,messageId}){
       const {templates:{templates}}=await loadSkill();
@@ -793,7 +818,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
       changed();
     },
     turn(id,turn){
-      if(closed)return;
+      if(closed||turn.knowledgePrivate||isKnowledgeFeedback(turn.text))return;
       const job=get(id)??{id,at:turn.at,turns:[],work:[],state:'open'};
       if(job.state!=='open')return;
       if(!job.turns.some(item=>item.id===turn.id)){job.turns.push(turn);save(job,'open');}

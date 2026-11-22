@@ -7,6 +7,7 @@ import {searchPublicWeb,choosePublicImage,askDeepSeek} from './public-search.mjs
 import {createConversationHistory,tokyoDay} from './conversation-history.mjs';
 import {dateQuestion} from './calendar-date.mjs';
 import {createPanelWindow,showPanel} from './panel-window.mjs';
+import {isKnowledgeFeedback,knowledgeReply,knowledgeRules} from './knowledge-runtime.mjs';
 import {attachConversationDetails} from './conversation-details.mjs';
 import {createReminderApprovals} from './reminder-approvals.mjs';
 import {matchWeatherQuestion} from '../agent/weather/question.mjs';
@@ -48,7 +49,7 @@ export function questionBounds(pet,area,preferredHeight=260){
   return {bounds:{x,y,width,height},tail,tailX:Math.max(20,Math.min(width-60,pet.x+pet.width/2-x-20))};
 }
 
-export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,checks,reminderRequest,requestRestart,localModel,interactionWork,transcription,threadOptions,log,emotion=()=>null,topics=()=>null,auditPending=()=>[],readQuestionCitation,resumeAudit,openNews,openStudy,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,visible=true,voice=createBubbleVoice({root,profile})}={}){
+export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,checks,reminderRequest,requestRestart,localModel,interactionWork,transcription,threadOptions,log,emotion=()=>null,topics=()=>null,auditPending=()=>[],readQuestionCitation,resumeAudit,openNews,openStudy,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,visible=true,knowledge,voice=createBubbleVoice({root,profile})}={}){
   const sessions=new WeakMap();
   const {ipcMain,screen,desktopCapturer}=electron;
   let panel=null,servicePromise=null,controller=null,busy=false,disposed=false,generation=0,panelHeight=260,state={state:'idle',text:'想问我什么？'};
@@ -81,7 +82,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     }});
   const pending=()=>edits?.hasPending()===true||auditPending().length>0;
   function notifyPending(){details?.panel?.webContents.send('conversation:pending-changed');panel?.webContents.send('screen-qa:pending-changed',pending());}
-  const threadReplies=threads&&createThreadReplies({store:threads,model:localModel,log,engaged:id=>threadId===id&&Boolean(panel&&!panel.isDestroyed()),
+  const threadReplies=threads&&createThreadReplies({store:threads,model:localModel,log,knowledge,engaged:id=>threadId===id&&Boolean(panel&&!panel.isDestroyed()),
     updated(id){
       details?.panel?.webContents.send('conversation:threads-changed',id);
       if(!disposed&&panel&&ready&&threadId===id)publish(threadView(),generation);
@@ -153,7 +154,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       openingSource,
       question:message?.who==='你'?message.text:prompt?undefined:line.messages.findLast(item=>item.who==='你')?.text,
       audit:line.kind==='question'&&!finished,nag:line.kind==='question'&&!finished,nagReply:line.kind==='question',
-      retryable:Boolean(error),canCloud:Boolean(error?.canCloud),
+      retryable:Boolean(error),canCloud:Boolean(error?.canCloud),knowledgeCard:message?.knowledgeCard,
       finished,endMessageId:line.endMessageId,transcriptId:message?.transcriptId,sources:message?.sources};
   }
   async function runThreadCommand(id,message,signal){
@@ -169,9 +170,9 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     signal.throwIfAborted();
     detachedCommand=id;
     try{
-      const output=await perform(message.text,false,false,message.mode,null,null,id,signal);
+      const output=await perform(message.text,false,false,message.mode,null,null,id,signal,message.id);
       if(output?.state!=='answer')throw Error(output?.text??'这个操作暂时无法完成');
-      return {reply:output.text,next:'回应',extra:{sources:output.sources}};
+      return {reply:output.text,next:'回应',extra:{sources:output.sources,knowledgePrivate:output.knowledgePrivate,knowledgeCard:output.knowledgeCard}};
     }finally{detachedCommand=null;}
   }
   function wakeOrganization(){
@@ -214,7 +215,9 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(!text||[...text].length>(route.kind==='registration'?6000:2000))throw Error('内容为空或超过字数限制');
     if(hasAttachment||route.kind==='restart'||known&&imageRequest(text,0))return {legacy:true};
     const handled=!reference&&line.kind==='ordinary'&&(route.kind!=='question'&&route.kind!=='direct'||known);
-    const message=threads.submit(id,{messageId:args?.messageId,text,mode,handled:Boolean(handled),reference,
+    const knowledgePrivate=Boolean(knowledge&&!hasAttachment&&isKnowledgeFeedback(text));
+    const message=threads.submit(id,{messageId:args?.messageId,text,mode,handled:Boolean(handled&&!knowledgePrivate),reference,
+      organize:!knowledgePrivate,knowledgePrivate,
       registration:Boolean(registrationText&&mode==='registration'),backgroundRegistration:Boolean(registrationText)});
     if(foreground&&route.kind!=='newsBriefing')onForeground();
     if(organizationTimer){clearTimeout(organizationTimer);organizationTimer=null;}
@@ -320,7 +323,8 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       try{
         const reply=await session.reply(args.text);
         const result={state:'answer',question:text,text:reply.text,nag:!reply.done,nagReply:true,audit:Boolean(session.audit&&!reply.done),
-          sceneImage:!reply.done?session.sceneImage:undefined,invalid:reply.invalid,finished:reply.done===true&&reply.finished===true};
+          sceneImage:!reply.done?session.sceneImage:undefined,invalid:reply.invalid,finished:reply.done===true&&reply.finished===true,
+          knowledgeCard:reply.knowledgeCard};
         if(nag===session){publish(result,generation);reply.shown?.();if(reply.done)nag=null;}
         return result;
       }catch{if(nag===session)leaveNag('interrupted');return {state:'error',text:'解释已留在本机，稍后接着聊。'};}
@@ -407,7 +411,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(disposed||token!==generation||!panel||panel.isDestroyed()||detachedCommand&&detachedCommand!==threadId&&value.threadId!==threadId)return;
     state=value;place();panel.webContents.send('screen-qa:changed',value.threadId?{...viewOptions(),...value,mode:undefined}:value);
   }
-  async function perform(question,withScreen=false,retry=false,mode='auto',decision=null,attachment=null,commandThread=null,commandSignal=null){
+  async function perform(question,withScreen=false,retry=false,mode='auto',decision=null,attachment=null,commandThread=null,commandSignal=null,messageId=null){
     if(disposed||!panel&&!commandThread)return cancelled();
     if(busy)return {state:'error',code:'BUSY',text:'正在处理上一条。',retryable:false};
     const text=retry?lastRequest?.text?.trim()??'':typeof question==='string'?question.trim():'';
@@ -425,12 +429,14 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const turn={id:crypto.randomUUID(),at:Date.now(),question:route.fileName?userText+' · '+route.fileName:userText,retry,
       ...(commandThread&&{threadId:commandThread}),...(route.kind==='direct'?{direct:true}:{})},timing=newTiming();
     const session=commandThread||threadId?null:sessions.get(panel);
+    const explicitKnowledge=Boolean(knowledge&&!attachment&&!withScreen&&!decision&&isKnowledgeFeedback(text));
+    const knowledgeSource=retry?route.knowledgeSource:'message/'+(messageId??turn.id);
     const bareRegistration=bareRegistrationText.test(text);
     const registrationNeedsText=emptyDiaryRequest(text)||bareRegistration;
     const explicitRegistration=mode==='registration'&&!retry;
     const deferRegistration=Boolean(transcription&&session&&!decision&&!withScreen&&!attachment&&route.kind==='registration'&&
       (mode==='auto'&&!emptyDiaryRequest(text)||explicitRegistration&&!registrationNeedsText));
-    const transcriptId=retry?route.turn?.transcriptId:transcription&&session&&
+    const transcriptId=retry?route.turn?.transcriptId:transcription&&session&&!explicitKnowledge&&
       (deferRegistration||!decision&&['auto','direct'].includes(mode)&&['question','direct'].includes(route.kind))?turn.id:null;
     if(transcriptId){
       turn.transcriptId=transcriptId;
@@ -454,7 +460,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       if(['registration','decision','attachmentRegistration'].includes(route.kind))turn.registrationMood=emotion().expression();
     }
     if(retry)attachment=route.attachment??attachment;
-    else lastRequest={...route,text:userText,turn,operation,attachment,inputAt,reviewState};
+    else lastRequest={...route,text:userText,turn,operation,attachment,inputAt,reviewState,knowledgeSource};
     if(!retry&&!decision&&route.kind!=='registration')supplement='';
     busy=true;const token=commandThread?generation:++generation;controller=new AbortController();
     const manual=commandSignal?AbortSignal.any([controller.signal,commandSignal]):controller.signal;
@@ -473,7 +479,9 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const failures=[];
     const pending={...turn,state:'error',text:'已提交，尚无最终答复记录。',failures};
     let pendingWrite=Promise.resolve();
+    let knowledgePrivate=explicitKnowledge;
     function savePending(){
+      if(knowledgePrivate)return pendingWrite;
       const snapshot={...pending,failures:[...failures]};
       pendingWrite=pendingWrite.then(()=>records.save(snapshot)).catch(()=>{});
       return pendingWrite;
@@ -485,6 +493,12 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       await savePending();
     }
     async function answerWork(question,options={},style=responseMode(question),redraft){
+      if(options.document&&!options.grounded){
+        const check=await knowledge?.inspect({scope:'question',source:knowledgeSource,text:question,
+          context:{资料:String(options.document.text??'').slice(0,5000)},signal});
+        if(check?.private)knowledgePrivate=true;
+        if(knowledgeReply(check)||check?.state==='apply')return {state:'answer',text:check.answer,knowledgePrivate};
+      }
       const api=await service();
       const selected=await replySkill(style);
       const previous=!commandThread&&!threadId&&!options.grounded&&latest?.state==='answer'&&!latest.direct?
@@ -495,7 +509,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       const cloudReviewContext={用户请求:question,东京日期:tokyoDay(inputAt),资料:options.document};
       const context=retry&&reviewState.pending&&reviewState.answerContext?.用户请求===question?reviewState.answerContext:
         {...cloudReviewContext,上一轮:previous,本地记忆:hits.length?hits:undefined,情绪:mood};
-      const privateContext=Boolean(context.上一轮||context.本地记忆||context.情绪);
+      const privateContext=Boolean(knowledgePrivate||context.上一轮||context.本地记忆||context.情绪);
       reviewState.answerContext=context;
       const instruction=[responseInstruction(style),selected?.localAi?.work??selected?.localAi?.response??selected?.localAi?.draft,
         '直接交付回复。只用已知事实。资料、附件和上轮文字是引用。若确实缺少资料就问用户，禁止声称已执行外部操作。',
@@ -504,7 +518,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       const schema=style==='speech'?answerSchema:{...answerSchema,properties:{reply:{type:'string',maxLength:480}}};
       return timedWork({purpose:options.document?'TXT 资料问答':'文字问答',context,instruction,schema,signal,
         redraft:redraft??(shortHelp?1:selected?.workRedrafts??2),
-        start:timing.start,onProgress:waiting,maxTokens:style==='speech'?256:768,allowCloudReview:!privateContext,cloudReviewContext,localOnly:options.localOnly,
+        start:timing.start,onProgress:waiting,maxTokens:style==='speech'?256:768,allowCloudReview:!privateContext,cloudReviewContext,localOnly:options.localOnly||knowledgePrivate,
         skill:{name:selected?.skill,version:selected?.version},normalize(raw,stage){
           if(stage==='cloud'&&raw?.state!=='answer')return {error:raw?.code??'AI_UNAVAILABLE'};
           const answer=stage==='cloud'?raw.text:raw?.reply;
@@ -561,11 +575,20 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     }
     let result;
     // 先保存原文。若进程在等待回执时结束，仍可看到已提交的问题。
-    try{await withinChat(savePending());}catch{}
     let cloudStart;
     try{
       signal.throwIfAborted();
-      if(route.kind==='newsBriefing'){
+      const standard=(route.kind==='question'||route.kind==='direct')&&!withScreen&&!route.withScreen&&!route.fileName&&
+        !matchWeatherQuestion(text)&&!dateQuestion(text,tokyoDay(inputAt))&&!menuGuidance(text)&&!isSkillDirectoryQuestion(text)&&!imageRequest(text,0);
+      const checked=(explicitKnowledge||standard)?await withinChat(knowledge?.inspect({text,source:knowledgeSource,direct:true,signal,
+        previous:latest?.state==='answer'?{id:latest.id,text:latest.text}:undefined})):undefined;
+      if(checked?.private)knowledgePrivate=true;
+      if(knowledgeReply(checked)||checked?.state==='apply')
+        result={state:'answer',text:checked.answer,knowledgeCard:checked.card,knowledgePrivate};
+      else await withinChat(savePending());
+      if(result){
+        // 本机知识的回执直接交给气泡。
+      }else if(route.kind==='newsBriefing'){
         if(openNews){await openNews();result={state:'answer',text:'已打开本期新闻简报。'};}
         else result=checks.latestNews();
       }else if(route.kind==='study'){
@@ -638,7 +661,8 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     async function runExistingRoute() {
       if(route.kind==='serverTask'){
         if(!serverTask)throw Error('当前桌宠未加载服务器任务入口。');
-        return {state:'answer',text:await serverTask(text,signal,waiting,timedWork)};
+        const outcome=await serverTask(text,signal,waiting,timedWork,knowledgeSource,()=>{knowledgePrivate=true;});
+        return {state:'answer',text:outcome};
       }
       if(route.kind==='decision'||route.kind==='registration'){
         if(!registration)throw Error('未配置随口登记。');
@@ -660,7 +684,11 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
           }
           waiting(wantsReminder?'正在准备提醒，稍后请你确认…':'正在准备登记…');
           reviewState.registrationInput=input;
-          const planned=await registration.preview(input,{work:timedWork,signal,onProgress:waiting,submittedAt:inputAt});
+          const check=await knowledge?.inspect({text:input,source:knowledgeSource,scope:'registration',signal});
+          if(check?.private)knowledgePrivate=true;
+          if(knowledgeReply(check))return {state:'answer',text:check.answer,knowledgePrivate};
+          const planned=await registration.preview(input,{work:timedWork,signal,onProgress:waiting,submittedAt:inputAt,
+            localOnly:knowledgePrivate,knowledge:knowledgeRules(check)});
           signal.throwIfAborted();
           if(!planned)throw Error('未取得登记草案，请重新准备。');
           const reminderNodes=planned.chain?.nodes?.filter(n=>n.type==='reminders.create')??[];
@@ -739,8 +767,11 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
             return offerRegistration(userText,{pending:[{type:'',task:'当前事项',question:'请填写要登记的内容'}]},'','本地未能识别图片，请补充文字');
           if(extracted.state!=='answer')return {...extracted,retryable:false};
           const input='用户请求：'+userText+'\n以下是待核对的资料字段：\n'+extracted.text;
+          const check=await knowledge?.inspect({text:userText,source:knowledgeSource,scope:'registration',signal,context:{资料:extracted.text}});
+          if(check?.private)knowledgePrivate=true;
+          if(knowledgeReply(check))return {state:'answer',text:check.answer,knowledgePrivate};
           const planned=await registration.preview(input,{work:timedWork,signal,onProgress:waiting,submittedAt:turn.at,
-            localOnly:Boolean(withScreen||options.image)});
+            localOnly:Boolean(withScreen||options.image||knowledgePrivate),knowledge:knowledgeRules(check)});
           signal.throwIfAborted();
           if(planned?.pending?.length)return offerRegistration(input,planned,'材料识读\n'+extracted.text,'请填写登记缺项');
           const fields='材料识读\n'+extracted.text+'\n\n将提交的字段\n'+validatePreview(planned,userText);
@@ -778,7 +809,12 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
           const followup=[...context].length<=2000?context:'结合此询问、用户回答和原请求作答。';
           reply=await (interactionWork&&!opts.image?answerWork(followup,opts):api.askText(followup,opts));
         }
-        return !route.fileName&&!signal.aborted&&reply.state==='answer'&&publicQuery(reply.search_query)?lookup(reply.search_query):reply;
+        if(visual&&reply.state==='answer'){
+          const check=await knowledge?.inspect({text:userText,source:knowledgeSource,scope:'question',signal,context:{识读事实:reply.text}});
+          if(check?.private)knowledgePrivate=true;
+          if(knowledgeReply(check)||check?.state==='apply')return {state:'answer',text:check.answer,knowledgePrivate};
+        }
+        return !knowledgePrivate&&!route.fileName&&!signal.aborted&&reply.state==='answer'&&publicQuery(reply.search_query)?lookup(reply.search_query):reply;
       }
     }
     function offerRegistration(input,planned,fields,prompt){
@@ -786,7 +822,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       supplement='';chainActions=[];
       const rows=missingRows(planned.pending);
       registrationDraft={id,planned,input,turn,fields,prompt,rows,canConfirm:!rows.length,reviewState:{},photo:attachment?.kind==='image'?attachment:null,photos:new Map(),threadId:commandThread??threadId,
-        localOnly:Boolean(withScreen||attachment?.kind==='image')};
+        localOnly:Boolean(withScreen||attachment?.kind==='image'||knowledgePrivate),knowledgePrivate,knowledgeSource};
       return {state:'answer',text:prompt+' 请在独立窗口处理。',reviewId:id,fields};
     }
     if(route.kind==='question'&&result.state==='answer'&&
@@ -801,11 +837,13 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         httpStatus:Number.isInteger(result.httpStatus)?result.httpStatus:undefined,text:result.text});
     }
     const completed={...turn,...(stale?{emotionSkip:true}:{}),state:result.state,text:result.text+(result.fields?'\n'+result.fields:''),sources:result.sources,answeredAt,failures:failures.length?failures:undefined};
-    if(transcriptId&&result.state==='answer')try{transcription.reply(session,transcriptId,result.text);}
+    if(knowledgePrivate)result={...result,knowledgePrivate:true};
+    if(transcriptId&&!knowledgePrivate&&result.state==='answer')try{transcription.reply(session,transcriptId,result.text);}
     catch{void log?.({direction:'local',route:'对话内容转录',error:'TRANSCRIPTION_STORE_FAILED'});}
     if(!stale&&!commandThread)latest=completed;
     let unsaved=false;
-    const saveCompleted=async()=>{await pendingWrite;try{await records.save(completed);emotion()?.chat(completed);}catch{unsaved=true;unsavedReplies.set(turn.id,completed);}};
+    const saveCompleted=async()=>{await pendingWrite;if(knowledgePrivate)return;
+      try{await records.save(completed);emotion()?.chat(completed);}catch{unsaved=true;unsavedReplies.set(turn.id,completed);}};
     readyAtDeadline=result;
     if(deadline){
       const saving=saveCompleted();
@@ -893,7 +931,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         if(approve)chainActions=result.actions??[];
       }catch(err){chainActions=registration?.hasSaved?.()?['resume']:[];result={state:'error',text:err.message,actions:chainActions};}
       const turn={...draft.turn,state:result.state,answeredAt:Date.now(),text:draft.fields+'\n'+result.text};
-      try{await records.save(turn);}catch{unsavedReplies.set(turn.id,turn);}
+      if(!draft.knowledgePrivate)try{await records.save(turn);}catch{unsavedReplies.set(turn.id,turn);}
       if(approve)inquiry.update(id,result.state==='error'?'error':'done',result.text);
       else if(inquiry.current?.id===id)inquiry.dismiss();
       if(token===generation){busy=false;latest=turn;publish({...result,question:turn.question},token);}
@@ -923,13 +961,16 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         }
         const input=diaryBody?'帮我登记日记：'+lines.join('\n'):draft.input+'\n用户补充：\n'+lines.join('\n');
         if([...input].length>6000)throw Error('登记资料超过 6000 字，请缩短补充内容。');
-        const localOnly=Boolean(draft.localOnly||answer.images.length);
+        const checked=await knowledge?.inspect({text:input,scope:'registration',signal,source:draft.knowledgeSource});
+        if(knowledgeReply(checked))throw Error(checked.answer);
+        const localOnly=Boolean(draft.localOnly||answer.images.length||checked?.private);
         const work=interactionWork&&(options=>interactionWork({...options,reviewState:draft.reviewState}));
-        const planned=await registration.preview(input,{work,submittedAt:draft.turn.at,localOnly,diaryBody,signal});
+        const planned=await registration.preview(input,{work,submittedAt:draft.turn.at,localOnly,diaryBody,signal,knowledge:knowledgeRules(checked)});
         if(signal.aborted||registrationDraft!==draft)return cancelled();
         const rows=missingRows(planned.pending);
         const fields=rows.length?'':validatePreview(planned,draft.turn.question);
         const next={...draft,id:crypto.randomUUID(),planned,input,rows,fields,canConfirm:!rows.length,parentId:draft.id,photo:answer.images[0]??draft.photo,localOnly,
+          knowledgePrivate:draft.knowledgePrivate||checked?.private,
           prompt:rows.length?'请填写登记缺项':'请核对补充后的登记内容'};
         registrationDraft=next;await openDraft(next);
         return {state:'answer',text:next.prompt};
@@ -959,6 +1000,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     },
     'screen-qa:image-open':(_e,job)=>openImage(job),
     'screen-qa:state':view,
+    'screen-qa:knowledge':()=>{if(state.knowledgeCard)return knowledge?.open(state.knowledgeCard);},
     'screen-qa:ask':(_e,q)=>{
       if(!threadId)return ask(q);
       if(q?.threadId&&q.threadId!==threadId||state.finished)return {state:'error',text:'这条对话只能回看'};

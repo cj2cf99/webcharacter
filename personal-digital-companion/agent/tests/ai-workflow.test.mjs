@@ -1,7 +1,7 @@
-import {createHash} from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
+import {createHash} from 'node:crypto';
 import {mkdtempSync,mkdirSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,relative,resolve} from 'node:path';
@@ -69,6 +69,26 @@ test('模型时限和前台让行保存可区分的回执，取消后前台先�
   assert.equal(logs[1].error,'AbortError');
   assert.equal(logs[1].stage,'取消');
   assert.equal(ai.readAiStep(logs[1].ai_step_id).status,'cancelled');
+});
+
+test('知识核对共享模型时隙且正文不进入请求库或诊断快照',async t=>{
+  const {file,after}=fixture(t),logs=[];
+  const ai=createAiWorkflowModel({file,log:event=>logs.push(event),safeStorage:{
+    encryptString:value=>Buffer.from(value),decryptString:value=>Buffer.from(value).toString(),
+  },model:model({async memory(text,_instruction,_schema,_wait,skill){
+    assert.equal(skill.aiTier,'4');
+    return {text};
+  }})});
+  after(()=>ai.close());
+  const secret='仅供知识推理的测试短语';
+  assert.deepEqual(await ai.memory(secret,'整理',textSchema,signal(),{aiPrivate:true,aiTier:'4',aiBudget:500}),
+    {text:secret});
+  const db=new DatabaseSync(file,{readOnly:true});
+  try{
+    assert.equal(db.prepare('SELECT count(*) AS n FROM ai_requests').get().n,0);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM ai_attempt_snapshots').get().n,0);
+  }finally{db.close();}
+  assert.equal(logs.length,0);
 });
 
 test('19 条延后等待，20 条唤醒，独立请求不按正文归并',async t=>{
@@ -375,15 +395,39 @@ test('单条补评最终被拒仍会留痕，同批和后续材料继续保存',
   }finally{db.close();}
 });
 
-test('本地整理、服务器文本校对、本地评价、多阶段日记和旧唠叨共享单个模型时隙',async t=>{
+test('手记成文用固定复审纠正来源归属，带反馈改写后才交付',async t=>{
+  const {file,after}=fixture(t),seen=[];
+  const ai=createAiWorkflowModel({file,model:model({async memory(text,prompt,schema,_signal,skill){
+    seen.push([skill.aiTier,skill.stage,isReviewer(schema)]);
+    if(isReviewer(schema)){
+      assert.match(prompt,/按来源纠正行动者/);
+      return seen.length===2?{decision:'revise',reason:'发布者是用户，绯月只读了登记',field:'',replacement:''}:review(schema);
+    }
+    if(seen.length===1)return {text:'我发布了绘图工具。',comment:'我很满意。',thread:''};
+    assert.match(JSON.parse(text).上轮反馈,/发布者是用户/);
+    return {text:'我看到你发布了绘图工具。',comment:'我也替你高兴。',thread:''};
+  }})});
+  after(()=>ai.close());
+  const schema={type:'object',properties:Object.fromEntries(['text','comment','thread'].map(key=>[key,{type:'string'}])),
+    required:['text','comment','thread'],additionalProperties:false};
+  const result=await ai.memory('发布登记由用户完成','写这条手记',schema,signal(),
+    {name:'diary-writing',stage:'narrate',aiReview:true,aiReviewGuidance:'按来源纠正行动者'});
+  assert.equal(result.text,'我看到你发布了绘图工具。');
+  assert.deepEqual(seen.map(([tier,,checking])=>[tier,checking]),[['2',false],['4',true],['9',false],['9',true]]);
+});
+
+test('并行任务共享模型时隙，旧唠叨修订接口返回 404 时跳过模型调用',async t=>{
   const {profile,file,after}=fixture(t),seen=[],active={count:0};
   const {DB,sqlite,close}=openTestDatabase();
   sqlite.exec(migration);
-  function api(owner,path,options={}){
+  const refinementResponses=[];
+  async function api(owner,path,options={}){
     const key=path.slice('/api/memory/'.length);
     if(key.startsWith('sources?'))return Response.json({records:[]});
     if(key.startsWith('expenses?'))return Response.json({records:[],complete:true});
-    return personalityMemory(new Request('https://fixture.test'+path,options),{DB},owner);
+    const response=await personalityMemory(new Request('https://fixture.test'+path,options),{DB},owner);
+    if(path.endsWith('/refine'))refinementResponses.push([path,response.status]);
+    return response;
   }
   const ai=createAiWorkflowModel({file,model:model({
     async memory(text,_prompt,schema,_signal,skill){
@@ -443,29 +487,9 @@ test('本地整理、服务器文本校对、本地评价、多阶段日记和�
   assert.match(server,/取消/);assert.equal(prompts,1);
   assert.match(evaluation,/补写 1 条执行评价/);
   assert.match(diary,/已同步/);
-  assert.match(nag,/已修订唠叨/);
+  assert.deepEqual(refinementResponses,[['/api/memory/nags/closed/refine',404]]);
+  assert.equal(nag,'本轮没有符合条件的修订');
   assert(seen.some(x=>x.endsWith(':narrate')));
   assert(seen.some(x=>x.endsWith(':summary')||x.endsWith(':header')));
-  assert(seen.some(x=>x.startsWith('memory-refinement:review')));
-});
-
-test('手记成文用固定复审纠正来源归属，带反馈改写后才交付',async t=>{
-  const {file,after}=fixture(t),seen=[];
-  const ai=createAiWorkflowModel({file,model:model({async memory(text,prompt,schema,_signal,skill){
-    seen.push([skill.aiTier,skill.stage,isReviewer(schema)]);
-    if(isReviewer(schema)){
-      assert.match(prompt,/按来源纠正行动者/);
-      return seen.length===2?{decision:'revise',reason:'发布者是用户，绯月只读了登记',field:'',replacement:''}:review(schema);
-    }
-    if(seen.length===1)return {text:'我发布了绘图工具。',comment:'我很满意。',thread:''};
-    assert.match(JSON.parse(text).上轮反馈,/发布者是用户/);
-    return {text:'我看到你发布了绘图工具。',comment:'我也替你高兴。',thread:''};
-  }})});
-  after(()=>ai.close());
-  const schema={type:'object',properties:Object.fromEntries(['text','comment','thread'].map(key=>[key,{type:'string'}])),
-    required:['text','comment','thread'],additionalProperties:false};
-  const result=await ai.memory('发布登记由用户完成','写这条手记',schema,signal(),
-    {name:'diary-writing',stage:'narrate',aiReview:true,aiReviewGuidance:'按来源纠正行动者'});
-  assert.equal(result.text,'我看到你发布了绘图工具。');
-  assert.deepEqual(seen.map(([tier,,checking])=>[tier,checking]),[['2',false],['4',true],['9',false],['9',true]]);
+  assert.equal(seen.some(x=>x.startsWith('memory-refinement:review')),false);
 });

@@ -5,7 +5,7 @@ import {chatTotalMs,memoryInferenceMs} from './chat-budget.mjs';
 
 export const LOCAL_MODEL_FILE = 'Qwen3.5-0.8B-Q4_K_M.gguf';
 const entry = fileURLToPath(new URL('./local-model-process.mjs', import.meta.url));
-export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 15000,device='cpu',intentBudgetMs=6500}) {
+export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 15000,device='cpu',intentBudgetMs=6500,threads=4}) {
   const modelName=basename(modelPath).replace(/-Q4_K_M\.gguf$/i,'');
   let status = {state: 'idle'};
   let child, loading, finishLoad, request, loadTimer, exited;
@@ -40,7 +40,7 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
       try {
         if (!(await stat(modelPath)).isFile()) throw Object.assign(Error(), {code:'ENOENT'});
         if (status.state !== 'loading') return;
-        const worker = utilityProcess.fork(entry,[modelPath,device],{serviceName:'Feiyue Local AI',stdio:'ignore'});
+        const worker = utilityProcess.fork(entry,[modelPath,device,String(threads)],{serviceName:'Feiyue Local AI',stdio:'ignore'});
         child = worker;
         exited=new Promise(resolve=>worker.once('exit',resolve));
         worker.on('message', value => {

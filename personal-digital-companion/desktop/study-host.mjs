@@ -1,4 +1,5 @@
 import {readFile,stat} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {loadStudyConnection} from './cloud-connection.mjs';
@@ -115,8 +116,9 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
     formalRetry:({id,index,accepted})=>local().formalRetry(id,index,accepted),
     basic:async()=>{
       const pack=JSON.parse(await readFile(resolve(bundle,'study-initial.v1.json'),'utf8'));
-      if(pack.version!==1||pack.release!=='fixed-initial-20261106-v1'||pack.scripts?.length!==30||
-        new Set(pack.scripts.map(s=>s.id)).size!==30||pack.scripts.some(s=>s.turns?.length!==10))throw Error('基础剧本版本不符');
+      // 对来源发布包的 JSON 内容校验，允许检出的文件使用不同换行符。
+      const digest=createHash('sha256').update(JSON.stringify(pack)).digest('hex');
+      if(pack.release!=='fixed-initial-20261106-v1'||digest!=='8508388a079c918eea7a2d075e1a312649a5ccb930b7397ca74c41c43c4ed595')throw Error('基础剧本版本不符');
       const materials=importStudyMaterials(pack);
       local().cache(materials);
       return materials.length;

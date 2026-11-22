@@ -1,11 +1,12 @@
 import {diaryQuestionBudgetMs,untilAbort} from './chat-budget.mjs';
 import {createDiaryAudit} from './diary-audit.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {deferredNagReply,explicitRoleCorrection,nagReplyKey as replyKey,reusedLongReply} from './nag-reply-check.mjs';
 import {tokyoDay} from './conversation-history.mjs';
 import {cleanMemory} from './personality-diary.mjs';
 import {answeredQuestion,emptyFollowUp,isPendingQuestion,pendingLimit,questionReminder,questionTarget,questionText,sameQuestion} from './pending-questions.mjs';
+import {isKnowledgeFeedback,knowledgeReply} from './knowledge-runtime.mjs';
 
 const dayMs=86400000;
 const game=/游戏|遊戲|ゲーム|娱乐|娛樂|娯楽|gaming|entertainment/i;
@@ -37,7 +38,7 @@ function diaryCitationLines(reading){
   }).map(line=>line.trim()).filter(Boolean);
 }
 
-export function createPersonalityNags({store,emotion,initiative,show,idle,canContinue=()=>true,notify=()=>{},changed=()=>{},onAnswered,questionImage,now=Date.now,random=Math.random}){
+export function createPersonalityNags({store,emotion,initiative,show,idle,canContinue=()=>true,notify=()=>{},changed=()=>{},onAnswered,questionImage,knowledge,now=Date.now,random=Math.random}){
   let active=null,syncJob=null,stopped=false,working=false;
   const lifetime=new AbortController();
   const pendingQuestions=()=>store.nags().filter(isPendingQuestion)
@@ -60,7 +61,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     return syncJob;
   }
   function save(n){n.localQuestion=true;store.saveNag(n);changed();if(answeredQuestion(n)&&!n.localOnly)void sync();}
-  const audit=createDiaryAudit({store,show,idle,canContinue,save,now,random});
+  const audit=createDiaryAudit({store,show,idle,canContinue,save,now,random,protectReply:privateReply,lookupReply:assessReply});
   function talk(n,who,text){n.talk.push({who,text,at:iso(now())});}
   async function think(stage,data,fields,signal,aiPriority,aiCurrentPriority,selected){
     const skill=selected??await readInteractionSkill('basicNag');signal.throwIfAborted();
@@ -196,6 +197,9 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     if(n.localInitiativeRound)emotion?.feedback(n.localInitiativeRound,status);
   }
   async function appraise(n,text,signal,thread){
+    const checked=await assessReply(n,text,signal,thread);
+    if(knowledgeReply(checked)||checked?.state==='apply')
+      return {reply:checked.answer,evaluation:'已按本机知识核对',mood:n.mood||'平静',next:checked.state==='need'?checked.answer:''};
     const {最新发言:latest,目的:purpose,...history}=thread?.context??{};
     const currentQuestion=replyKey(n.next);
     const inHistory=currentQuestion&&history.之前发言?.some(turn=>turn.发言者==='绯月'&&replyKey(turn.原话)===currentQuestion);
@@ -247,6 +251,26 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     }
     return {reply:deferredNagReply,evaluation:'已保存原话，待复核这轮回应。',mood,next:'',deferred:true};
   }
+  async function privateReply(n,text,signal,id='reply/'+randomUUID()){
+    if(!knowledge||!isKnowledgeFeedback(text))return null;
+    const result=await knowledge.inspect({text,source:id,signal,direct:true,scope:'question',
+      learn:!n.localOnly,previous:{id:n.id+'/'+n.turns,text:n.next}});
+    return {text:knowledgeReply(result)??'请单独发送纠正的条件和做法。有需要归档的答复时请另发一条。',
+      knowledgeCard:result?.card};
+  }
+  async function assessReply(n,text,signal,thread){
+    const result=await knowledge?.inspect({text:n.next||n.title,scope:'active',signal,learn:false,priority:thread?.priority??6,
+      context:{事项:n.title,用户答复:text,现场:n.localContext,同线依据:thread?.context}});
+    if(result?.private){n.localOnly=true;save(n);}
+    return result;
+  }
+  async function prepareQuestion(source,prompt,signal,context){
+    const result=await knowledge?.inspect({text:prompt,signal,source:'question/'+source.source+'/'+source.source_id,scope:'active',
+      context:{主题:source.title,原因:source.reason,局部事实:source.localContext,依据:context},learn:!source.localOnly,priority:3});
+    if(result?.state==='apply')return 'resolved';
+    if(['unavailable','conflict'].includes(result?.state))return 'deferred';
+    return 'ask';
+  }
   function remind(added=false){
     const queue=pendingQuestions(),preferred=queue[0];
     const message=questionReminder(queue.length,added);
@@ -275,6 +299,11 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     working=true;
     try{
       const result=await audit.prepare(signal,progress);
+      if(result.n){
+        const checked=await prepareQuestion(result.n,result.n.next??result.n.title,signal,result.n.localQuestionEvidence??result.n.refs);
+        if(checked==='resolved')return {detail:'已用本机知识核对手记疑点'};
+        if(checked==='deferred')return {deferred:true};
+      }
       if(result.n&&queue(result.n))return {detail:'已新增 1 个手记质问'};
       if(!result.deferred&&pending())remind();
       if(result.n)return {detail:'已拟出手记质问，本轮未能加入待确认'};
@@ -304,6 +333,9 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
           const mood=emotion?.expression().word??v.mood;
           if(!v.evaluation||!mood||!questionText(v.question))throw Error('没有取得可用的念叨问题');
           if(/^[1-5]$/u.test(v.score)&&source.source!=='diary')source.priority=Number(v.score);
+          const checked=await prepareQuestion(source,v.question,signal,v.evidence);
+          if(checked==='resolved')return {detail:'已用本机知识核对这项疑点'};
+          if(checked==='deferred')return {deferred:true};
           if(enqueue(reading?{...source,localQuestionEvidence:v.evidence}:source,{prompt:v.question,evaluation:v.evaluation,mood}))return {detail:'已新增 1 个待确认问题'};
         }
       }
@@ -361,6 +393,10 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     async function reply(input){
       const text=store.nagText?await store.nagText(n,input,session.controller.signal):cleanMemory(input);
       if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请把这次的解释控制在 3000 字以内。'};
+      session.replySource??='reply/'+randomUUID();
+      const correction=await privateReply(n,text,session.controller.signal,session.replySource);
+      session.replySource=null;
+      if(correction)return correction;
       talk(n,'你',text);save(n);
       if(n.source==='topic'){
         const result=await completeTopic(n,session.controller.signal);
@@ -405,6 +441,12 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     if(n.localThreadReceipts?.[key])return n.localThreadReceipts[key];
     if(!isPendingQuestion(n))throw Error('原质问已经收尾');
     const text=messages.filter(message=>!message.legacyPending).map(message=>message.text).join('\n');
+    const feedback=messages.find(message=>!message.legacyPending&&isKnowledgeFeedback(message.text));
+    if(feedback){
+      const correction=await privateReply(n,feedback.text,signal,'message/'+feedback.id);
+      if(correction)return {reply:correction.text+(messages.length>1?' 其余待归档答复请单独发送。':''),next:'回应',
+        extra:{knowledgePrivate:true,knowledgeCard:correction.knowledgeCard}};
+    }
     const last=n.talk.at(-1);
     if(!text&&messages[0].legacyPending&&last?.who==='你'&&last.threadMessage!==key){
       last.threadMessage=key;
@@ -421,7 +463,8 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       const outcome=await audit.threadAnswer(n,signal,priority,stillLatest,context,isOpen,currentPriority);
       if(!outcome||!isOpen())return;
       if(outcome.done&&!outcome.finished)throw Error(outcome.text);
-      return receipt({reply:outcome.text+(outcome.finished?'\n我先把手记收到这里啦。':''),next:outcome.finished?'结束':'追问'});
+      return receipt({reply:outcome.text+(outcome.finished?'\n我先把手记收到这里啦。':''),next:outcome.finished?'结束':'追问',
+        extra:outcome.knowledgePrivate?{knowledgePrivate:true}:undefined});
     }
     if(n.source==='topic'&&stillLatest()){
       await onAnswered?.(n,signal);
@@ -438,7 +481,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     const next=followUp(n,v);
     talk(n,'绯月',v.reply);n.next=questionText(v.next);
     if((!next||ended(n))&&stillLatest()){
-      const result={reply:v.deferred?v.reply:v.reply+'\n这件事我先记到这里啦。',next:'结束'};
+      const result={reply:v.deferred?v.reply:v.reply+'\n这件事我先记到这里啦。',next:'结束',extra:n.localOnly?{knowledgePrivate:true}:undefined};
       await onAnswered?.(n,signal);
       signal.throwIfAborted();
       if(!stillLatest())return isOpen()?receipt({reply:v.reply,next:'回应'}):undefined;
@@ -447,7 +490,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       return result;
     }
     if(next)setFollowUp(n,next);
-    return receipt({reply:[v.reply,next].filter(Boolean).join('\n'),next:next?'追问':'回应'});
+    return receipt({reply:[v.reply,next].filter(Boolean).join('\n'),next:next?'追问':'回应',extra:n.localOnly?{knowledgePrivate:true}:undefined});
   }
   function threadEnd(id){
     if(active?.id===id)active.leave('later');
@@ -456,7 +499,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     if(!n||!isPendingQuestion(n))return;
     finish(n,'用户结束');
   }
-  return {assessPending,poll,pollAudit,resume,enqueue,remind,recoverAudit:audit.recover,pending,pendingQuestions,threadAnswer,threadEnd,flush:sync,async close(){
+  return {assessPending,prepareQuestion,poll,pollAudit,resume,enqueue,remind,recoverAudit:audit.recover,pending,pendingQuestions,threadAnswer,threadEnd,flush:sync,async close(){
     audit.close();active?.leave('interrupted');stopped=true;lifetime.abort();await syncJob;
   }};
 }

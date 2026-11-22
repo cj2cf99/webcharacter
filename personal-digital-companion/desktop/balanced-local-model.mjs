@@ -68,7 +68,7 @@ function workChoices(gpu,residentMiB,primaryResident,tier){
   return choices;
 }
 
-export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=readGpuLoad,create=createLocalModel,localFirst=false}){
+export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=readGpuLoad,create=createLocalModel,localFirst=false,taskDevice}){
   let current,chosen,initializing,warmController,exiting,busy=false,closed=false,suspended=false,failedText='',failures=0,lastUsed,lastWork;
   let preheated,idleTimer;
   function release(){
@@ -89,21 +89,27 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
   let memoryTurn;
   async function prepare(signal,{correcting=false,fixedAggressive=false,primaryChat=false,workTier,refinement=false,aiTier,gpuOnly=false,gpuSample}={}){
     if(!current)await untilAbort(exiting,signal);
-    if(aiTier&&chosen?.size===aiTier&&current?.snapshot().state==='ready'&&(aiTier!=='9'||chosen.device==='gpu'))return true;
-    if(refinement&&current?.snapshot().state==='ready'&&
+    const fixed=taskDevice&&(aiTier||workTier)?{size:taskDevice==='cpu'?'2':'4',device:taskDevice}:null;
+    if(fixed&&chosen?.size===fixed.size&&chosen.device===fixed.device&&current?.snapshot().state==='ready'&&
+        (fixed.device==='cpu'||current.snapshot().gpuLayers>0))return true;
+    if(!fixed&&aiTier&&chosen?.size===aiTier&&current?.snapshot().state==='ready'&&(aiTier!=='9'||chosen.device==='gpu'))return true;
+    if(!fixed&&refinement&&current?.snapshot().state==='ready'&&
         (chosen?.size==='2'||chosen?.size==='4'&&chosen.device==='gpu'))return true;
     const route=workTier==='main'?'main':fixedAggressive?'direct':primaryChat&&!correcting?'auto':undefined;
     const ready=current?.snapshot();
-    if(route&&preheated===route&&ready?.state==='ready'&&ready.gpuLayers>0){
+    if(!fixed&&route&&preheated===route&&ready?.state==='ready'&&ready.gpuLayers>0){
       if(!gpuOnly)preheated=undefined;
       return true;
     }
-    let gpu=gpuSample===undefined?await untilAbort(readGpu(),signal):gpuSample;
+    let gpu=fixed?.device==='cpu'?null:gpuSample===undefined?await untilAbort(readGpu(),signal):gpuSample;
     if(gpuOnly&&gpu)gpu={...gpu,utilization:0};
     const resident=chosen?.device==='gpu'?current?.snapshot().vramMiB??0:0;
     const primaryResident=chosen?.file===primaryChatFile && chosen.device==='gpu' && current?.snapshot().state==='ready';
-    let choices=aiTier?[
-      ...(gpu&&gpu.utilization<65&&gpu.freeMiB+resident>=minFreeMiB[aiTier]?[{size:aiTier,device:'gpu'}]:[]),
+    const gpuFits=size=>gpu&&gpu.utilization<65&&gpu.freeMiB+resident>=minFreeMiB[size];
+    let choices;
+    if(fixed)choices=fixed.device==='cpu'||gpuFits(fixed.size)?[fixed]:[];
+    else choices=aiTier?[
+      ...(gpuFits(aiTier)?[{size:aiTier,device:'gpu'}]:[]),
       ...(aiTier==='9'?[]:[{size:aiTier,device:'cpu'}])
     ]:refinement?[
       ...(gpu&&gpu.utilization<50&&gpu.freeMiB+resident>=minFreeMiB['4']?[{size:'4',device:'gpu'}]:[]),
@@ -130,7 +136,7 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
       chosen=choice;
       const {size,device}=choice;
       const worker=current=create({utilityProcess,modelPath:join(dirname(modelPath),choice.file??('Qwen3.5-'+size+'B-Q4_K_M.gguf')),
-        device,loadTimeout:chatTotalMs,intentBudgetMs:correcting?45000:20000,log});
+        device,...(fixed?{threads:2}:{}),loadTimeout:chatTotalMs,intentBudgetMs:correcting?45000:20000,log});
       await untilAbort(worker.start(),signal);
       if(closed)return false;
       const state=worker.snapshot();
@@ -235,7 +241,7 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
   }
   async function memory(text,instruction,schema,signal,skill){
     if(workSession)await waitForWorkSession(signal);
-    if(busy||closed||suspended||memoryTurn)throw Error('本地模型忙碌');
+    if(busy||closed||suspended||memoryTurn)throw Object.assign(Error('本地模型忙碌'),{code:'LOCAL_AI_BUSY'});
     const controller=new AbortController(),done=Promise.withResolvers();
     const refinement=skill?.name==='memory-refinement';
     let worker;
@@ -243,7 +249,7 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     memoryTurn={controller,done:done.promise};busy=true;
     try{
       await untilAbort(initializing,signal);
-      const gpuSample=skill?.backgroundBudget?await untilAbort(readGpu(),signal):undefined;
+      const gpuSample=taskDevice!=='cpu'&&skill?.backgroundBudget?await untilAbort(readGpu(),signal):undefined;
       if(gpuSample?.utilization>=70)throw Object.assign(Error('显卡正在使用，本机整理稍后继续'),{code:'LOCAL_AI_GPU_DEFERRED'});
       if(!await prepare(signal,{fixedAggressive:!refinement,refinement,aiTier:skill?.aiTier,gpuSample}))
         throw Object.assign(Error(skill?.aiTier?'本机 '+skill.aiTier+'B 未达到当前阶段的装载条件':
@@ -270,7 +276,7 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     busy=true;
     try{
       await untilAbort(initializing,signal);
-      const ready=lastWork?.session===session&&lastWork?.tier===tier&&current?.snapshot().state==='ready';
+      const ready=lastWork?.session===session&&lastWork?.tier===tier&&current?.snapshot().state==='ready'&&(!taskDevice||chosen.device===taskDevice&&chosen.size===(taskDevice==='cpu'?'2':'4'));
       if(workSession?.id===session&&lastWork?.session===session&&!ready)return {error:'LOCAL_AI_PROCESS_EXITED'};
       if(!ready&&!await prepare(signal,{workTier:tier}))return {error:lastUsed?.error??'LOCAL_AI_NOT_READY'};
       lastWork={session,tier};
