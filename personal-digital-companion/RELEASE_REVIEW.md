@@ -1402,3 +1402,5 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 **花园清单。** 线上结构同步新增 0 项，修订 154。本次归属网页角色组件 #16 → 绯月（桌面精灵）#61，新增发布成功记录 #80 和明细 #158，版本 29.0 → 30.0，修订 154 → 155。批次 feiyue-action-review-budget-20261123，摘要 9150c15b6115f714c62e9971984f4b7353782da6fb31e2918f2d030e69a4636c，具体内容已送用户确认。此时尚未提交 SQL 或写入生产花园。
 
 **来源 Git 同步。** 已安装修复和实际清单的来源提交 86e56ec5ba31ae78ccc76cdef1e9b5f709edcf20 已推送，并回读 origin/codex/workspace-checkpoint-20261120 核对一致。
+
+**花园登记与回执。** 用户明确确认原清单。绯月正式 REST v5 校验原批次不存在，复核生产修订 154 及结构无新增，先提交精确 SQL b56753f0653680e7367e0bb7275f8f306018a719 后仅提交一次。批次 feiyue-action-review-budget-20261123 于 2026-11-23 02:21:27 JST 完成，状态 done，1/1 verified。独立线上回读确认「网页角色组件 #16 → 绯月（桌面精灵）#61」、部署 #80 和明细 #158、版本 29.0 → 30.0、修订 155，发布标记唯一。2026-11-23 02:21:32 JST 签收并回读。完整回执 G:/cloudflare/myapp/database/changes/feiyue-action-review-budget-20261123/execution-receipt.json。主项目 844 项测试通过，Wrangler dry-run 通过。清单、SQL 和回执三项已推送至 codex/garden-feiyue-action-review-budget-20261123，远端提交 104bd7123de0a27f17ede5546887678f8b3582c9 已核对。
