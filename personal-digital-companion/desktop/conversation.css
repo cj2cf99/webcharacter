@@ -68,3 +68,5 @@ details.fy-card>summary.thread-summary{display:block}
 .thread-note textarea{width:100%;box-sizing:border-box;resize:vertical}
 .thread-note small{grid-column:1/-1}
 .thread-note[hidden],#threadTabs[hidden]{display:none}
+.ai-snapshot{margin:.45rem 0;min-width:0}
+.ai-snapshot .snapshot-text{white-space:pre-wrap;overflow-wrap:anywhere;margin:.2rem 0 .7rem}

@@ -1,3 +1,5 @@
+import {emotionMaterials} from './emotion-prompt.mjs';
+
 const api=window.conversations,day=document.querySelector('#day'),list=document.querySelector('#turns'),status=document.querySelector('#status');
 const clock=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
 let generation=0, view='chat';
@@ -410,6 +412,41 @@ function renderPending(data,explicit){
   if(sections.length)pendingReceipt='';
   status.textContent=pendingReceipt||(data.questions?.length?'绯月有 '+data.questions.length+' 个问题等你回答。':sections.length?'可以先关闭，稍后再决定。':'没有待确认的事项。');
 }
+function jsonDetails(label,value){
+  const details=element('details','');
+  details.append(element('summary',label));
+  details.ontoggle=()=>{
+    if(details.open&&details.childElementCount===1)details.append(element('pre',JSON.stringify(value,null,2)));
+  };
+  return details;
+}
+function showSnapshot(container,data){
+  const {input,output}=data;
+  container.replaceChildren();
+  const section=(title,text)=>{
+    container.append(element('strong',title),element('p',text,'snapshot-text'));
+  };
+  if(output?.failure)section('调用失败',output.failure.message||output.failure.code);
+  else if(output?.value!==undefined){
+    const value=output.value;
+    if(input?.skill?.name==='emotion-appraisal'&&value?.status){
+      const labels={keep:'保留原欲求',release:'放下原欲求',satisfied:'原欲求已满足'};
+      section('模型判断',[labels[value.status]??value.status,value.quote&&'证据：'+value.quote,value.line].filter(Boolean).join('\n'));
+    }else section('模型回执',typeof value==='string'?value:JSON.stringify(value,null,2));
+  }
+  if(input){
+    let material=input.text;
+    if(input.skill?.name==='emotion-appraisal'&&typeof material==='string'&&material.startsWith('{')){
+      try{
+        const old=JSON.parse(material);
+        if(old.事件)material=emotionMaterials(old);
+      }catch{/* 不认识的旧格式仍显示原文。 */}
+    }
+    if(material)section('本轮材料',material);
+    if(input.instruction)section('判断指令',input.instruction);
+  }else section('本轮材料','此快照未保留输入。');
+  container.append(jsonDetails('原始 JSON',data));
+}
 function logRow(line){
   const row=card('section','muted');
   let data;
@@ -443,20 +480,28 @@ function logRow(line){
   if(Object.keys(detail).length){
     const more=element('details',''),summary=element('summary','');
     summary.append(element('span','›','fy-caret'),document.createTextNode(' 明细'));summary.className='fy-meta';
-    more.append(summary,element('pre',JSON.stringify(detail,null,2)));
+    more.append(summary);
     if(detail.ai_step_id&&api.aiStep){
-      const snapshot=element('details','');
-      snapshot.append(element('summary','AI 调用快照'));
-      snapshot.ontoggle=async()=>{
-        if(!snapshot.open||snapshot.childElementCount>1)return;
-        const output=element('pre','正在读取…');snapshot.append(output);
+      const label=' '+(detail.skill==='emotion-appraisal'?'情绪复盘':'AI 调用快照');
+      summary.lastChild.textContent=label;
+      let state='idle';
+      more.ontoggle=async()=>{
+        if(!more.open||state!=='idle')return;
+        state='loading';
+        summary.lastChild.textContent=label;
+        const output=element('div','正在读取…','ai-snapshot');more.append(output);
         try{
           const data=await api.aiStep(detail.ai_step_id);
-          output.textContent=data?JSON.stringify(data,null,2):'快照未找到';
-        }catch{output.textContent='快照读取失败，关闭后可重试。';snapshot.addEventListener('toggle',()=>{if(!snapshot.open)output.remove();},{once:true});}
+          if(data)showSnapshot(output,data);else output.textContent='快照未找到';
+          output.append(jsonDetails('日志元数据',detail));
+          state='ready';
+        }catch{
+          state='idle';
+          output.remove();
+          summary.lastChild.textContent=' 快照读取失败，重新展开可重试';
+        }
       };
-      more.append(snapshot);
-    }
+    }else more.append(element('pre',JSON.stringify(detail,null,2)));
     row.append(more);
   }
   return row;

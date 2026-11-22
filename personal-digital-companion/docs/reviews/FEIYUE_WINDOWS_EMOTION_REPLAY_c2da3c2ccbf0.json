@@ -1,0 +1,72 @@
+{
+  "installedBase": "4f12e1d6d84e",
+  "installedSource": "f23b2e56055323b35216a83420eaeff89d20f1b7",
+  "sourceBase": "03942463b3de924c380ae45a0c29a30bfbbee1c6",
+  "items": [
+    {
+      "path": "desktop/emotion-service.mjs",
+      "before": "2469dc939ef84a320c18829e096b6ac0cc8967e9f6057b86422374cfa35ec54f",
+      "after": "9c53553f7ceda3782efd7aa0c2a713a4394857c7130b6dc286e93407c82060d3"
+    },
+    {
+      "path": "desktop/conversation-ui.mjs",
+      "before": "9ac61e6bbc34908965b2034182cc09bbd0d38fc2a833ba694ede9cd2ed9bf7ab",
+      "after": "942cb01533d32fbcebbd4cafb5ca8fa673817ab7eb113b967e32187b70e13c82"
+    },
+    {
+      "path": "desktop/conversation.css",
+      "before": "81783c0897a8755239262b37849c562f09af39f253bcd2ffca9a5b58c149f87b",
+      "after": "91e8f3178f2bd0b221e54947d70e31a0a2d25d08463c58d2120f3f3a1f9e04ee"
+    },
+    {
+      "path": "desktop/source-updates.mjs",
+      "before": "adbaac2405a62beefb6cf0efef790494f8a891b4df7363c24292b78dfc07ddb4",
+      "after": "a7c19f6e567fb7b64bda75a3293a1c1ffabdf0d5134b20daa341a403a97973b7"
+    },
+    {
+      "path": "desktop/emotion-prompt.mjs",
+      "before": null,
+      "after": "692d0c999707721b7a0158b5c40d04140ae679ee94e44dda7b56e8dec96cfbf1"
+    },
+    {
+      "path": "output/desktop-bundle/conversation-ui.mjs",
+      "before": "9ac61e6bbc34908965b2034182cc09bbd0d38fc2a833ba694ede9cd2ed9bf7ab",
+      "after": "942cb01533d32fbcebbd4cafb5ca8fa673817ab7eb113b967e32187b70e13c82"
+    },
+    {
+      "path": "output/desktop-bundle/conversation.css",
+      "before": "81783c0897a8755239262b37849c562f09af39f253bcd2ffca9a5b58c149f87b",
+      "after": "91e8f3178f2bd0b221e54947d70e31a0a2d25d08463c58d2120f3f3a1f9e04ee"
+    },
+    {
+      "path": "output/desktop-bundle/emotion-prompt.mjs",
+      "before": null,
+      "after": "692d0c999707721b7a0158b5c40d04140ae679ee94e44dda7b56e8dec96cfbf1"
+    },
+    {
+      "path": "skills/emotion-appraisal/source/SKILL.md",
+      "before": "1e3576f57ab939c5653ac4550a30a2f2f0e62cbaa60aea87529fe31aa409b7b8",
+      "after": "7373475b4010f480249b2a31e74c3479a6261bc044aeb71c1bebaf3ea4e45c9b"
+    },
+    {
+      "path": "skills/emotion-appraisal/source/local-ai.json",
+      "before": "ceb6faca41d796e7c7c4b33033186e19c617e2d773ad3e7bda433d4bc6c397c7",
+      "after": "86c305082c3214c0e947d36789f89188a96a22e85226d5d647b6cfc718120e0f"
+    },
+    {
+      "path": "skills/emotion-appraisal/versions/emotion-appraisal-v2-3/SKILL.md",
+      "before": null,
+      "after": "33286a4f22786c0559ad6a044f69782fb10cf57b2afb55d1e99877dd3e49cb73"
+    },
+    {
+      "path": "skills/emotion-appraisal/versions/emotion-appraisal-v2-3/local-ai.json",
+      "before": null,
+      "after": "86c305082c3214c0e947d36789f89188a96a22e85226d5d647b6cfc718120e0f"
+    },
+    {
+      "path": "skills/emotion-appraisal/latest.json",
+      "before": "90b63990c55ed02c0b4224ac936eb798eeffe2605c84620b61346c28e781ed66",
+      "after": "bafdea5e4fcc0714aa12bb4010109e004f2e85d3a6e27b68744eea07611e0e90"
+    }
+  ]
+}

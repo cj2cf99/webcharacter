@@ -2,14 +2,22 @@ import {createEmotionStore,inclinations} from './emotion-core.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
 import {tokyoDay} from './conversation-history.mjs';
 import {cleanMemory} from './personality-diary.mjs';
+import {emotionMaterials} from './emotion-prompt.mjs';
 
 const short={type:'string'};
 export function fields(properties){
   return {type:'object',properties,required:Object.keys(properties),additionalProperties:false};
 }
 const phrase={...short,maxLength:180},emotionWord={...short,minLength:1,maxLength:6};
-const assessment=fields({delta:{enum:[-1,0,1]},status:{enum:['keep','release','satisfied']},quote:phrase,
-  positive:emotionWord,negative:emotionWord,line:{...phrase,minLength:1},want:phrase,condition:phrase,curiosity:{...short,maxLength:40}});
+const expressionFields={delta:{enum:[-1,0,1]},positive:emotionWord,negative:emotionWord,
+  line:{...phrase,minLength:1},want:phrase,condition:phrase,curiosity:{...short,maxLength:40}};
+const noQuote={const:''};
+const newDesireAssessment=fields({status:{const:'keep'},quote:noQuote,...expressionFields});
+const priorDesireAssessment={oneOf:[
+  fields({status:{const:'keep'},quote:noQuote,...expressionFields,want:{const:''},condition:{const:''}}),
+  fields({status:{const:'release'},quote:noQuote,...expressionFields}),
+  fields({status:{const:'satisfied'},quote:{...phrase,minLength:1},...expressionFields})
+]};
 const word=v=>typeof v==='string'&&/^[\p{Script=Han}]{1,6}$/u.test(v);
 const timeout=code=>code==='TimeoutError'||code==='LOCAL_AI_TIMEOUT';
 export function weightedHistory(records){
@@ -73,17 +81,21 @@ export function createEmotionService({profile,model,diary,memory,topics,now=Date
         }
         return [day,String(mood).slice(0,10),strength];
       });
-      const input=JSON.stringify({事件:e.kind,用户:facts.user,绯月:facts.reply,事实:facts.title,当前情绪:s.word,档位:s.grade,
-        事件前欲求:s.desire?.id===e.prior?s.desire:null,本周:inclinations[store.week()-1],
-        喜好:topics?.preferences()??[],历史权重:"各组按近到远，最新占半，其余均分；仅一条占全部。列为日期、情绪词、已知强度。",手记:historyGroup(history.pages),念叨:historyGroup(history.nags)});
-      const a=await model.memory(input,loop.localAi.assessment+'\n'+appraisal.localAi.assess+'\n情绪表达、想做的事和满足条件各用一句简短的话。',assessment,signal,
-        {name:appraisal.skill,version:appraisal.version,boundedOutput:true,backgroundBudget:true,maxTokens:384,aiBudget:45000});
+      const desire=s.desire&&s.desire.id===e.prior&&s.desire.at<=e.at?s.desire:null;
+      const context={事件:e.kind,...(e.kind==='chat'?{用户:facts.user,绯月:facts.reply}:{事实:facts.title}),
+        当前情绪:s.word,档位:s.grade,事件前欲求:desire&&{want:desire.want,condition:desire.condition},
+        本周:inclinations[store.week()-1],喜好:topics?.preferences()??[],手记:historyGroup(history.pages),念叨:historyGroup(history.nags)};
+      const eventRule=e.kind==='chat'?'完整交流按实际影响填 delta：关心陪伴 +1，普通指令 0，明确伤害 -1。':
+        '本次证据只有事实标题。登记、发布、整理等记录只证明标题明确记载的工作。核对标题具体完成了什么：若没有写明旧欲求所需的能力、对象或效果，quote 填空串，status 填 keep。delta 填 0，curiosity 留空。';
+      const instruction=[appraisal.localAi.assess,eventRule,loop.localAi.assessment].join('\n\n');
+      const a=await model.memory(emotionMaterials(context),instruction,desire?priorDesireAssessment:newDesireAssessment,signal,
+        {name:appraisal.skill,version:appraisal.version,stage:'情绪复盘',boundedOutput:true,backgroundBudget:true,maxTokens:384,aiBudget:45000});
       signal.throwIfAborted();
       if(![-1,0,1].includes(a.delta)||!['keep','release','satisfied'].includes(a.status)||!word(a.positive)||!word(a.negative)||
         !['line','quote','want','condition'].every(k=>typeof a[k]==='string'&&a[k].length<=180)||!a.line.trim()){
         deferred.set(e.seq,Infinity);warn('评价字段无效，保留待评','EMOTION_RESULT_INVALID');return;
       }
-      store.settle(e,a,{skill:appraisal.version,loop:loop.version,model:'Qwen3.5 Aggressive 9B',context:JSON.parse(input)});
+      store.settle(e,a,{skill:appraisal.version,loop:loop.version,model:'Qwen3.5 Aggressive 9B',context});
       deferred.delete(e.seq);
       if(topics&&typeof a.curiosity==='string'&&a.curiosity.length>=2&&a.curiosity.length<=40&&facts.user.includes(a.curiosity)){
         try{await topics.remember(a.curiosity,e.key);}

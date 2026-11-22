@@ -113,7 +113,11 @@ async function test(){
     checks:{notices:(...args)=>checkStore.notices(...args),markRead:id=>checkStore.markRead(id),
       read:(_day,page)=>({nextAt:Date.now()+8*60_000,first:false,running:false,pending:true,page:page??0,pages:2,
       events:[{at:Date.now(),due:Date.now(),project:'到期事项',status:'未执行',detail:page?'旧一页':'绯月忙 · 连续第 2 次'}]})},
-    readTraffic:cursor=>({lines:[JSON.stringify({direction:'receive',method:'GET',route:cursor?'/api/older':'/api/tasks',status:200})],next:cursor?null:[1]})});
+    readAiStep:()=>({input:{skill:{name:'emotion-appraisal'},text:JSON.stringify({
+      事件:'work',事实:'技能目录登记',事件前欲求:{id:'legacy-private-id',want:'听写',condition:'三语可用'},
+      当前情绪:'担忧',档位:-4,本周:'亲密陪伴',手记:[],念叨:[]})},output:{value:{status:'keep',quote:''}}}),
+    readTraffic:cursor=>({lines:[JSON.stringify({direction:'receive',method:'GET',route:cursor?'/api/older':'/api/tasks',status:200,
+      ...(!cursor&&{ai_step_id:'old-snapshot',skill:'emotion-appraisal'})})],next:cursor?null:[1]})});
   const owner=new TestWindow({width:250,height:360});
   const settings=attachSettings(runtime,{...common,win:owner});
   const hosts=[review,registration,weather,history,settings,polls,inbox];
@@ -296,6 +300,11 @@ async function test(){
     assert.equal(await testUi(history,"document.querySelector('#nextCheckPage').disabled && document.querySelectorAll('#turns section').length===1 && document.querySelector('#checkPage').textContent==='第 2 页'"),true);
     await testUi(history,"document.querySelector('#previousCheck').click()");
     await until(history,"document.querySelector('#turns').textContent.includes('/api/tasks') && !document.querySelector('#nextCheckPage').disabled");
+    await testUi(history,"document.querySelector('#turns summary').click()");
+    await until(history,"document.querySelector('.ai-snapshot')?.innerText.includes('事实标题：技能目录登记')");
+    assert.ok(await testUi(history,"!document.querySelector('.ai-snapshot').innerText.includes('legacy-private-id') && !document.querySelector('.ai-snapshot details').open"));
+    await testUi(history,"document.querySelector('.ai-snapshot summary').click()");
+    await until(history,"document.querySelector('.ai-snapshot pre')?.textContent.includes('legacy-private-id')");
     console.log('PASS：今日工时行、零与小数、执行回执、只读任务日志及前后翻页。');
     console.log('PASS：七个面板通过深浅色、原生标题栏和热加载检查；轮询设定通过保存、重开、队列定位和数值边界检查。');
   }finally{for(const host of hosts)host.close();checkStore.close();owner.destroy();}

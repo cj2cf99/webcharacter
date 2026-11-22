@@ -1573,3 +1573,31 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 **花园决策。** 展示安装后的精确清单后，用户选择「暂不登记」。批次草案 feiyue-nag-reply-20261123 仍留在本机，花园线上及登记 SQL Git 均无本次写入。
 
 **主动质问续答源码同步。** 发布源码提交 f23b2e56055323b35216a83420eaeff89d20f1b7 已推送至 WebCharacter codex/workspace-checkpoint-20261120，并独立回读确认。导出该提交的项目源码复跑两项续答专项，均通过。用户选择暂缓花园登记，未提交花园 SQL。
+
+## 2026-11-23 JST · Windows 正式绯月情绪复盘候选 c2da3c2ccbf0
+
+**用户需求与验收。** 用户确认情绪复盘按事件类型组织询问、任务日志默认分段并折叠原始 JSON，要求用截图里的外置 Skill 与技能目录发布登记工作记录验证可保留原欲求，随后要求更新正式版。验收核对模型原始 keep、空引文、同一欲求编号与三语满足条件、无奖励，以及从任务日志按需展开原始快照。此次用户明确选择「本次不登记」。
+
+**目标与基线。** 只更新本机 Windows 绯月，正式目录 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion。原实例 REST v6，PID 11844 于 2026-11-23 04:03:19.596 JST 启动。正式安装基线 4f12e1d6d84e，对应已同步来源提交 f23b2e56055323b35216a83420eaeff89d20f1b7。此次来源为 G:/selftool/WebCharacter/personal-digital-companion 的工作区，开发 Git 基线 03942463b3de924c380ae45a0c29a30bfbbee1c6。实际安装文件和工作区另有其他变更，安装以现有文件逐项合入。
+
+**精确比较与文件。** 以下命令均在 G:/selftool/WebCharacter/work/feiyue-emotion-release-20261123 下运行。windows-files.json 的 SHA-256 为 c2da3c2ccbf0a8b0f9e008f8fe905cfbd0b413a26eb101703dae5545f6d18246。每项列出完整前后 SHA-256，before 与 candidate 两目录分别保存原件与待装文件，使用 `git diff --no-index before candidate` 查看实际差异。开发仓副本在 personal-digital-companion/docs/reviews/FEIYUE_WINDOWS_EMOTION_REPLAY_c2da3c2ccbf0.json。本次 13 项，9 项替换、4 项新增。
+
+- desktop/emotion-service.mjs 及新增 desktop/emotion-prompt.mjs 将原扁平 JSON 输入改为事件证据、事前欲求、表达参考和历史。交流保留双方原话，工作等事件取事实标题。状态决定引文是否可填；保留旧欲求时新欲求字段为空。沿用原状态库和既有奖励结算。
+- desktop/conversation-ui.mjs、desktop/conversation.css、desktop/source-updates.mjs 及 output/desktop-bundle 下的 conversation-ui.mjs、conversation.css、emotion-prompt.mjs，使新旧快照打开后按段阅读，并可展开完整原始 JSON。正式文件移植仅取本次日志段落、样式与页面模块接线。
+- skills/emotion-appraisal 下更新 source/SKILL.md、source/local-ai.json、latest.json，新增 versions/emotion-appraisal-v2-3/SKILL.md 及 local-ai.json。正式随附版 1.6 升到已验证的 2.3，旧历史版本保留。
+
+**数据与配置。** 数据库迁移、回填、云端部署、端口、凭据、外部依赖及花园数据库写入均无。已有情绪事件与快照仍可读取。试验使用临时个人资料，受控重启前等待在途工作，原个人资料与入口沿用。
+
+**实际检查。** `python -B prepare.py` 完成候选组装。候选目录运行 `node --test qa/agent/tests/emotion-core.test.mjs qa/agent/tests/emotion-initiative.test.mjs`，28/28 通过；开发工作区三组相关回归此前 42/42 通过。进入 qa，用现有 Electron 执行 `tools/run-electron-check.mjs tools/test-emotion-work-replay-electron.mjs`，本机 Aggressive 9B CPU 在 28.222 秒返回 keep 和空引文，数据库保留同一欲求及条件，档位 −4、奖励维持 0；直接写明三语听写已解决打字慢的标题返回 satisfied、逐字证据，奖励维持 3，未原样重建旧欲求。日志深浅色、360 像素窄窗、原始 JSON 完整回读通过。使用开发版隔离 Electron 核对旧日志和标题栏的回归也已通过。`./install.ps1 -Mode Rehearse` 在隔离目录通过安装中断和全量回退两种检查。
+
+**风险与审核重点。** 请核对新模块在正式页面资源、技能源文件和固定版本中的一致性，以及 keep 的空引文和同一欲求回读。正向对照中模型的内心话仍用了期待语气，状态判断和结算正确；两条固定样例不覆盖所有自然语言。CPU 在开发迭代中出现过单次 45 秒超时，沿用原补评机制。本次未跑候选全仓回归，正式界面及真实新事件尚待安装后验证。
+
+**安装、恢复与确认。** 先以 `./install.ps1 -Mode Preflight` 核对正式进程、回环监听、入口、文件前像和资料状态。用户明确确认本候选后才执行 `./install.ps1 -Mode Install`。等待在途任务，备份被替换文件、正常退出、备份含 emotions.sqlite 的八个本机库，再逐项原子安装并经原入口重启。验证新 PID、原资料目录、REST v6、启用的情绪技能 2.3、13 项文件摘要及 SQLite 完整性与关键业务计数。失败时正常退出新实例、按清单恢复旧件、移除本次新增文件，以原入口重启；保留用户数据及备份。安装成功后补记实装版本时间、后检与相关 Git 提交、普通推送及远端回读。当前为部署准备，本候选安装与重启待用户明确许可，独立第三方审核未执行。
+
+候选 c2da3c2ccbf0 正式安装前预检已完成。install.ps1 -Mode Preflight 核对原 PID 11844、REST v6、快捷方式、登录启动入口及 13 项前像通过，八个资料库 quick_check 均为 ok，检查时无在途桌面任务、提醒、花园或转录。用户选定本次跳过花园，结构同步命令被自动审批拒绝，未执行，花园无写入。
+
+### 情绪复盘 c2da3c2ccbf0 正式安装回执
+
+用户确认安装。本机于 2026-11-23 04:21:53 JST 完成 13 项文件安装，原 PID 11844 正常退出，新 PID 26996 于 04:21:52 JST 从原入口及资料目录启动。已核对 13 项 SHA-256、八个 SQLite 库安装前后完整性及原轮询配置。正式 REST v6 返回随附情绪技能 2.3，匿名读取技能目录为 401。代码及本机资料备份保存在发布工作目录的 install-backup-20261123-042142。
+
+使用实际安装路径的模型、服务及页面，以临时测试资料运行 installed-replay.mjs。截图样例在 CPU 上用时 26.021 秒，回执为 keep、空引文，SQLite 中同一欲求及满足条件保留，档位 −4、奖励维持 0。验收标题对照返回 satisfied、原文引证、维持 3 次，未重建同一欲求。正向对照的内心话仍带期待语气。任务日志分段、原始 JSON 折叠及展开回读、深浅色和窄窗通过；正式个人资料的日常使用体验待用户复验。本次无迁移，按用户决定跳过花园登记。

@@ -20,7 +20,7 @@ test('情绪评价超时只延后重试一次，之后的材料先完成，正�
     skill:async()=>({skill:'emotion-appraisal',version:'fixture',localAi:{assessment:'评价',assess:'核对'}}),
     topics:{preferences:()=>[],async remember(){throw new DOMException('专题写入失败','TimeoutError');}},
     diary:{emotionalHistory:()=>({pages:[],nags:[]})},model:{async memory(input,_prompt,_schema,signal,options){
-      const text=JSON.parse(input).用户;
+      const text=/^用户原话：(.*)$/mu.exec(input)[1];
       calls.push(text);
       assert.equal(options.aiBudget,45000);
       assert.equal(options.backgroundBudget,true);
