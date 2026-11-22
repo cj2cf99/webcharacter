@@ -14,7 +14,7 @@ const lists={
 };
 let view='local';
 let shownTranscript,transcriptPage=0,transcriptDecision=false;
-let selection=new Set(),checklist;
+let selection=new Set(),checklist,editingRow;
 const working=new Set();
 const operationKey=({method,id})=>method==='inspect'?'inspect':method+':'+id;
 
@@ -103,7 +103,7 @@ async function loadTranscripts(){
 async function showTranscript(id){
   const entering=shownTranscript!==id;
   shownTranscript=id;
-  if(entering){transcriptPage=0;selection=new Set();}
+  if(entering){transcriptPage=0;selection=new Set();editingRow=undefined;}
   const data=await read('transcript',id);
   if(shownTranscript!==id)return;
   if((entering||checklist?.state!==data.state)&&data.state==='ready')
@@ -111,9 +111,70 @@ async function showTranscript(id){
   checklist=data;
   renderTranscript();
 }
+async function editTranscriptRow(data,item,container,begin){
+  const key={id:data.id,rowId:item.id};
+  try{
+    const {fields}=await read('transcriptEdit',key);
+    if(!container.isConnected||editingRow||transcriptDecision)return;
+    if(!fields.length){putNotice('这条记录没有可修改的字段。');return;}
+    editingRow=item.id;
+    const controls=byId('transcript-detail').querySelectorAll('button,input[type=checkbox]');
+    const enabled=[...controls].filter(control=>!control.disabled);
+    for(const control of enabled)control.disabled=true;
+    const editor=node('form');editor.className='transcript-editor';
+    const error=node('small');error.setAttribute('role','alert');
+    let deadlineInputs;
+    for(const {key:field,value,required,limit} of fields){
+      if(field==='deadline'){
+        const timing=node('div');timing.className='transcript-deadline';
+        const [day,clock]=String(value??'').split('T');
+        const date=node('input'),time=node('input');
+        date.type='date';date.required=required;date.value=day;
+        time.type='time';time.value=clock??'';
+        const dateLabel=node('label','日期（JST）'),timeLabel=node('label','时分（可选）');
+        dateLabel.append(date);timeLabel.append(time);timing.append(dateLabel,timeLabel);editor.append(timing);
+        deadlineInputs={date,time};
+        continue;
+      }
+      const label=node('label',fieldNames[field]||field);
+      const input=node(['body','content','reflection'].includes(field)?'textarea':field==='level'?'select':'input');
+      input.name=field;input.required=required;
+      if(field==='level')for(const option of ['高','中','低'])input.append(new Option(option,option));
+      if(limit)input.maxLength=limit;
+      input.value=value??(field==='level'?'中':'');
+      label.append(input);editor.append(label);
+    }
+    const actions=node('div');actions.className='transcript-tools';
+    const save=node('button','保存修改');save.type='submit';
+    const cancel=node('button','取消');cancel.type='button';
+    const close=()=>{editingRow=undefined;editor.remove();for(const control of enabled)control.disabled=false;begin.focus();};
+    cancel.onclick=close;
+    actions.append(save,cancel);editor.append(error,actions);begin.after(editor);
+    editor.querySelector('input,textarea,select')?.focus();
+    editor.onsubmit=async event=>{
+      event.preventDefault();
+      save.disabled=cancel.disabled=true;
+      error.textContent='';
+      try{
+        const values=Object.fromEntries(new FormData(editor));
+        if(deadlineInputs){
+          const {date,time}=deadlineInputs;
+          values.deadline=date.value+(time.value?'T'+time.value:'');
+        }
+        await read('transcriptEdit',{...key,values});
+        if(!container.isConnected)return;
+        close();
+        await showTranscript(data.id);
+        putNotice('修改已保存。');
+      }catch(failure){error.textContent=failure.message;}
+      finally{save.disabled=cancel.disabled=false;}
+    };
+  }catch(error){putNotice(error.message);}
+}
 function renderTranscript(){
   const data=checklist,body=byId('transcript-detail');
   if(!data||data.id!==shownTranscript)return;
+  editingRow=undefined;
   byId('transcripts').hidden=false;body.hidden=false;byId('transcript-items').hidden=true;
   byId('local-message').hidden=true;byId('local-items').hidden=true;
   const button=(label,fn,id)=>{
@@ -163,17 +224,22 @@ function renderTranscript(){
       card.prepend(box);
     }
     const center=card.querySelector('div');
+    if(ready&&item.type!=='hu-shi.event.create'){
+      const edit=button('修改',()=>void editTranscriptRow(data,item,center,edit));
+      edit.className='transcript-edit';
+      center.append(edit);
+    }
     for(const [key,value] of Object.entries({...item.params,categoryLabel:item.categoryLabel})){
       if(!value||key==='title')continue;
-      const info=node('p',(fieldNames[key]||key)+' · '+value+(key==='deadline'?' JST':''));
+      const info=node('p',(fieldNames[key]||key)+' · '+(key==='deadline'?String(value).replace('T',' ')+' JST':value));
       info.className='transcript-text';center.append(info);
     }
     for(const message of [item.conditions.length?'准备条件 · '+item.conditions.join('、'):'',
       item.dependsOn.length?'前置登记 · '+item.dependsOn.map(id=>{const row=rows.find(other=>other.id===id);return row?.params.title||row?.label||id;}).join('、'):'',
-      item.missing.length?'待补 · '+item.missing.join('、'):'',item.prepareError,item.previewNote,item.timing&&'原话时间 · '+item.timing,receipt?.error])if(message)center.append(node('small',message));
+      item.missing.length?'待补 · '+item.missing.map(key=>fieldNames[key]||key).join('、'):'',item.prepareError,item.previewNote,item.timing&&'原话时间 · '+item.timing,receipt?.error])if(message)center.append(node('small',message));
     const proof=node('details');proof.append(node('summary','查看来源'));
     for(const ref of item.evidence)proof.append(node('p',ref.quote));
-    for(const source of item.sources)proof.append(node('small',(fieldNames[source.field]||source.field)+' · '+({explicit:'原话',inferred:'推定',default:'默认'}[source.kind])+ ' · '+source.basis));
+    for(const source of item.sources)proof.append(node('small',(fieldNames[source.field]||source.field)+' · '+({explicit:'原话',inferred:'推定',default:'默认',manual:'用户修改'}[source.kind])+ ' · '+source.basis));
     center.append(proof);form.append(card);
   }
   body.append(form);

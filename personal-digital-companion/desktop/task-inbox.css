@@ -37,3 +37,12 @@ li.chain-item { display:block; padding:0 }
 #transcript-detail small { display:block; }
 #transcript-detail .transcript-text { white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0; }
 #transcript-detail details p { overflow-wrap:anywhere; }
+.transcript-edit { margin:3px 0; }
+#transcript-detail .fy-list { grid-template-columns:minmax(0,1fr); }
+.transcript-editor { display:grid; grid-template-columns:minmax(0,1fr); gap:6px; margin-top:6px; border-top:1px dashed var(--fy-line); padding-top:6px; }
+.transcript-editor label { display:grid; grid-template-columns:minmax(0,1fr); gap:3px; color:var(--fy-muted); font-size:12px; }
+.transcript-editor :is(input,textarea,select) { box-sizing:border-box; width:100%; min-width:0; }
+.transcript-editor textarea { min-height:74px; resize:vertical; }
+.transcript-editor small[role=alert] { color:var(--fy-danger); }
+.transcript-deadline { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px; }
+#transcript-detail div:has(> .transcript-editor) > :is(.transcript-edit,.transcript-text) { display:none; }

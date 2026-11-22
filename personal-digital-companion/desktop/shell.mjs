@@ -371,7 +371,8 @@ export async function startDesktop(electron,options={}){
   const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark,recordCheck:checks.record,checks});
   const reminderReview=tasks.reminderReview?attachReminderReview(electron,{bundle,root,flow:tasks.reminderReview}):null;
   const taskInbox=tasks.taskInbox||transcription?attachTaskInbox(electron,{bundle,root,flow:{...tasks.taskInbox,
-    transcripts:transcription?.list,transcript:transcription?.detail,transcriptDecision:transcription?.decide,transcriptRetry:transcription?.retry,
+    transcripts:transcription?.list,transcript:transcription?.detail,transcriptEdit:transcription?.edit,
+    transcriptDecision:transcription?.decide,transcriptRetry:transcription?.retry,
     local:async()=>[...(localPool?.pending()??[]).map(batch=>({batch:localPool.withQueue(batch),name:batch.title,started_at:batch.created})),...await (tasks.taskInbox?.local()??[])]}}):null;
   if(hasMemory){
     topics=createTopicMemory({profile,memory,model:localModel,safeStorage:electron.safeStorage,traffic:tasks.traffic?.readPage});

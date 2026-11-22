@@ -6,7 +6,7 @@ export function attachTaskInbox(electron,{bundle,root,flow,visible=true}) {
   const {ipcMain}=electron;
   const entry=resolve(bundle,'task-inbox.html');
   const url=pathToFileURL(entry).href;
-  const methods=['local','tasks','chains','detail','receipts','claim','inspect','resume','transcripts','transcript','transcriptDecision','transcriptRetry'];
+  const methods=['local','tasks','chains','detail','receipts','claim','inspect','resume','transcripts','transcript','transcriptEdit','transcriptDecision','transcriptRetry'];
   let panel=null;
   for(const method of methods){
     ipcMain.handle('task-inbox:'+method,async(event,value)=>{

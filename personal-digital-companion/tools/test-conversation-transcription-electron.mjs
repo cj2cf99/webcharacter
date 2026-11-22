@@ -12,6 +12,7 @@ import {attachTaskInbox} from '../desktop/task-inbox-host.mjs';
 import {createRegistrationFlow} from '../desktop/registration-flow.mjs';
 import {createWorker} from '../agent/worker.mjs';
 import {initializeDatabase,openTestDatabase} from '../agent/tests/sqlite-d1.mjs';
+import {tokyoDate} from '../desktop/calendar-date.mjs';
 
 const root=resolve(import.meta.dirname,'..'),bundle=resolve(root,'output/desktop-bundle');
 const profile=mkdtempSync(join(tmpdir(),'feiyue-transcription-'));
@@ -31,6 +32,7 @@ async function run(){
   const mock=process.argv.includes('--mock');
   const explicit=process.argv.includes('--registration');
   const theme=process.argv.includes('--dark')?'dark':'light';
+  const reminderDay=tokyoDate(Date.now()+86_400_000),editedDay=tokyoDate(Date.now()+2*86_400_000);
   if(mock)electron.nativeTheme.themeSource=theme;
   if(mock){
     model={async withWorkSession(id,signal,run){
@@ -41,11 +43,15 @@ async function run(){
         if(++phase===1){
           sourceId=data.turns[0].sourceId;
           return {recentFactIds:['run'],actions:[{id:'run',summary:'昨天跑了五公里',subject:'user',state:'occurred',intent:'none',
-            timeText:'昨天',conditions:[],evidence:[{sourceId,quote:'昨天我跑了五公里'}]}],requests:[],signals:[]};
+            timeText:'昨天',conditions:[],evidence:[{sourceId,quote:'昨天我跑了五公里'}]}],
+            requests:[{id:'return-call',summary:'给田中回信',subject:'user',state:'planned',intent:'explicit',timeText:'明天',
+              conditions:[],evidence:[{sourceId,quote:'明天请提醒我给田中回信'}]}],signals:[]};
         }
         if(phase===2)return {candidates:[{id:'exercise',type:'hu-shi.exercise.create',matterIds:['run'],params:{body:'昨天跑了五公里。'},
           conditions:[],dependsOn:[],missing:[],fieldSources:[]},
           {id:'diary',type:'diaries.create',matterIds:['run'],params:{content:'昨天跑了五公里。'},
+            conditions:[],dependsOn:[],missing:[],fieldSources:[]},
+          {id:'reminder',type:'reminders.create',matterIds:['return-call'],params:{title:'给田中回信',content:'给田中回信。',deadline:reminderDay},
             conditions:[],dependsOn:[],missing:[],fieldSources:[]}],notes:[]};
         return {issues:[]};
       });
@@ -61,7 +67,7 @@ async function run(){
     }));
   }
   pet=new electron.BrowserWindow({width:240,height:360,show:false});
-  let notification;
+  let notification,pauseSubmission=false;
   const states=[],writes=[],requests=[];
   db=openTestDatabase();initializeDatabase(db.sqlite);
   for(const seed of ['tasklist-hu-shi.sql','tasklist-registration.sql'])db.sqlite.exec(readFileSync(join(root,'agent','seeds',seed),'utf8'));
@@ -73,7 +79,8 @@ async function run(){
   const env={DB:db.DB,COMPANION_HOST:{async resourceCategories(){return [{id:'ai-resources',name:'AI登记内容'}];}}};
   const request=(path,options)=>{requests.push(path);return worker.fetch(new Request('https://fixture.invalid'+path,options),env);};
   const registration=createRegistrationFlow({profile,request});
-  transcription=createConversationTranscription({profile,safeStorage:electron.safeStorage,model,canStart:()=>!host.panel,
+  transcription=createConversationTranscription({profile,safeStorage:electron.safeStorage,model,
+    canStart:state=>!host.panel&&(state!=='approved'||!pauseSubmission),
     changed:()=>states.push(transcription.list()[0]?.stage),notify:value=>{notification=value;},
     prepareBatch:rows=>prepareConversationBatch(rows,request),registration});
   host=attachScreenQuestion(electron,{win:pet,profile,bundle,root,transcription,registration,visible:false,
@@ -81,7 +88,7 @@ async function run(){
   await host.open(explicit?'registration':'auto');
   const send=text=>host.panel.webContents.executeJavaScript(`window.screenQuestion.ask(${JSON.stringify(text)},false,
     document.getElementById('mode').value)`);
-  const input=['昨天我跑了五公里，回来还拉伸了。'];
+  const input=[mock?'昨天我跑了五公里，回来还拉伸了。明天请提醒我给田中回信。':'昨天我跑了五公里，回来还拉伸了。'];
   if(!mock)input.push('明天提醒我给田中回信，回信前先看周报。',
     '我很喜欢这个色板网站 https://example.invalid/palette ，以后想参考它的颜色搭配做原型。');
   if(explicit){
@@ -134,11 +141,13 @@ async function run(){
     stages:[...new Set(states)].filter(Boolean),model:model.snapshot?.().model,backend:model.snapshot?.().backend}));
   if(!mock)console.log('本地模型调用',JSON.stringify(timings.map(({stage,model,backend,duration_ms})=>({stage,model,backend,duration_ms}))));
   inbox=attachTaskInbox(electron,{bundle,root,visible:false,flow:{local:async()=>[],transcripts:transcription.list,
-    transcript:transcription.detail,transcriptDecision:transcription.decide,transcriptRetry:transcription.retry}});
+    transcript:transcription.detail,transcriptEdit:transcription.edit,
+    transcriptDecision:transcription.decide,transcriptRetry:transcription.retry}});
   await inbox.open(result.id);
-  const browser=inbox.panel.webContents;
+  let browser=inbox.panel.webContents;
   await wait(()=>browser.executeJavaScript('document.querySelectorAll("#transcript-detail input[type=checkbox]").length>1'));
   const exercise=result.result.rows.find(row=>row.type==='hu-shi.exercise.create');
+  const editedExercise='运动\n经确认，昨天跑了四公里。\n❤️';
   assert.match(exercise.params.body,/^运动\n[\s\S]+\n❤️$/u);
   assert(await browser.executeJavaScript(`Array.from(document.querySelectorAll('#transcript-detail .transcript-text')).some(field=>field.textContent.endsWith(${JSON.stringify(exercise.params.body)}))`));
   if(mock){
@@ -151,18 +160,57 @@ async function run(){
     }return true;})()`));
     const image=await browser.capturePage();assert(!image.isEmpty());
     writeFileSync(join(root,'output','transcription-review-'+theme+'.png'),image.toPNG());
+    await browser.executeJavaScript(`document.querySelector('input[data-type="hu-shi.exercise.create"]').closest('li').querySelector('.transcript-edit').click()`);
+    await wait(()=>browser.executeJavaScript("Boolean(document.querySelector('.transcript-editor textarea[name=body]'))"));
+    assert(await browser.executeJavaScript("document.querySelector('#transcript-selected').disabled"));
+    const width=await browser.executeJavaScript(`({viewport:innerWidth,right:document.querySelector('.transcript-editor').getBoundingClientRect().right})`);
+    assert(width.right<=width.viewport,JSON.stringify(width));
+    writeFileSync(join(root,'output','transcription-edit-'+theme+'.png'),(await browser.capturePage()).toPNG());
+    await assert.rejects(transcription.edit({id:result.id,rowId:exercise.id,values:{type:'diaries.create'}}),/不支持的字段/);
+    await assert.rejects(transcription.edit({id:result.id,rowId:exercise.id,values:{body:' '}}),/必填/);
+    await browser.executeJavaScript(`document.querySelector('.transcript-editor textarea[name=body]').value=${JSON.stringify(editedExercise)};document.querySelector('.transcript-editor').requestSubmit()`);
+    await wait(()=>transcription.detail(result.id).result.rows.find(row=>row.id===exercise.id).params.body===editedExercise);
+    assert.deepEqual(requests,[],'保存修改时只写本机草稿');
+    inbox.panel.destroy();await inbox.open();
+    browser=inbox.panel.webContents;
+    await wait(()=>browser.executeJavaScript("Boolean(document.querySelector('#transcript-items button'))"));
+    await browser.executeJavaScript("document.querySelector('#transcript-items button').click()");
+    await wait(()=>browser.executeJavaScript(`document.querySelector('#transcript-detail').textContent.includes('昨天跑了四公里')`));
+    const reminder=transcription.detail(result.id).result.rows.find(row=>row.type==='reminders.create');
+    assert.equal(reminder?.params.deadline,reminderDay);
+    const openReminder=async()=>{
+      await browser.executeJavaScript(`document.querySelector('input[data-type="reminders.create"]').closest('li').querySelector('.transcript-edit').click()`);
+      await wait(()=>browser.executeJavaScript("Boolean(document.querySelector('.transcript-editor input[type=time]'))"));
+    };
+    await openReminder();
+    assert.equal(await browser.executeJavaScript("document.querySelector('.transcript-editor input[type=time]').value"),'');
+    await browser.executeJavaScript(`document.querySelector('.transcript-editor input[type=date]').value=${JSON.stringify(editedDay)};
+      document.querySelector('.transcript-editor input[type=time]').value='18:45';document.querySelector('.transcript-editor').requestSubmit()`);
+    await wait(()=>browser.executeJavaScript(`document.querySelector('#transcript-detail').textContent.includes(${JSON.stringify(editedDay+' 18:45 JST')})`));
+    assert.deepEqual(requests,[],'修改提醒日期和时分也不提交');
   }
-  const selected=mock?['hu-shi.exercise.create','diaries.create']:['hu-shi.exercise.create','reminders.create'];
+  const selected=['hu-shi.exercise.create','reminders.create',...(mock?['diaries.create']:[])];
+  if(mock)pauseSubmission=true;
   await browser.executeJavaScript(`for(const box of document.querySelectorAll('#transcript-detail input[type=checkbox]')){box.checked=${JSON.stringify(selected)}.includes(box.dataset.type);box.dispatchEvent(new Event('change'));}document.querySelector('#transcript-selected').click()`);
+  if(mock){
+    await wait(()=>transcription.detail(result.id).state==='approved');
+    await wait(()=>browser.executeJavaScript("!document.querySelector('#transcript-detail .transcript-edit')"));
+    await assert.rejects(transcription.edit({id:result.id,rowId:exercise.id}),/只有待确认/);
+    await assert.rejects(transcription.edit({id:result.id,rowId:exercise.id,values:{body:'不允许改已确认的记录'}}),/只有待确认/);
+    assert.deepEqual(requests,[]);
+    pauseSubmission=false;
+  }
   await wait(()=>{const item=transcription.detail(result.id);if(item.state==='submit-pending'||item.result.rows.some(row=>row.prepareError))
     throw Error(item.error||'批量提交未完成');return item.state==='done';});
-  assert.deepEqual(writes.map(row=>row.path).sort(),['/api/records/hu-shi/exercise/entries',mock?'/api/diaries':'/api/reminders'].sort());
-  assert.equal(writes.find(row=>row.path.endsWith('/exercise/entries')).body.body,exercise.params.body);
+  assert.deepEqual(writes.map(row=>row.path).sort(),['/api/records/hu-shi/exercise/entries','/api/reminders',...(mock?['/api/diaries']:[])].sort());
+  assert.equal(writes.find(row=>row.path.endsWith('/exercise/entries')).body.body,mock?editedExercise:exercise.params.body);
   if(mock){
     const diary=result.result.rows.find(row=>row.type==='diaries.create');
     assert.deepEqual(writes.find(row=>row.path==='/api/diaries').body,diary.params);
+    assert.equal(writes.find(row=>row.path==='/api/reminders').body.deadline,editedDay+'T18:45');
   }
   assert.equal(requests.filter(path=>path==='/api/chains').length,1);
+  await assert.rejects(transcription.edit({id:result.id,rowId:exercise.id,values:{body:'已完成后不允许修改'}}),/只有待确认/);
   console.log('确认后只通过一条登记链提交勾选项，写入由隔离 Worker 回执。');
 }
 

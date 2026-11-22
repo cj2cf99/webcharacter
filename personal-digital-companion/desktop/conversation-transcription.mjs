@@ -15,6 +15,23 @@ const graphemes=new Intl.Segmenter('zh-CN',{granularity:'grapheme'});
 const finalHeart=/(?:❤[\uFE0E\uFE0F]?\s*)+$/u;
 const string=value=>typeof value==='string'?value.trim():'';
 const list=value=>Array.isArray(value)?value:[];
+const missingDependency='有效的前置登记';
+const pastDeadline=(deadline,now)=>deadline.slice(0,10)<tokyoDate(now)
+  ||deadline.includes('T')&&Date.parse(deadline+'+09:00')<=now;
+
+function checkDependencies(rows){
+  const byKey=new Map(rows.map(row=>[row.id,row]));
+  for(const row of rows)row.missing=row.missing.filter(item=>item!==missingDependency);
+  for(const row of rows){
+    const checked=new Set([row.id]);
+    let parent=row.dependsOn[0];
+    while(parent){
+      const target=byKey.get(parent);
+      if(!target||checked.has(parent)||target.missing.length){row.missing.push(missingDependency);break;}
+      checked.add(parent);parent=target.dependsOn[0];
+    }
+  }
+}
 
 function schemaFor(schemas,stage){
   function expand(value){
@@ -387,16 +404,7 @@ async function transcribe(data,model,skill,save,signal){
       if(unique.has(key))return false;
       unique.add(key);return true;
     });
-    const byKey=new Map(kept.map(row=>[row.id,row]));
-    for(const row of kept){
-      const checked=new Set([row.id]);
-      let parent=row.dependsOn[0];
-      while(parent){
-        const target=byKey.get(parent);
-        if(!target||checked.has(parent)||target.missing.length){row.missing.push('有效的前置登记');break;}
-        checked.add(parent);parent=target.dependsOn[0];
-      }
-    }
+    checkDependencies(kept);
     return {rows:kept,notes:[...new Set(data.work.flatMap(part=>part.result.notes))],
     summaries:data.work.map(part=>part.summary)};
   });
@@ -417,8 +425,7 @@ export async function prepareConversationBatch(rows,request,now=Date.now){
       if(!category){missing.push({id:row.id,message:'目录中暂未找到「'+row.categoryLabel+'」'});continue;}
       params.category_id=category.id;
     }
-    if(params.deadline&&(params.deadline.slice(0,10)<tokyoDate(now())||
-      params.deadline.includes('T')&&Date.parse(params.deadline+'+09:00')<=now())){
+    if(params.deadline&&pastDeadline(params.deadline,now())){
       missing.push({id:row.id,message:'提醒日期已过，请另行确认新日期'});continue;
     }
     try{
@@ -530,6 +537,53 @@ export function createConversationTranscription({profile,safeStorage,model,regis
     detail(id){
       allowedId(id);const job=get(id);if(!job||job.state==='open')throw Error('找不到这条转录');
       return {...status(job),result:job.result,selected:job.selected,receipts:job.receipts};
+    },
+    async edit({id,rowId,values}={}){
+      allowedId(id);
+      const {templates:{templates}}=await loadSkill();
+      const job=get(id);
+      const row=job?.state==='ready'&&job.result.rows.find(item=>item.id===rowId);
+      if(!row)throw Error('只有待确认的记录可以修改，请重新打开清单');
+      const template=templates[row.type];
+      if(!template)throw Error('未找到这条记录的登记模板');
+      const required=template.required.map(key=>key==='category_id'?'categoryLabel':key);
+      const names=[...new Set([...required,...(template.optional??[]),...(template.optionalFromSource??[])])];
+      const fields=names.map(key=>({key,required:required.includes(key),value:key==='categoryLabel'?row.categoryLabel:row.params[key],
+        limit:key==='title'?template.format?.titleLimit:key===template.format?.bodyField?template.format.bodyLimit:undefined}));
+      if(values===undefined)return {fields};
+      if(!values||typeof values!=='object'||Array.isArray(values)||Object.keys(values).some(key=>!names.includes(key)))
+        throw Error('修改包含不支持的字段');
+      const changedFields=[];
+      for(const field of fields){
+        const {key,limit}=field;
+        if(!Object.hasOwn(values,key)||values[key]===(field.value??''))continue;
+        if(typeof values[key]!=='string')throw Error('字段内容无效');
+        const value=values[key].trim();
+        if(!value&&field.required)throw Error('请填写必填字段');
+        if(limit&&value.length>limit)throw Error('修改后的文字超出登记上限');
+        if(key==='deadline'){
+          const day=value.slice(0,10),date=new Date(day+'T00:00:00Z');
+          if(!datePattern.test(value)||!Number.isFinite(+date)||date.toISOString().slice(0,10)!==day)
+            throw Error('提醒日期或时间无效');
+          if(pastDeadline(value,now()))throw Error('请填写尚未到期的提醒时间（JST）');
+        }
+        if(key==='level'&&value&&!['高','中','低'].includes(value))throw Error('请选择有效级别');
+        if(key==='url'&&value&&!/^https?:\/\/[^\s]+$/iu.test(value))throw Error('请填写有效的 HTTP 或 HTTPS 网址');
+        if(key==='categoryLabel')row.categoryLabel=value;
+        else if(value)row.params[key]=value;
+        else delete row.params[key];
+        changedFields.push(key);
+      }
+      if(changedFields.length){
+        const fixes={title:'标题超出登记上限',deadline:'有效提醒时间',[template.format?.bodyField]:'正文超出登记上限'};
+        row.missing=row.missing.filter(item=>!changedFields.some(key=>item===key||item===fixes[key]));
+        row.sources=row.sources.filter(item=>!changedFields.includes(item.field));
+        row.sources.push(...changedFields.map(field=>({field,kind:'manual',basis:'确认前手动编辑'})));
+        delete row.prepareError;
+        checkDependencies(job.result.rows);
+        save(job,'ready');changed();
+      }
+      return status(job);
     },
     decide({id,selected}={}){
       allowedId(id);const job=get(id);
