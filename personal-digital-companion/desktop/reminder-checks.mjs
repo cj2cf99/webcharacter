@@ -80,6 +80,20 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
       return db.prepare("SELECT id,at,body FROM notices WHERE at>=? AND at<? AND title<>'绯月 · 任务日志巡检' ORDER BY at,id").all(start,start+86400000);
     },
     weatherState(){const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value);},
+    weatherTemperatureHistory(place, through){
+      const date=new Intl.DateTimeFormat('sv-SE',{timeZone:place.timezone});
+      const rows=db.prepare('SELECT at,detail FROM checks WHERE project=? AND at>=? AND at<? ORDER BY at,id')
+        .all('天气 · '+place.name,through-15*86400_000,through);
+      const history={};
+      for(const {at,detail} of rows){
+        const match=/(?:^| · )(?:全天 (-?\d+(?:\.\d+)?)～(-?\d+(?:\.\d+)?)|最低 (-?\d+(?:\.\d+)?))°C(?= · |$)/.exec(detail);
+        if(!match)continue;
+        const day=date.format(at);
+        history[day]={...history[day],low:Number(match[1]??match[3])};
+        if(match[2]!==undefined)history[day].high=Number(match[2]);
+      }
+      return history;
+    },
     saveWeather(value,brief,at){
       db.exec('BEGIN');
       try{

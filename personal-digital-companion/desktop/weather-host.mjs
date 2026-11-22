@@ -12,7 +12,7 @@ const jmaPages = new Map([
   ['typhoon', JMA_TYPOON_PAGE], ['bulletin', JMA_BULLETIN_PAGE],
 ]);
 
-export function attachWeather(electron, {bundle, root, profile, service, request, background = true, visible = true, recordCheck=()=>{}, checks}) {
+export function attachWeather(electron, {bundle, root, profile, service, request, requestHourly, background = true, visible = true, recordCheck=()=>{}, checks}) {
   const {ipcMain, shell} = electron;
   let seen=checks?.weatherState();
   if(!seen){
@@ -25,21 +25,14 @@ export function attachWeather(electron, {bundle, root, profile, service, request
   let panel=null,closed=false,collecting=false;
   const triggers=new Map();
   function collectReminder(row,items,category='官方预警'){
-    if(category==='低温提醒'){
-      const low=row.minimum.value,range=[low.temperature,low.maximum].join('/');
-      seen.lowRanges??={};
-      if(seen.lowRanges[row.id]===range)return;
-      seen.lowRanges[row.id]=range;
-    }
     const reasons=triggers.get(row.id)??[];
     for(const item of items){
-      const text=category==='低温提醒'?'低温，最低 '+row.minimum.value.temperature+'°C':
-        category==='气象通报'?item.type+'通报':item.shortTitle||item.title;
+      const text=category==='气象通报'?item.type+'通报':item.shortTitle||item.title;
       reasons.push(text);
     }
     triggers.set(row.id,reasons);
   }
-  const api=service??createWeatherService({request,seen,remindersEnabled:()=>collecting,important:collectReminder,
+  const api=service??createWeatherService({request,requestHourly,seen,remindersEnabled:()=>collecting,important:collectReminder,
     onChange:data=>{if(panel&&!panel.isDestroyed())panel.webContents.send('weather:changed',data);}});
   function trusted(event) {
     return panel && !panel.isDestroyed() && event.sender === panel.webContents && event.senderFrame === panel.webContents.mainFrame;
@@ -95,10 +88,15 @@ export function attachWeather(electron, {bundle, root, profile, service, request
       await api.whenIdle();
       if(closed)return;
       collecting=true;
-      const {rows}=await api.refreshAll();
+      const {rows}=await api.refreshAll({includeHourly:true});
       if(closed)return;
-      for(const row of rows)if(row.minimum.state==='ready'&&!row.minimum.value.below&&seen.lowRanges)delete seen.lowRanges[row.id];
-      const brief=weatherBrief(rows,triggers,seen.brief,at);
+      const places={...seen.brief?.places};
+      for(const row of rows){
+        if(!places[row.id]?.temperatures){
+          places[row.id]={...places[row.id],temperatures:checks.weatherTemperatureHistory(row,at)};
+        }
+      }
+      const brief=weatherBrief(rows,triggers,{...seen.brief,places},at);
       seen.brief=brief.state;seen.lastCheck=at;
       checks.saveWeather(seen,brief,at);
       for(const row of rows){
@@ -115,6 +113,7 @@ export function attachWeather(electron, {bundle, root, profile, service, request
         field('实况',row.current,()=>row.current.value.text+' '+row.current.value.temperature+'°C');
         field('当日气温',row.minimum,()=>row.minimum.value.maximum===null?'最低 '+row.minimum.value.temperature+'°C':
           '全天 '+row.minimum.value.temperature+'～'+row.minimum.value.maximum+'°C');
+        field('短时雨雪',row.hourly,()=>row.hourly.value.length?'未来 6 小时有雨雪':'未来 6 小时暂无明显雨雪');
         if(row.minimum.state==='ready'&&row.minimum.value.maximum===null)failed.push('最高温');
         const status=failed.length?(results.length?'部分失败':'查询失败'):'已检查';
         if(failed.length)results.push(failed.join('、')+'未取得');

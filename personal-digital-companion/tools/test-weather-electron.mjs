@@ -17,8 +17,12 @@ async function run() {
   electron.app.setPath('userData', profile);
   await electron.app.whenReady();
   const isolated = process.argv.includes('--isolated');
-  let request;
+  let request, requestHourly;
+  let rain = false;
+  let high = 17;
   if (isolated) {
+    requestHourly = async coordinates => Response.json({hours:[{forecastTime:new Date(Math.ceil(Date.now()/3600_000)*3600_000+3600_000).toISOString(),
+      precipitation:rain && coordinates === '33.88/130.88' ? {type:'rain',probability:0.8} : {type:'none'}}]});
     request = async path => {
       const [, , , place, kind] = path.split('/');
       if (kind === 'current') return Response.json({validTime:new Date().toISOString(), condition:{text:'小雨'}, temperature:{value:12}, wind:{speed:{value:2}}});
@@ -27,7 +31,7 @@ async function run() {
         const zone = japan ? 'Asia/Tokyo' : 'Asia/Shanghai';
         const date = new Intl.DateTimeFormat('sv-SE',{timeZone:zone}).format(Date.now());
         const start = date + (japan ? 'T00:00+09:00' : 'T00:00+08:00');
-        return Response.json({days:[{forecastStartTime:start,forecastEndTime:new Date(Date.parse(start)+86400000).toISOString(),temperatureMin:{unit:'°C',value:2},temperatureMax:{unit:'°C',value:17}}]});
+        return Response.json({days:[{forecastStartTime:start,forecastEndTime:new Date(Date.parse(start)+86400000).toISOString(),temperatureMin:{unit:'°C',value:2},temperatureMax:{unit:'°C',value:japan?high:17}}]});
       }
       if (kind !== 'alerts') return Response.json([]);
       if (place === 'kokurakita') return Response.json([{warning:{class20Items:[{areaCode:'4010000',kinds:[{code:'03',status:'発表'}]}]}}]);
@@ -52,8 +56,13 @@ async function run() {
     show() { notifications.push(this.value); }
   }
   const requestTimes=[],checks=createReminderChecks({profile,isBusy:()=>false,handlers:{weather:()=>host.check()}});
+  if (isolated) {
+    for (let days = 1; days <= 14; days++) {
+      checks.record('天气 · 北九州市小仓北区','已检查','全天 4～17°C',Date.now()-days*86400_000);
+    }
+  }
   const host = attachWeather({...electron, Notification: ObservedNotification},
-    {root, bundle: resolve(root, 'output/desktop-bundle'), profile, background: true, visible: false,
+    {root, bundle: resolve(root, 'output/desktop-bundle'), profile, requestHourly, background: true, visible: false,
       checks,recordCheck:checks.record,request: (...args) => { requestTimes.push(Date.now()); return request(...args); }});
   try {
     const startupTime=Date.now();
@@ -93,14 +102,33 @@ async function run() {
       assert.ok(Math.abs(log.nextWeatherAt-checks.weatherState().lastCheck-3600_000)<2000);
       assert.equal(notifications.length,0,'不弹系统通知');
       const notices=checks.notices();assert.equal(notices.unread,1);
+      assert.equal(notices.events[0].title,'天气简报');
       const lines = notices.events[0].body.split('\n');
       assert.equal(lines.length,3);
       for (const [index, row] of result.rows.entries()) {
         assert.ok(lines[index].startsWith(row.name));
-        assert.doesNotMatch(lines[index], /小雨|暂无生效预警/);
-        if(index===0)assert.match(lines[index],/大雨.*警報/);
-        assert.match(lines[index], /最低 2°C/);
+        assert.match(lines[index], /小雨.*2～17°C.*留意低温/);
+        if(index===0) {
+          assert.match(lines[index],/大雨.*警報/);
+          assert.match(lines[index],/最低温新纪录 2°C（原 4°C）/);
+        }
+        else assert.match(lines[index],/暂无生效预警/);
       }
+      await host.check();
+      assert.equal(checks.unread,1,'同日没有新变化时保持一封');
+      rain=true;
+      await host.check();
+      assert.equal(checks.unread,2);
+      assert.match(checks.notices().events[0].body,/小仓北区.*预计.*降雨/);
+      await host.check();
+      assert.equal(checks.unread,2,'同一场雨雪不重复提醒');
+      high=19;
+      await host.check();
+      assert.equal(checks.unread,3);
+      assert.match(checks.notices().events[0].body,/最高温新纪录 19°C（原 17°C）/);
+      high=20;
+      await host.check();
+      assert.equal(checks.unread,3,'同地同方向的纪录当天只报一次');
     }
     const notified = notifications.length;
     await dom('window.feiyueWeather.refresh()');

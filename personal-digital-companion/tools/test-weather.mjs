@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {generateKeyPairSync, verify} from 'node:crypto';
-import {qweatherAuth} from '../desktop/weather-credentials.mjs';
+import {createHourlyWeatherRequest,qweatherAuth} from '../desktop/weather-credentials.mjs';
 import {createWorker} from '../agent/worker.mjs';
 import {matchWeatherQuestion} from '../agent/weather/question.mjs';
 import {createScreenQuestionClient} from '../desktop/screen-question-client.mjs';
@@ -235,7 +235,7 @@ test('日本 10°C 和中国 5°C 使用严格小于；东京跨日时按地点�
   assert.throws(() => parseDailyMinimum({days: [dayForecast('2026-11-19', '+09:00', 3)]}, WEATHER_PLACES[0], midnightTokyo), /不可用/);
 });
 
-test('关注项提醒包含低等级正式预警；本地台风与最低温跨服务重建不重复', async () => {
+test('关注项包含低等级正式预警，本地台风跨服务重建不重复', async () => {
   const notifications = [];
   let seen = {};
   let date = '2026-11-19';
@@ -255,8 +255,8 @@ test('关注项提醒包含低等级正式预警；本地台风与最低温跨�
     }),
   };
   let service = createWeatherService({...options, seen});
-  await service.refreshAll();
-  assert.equal(notifications.filter(([, k]) => k === '低温提醒').length, 3);
+  const initial = await service.refreshAll();
+  assert.ok(initial.rows.every(row => row.minimum.value.below));
   assert.equal(notifications.filter(([, k]) => k === '气象通报').length, 0);
   assert.deepEqual(notifications.find(([, k]) => k === '官方预警'), ['kokurakita', '官方预警', '低温注意報']);
   localBulletin = [bulletin()];
@@ -265,12 +265,55 @@ test('关注项提醒包含低等级正式预警；本地台风与最低温跨�
   service.close();
   service = createWeatherService({...options, seen});
   await service.refreshAll();
-  assert.equal(notifications.length, 5);
+  assert.equal(notifications.length, 2);
   date = '2026-11-20';
   now += 86400_000;
   await service.refreshCurrent();
-  assert.equal(notifications.filter(([, k]) => k === '低温提醒').length, 6);
+  assert.ok(service.snapshot().rows.every(row => row.minimum.value.day === date));
+  assert.equal(notifications.length, 2);
   service.close();
+});
+
+test('三地小时预报由桌面直连且只在后台查询，上游故障保留旧值并标记失败', async () => {
+  const hourly = [];
+  let unavailable = false, configured = true, authorizationLoads = 0;
+  const auth = qweatherAuth({host: proxyEnv.QWEATHER_HOST, developerId: proxyEnv.QWEATHER_DEVELOPER_ID,
+    projectId: proxyEnv.QWEATHER_PROJECT_ID, credentialId: proxyEnv.QWEATHER_CREDENTIAL_ID,
+    privatePem: proxyEnv.QWEATHER_PRIVATE_KEY}, () => at);
+  const requestHourly = createHourlyWeatherRequest({loadAuth: async () => {
+    authorizationLoads++;
+    return configured ? auth : null;
+  }, fetcher: async (url, {headers, redirect}) => {
+    hourly.push(new URL(url));
+    assert.equal(redirect, 'error');
+    const [header, claims, signature] = headers.Authorization.slice('Bearer '.length).split('.');
+    assert.equal(verify(null, Buffer.from(header + '.' + claims), proxyKey.publicKey, Buffer.from(signature, 'base64url')), true);
+    if (unavailable) return new Response(null, {status: 401});
+    return Response.json({hours: [{forecastTime: '2026-11-19T03:00:00Z', precipitation: {type: 'snow', probability: 0.7}}]});
+  }});
+  const routes = [];
+  const service = createWeatherService({clock: () => at, requestHourly, request: async path => {
+    routes.push(path);
+    return Response.json(current);
+  }});
+  try {
+    await service.refreshAll();
+    assert.equal(hourly.length, 0);
+    assert.equal(authorizationLoads, 0);
+    const initial = await service.refreshAll({includeHourly: true});
+    assert.deepEqual(hourly.map(url => url.pathname), WEATHER_PLACES.map(place => '/weather/v1/hourly/' + place.coordinates));
+    assert.ok(hourly.every(url => url.origin === auth.origin && url.search === '?hours=7&lang=zh'));
+    assert.ok(initial.rows.every(row => row.hourly.state === 'ready' && row.hourly.value[0].label === '降雪'));
+    assert.equal(authorizationLoads, 1);
+    unavailable = true;
+    const failed = await service.refreshAll({includeHourly: true});
+    assert.ok(failed.rows.every(row => row.hourly.state === 'error' && row.hourly.value[0].label === '降雪'));
+    configured = false;
+    const unplugged = await service.refreshAll({includeHourly: true});
+    assert.ok(unplugged.rows.every(row => row.hourly.state === 'unconfigured'));
+    assert.equal(authorizationLoads, 2);
+    assert.ok(routes.every(route => !route.endsWith('/hourly')));
+  } finally { service.close(); }
 });
 
 test('天气 Worker 按既有鉴权和固定路由处理，客户端无服务时不外联', async () => {
