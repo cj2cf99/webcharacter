@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import wave
 
@@ -16,11 +17,11 @@ cache = Path(cache_arg)
 wire = sys.stdout
 sys.stdout = sys.stderr
 engine = None
+recognizers = {}
 
 
-def load_recognizer():
-    global engine
-    if engine is None:
+def load_recognizer(language='zh'):
+    if language not in recognizers:
         import _distutils_hack
 
         _distutils_hack.add_shim()
@@ -32,14 +33,17 @@ def load_recognizer():
             'vad_model': models / 'speech_fsmn_vad_zh-cn-16k-common-pytorch',
             'punc_model': models / 'punc_ct-transformer_zh-cn-common-vocab272727-pytorch',
         }
+        if language == 'ja':
+            model = Path(os.environ.get('FEIYUE_SENSEVOICE_MODEL', ''))
+            paths = {'model': model}
         if any(not (path / 'model.pt').is_file() for path in paths.values()):
-            raise ValueError('本机 Paraformer 或其标点模型文件缺失。')
-        engine = AutoModel(**{key: str(path) for key, path in paths.items()}, device='cpu', ncpu=4,
-                           disable_update=True, disable_pbar=True, trust_remote_code=False)
-    return engine
+            raise ValueError('本机日语听写模型文件缺失。' if language == 'ja' else '本机 Paraformer 或其标点模型文件缺失。')
+        recognizers[language] = AutoModel(**{key: str(path) for key, path in paths.items()}, device='cpu', ncpu=4,
+                                         disable_update=True, disable_pbar=True, trust_remote_code=False)
+    return recognizers[language]
 
 
-def recognize(audio):
+def recognize(audio, language='zh'):
     import numpy as np
 
     with wave.open(io.BytesIO(base64.b64decode(audio, validate=True)), 'rb') as wav:
@@ -54,8 +58,10 @@ def recognize(audio):
     samples = np.frombuffer(frames, dtype='<i2').astype(np.float32) / 32768
     if np.max(np.abs(samples)) < .003:
         return {'text': ''}
-    result = load_recognizer().generate(input=samples, cache={})
-    return {'text': result[0].get('text', '').strip() if result else ''}
+    options = {'language': 'ja', 'use_itn': True} if language == 'ja' else {}
+    result = load_recognizer(language).generate(input=samples, cache={}, **options)
+    text = result[0].get('text', '') if result else ''
+    return {'text': (re.sub(r'<\|[^<>]*\|>', '', text) if language == 'ja' else text).strip()}
 
 
 def synthesize(text):
@@ -118,7 +124,8 @@ for line in sys.stdin:
             load_recognizer()
             result = {'ready': True}
         else:
-            result = recognize(request['audio']) if mode == 'asr' else synthesize(request['text'])
+            language = 'ja' if request.get('language') == 'ja' else 'zh'
+            result = recognize(request['audio'], language) if mode == 'asr' else synthesize(request['text'])
     except (ValueError, wave.Error, EOFError) as error:
         result = {'error': str(error)}
     except Exception:

@@ -51,3 +51,15 @@ export async function loadCloudConnection(profile, {fetcher = fetch, decrypt = p
     },
   };
 }
+
+export async function loadStudyConnection(profile, options) {
+  const client = await loadCloudConnection(profile, options);
+  if (!client) return null;
+  if (client.mode === '开发连接') {
+    return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(client.origin).hostname) ? client : null;
+  }
+  return {...client, request(path, options) {
+    if (!path.startsWith('/api/study/v1/')) throw Error('线上语言材料准备中，可用基础剧本或导入文件');
+    return client.request(path, options);
+  }};
+}

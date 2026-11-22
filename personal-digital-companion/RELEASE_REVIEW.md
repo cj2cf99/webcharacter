@@ -1692,3 +1692,43 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 ### 七日新闻候选 cafa85c28ea2 源码同步
 
 安装对应的源码从 215247fa10a272aa1ce5fac5bd7ff2f29ce6aa50 按 41 项核对清单叠加，仅携带七日新闻相关改动。正式页面资源由源文件构建。源码提交 0655e38fb6d5d3f5cf0bc2dd5078744634b393e2 已推送至 origin/codex/workspace-checkpoint-20261120 并回读一致。共享入口按新闻增量移植，保留同分支已有的独立改动。花园仍待版本规则支持。
+
+## 2026-11-23 JST · Windows 绯月「陪我学习」安装候选 247f3713f3f2
+
+**用户需求和验收。** 绯月按现有材料做 A/B 对练、保存总结和强化练习，支持本机缓存、抽题、模考。用户随后确认绯月通过 subscriptions-api 与网页版共用知序账户和正式场次，先用真实结构和少量生产只读样本在本地验收。两个 Worker 已单独发布，用户随后要求安装。验收范围为右键或明确对话指令打开同一学习面板，本机材料及模型可用，知序取材、接管续考和交卷可回读，草稿与复盘仍在本机。
+
+**目标和比较方法。** 目标为 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion 的 Windows 正式绯月。实际安装版本 cafa85c28ea2，安装树 Git 参考 39fd098e40ebf7c2c82dd5a6f9944ae98055566e 加实际补丁。准备时正式 REST v6，PID 14308，04:36:25 JST 开始运行，同一 Electron、实际命令行、登录项和 output/desktop-profile。来源 G:/selftool/WebCharacter/personal-digital-companion，Git 基线 03942463b3de924c380ae45a0c29a30bfbbee1c6。依据 REQUIREMENTS.md 的学习章节、docs/STUDY_DESIGN.md 和 docs/reviews/LEARNING_IMPLEMENTATION_REVIEW_2026-11-23.md；仅合入学习文件和必要钩子。此前候选 b693d0853451 未实装；知识库和新闻编辑的并行发布使四个前像变化。按实际最新文件重新落入学习门面，仅重做 shell.mjs、screen-question-host.mjs、menu-layout.json、source-updates.mjs 的学习接线，其余 21 项摘要不变，最新正式功能保持原代码。
+
+冻结目录 G:/selftool/WebCharacter/work/feiyue-study-install-20261123。windows-files.json 的完整 SHA-256 为 247f3713f3f227c75c91d1d0cedf071f382044f91afafc55426ab3704bda1903，逐项记录 before/ 与 candidate/ 的文件路径、旧摘要和新摘要。25 项中 10 项替换现有文件，其余为新增。核对旧、新两树对应的文件即可还原差异。
+
+**具体文件和行为。**
+
+- desktop/shell.mjs、screen-question-host.mjs、conversation-routing.mjs、menu-layout.json 和 source-updates.mjs 增加学习入口、显式对话触发、面板生命周期与热加载。其它正式版模块继续使用原代码。
+- 新增 desktop/study-host.mjs、study-preload.cjs、study-materials.mjs、study-relay.mjs、study-store.mjs、study-ui.mjs、study.html、study.css 和 pair-choice.mjs。范围为安全 IPC、材料导入缓存、题库抽练和模考、A/B 对练、复盘、强化、正式考试续考和交卷。输出目录同步 study-ui.mjs、study.html、study.css 和 pair-choice.mjs。回执使用既有知序修订号、写入者代次及幂等键。复盘显式使用 JST。
+- assets 和 output/desktop-bundle 的 study-initial.v1.json 为同一份 LanguageStudy 正式初始包，30 套，按需载入。tools/build-desktop.mjs 增加资源收集。
+- cloud-connection.mjs 复用已有身份接入已发布的知序服务。线上自建语言材料路由留待服务端发布，当前可用基础剧本和本机导入。知序生产回执暂未提供完整历史作答标记，未见题明确采用本机已知记录，普通抽练、正式续考和交卷使用现有契约。
+- dictation-host.mjs、bubble-voice.mjs 和 bubble-voice-worker.py 为可信学习窗口接入日语听写，使用现有 SenseVoiceSmall 模型；普通中文听写沿用原逻辑。无需安装依赖或另复制模型。
+
+**数据库及配置。** 无已有业务库的迁移、回填或安装时写入；无 Cloudflare 发布或配置修改。首次打开学习窗口按需在原资料目录创建独立受保护的 study.sqlite。只在用户实际操作正式考试时提交。纯代码和资源发布按新个人发布规则跳过数据库备份，仅备份本次替换的应用文件。已有资料、登录项、启动入口和模型配置沿用。
+
+**实际验证。**
+
+- 隔离正式基线运行 node --test agent/tests/study.test.mjs，13/13。覆盖离线、草稿、续考、特殊配对、复盘、来源分页和当前发布的 Access 请求范围。
+- windows-study-audit.mjs --as-integrated --synthetic 精确加载候选桌面代码及实际 Worker 候选。隔离 Workerd 共享真实结构，合成样本双向续考各 6/6，并发开考/接管各一方成功，交卷只结算一次，超时草稿保留。上一阶段已用 6 道真实只读样本验收。
+- install.ps1 -Mode Rehearse 在隔离目录完成中途失败与完整回退演练。基础包与 LanguageStudy 源文件 SHA-256 相同，宿主、路由、语音和打包接线通过语法检查。
+- 最新 test-panel-titlebar-electron.mjs 在隔离正式基线通过布局、原生标题栏和热加载检查。正式树的旧检查脚本将常规自绘菜单误当作标题面板，复测使用项目现有新版脚本。仅更换测试副本。
+- 同样的学习实现和模型文件先前已在隔离 Electron 通过 test-study-electron.mjs --real-cpu --ja-sample=<预录样本>。重基线后重跑带模型替身的正式基线冷启动、标题栏、候选 Workerd、13 项专项与安装回退演练，均通过。冷启动脚本改为等待菜单学习项完成渲染，安装文件未改变。日语预录样本同时通过实际模型直测。实点自绘菜单首击、深浅色窄窗、考试暂停恢复与关窗草稿、载入 30 套基础剧本。本机 Qwen3.5-2B CPU 完成 A/B 对练，模拟麦克风经本机 SenseVoice 日语识别回填，待用户确认后才提交。
+
+**安装和回退。** 取得对候选的明确确认后，再次核对候选摘要、现场正式版本、启动入口、在途任务和正式资料路径。等待空闲后正常退出，应用定向文件，保持原启动入口，核对新进程、REST v6、资料目录和已安装文件摘要。异常恢复被替换文件、移除新增文件并启动旧代码。既有数据库只做只读完整性回查。安装后补记实际版本、JST 时间、后检与 Git 回执。
+
+**当前限制和确认。** 等待正式安装授权，尚未替换正式代码。第三方独立审核未执行。重点检查工作区范围、可信 IPC、题目与场次共用、超时恢复及独立本地资料。生产 Access 效果待用户截图确认。
+
+花园默认草案 feiyue-study-install-20261123。当前修订 157，网页角色组件 #16 → 绯月（桌面精灵）#61 现为 32.0，本次独立成功按新规则加 0.1。如果上次两个 Worker 的记录先登记，则按届时版本续算。现行模型会计算为 33.0，暂不生成版本不一致的执行 SQL。待支持新模型及实际结果后回读编号、前后版本和清单并取得单独确认。既有项目、种子、改善、缺陷和历史无需更新。
+
+### 实际安装回执 · 247f3713f3f2
+
+用户确认后于 2026-11-23T04:45:26.4677741+09:00 完成安装，旧 PID 14308 正常退出，新 PID 16124 于 2026-11-23T04:45:25.4730000+09:00 从原 Electron 入口启动，使用原正式资料目录。25 项应用文件 SHA-256 与候选完全一致，原快捷方式和登录项通过查验。正式 REST v6 的受控技能目录可回读，未认证为 401；既有资料库完整性及必要状态核对通过。
+
+从实际安装目录加载正式 shell、页面及固定资源，以独立临时资料运行 installed-study-entry.mjs。自绘菜单首击、本地模考暂停恢复、关窗草稿恢复、深浅色窄窗、逐句信心、返回原答和按需加载 30 套基础剧本通过。安装未变更已有业务数据库，未执行数据库备份、DDL 或回填。保留被替换应用文件的回退副本。线上 Access 页面和正式取题交卷待用户截图确认，代理未代登录。
+
+花园批次 feiyue-study-install-20261123 待支持 +0.1 的计数模型及具体清单确认，暂未登记。准确安装源码的 Git 同步状态在后续回读时补记。

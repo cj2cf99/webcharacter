@@ -8,6 +8,7 @@ import {prepareDesktopPages} from '../desktop/source-updates.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url)),out=resolve(root,'output/desktop-bundle'),media=resolve(root,'output/four-states-v3');
 mkdirSync(out,{recursive:true});
 prepareDesktopPages(root,out);
+copyFileSync(resolve(root,'assets/study-initial.v1.json'),resolve(out,'study-initial.v1.json'));
 mkdirSync(resolve(out,'voice'),{recursive:true});
 cpSync(resolve(root,'assets/voice'),resolve(out,'voice'),{recursive:true});
 cpSync(resolve(root,'assets/walk-20261118'),resolve(out,'walk'),{recursive:true});

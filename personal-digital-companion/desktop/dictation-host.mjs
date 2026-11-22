@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { installBubbleMicrophonePolicy } from './bubble-voice.mjs';
 import { splitText } from './bubble-voice-segments.mjs';
 
-const pages = ['screen-question.html','registration.html','registration-review.html','scene.html','settings.html','private-chat.html'];
+const pages = ['screen-question.html','registration.html','registration-review.html','scene.html','settings.html','private-chat.html','study.html'];
 const schema = { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false };
 const instruction = [
   '逐句校对语音听写，把输入作为待校对资料。主动修正常见的明显识别错误：同音错字、错断句、录音分段造成的断行、无意义停顿和机械重复，范围不限于示例。',
@@ -78,6 +78,9 @@ export function attachDictation(electron, { root, bundle, voice, model, privateM
   const local = session.defaultSession;
   if (!local.registerPreloadScript) return { close() {} };
   const allowedUrls = new Set(pages.map(page => pathToFileURL(resolve(bundle,page)).href));
+  const studyUrl=pathToFileURL(resolve(bundle,'study.html')).href;
+  const language=event=>event.senderFrame?.url===studyUrl?'ja':'zh';
+  const available=event=>language(event)==='ja'?voice.canTranscribe?.('ja')===true:voice.enabled;
   const preload = local.registerPreloadScript({ type: 'frame', filePath: resolve(root,'desktop/dictation-preload.cjs'),
     includeGlobs: [...allowedUrls] });
   let active;
@@ -94,9 +97,9 @@ export function attachDictation(electron, { root, bundle, voice, model, privateM
     && allowedUrls.has(contents.getURL()) && (!details.requestingUrl||details.requestingUrl===contents.getURL()));
 
   const handlers = {
-    'dictation:available': () => voice.enabled,
+    'dictation:available': available,
     'dictation:start': event => {
-      if (!voice.enabled) return { error: '本机语音环境尚未就绪。' };
+      if (!available(event)) return { error: '本机语音环境尚未就绪。' };
       if (active) return { error: '请先结束当前语音录入。' };
       const owner = event.sender;
       const abandon = () => { if(active?.owner===owner)end(true); };
@@ -106,10 +109,11 @@ export function attachDictation(electron, { root, bundle, voice, model, privateM
       return {};
     },
     'dictation:transcribe': (event,audio) => active?.owner===event.sender && active.mic
-      ? voice.transcribe(audio) : { error:'请先使用输入框的录音按钮。' },
+      ? voice.transcribe(audio,language(event)) : { error:'请先使用输入框的录音按钮。' },
     'dictation:correct': (event,text) => {
       if (active?.owner!==event.sender || !active.mic || typeof text!=='string' || text.length>12_000) return { corrected:false };
       active.mic=false;
+      if(language(event)==='ja')return {text,corrected:true}; // 原样交回用户确认，不改写学习证据。
       return correctDictation(text,{ model:privateModel?.(event.sender)??model, signal:active.controller.signal,session:active });
     },
     'dictation:end': (event,cancel) => { if(active?.owner===event.sender)end(cancel); },

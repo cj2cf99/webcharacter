@@ -14,7 +14,7 @@ export function installBubbleMicrophonePolicy(session, allowed) {
   ));
 }
 
-function speechWorker({ python, script, runtime, reference, cache, mode, device = 'auto' }) {
+function speechWorker({ python, script, runtime, reference, cache, mode, device = 'auto', senseVoiceModel }) {
   let child, pending, exited, idleTimer;
 
   function close(message = '语音操作已结束。') {
@@ -31,7 +31,8 @@ function speechWorker({ python, script, runtime, reference, cache, mode, device 
     const worker = spawn(python, ['-X', 'utf8', '-B', '-u', script, mode, runtime, reference, cache], {
       cwd: cache, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'],
       env: { ...process.env, HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1', HF_HUB_DISABLE_TELEMETRY: '1',
-        GRADIO_ANALYTICS_ENABLED: 'False', OMP_NUM_THREADS: '4', FEIYUE_TTS_DEVICE: device },
+        GRADIO_ANALYTICS_ENABLED: 'False', OMP_NUM_THREADS: '4', FEIYUE_TTS_DEVICE: device,
+        ...(senseVoiceModel?{FEIYUE_SENSEVOICE_MODEL:senseVoiceModel}:{}) },
     });
     const failed = () => { if (child === worker) close('本机语音进程未就绪，请重试。'); };
     worker.on('error', failed);
@@ -77,23 +78,28 @@ export function createBubbleVoice({ root, profile, ttsDevice = 'auto' }) {
   const script = resolve(root, 'desktop/bubble-voice-worker.py');
   const cache = resolve(profile, ttsDevice === 'gpu' ? 'private-voice-runtime' : 'voice-runtime');
   const enabled = process.platform === 'win32' && existsSync(python) && existsSync(script);
-  const asr = speechWorker({ python, script, runtime, reference, cache, mode: 'asr' });
+  const workspaceModel=join(root,'../work/sensevoice-small/model');
+  const sharedModel='G:/selftool/WebCharacter/work/sensevoice-small/model';
+  const senseVoiceModel=resolve(process.env.FEIYUE_SENSEVOICE_MODEL??(existsSync(join(workspaceModel,'model.pt'))?workspaceModel:sharedModel));
+  const canTranscribe=language=>enabled&&(language!=='ja'||existsSync(join(senseVoiceModel,'model.pt')));
+  const asr = speechWorker({ python, script, runtime, reference, cache, mode: 'asr', senseVoiceModel });
   const tts = speechWorker({ python, script, runtime, reference, cache, mode: 'tts', device: ttsDevice });
   let preheating;
   return {
     enabled,
+    canTranscribe,
     preheat() {
       if (!enabled) return { error: '本机听写环境未就绪。' };
       return preheating ??= asr.run({ preheat: true }).finally(() => { preheating = undefined; });
     },
-    async transcribe(wav) {
-      if (!enabled) return { error: '本机 GPT-SoVITS 运行环境未就绪。' };
+    async transcribe(wav,language='zh') {
+      if (!canTranscribe(language)) return { error: language==='ja'?'本机日语听写模型未就绪。':'本机 GPT-SoVITS 运行环境未就绪。' };
       if (!(wav instanceof Uint8Array) || wav.byteLength < 3244 || wav.byteLength > 256044) return { error: '录音段格式无效。' };
       if (preheating) {
         const warmed = await preheating;
         if (!warmed.ready) return { error: warmed.error };
       }
-      const result = await asr.run({ audio: Buffer.from(wav).toString('base64') });
+      const result = await asr.run({ audio: Buffer.from(wav).toString('base64'),...(language==='ja'?{language}:{}) });
       return result.error ? { error: result.error } : { text: result.text };
     },
     async render(text) {

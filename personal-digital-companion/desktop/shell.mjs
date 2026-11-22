@@ -39,6 +39,7 @@ import {attachWeather} from './weather-host.mjs';
 import {createReminderChecks,checkDueItems} from './reminder-checks.mjs';
 import {attachPollSettings} from './poll-settings-host.mjs';
 import {attachNewsPanel} from './news-panel-host.mjs';
+import {attachStudy} from './study-host.mjs';
 import {createNewsEditor} from './news-editor.mjs';
 import {cleanNewsTitle} from './news-layout.mjs';
 import {attachReminderReview} from './reminder-review-host.mjs';
@@ -346,6 +347,7 @@ export async function startDesktop(electron,options={}){
   menuUnread=checks.unread;pendingCheckVisible=checks.pending;
   const pollSettings=attachPollSettings(electron,{root,bundle,checks});
   const newsPanel=attachNewsPanel(electron,{root,bundle,checks,model:localModel,compile:compileNews});
+  const study=attachStudy(electron,{root,bundle,profile,model:localModel,connection:options.studyConnection,onForeground:interruptMemory});
   const serverTask=createServerTaskCommand({profile,tasks,localModel,interactionWork,dialog:messages});
   const modelFolder=dirname(desktopModelPath(app,root));
   const upgradeVision=options.upgradeVision??(!options.vision&&interactionWork?localVision(resolve(modelFolder,'Qwen3.5-9B-Q4_K_M.gguf'),
@@ -407,7 +409,7 @@ export async function startDesktop(electron,options={}){
       const n=nags?.pendingQuestions().find(item=>item.id===id);
       return n&&diary.questionCitation(n,true);
     },
-    openNews:newsPanel.open,resumeAudit:resumeQuestion,onRegistration:()=>contextualAction('chat-registration'),serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
+    openNews:newsPanel.open,openStudy:study.open,resumeAudit:resumeQuestion,onRegistration:()=>contextualAction('chat-registration'),serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
     memory,vision:memory&&(options.vision??localVision(desktopModelPath(app,root))),readTasks:memory?.readTasks??tasks.executor?.review.read,
     readTraffic:tasks.traffic?.readPage,client:options.screenQuestionClient,requestRestart,localModel,interactionWork,upgradeVision,log:tasks.traffic?.write});
   const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark,recordCheck:checks.record,checks});
@@ -948,6 +950,7 @@ export async function startDesktop(electron,options={}){
       }},
       today:reminderReview && {click:()=>taskNotice(reminderReview.open())},
       news:{click:()=>taskNotice(newsPanel.open())},
+      study:{click:()=>taskNotice(study.open())},
       tasks:taskInbox&&{click:()=>taskNotice(taskInbox.open())},
       restoreTerminal:electron.dialog?.showOpenDialog&&{click:()=>taskNotice(restoreLocalTerminal())},
       review:{click:()=>taskNotice(screenQuestion.openReview())},
@@ -1050,7 +1053,7 @@ export async function startDesktop(electron,options={}){
     if(files.includes('tray.png'))tray.setImage(nativeImage.createFromPath(resolve(bundle,'tray.png')));
     for(const [page,panel] of [['index.html',win],['settings.html',pcSettings.panel],['weather.html',weather.panel],
       ['conversation.html',screenQuestion.details],['reminder-review.html',reminderReview?.panel],['poll-settings.html',pollSettings.panel],
-      ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],
+      ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],['study.html',study.panel],
       ['screen-question.html',screenQuestion.panel],['registration-review.html',screenQuestion.inquiryPanel],['sound-settings.html',settingsWindow],
       ...(messages.panels??[]).map(panel=>['message-box.html',panel])]){
       if(!panel||panel.isDestroyed())continue;
@@ -1091,7 +1094,7 @@ export async function startDesktop(electron,options={}){
     reminderStartup.abort();
     interruptMemory();electron.powerMonitor?.removeListener?.('suspend',suspendMemory);
     electron.powerMonitor?.removeListener?.('lock-screen',lockScene);
-    curiosity?.close();scenePanel?.close();pollSettings.close();newsPanel.close();checks.close();
+    curiosity?.close();scenePanel?.close();pollSettings.close();newsPanel.close();study.close();checks.close();
     stopLayout();
     clearTimeout(refreshTimer);clearTimeout(memoryResultTimer);stopSources?.();
     ipcMain.removeListener('desktop:attachment-done',onAttachmentDone);
@@ -1253,6 +1256,6 @@ export async function startDesktop(electron,options={}){
   const remindersReady=waitForStartupReminders(reminderStartup.signal);
   if(!options.benchmark)checks.start();
   taskNotice(tasks.startup(remindersReady));
-  return {win,show,hide,moveTo,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,transcription,
+  return {win,show,hide,moveTo,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,transcription,study,
     get localAPIAddress(){return localREST?.address??null;},getStats:()=>({pointerMessages,visible:win.isVisible(),ready:previousReady})};
 }

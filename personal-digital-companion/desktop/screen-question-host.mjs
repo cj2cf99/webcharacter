@@ -48,7 +48,7 @@ export function questionBounds(pet,area,preferredHeight=260){
   return {bounds:{x,y,width,height},tail,tailX:Math.max(20,Math.min(width-60,pet.x+pet.width/2-x-20))};
 }
 
-export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,checks,reminderRequest,requestRestart,localModel,interactionWork,transcription,threadOptions,log,emotion=()=>null,topics=()=>null,auditPending=()=>[],readQuestionCitation,resumeAudit,openNews,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,visible=true,voice=createBubbleVoice({root,profile})}={}){
+export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,checks,reminderRequest,requestRestart,localModel,interactionWork,transcription,threadOptions,log,emotion=()=>null,topics=()=>null,auditPending=()=>[],readQuestionCitation,resumeAudit,openNews,openStudy,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,visible=true,voice=createBubbleVoice({root,profile})}={}){
   const sessions=new WeakMap();
   const {ipcMain,screen,desktopCapturer}=electron;
   let panel=null,servicePromise=null,controller=null,busy=false,disposed=false,generation=0,panelHeight=260,state={state:'idle',text:'想问我什么？'};
@@ -568,6 +568,9 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       if(route.kind==='newsBriefing'){
         if(openNews){await openNews();result={state:'answer',text:'已打开本期新闻简报。'};}
         else result=checks.latestNews();
+      }else if(route.kind==='study'){
+        if(!openStudy)throw Error('学习面板暂不可用');
+        await openStudy();result={state:'answer',text:'已打开「陪我学习」。'};
       }else if(route.kind==='search'){
         result=await lookup(route.query,route.summarize,route.images,route.research,route.page);
       }else if(route.kind==='question'&&!route.fileName&&!(retry?route.withScreen:withScreen)&&isSkillDirectoryQuestion(text)){

@@ -1,5 +1,7 @@
 # WebCharacter 开发指南
 
+2026-11-23 JST，绯月 Windows 正式版 247f3713f3f2 已安装「陪我学习」。本机 A/B 对练、基础剧本和知序题库入口已验证，知序线上 Access 效果待用户截图确认。见[安装回执](../personal-digital-companion/RELEASE_REVIEW.md#实际安装回执--247f3713f3f2)。
+
 2026-11-23 JST，绯月正式版 c2da3c2ccbf0 的情绪复盘按事件取证，任务日志可展开分段材料和原始 JSON。截图工作记录的本机模型回放见[桌宠开发记录](../personal-digital-companion/docs/DEVELOPMENT.md#情绪复盘的工作记录回放)。
 
 2026-11-23 JST，新增[对话、摘要与待确认的开发注意事项](../personal-digital-companion/docs/DEVELOPMENT.md#对话摘要与待确认的开发注意事项)。涉及从记录生成提问、确认或摘要的项目，应核对具体待答事项及后来已给的信息，保留来源与正确引用，验证缺来源、重复、长文本和误改题等场景。
