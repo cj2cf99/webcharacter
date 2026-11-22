@@ -1873,3 +1873,25 @@ Git 以远端 6562e7d 为比较基线，只纳入七项实现差异、三处测�
 已按用户本次部署指令安装五个候选文件，正式安装文件摘要 d13cd4d22bbd。安装前重新核对活动实例与五项旧文件。正式进程 PID 17420 正常退出，经原入口启动 PID 21508。本机 REST v7、取号及取消路由、认证后的批次读取均已确认。资料中原有 28 个批次、1 条提醒仍可读，新建空队列表 garden_turns。24 项技能目录可访问。发布元数据清单单独确认。详见发布项目的 docs/releases/garden-parallel-20261123/install-receipt.json。
 
 发布收尾：用户明确跳过本次绯月登记，取号已取消，生产回读 feiyue-garden-v7-20261123 无发布行，本次没有登记增版。正式 v7 发布源码 e4e12017c6aa2c46ba0bcfcbab2b028229eb3541 已推送并回读。
+
+
+## 2026-11-23 JST · Windows 正式绯月右键菜单收短 · 9c9f31935a3a
+
+用户要求将常用功能放一级，其他默认折叠，随后指示「更新，不需要登记」。目标为本机 Windows 正式绯月。常态一级从 13 项减为 8 项，包括问绯月、今日任务、三地天气、本地复盘，以及阅读与学习、任务、桌宠动作、设置与维护四组。每次重开应收起所有分组，角色、托盘和按状态显示的邀请、提醒、待确认入口均须可用。原有 34 个动作逐项比对，动作名、标签、图标及强调属性相同。
+
+**基线与文件。** 正式目录 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion，Git 参考 39fd098e 叠加已安装补丁。预检核实 PID 21508、启动时间 05:12:23 JST、本机 REST v7、资料目录、快捷方式及登录项。开发来源 WebCharacter 工作树 03942463 加本次菜单调整。以两个实装文件的前像为准。docs/releases/menu-compact-20261123/windows-files.json 记录逐文件新旧 SHA-256，windows.patch 可在正式基线上审阅文本差异。清单 SHA-256 为 9c9f31935a3a58005ee2e3e335417b79ca95189ba24c7faf5b8cc27e94f02650。
+- desktop/menu-layout.json 调整分组和分隔线。新闻、知识库、陪练、看日记进入阅读与学习，补写评价进入任务，显隐进入桌宠动作，退出进入设置与维护。
+- desktop/shell.mjs 仅更新暂停提示。从原来的「日记与评价」菜单提示改为引导到两条实际可用的菜单路径。该文件基于正式版定点替换，其他开发中改动不在清单中。
+
+**数据和配置。** 数据库迁移、回填、业务写入、外部服务、绑定、凭据和用户配置变更均为无。纯代码更新，跳过数据库备份。用户明确跳过花园登记。本次无需 SQL、取号、批次或花园版本变化。
+
+**实际检查。** 子项目 node tools/build-desktop.mjs、node tools/test-desktop-shell.mjs、node --test agent/tests/screen-question-host.test.mjs（12/12）通过。Electron 标题栏及浅深色面板截图通过。以实际安装源码和静态资源搭建隔离目录 work/menu-compact-release-20261123/qa，仅覆盖清单两文件。在测试用临时资料下，经 Electron tools/run-electron-check.mjs 运行 test-menu-shell-electron.mjs、test-knowledge-electron.mjs、test-study-electron.mjs 和 test-menu-popup-electron.mjs，均通过。验证了双入口、每次重开折叠、嵌套选择、勾选、Esc、浅深两色及知识库和陪练首击。候选使用默认 GPU 的截图巡检中途挂起，改用独立测试资料加 --disable-gpu 后完整通过；正式渲染配置不变。回退和预检使用 pwsh -NoProfile -File work/menu-compact-release-20261123/install.ps1 -Mode Rehearse / Preflight，中断和完整替换后的回退均逐件核对通过。预检核对八个本机库可读且快检正常，在途计数当时为零。
+
+**风险与安装步骤。** 审核重点为旧菜单动作完整性、正式 shell 是否只修改提示、实际父分组和可见下标选择、重开折叠。执行前复核进程、原入口、清单及两文件旧值。使用同目录 install.ps1 -Mode Install，等任务空闲，备份两个文件，经正式应用正常退出、定向替换、用原入口启动。回读新 PID、REST v7、原资料目录及文件摘要。从安装目录以独立资料复验角色和托盘入口，不向用户资料写测试内容。若安装或启动失败，恢复两份备份并由原入口启动。现场文件或范围变化须先核对。
+
+**状态。** 用户已指示更新并跳过登记；正式候选已准备，发布审核记录已补齐。安装、重启后验收、Git 收尾待执行。第三方独立审核未执行。
+
+
+### 正式安装回执 · 9c9f31935a3a
+
+2026-11-23 05:42:45 JST，Windows 正式绯月安装菜单候选 9c9f31935a3a，常态一级从 13 项减为 8 项。安装目录的角色与托盘右键、分组展开、Esc 及隐藏动作已用临时资料复验通过。用户确认安装并跳过花园登记。 旧 PID 21508 正常退出，新 PID 7140 经 REST v7、资料目录、快捷方式及登录项核对。两项实装哈希一致，八个本机数据库快检正常。用户本人桌面操作待体验。安装回执与精确实装差异见 docs/releases/menu-compact-20261123。发布分支 717649c 的基线未包含正式版既有知识库模块，该分支保留自身动作清单，正式版完整 34 项布局由逐文件清单和 windows.patch 记录。

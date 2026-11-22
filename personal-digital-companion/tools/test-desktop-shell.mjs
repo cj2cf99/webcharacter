@@ -118,7 +118,7 @@ ipcMain.emit('desktop:hit',event,false);assert.equal(win.ignore.at(-1)[0],false,
 ipcMain.emit('desktop:drag-end',event);ipcMain.emit('desktop:hit',event,false);assert.equal(win.ignore.at(-1)[0],true);
 const actionsMenu=()=>tray.menu.find(item=>item.label==='桌宠动作').submenu;
 const moveItems=()=>actionsMenu().find(item=>item.label==='移动到').submenu;
-const watchDiary=tray.menu.find(item=>item.label==='日记与评价').submenu.find(item=>item.label==='看绯月写日记').click;
+const watchDiary=tray.menu.find(item=>item.label==='阅读与学习').submenu.find(item=>item.label==='看绯月写日记').click;
 result.hide();
 const writing=watchDiary();
 assert.equal(win.visible,true);
@@ -133,7 +133,7 @@ diaryDatabase.close();
 assert.deepEqual(win.sent.filter(([name])=>name==='desktop:idle-context').slice(-2).map(([,value])=>value),['diary-review-idle','']);
 assert.match(loginErrors.pop().detail,/云端连接未配置/);
 assert.ok(thoughtHistory.some(([channel,v])=>channel==='desktop:thought'&&v?.title==='闲时 · 写日记'&&v.total===7),'手动写日记显示真实归档进度');
-const reviewTasks=tray.menu.find(item=>item.label==='日记与评价').submenu.find(item=>item.label==='补写本机任务执行评价').click;
+const reviewTasks=tray.menu.find(item=>item.label==='任务').submenu.find(item=>item.label==='补写本机任务执行评价').click;
 const oldDay='2020-01-01',oldTime=Date.parse(oldDay+'T12:00:00+09:00');
 await memory.saveTasks(oldDay,[{task_id:'old-task',at:oldTime,title:'登记',action:'完成',detail:'测试'}],{index:false});
 await memory.save({id:'old-dialogue',at:oldTime,state:'answer',question:'聊天',text:'非任务资料'},{index:false});
@@ -146,8 +146,8 @@ console.log('PASS：手动扫描七天以前的本机任务、排除聊天、显
 console.log('PASS：本周期已写仍能手动启动绯月手记，隐藏时显示桌宠，重复点击只写一份，离线保留草稿。');
 actionsMenu().find(item=>item.label==='开始工作').click();assert.deepEqual(win.sent.at(-1),['desktop:work',true]);
 await watchDiary();if(process.platform==='win32')assert.match(tray.balloon.content,/正在忙/);
-tray.menu.find(item=>item.label==='隐藏').click();assert.equal(win.visible,false);assert.equal(timer,null);
-tray.menu.find(item=>item.label==='显示').click();assert.equal(win.visible,true);assert(timer);
+actionsMenu().find(item=>item.label==='隐藏').click();assert.equal(win.visible,false);assert.equal(timer,null);
+actionsMenu().find(item=>item.label==='显示').click();assert.equal(win.visible,true);assert(timer);
 let prevented=false;win.webContents.emit('will-navigate',{preventDefault(){prevented=true}},'https://example.com');assert(prevented);
 ipcMain.emit('desktop:sound-ready',event);assert.deepEqual(win.sent.at(-1),['desktop:sound',normalizeSound()]);
 ipcMain.emit('desktop:sound-change',{sender:{},senderFrame:{}},{enabled:false,volume:90});
@@ -155,12 +155,12 @@ ipcMain.emit('desktop:sound-ready',event);assert.equal(win.sent.at(-1)[1].enable
 ipcMain.emit('desktop:sound-change',event,{enabled:false,volume:23});assert.deepEqual(JSON.parse(readFileSync(join(profile,'sound-settings.json'),'utf8')),normalizeSound({enabled:false,volume:23}));
 ipcMain.emit('desktop:sound-change',event,{enabled:true,volume:999});ipcMain.emit('desktop:sound-ready',event);assert.equal(win.sent.at(-1)[1].volume,23);
 const labels=items=>items.filter(item=>item.type!=='separator').map(item=>item.label);
-assert.deepEqual(labels(tray.menu),['问绯月','今日任务','三地天气','新闻简报','陪我学习','本地复盘','任务','日记与评价','桌宠动作','设置与维护','隐藏','退出']);
+assert.deepEqual(labels(tray.menu),['问绯月','今日任务','三地天气','本地复盘','阅读与学习','任务','桌宠动作','设置与维护']);
 win.webContents.emit('context-menu');assert.equal(tray.openedMenu,tray.menu,'角色右键与托盘使用同一菜单');
-assert.deepEqual(labels(tray.menu.find(item=>item.label==='任务').submenu),['绯月任务管理','中断任务与补传','任务日志']);
+assert.deepEqual(labels(tray.menu.find(item=>item.label==='任务').submenu),['绯月任务管理','中断任务与补传','任务日志','补写本机任务执行评价']);
 const settingsLabels=labels(tray.menu.find(item=>item.label==='设置与维护').submenu);
 if(process.platform==='win32'){
-  assert.deepEqual(settingsLabels,['动画与声音','轮询设定','登录 Windows 后延迟 1 分钟启动','云端连接','重启绯月']);
+  assert.deepEqual(settingsLabels,['动画与声音','轮询设定','登录 Windows 后延迟 1 分钟启动','云端连接','重启绯月','退出']);
   const item=tray.menu.getMenuItemById('loginStart');
   assert.equal(item.type,'checkbox');assert.equal(item.checked,false);assert.equal(loginWrites,0);
   item.checked=true;item.click(item);assert.equal(item.checked,true);
@@ -172,7 +172,7 @@ if(process.platform==='win32'){
   loginError=false;item.checked=false;item.click(item);assert.equal(item.checked,false);assert.equal(loginEntries.length,0);
   result.hide();app.emit('second-instance',{},['--feiyue-login']);assert.equal(win.visible,false);
   app.emit('second-instance',{},[]);assert.equal(win.visible,true);
-}else assert.deepEqual(settingsLabels,['动画与声音','轮询设定','云端连接','重启绯月']);
+}else assert.deepEqual(settingsLabels,['动画与声音','轮询设定','云端连接','重启绯月','退出']);
 ipcMain.emit('desktop:sound-preview',event,'click');assert.equal(win.sent.at(-1)[0],'desktop:sound-preview');
 const savedBounds={...win.getBounds()};
 const postureMessages=()=>win.sent.filter(m=>m[0]==='desktop:posture');

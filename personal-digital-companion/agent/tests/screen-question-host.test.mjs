@@ -109,6 +109,7 @@ test('图像确定性步骤、附件角色与负面指令',()=>{
   assert.equal(attachmentRegistration('把图里的会议记成提醒'),true);
   assert.equal(attachmentRegistration('请描述这张图片'),false);
   assert.match(menuGuidance('本地复盘怎么打开'),/选择「本地复盘」/);
+  assert.match(menuGuidance('陪我学习怎么打开'),/阅读与学习 → 陪我学习/);
   assert.match(menuGuidance('任务日志在哪'),/任务 → 任务日志/);
   assert.match(menuGuidance('要怎么才能登记日记？'),/问绯月.*帮我登记日记/);
 });

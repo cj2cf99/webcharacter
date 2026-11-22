@@ -1,0 +1,12 @@
+{
+  "installedAt": "2026-11-23T05:42:45.1565636+09:00",
+  "version": "9c9f31935a3a",
+  "manifest": "9c9f31935a3a58005ee2e3e335417b79ca95189ba24c7faf5b8cc27e94f02650",
+  "files": 2,
+  "oldPid": 21508,
+  "newPid": 7140,
+  "startedJst": "2026-11-23T05:42:43.9330000+09:00",
+  "rest": 7,
+  "postInstallMenuCheck": "passed",
+  "gardenRegistration": "用户明确跳过"
+}

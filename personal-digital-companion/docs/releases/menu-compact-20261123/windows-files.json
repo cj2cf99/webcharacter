@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "path": "desktop/menu-layout.json",
+      "before": "62c6bda58fc609b99f0b9cd574fc749c905a9beb43afa2875987a5617c160da9",
+      "after": "ae1a992e6a3c16b4bf16f05907a2d6424fac5a92d41373a115527ebc27693528"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "before": "5b423962d9e87a30bdd7471f9f47611d55ff9f8df0abfb0c69b1facdd47ec3a2",
+      "after": "54799f93b06b4659c0965dfc84004aebfcd003022930f31bb08cdbfb3a1020b8"
+    }
+  ]
+}

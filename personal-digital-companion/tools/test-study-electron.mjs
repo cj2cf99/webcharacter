@@ -53,8 +53,9 @@ async function test(){
     await until(()=>shell.win.isVisible(),'桌宠未显示');
     shell.win.webContents.emit('context-menu');
     const popup=()=>electron.BrowserWindow.getAllWindows().find(w=>w.getTitle()==='绯月菜单');
-    await until(()=>popup()?.isVisible()&&popup().webContents.executeJavaScript("[...document.querySelectorAll('#items > .item')].some(e=>e.innerText.includes('陪我学习'))").catch(()=>false),'自绘菜单未渲染学习入口');
-    await popup().webContents.executeJavaScript("[...document.querySelectorAll('#items > .item')].find(e=>e.innerText.includes('陪我学习')).click()");
+    await until(()=>popup()?.isVisible()&&popup().webContents.executeJavaScript("[...document.querySelectorAll('#items > .item')].some(e=>e.innerText.includes('阅读与学习'))").catch(()=>false),'自绘菜单未渲染学习入口');
+    await popup().webContents.executeJavaScript(`document.querySelector('button[title="阅读与学习"]').click();
+      const entry=document.querySelector('button[title="陪我学习"]');if(!entry.offsetParent)throw Error('陪我学习入口未展开');entry.click();`);
     await until(()=>shell.study.panel?.isVisible(),'首击学习面板未显示');
     let panel=shell.study.panel;
     const js=script=>panel.webContents.executeJavaScript(script).catch(error=>{throw Error('隔离学习脚本 '+script.slice(0,180)+': '+error.message);});

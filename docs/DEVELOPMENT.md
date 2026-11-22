@@ -142,3 +142,6 @@ node tools/check-project.mjs
 ### 2026-11-23 JST · 正式绯月花园登记 v7
 
 正式绯月已支持并行准备、队首统一取号与同批重试。主站 0034 已迁移。已成功发布的功能每次加 0.1。见[本机花园登记手册](../personal-digital-companion/docs/LOCAL_GARDEN_API.md)及[正式安装回执](../personal-digital-companion/docs/releases/garden-parallel-20261123/install-receipt.json)。
+
+
+2026-11-23 05:42:45 JST，Windows 正式绯月安装菜单候选 9c9f31935a3a，常态一级从 13 项减为 8 项。安装目录的角色与托盘右键、分组展开、Esc 及隐藏动作已用临时资料复验通过。用户确认安装并跳过花园登记。

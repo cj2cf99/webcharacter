@@ -26,7 +26,7 @@ async function main(){
   actions.attachment={label:'窗口依附'};
   actions.move={submenu:[{label:'右下角',click:()=>clicks.push('move')}]};
   actions.loginStart={id:'loginStart',type:'checkbox',checked:false,click:item=>clicks.push('login:'+item.checked)};
-  actions.continueNag=false;actions.pendingCheck=false;
+  actions.privateChat=false;actions.continueNag=false;actions.pendingCheck=false;
   const menu=electron.Menu.buildFromTemplate(menuTemplate(layout,actions));
   let opened=0,closed=0;
   menu.on('menu-will-show',()=>opened++);
@@ -40,7 +40,8 @@ async function main(){
       electron.nativeTheme.themeSource=theme;
       await open();
       const labels=await js("[...document.querySelectorAll('#items > .item .label')].map(n=>n.textContent)");
-      assert.deepEqual(labels,['问绯月','提醒（3 条未读）','今日任务','三地天气','本地复盘','任务','日记与评价','桌宠动作','设置与维护','隐藏','退出']);
+      assert.deepEqual(labels,['问绯月','提醒（3 条未读）','今日任务','三地天气','本地复盘','阅读与学习','任务','桌宠动作','设置与维护']);
+      assert.equal(await js("document.querySelectorAll('.group[aria-expanded=true]').length"),0,'重开菜单时所有分组均应折叠');
       const before=page().getBounds();
       assert(before.y+before.height<=area.y+area.height&&before.x+before.width<=area.x+area.width,'菜单超出工作区');
       writeFileSync(join(out,'menu-'+theme+'.png'),(await page().webContents.capturePage()).toPNG());

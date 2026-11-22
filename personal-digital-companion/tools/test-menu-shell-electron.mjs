@@ -20,13 +20,13 @@ async function test(){
   shell.win.webContents.emit('context-menu');
   await until(()=>popup()?.isVisible(),'角色右键未打开自绘菜单');
   const labels=await popup().webContents.executeJavaScript("[...document.querySelectorAll('#items > .item .label')].map(n=>n.textContent)");
-  assert.ok(labels.includes('今日任务')&&labels.includes('本地复盘')&&labels.at(-1)==='退出',labels.join(','));
+  assert.ok(labels.includes('今日任务')&&labels.includes('本地复盘')&&!labels.includes('退出')&&labels.includes('桌宠动作'),labels.join(','));
   await popup().webContents.executeJavaScript("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}))");
   await until(()=>!popup().isVisible(),'Esc 未关闭');
   handlers['right-click']();
   await until(()=>popup()?.isVisible(),'托盘右键未打开自绘菜单');
-  assert.equal(await popup().webContents.executeJavaScript("[...document.querySelectorAll('#items > .item .label')].at(-2).textContent"),'隐藏');
-  await popup().webContents.executeJavaScript("[...document.querySelectorAll('#items > .item')].at(-2).click()");
+  await popup().webContents.executeJavaScript(`document.querySelector('button[title="桌宠动作"]').click();
+    const hide=document.querySelector('button[title="隐藏"]');if(!hide.offsetParent)throw Error('隐藏入口未展开');hide.click();`);
   await until(()=>!shell.win.isVisible(),'点击「隐藏」未执行');
   assert.equal(nativeShown,0,'不应退回原生菜单');
   console.log('PASS：角色与托盘右键打开自绘菜单，Esc 关闭，点击执行原动作。');
