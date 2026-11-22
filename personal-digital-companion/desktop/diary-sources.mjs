@@ -1,8 +1,8 @@
 const labels={journal:'你的日记',deploy:'花园部署',paylog:'当日消费'};
 
 export async function readDiarySources(api,day,signal){
-  const items=[],errors=[];
-  for(const [kind,label] of Object.entries(labels)){
+  async function read(kind,label){
+    const items=[],errors=[];
     let cursor='',incomplete=false;
     const seen=new Set(),ids=new Set();
     try{
@@ -39,6 +39,8 @@ export async function readDiarySources(api,day,signal){
       }while(cursor);
       if(incomplete)errors.push(label+'的同步范围未覆盖该日');
     }catch(error){signal.throwIfAborted();errors.push(label+'读取失败（'+error.message+'）');}
+    return {items,errors};
   }
-  return {items,errors};
+  const sources=await Promise.all(Object.entries(labels).map(([kind,label])=>read(kind,label)));
+  return {items:sources.flatMap(source=>source.items),errors:sources.flatMap(source=>source.errors)};
 }

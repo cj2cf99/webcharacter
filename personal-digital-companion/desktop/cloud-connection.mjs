@@ -51,3 +51,17 @@ export async function loadCloudConnection(profile, {fetcher = fetch, decrypt = p
     },
   };
 }
+
+export async function loadStudyConnection(profile, options) {
+  const client = await loadCloudConnection(profile, options);
+  if (!client) return null;
+  if (client.mode === '开发连接') {
+    return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(client.origin).hostname) ? client : null;
+  }
+  return {...client, request(path, options) {
+    const languageRead=/^\/api\/language\/(?:dialogues|scenes)(?:\/[A-Za-z0-9_-]{1,120})?$/u.test(path.split('?')[0]) &&
+      (options?.method??'GET')==='GET';
+    if (!path.startsWith('/api/study/v1/') && !languageRead) throw Error('该材料尚未接入学习服务，可使用缓存或导入文件');
+    return client.request(path, options);
+  }};
+}

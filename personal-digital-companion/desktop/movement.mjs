@@ -42,11 +42,10 @@ export function fullscreenDisplays(displays,windows){
 }
 
 export function displaySize(display,nominal){
-  const {width,height}=display.workArea, grid=movementGrid(display.scaleFactor);
-  const scale=Math.min(1,width/nominal.width,height/nominal.height);
+  const grid=movementGrid(display.scaleFactor);
   return {
-    width:clamp(snapMovement(nominal.width*scale,grid),1,width),
-    height:clamp(snapMovement(nominal.height*scale,grid),1,height)
+    width:snapMovement(nominal.width,grid),
+    height:snapMovement(nominal.height,grid)
   };
 }
 

@@ -123,7 +123,7 @@ async function run(){try{
   const search=async query=>{searched.push(query);return {state:'answer',text:'搜索结果 '+query,
     sources:[{title:'发布公告',snippet:'最新版本已公布。',url:'https://example.org/docs'}]};};
   const registration={submit:async text=>{registered.push(text);return {status:'completed',chain:{status:'COMPLETED',nodes:[{current_task:{type:'records.create',status:'COMPLETED',params:{body:text}}}]}};}};
-  const reminderWrites=[];
+  const reminderWrites=[],photoWrites=[];
   const reminderRequest=async(path,options)=>{
     if(path==='/api/reminder-edits')return Response.json({items:(JSON.parse(options.body).id?[1]:[1,2]).map(id=>({id,title:'周报'+id,content:'初稿',deadline:'2026-11-20',recurrence:null,version:'fixture'}))});
     reminderWrites.push([path,JSON.parse(options.body)]);return Response.json({accepted:true});
@@ -336,9 +336,9 @@ async function run(){try{
   await wait(()=>historyJs("Boolean(document.querySelector('details[open] p')?.textContent.includes('只能确定'))"));
   assert.ok(await historyJs("document.querySelector('details[open] p').textContent.length")>50);
   assert.ok(await historyJs("document.querySelectorAll('details').length")>=4);
-  assert.equal(await historyJs("document.querySelectorAll('img').length"),0);
+  assert.equal(await historyJs("document.querySelectorAll('details[open] p img, img[src=x]').length"),0);
   assert.ok(await historyJs("[...document.querySelectorAll('details')].some(n=>n.querySelector('summary').textContent.includes('介绍下罗马')&&n.textContent.includes('罗马坐落在台伯河畔。')&&n.querySelector('.failure-log')?.textContent.includes('HTTP 504 · TIMEOUT'))"));
-  assert.ok(await historyJs("Array.from(document.querySelectorAll('.failure-log')).some(n=>n.textContent.includes('第 1 次请求')&&n.textContent.includes('第 2 次请求')&&n.textContent.includes('HTTP 504')&&n.textContent.includes('AI_TIMEOUT'))"));
+  assert.equal(await historyJs("Array.from(document.querySelectorAll('.failure-log')).some(n=>n.textContent.includes('AI_TIMEOUT'))"),false);
   assert.equal(await historyJs("Array.from(document.querySelectorAll('summary')).filter(n=>n.textContent.includes('手动重试')).length"),1);
   assert.equal(await historyJs("Array.from(document.querySelectorAll('summary')).filter(n=>n.textContent.includes('这个报错是什么意思')).length"),4);
   const historyPanel=host.details;
@@ -352,11 +352,14 @@ async function run(){try{
   const submit=async text=>{await js("document.querySelector('#question').value="+JSON.stringify(text)+";document.querySelector('#questionForm').requestSubmit()");};
   await host.open('registration');assert.equal(host.panel,panel);
   await wait(()=>js("document.querySelector('#mode').value==='registration'"));
+  const beforeRegistration=registrationActions;
   await submit('午饭拉面');await wait(()=>js("document.querySelector('#answer').textContent.includes('已登记')"));
+  assert.equal(registrationActions,beforeRegistration+1,'气泡接到登记触发一次专属动作');
   assert.deepEqual(registered,['午饭拉面']);
   await submit('上网搜一下 Firefox');await wait(()=>js("document.querySelector('#answer').textContent.includes('搜索结果 Firefox')"));
   await submit('FluxJet 是什么？');await wait(()=>js("document.querySelector('#answer').textContent.includes('搜索结果 FluxJet')"));
   assert.deepEqual(searched,['Firefox','FluxJet']);assert.equal(captures,3);
+  assert.equal(registrationActions,beforeRegistration+1,'普通查询不触发登记动作');
   const pick=value=>js("document.querySelector('#mode').value="+JSON.stringify(value)
     +";document.querySelector('#mode').dispatchEvent(new Event('change'));true;");
   assert.deepEqual(await js("Array.from(document.querySelector('#mode').options,x=>x.textContent)"),['自动','绯月环球之旅','登记','查询网络','查询记忆（未开放）']);

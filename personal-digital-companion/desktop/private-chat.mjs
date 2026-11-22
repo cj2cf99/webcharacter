@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {existsSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {splitText} from './bubble-voice-segments.mjs';
+import {knowledgeReply,knowledgeRules} from './knowledge-runtime.mjs';
 import voices from '../assets/voice/private-chat/manifest.json' with {type:'json'};
 
 export const waitingLabel='老公我在等你哦';
@@ -20,7 +21,7 @@ const instruction='你是绯月，正在和自己的丈夫轻松聊天。用中�
 const spareTopics=['问问老公今天过得怎么样','聊聊最近想一起做的一件小事','分享一件让绯月觉得有意思的小事'];
 
 export function createPrivateChat({profile,readGpu,idle,prepare,resume,createModel,createVoice,view,
-  change=()=>{},report=()=>{},shared=()=>{},now=Date.now,random=Math.random}){
+  change=()=>{},report=()=>{},shared=()=>{},knowledge,now=Date.now,random=Math.random}){
   const file=join(profile,'private-chat.json');
   let saved={plan:null,lastInvitedAt:null,sources:[]};
   if(existsSync(file)){
@@ -109,13 +110,17 @@ export function createPrivateChat({profile,readGpu,idle,prepare,resume,createMod
     if(number>1)update(session,{phase:'thinking',number});
     const content={topics:session.plan.topics,turns:session.turns.map(turn=>({...turn,user:turn.user.slice(0,700)})),input:answer,
       round:number,remaining:maxTurns-number,requiredFinish:number===maxTurns};
-    const result=await session.model.analyze(JSON.stringify(content),{signal,hint:'interactionWork',
+    const check=answer&&await knowledge?.inspect({text:answer,source:'private-chat/'+session.id+'/'+number,scope:'private-chat',
+      signal,direct:true,learn:false,context:{前一轮:session.turns.at(-1)},judge:{memory:(text,instruction,schema,signal,settings)=>
+        session.model.analyze(text,{signal,hint:'interactionWork',skillInstruction:{name:'专聊知识核对',version:'1',instruction,schema,maxTokens:settings.maxTokens}})}});
+    const replyFromKnowledge=knowledgeReply(check);
+    const result=replyFromKnowledge?{reply:replyFromKnowledge,done:false}:await session.model.analyze(JSON.stringify({...content,...knowledgeRules(check)}),{signal,hint:'interactionWork',
       skillInstruction:{name:'绯月专聊',version:'1',instruction,schema,maxTokens:768}});
     if(!live(session))return;
     const chars=typeof result?.reply==='string'?Array.from(result.reply.trim()):[];
     const reply=chars.slice(0,maxReplyChars).join('').trimEnd();
     const parts=splitText(reply);
-    if(Array.from(reply).length<minReplyChars||!parts.length)throw Error('绯月没能整理好这次回复。');
+    if(!parts.length||!replyFromKnowledge&&Array.from(reply).length<minReplyChars)throw Error('绯月没能整理好这次回复。');
     const turn={id:randomUUID(),parts,taken:0,complete:number===maxTurns||(number>1&&result.done===true)};
     session.turn=turn;
     session.turns.push({user:answer,feiyue:reply});

@@ -16,6 +16,7 @@
       <nav aria-label="对话工具">
         <button type="button" class="quiet" id="pending" data-icon="✋" hidden>待确认</button>
         <button type="button" class="quiet" id="history" data-icon="📜">对话记录</button>
+        <button type="button" class="quiet" id="newThread" title="新对话" aria-label="新对话" hidden>＋</button>
       </nav>
       <button id="close" type="button" aria-label="关闭问答">×</button>
     </header>
@@ -32,11 +33,24 @@
         <button class="quiet" id="speakReply" type="button" hidden>朗读</button>
         <small id="speakStatus" class="fy-dictation-note" role="status" hidden></small>
         <button class="quiet" id="sources" hidden>查看来源</button>
+        <button class="quiet" id="knowledge-card" hidden>打开知识条目</button>
         <span id="unsaved" hidden>记录未保存</span>
       </div>
     </section>
     <div id="auditActions" hidden><button id="later" type="button">稍后回答</button> <button id="refuse" type="button">拒绝回答</button></div>
     <div id="decisions" hidden></div>
+    <div id="threadActions" hidden>
+      <button id="threadDraft" class="quiet" type="button" hidden>查看待确认卡</button>
+      <button id="finishThread" class="quiet" type="button" hidden>对话已结束</button>
+      <button id="cloudFallback" class="quiet" type="button" hidden>补充后交给云端</button>
+    </div>
+    <form id="cloudForm" hidden>
+      <label for="cloudText">填写可单独理解的外发问题</label>
+      <textarea id="cloudText" rows="2" maxlength="2000" required></textarea>
+      <p id="cloudPreview" hidden></p>
+      <button id="cloudSend" type="submit">预览外发文字</button>
+      <button id="cloudCancel" type="button">取消</button>
+    </form>
     <div id="imageResults" aria-live="polite" hidden></div>
     <form id="questionForm">
       <div id="attachment" hidden>
@@ -46,6 +60,7 @@
       </div>
       <small id="attachmentError" role="status" hidden></small>
       <small id="voiceStatus" role="status" hidden></small>
+      <small id="warmStatus" class="fy-dictation-note" role="status" hidden></small>
       <label class="sr" for="question">你的问题</label>
       <textarea id="question" rows="2" placeholder="问绯月，或记点什么…" aria-describedby="hint"></textarea>
       <footer>
@@ -53,6 +68,7 @@
         <label class="capture" title="仅普通文字聊天直连本地模型" hidden id="directOption"><input id="directChat" type="checkbox">直连</label>
         <select id="mode" aria-label="输入用途"><option value="auto">自动</option><option value="tour">绯月环球之旅</option><option value="registration">登记</option><option value="web" disabled>查询网络（待重启）</option><option value="memory" disabled>查询记忆（未开放）</option></select>
         <span id="hint">Ctrl+Enter</span>
+        <button id="warmModels" type="button" aria-label="预热听写和 GPU 对话模型" title="预热听写和 GPU 对话模型" hidden>⚡</button>
         <button id="recordVoice" type="button" aria-label="开始语音录入" title="开始语音录入" hidden>🎙</button>
         <button id="send" type="submit">发送 ↗</button>
       </footer>

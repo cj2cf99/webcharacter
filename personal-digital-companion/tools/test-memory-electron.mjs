@@ -1,5 +1,7 @@
 import * as electron from 'electron';
 import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {createHash} from 'node:crypto';
 import {mkdtempSync,readFileSync,existsSync,renameSync,writeFileSync,mkdirSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -38,20 +40,23 @@ async function test(){
       seen.push(q);
       return real?infer(q,img,signal):q.includes('抠图')?{reason:'没有像素蒙版'}:{text:'Q7M-482'};
     },
-    request:async(path,opts)=>{
-      assert.equal(path,'/api/assistant/screen-question');
-      const body=JSON.parse(opts.body);
-      assert.equal(body.question,seen.at(-1));assert.ok(body.image.data_base64);
-      uploads.push(body.question);
-      return Response.json({ok:true,answer:'云端测试回执'});
-    }});
+    request:async path=>{uploads.push(path);throw Error('本地识图不得请求远程接口');}});
   const reportCase=process.argv.includes('--task-reports'),job='ab'.repeat(16),input=join(profile,'render.png'),dayNow=tokyoDay(Date.now());
   if(reportCase){
     writeFileSync(input,source.toPNG());
     mkdirSync(join(profile,'image-tasks'),{recursive:true});
     writeFileSync(join(profile,'image-tasks',job+'.json'),JSON.stringify({job,state:'done',original:'生成测试字样',at:Date.now(),
       text:'已完成测试图',output:input,completed:[{step:1,operation:'generate',output:input,width:640,height:200}]}));
-    await memory.saveTasks(dayNow,[{at:Date.now(),task_id:'task-123',title:'随手记',action:'已登记',detail:'记录编号 123'}]);
+    const at=Date.parse(dayNow+'T00:00:00+09:00');
+    const task={at,task_id:'task-123',title:'随手记',action:'已登记',detail:'记录编号 123'};
+    await memory.saveTasks(dayNow,[{...task,action:'开始登记'},task,{...task,at:at+1,action:'收到回执'}]);
+    const db=new DatabaseSync(join(profile,'personality-memory.sqlite'));
+    db.exec('CREATE TABLE materials(id TEXT PRIMARY KEY,day TEXT,review TEXT);CREATE TABLE material_sources(id TEXT PRIMARY KEY,source TEXT,at INTEGER)');
+    const sourceKey='task:'+task.task_id,put=db.prepare('INSERT INTO materials VALUES(?,?,?)'),link=db.prepare('INSERT INTO material_sources VALUES(?,?,?)');
+    const legacy=createHash('sha256').update([dayNow,sourceKey,at,0,[task.title,task.action,task.detail].join(' · ')].join('|')).digest('hex');
+    put.run(legacy,dayNow,'已核对登记内容');put.run('later',dayNow,'回执已确认');link.run('later',sourceKey,at+1);
+    put.run('empty',dayNow,'　');link.run('empty','task:'+job,at);
+    db.close();
   }
   // Windows 仅向已显示的原生窗口反馈全屏状态；透明测试窗不抢焦点。
   class ReportTestWindow extends electron.BrowserWindow{
@@ -69,10 +74,13 @@ async function test(){
       host.details.showInactive();
       const js=code=>host.details.webContents.executeJavaScript(code);
       await until(()=>js("document.querySelectorAll('#turns button').length===2"));
+      assert.deepEqual(await js("[...document.querySelectorAll('#turns section')].filter(e=>e.textContent.includes('随手记')).map(e=>[e.querySelector('h2').textContent.split(' · ').at(-1),!!e.querySelector('button')])"),[['收到回执',true],['已登记',false],['开始登记',false]]);
       await js("[...document.querySelectorAll('#turns section')].find(e=>e.textContent.includes('随手记')).querySelector('button').click()");
       await until(()=>js("document.querySelector('#taskReport').open&&document.querySelector('#reportContents').textContent.includes('记录编号 123')"));
+      assert.deepEqual(await js("[...document.querySelectorAll('#reportContents > :first-child.task-reviews p')].map(el=>el.textContent)"),['回执已确认','已核对登记内容']);
       await js("document.querySelector('#reportClose').click();[...document.querySelectorAll('#turns section')].find(e=>e.textContent.includes('ComfyUI')).querySelector('button').click()");
       await until(()=>js("document.querySelector('.result-picture img')?.naturalWidth>0"));
+      assert.equal(await js("document.querySelector('#reportContents .task-reviews')"),null);
       await js("document.querySelector('.result-picture').click()");
       await until(()=>js("document.querySelector('#pictureViewer').open&&document.querySelector('#pictureOriginal').naturalWidth===640"));
       await until(()=>host.details.isFullScreen());
@@ -101,7 +109,7 @@ async function test(){
     }
     await traffic.flush();await host.openLog();
     const log=host.details.webContents;
-    await until(()=>log.executeJavaScript("document.querySelectorAll('img').length===2&&[...document.images].some(i=>i.complete&&i.naturalWidth>0)"));
+    await until(()=>log.executeJavaScript("document.querySelectorAll('.image-preview img').length===2&&[...document.querySelectorAll('.image-preview img')].some(i=>i.complete&&i.naturalWidth>0)"));
     const moved=join(profile,'moved-day');
     renameSync(memory.folder(day),moved);
     await win.loadFile(join(moved,'复盘.html'));

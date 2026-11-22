@@ -28,6 +28,7 @@
     "image": "image-task-chain"
   },
   "menu": {
+    "news": "public-lookup",
     "question": "personal-conversation",
     "continueNag": "personal-conversation",
     "registration": "record-submission",

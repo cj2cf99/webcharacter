@@ -430,3 +430,4 @@ test('鱼与熊掌：确认前展示四栏，标题与完整正文写入真实�
   assert.match((await ask('确认登记')).text,/已登记/);
   assert.deepEqual(f.writes.map(({path,body})=>({path,body})),[{path:'/api/resources',body:{body:title,note:text,url,category_id:'other'}}]);
 });
+

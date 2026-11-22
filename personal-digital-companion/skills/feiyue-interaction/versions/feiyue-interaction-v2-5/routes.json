@@ -28,6 +28,7 @@
     "image": "image-task-chain"
   },
   "menu": {
+    "news": "public-lookup",
     "question": "personal-conversation",
     "continueNag": "personal-conversation",
     "registration": "record-submission",
@@ -60,11 +61,5 @@
     "restart": "desktop-controls",
     "visibility": "desktop-controls",
     "quit": "desktop-controls"
-  },
-  "replyModes": {
-    "speech": "personal-conversation",
-    "writing": "diary-writing",
-    "judgment": "emotion-appraisal",
-    "tool": "tool-response"
   }
 }

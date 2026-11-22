@@ -13,7 +13,7 @@ class MonthlyBudgetUnavailable(ValueError):
     pass
 
 
-def reserve_monthly(provider, allowance, available, *, directory=None, now=None, reset=None, minimum=1, maximum=1):
+def reserve_monthly(provider, allowance, available, *, directory=None, now=None, reset=None, minimum=1, maximum=1, bucket=None):
     if type(allowance) is not int or type(available) is not int or not 0 <= available <= allowance:
         raise MonthlyBudgetUnavailable("SEARCH_FREE_UNVERIFIED")
 
@@ -46,8 +46,19 @@ def reserve_monthly(provider, allowance, available, *, directory=None, now=None,
             headroom = min(headroom, cycle_cap - previously_reserved)
         daily_share = max(minimum, (available - hold) // days_left)
         cost = min(maximum, min(daily_cap, daily_share) - today, headroom)
+        if bucket is not None:
+            name, allocation = bucket
+            db.execute("CREATE TABLE IF NOT EXISTS search_allocation (provider TEXT, bucket TEXT, cycle TEXT, used INTEGER NOT NULL, PRIMARY KEY(provider,bucket,cycle))")
+            bucket_cycle = reset.date().isoformat() if reset is not None else day[:7]
+            usage = db.execute("SELECT used FROM search_allocation WHERE provider=? AND bucket=? AND cycle=?",
+                               (provider, name, bucket_cycle)).fetchone()
+            bucket_used = usage[0] if usage else 0
+            cost = min(cost, allocation - bucket_used)
         if cost < minimum:
             raise MonthlyBudgetUnavailable("SEARCH_MONTHLY_PACED")
+        if bucket is not None:
+            db.execute("INSERT OR REPLACE INTO search_allocation VALUES (?, ?, ?, ?)",
+                       (provider, name, bucket_cycle, bucket_used + cost))
         db.execute("INSERT OR REPLACE INTO search_daily VALUES (?, ?, ?)", (provider, day, today + cost))
         if provider == "tavily":
             db.execute("INSERT OR REPLACE INTO monthly VALUES (?, ?)", (day[:7], previously_reserved + cost))

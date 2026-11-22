@@ -68,11 +68,14 @@ const reminderOptOut=/^(?:(?:请|绯月)[，, ]*)?(?:不要|不必|不用|先别
 const reminderHelp=/(?:如何|怎么|怎样).{0,15}(?:登记|设置|添加|打开|使用|创建|进入|关闭).{0,10}(?:提醒|待办)|(?:提醒|待办).{0,10}(?:怎么用|怎么打开|什么意思|是什么|在哪里|在哪[里儿]?)[呀呢吗？?。]*$/u;
 const newReminder=/(?:加|添加|建|创建|新增|设|设置)(?:[一1]?[个条项份]|置)?[^，,。！？?]{0,12}(?:提醒|待办)|(?:提交|登记|记|设|存|列)(?:到|入|进|成|作|为)(?:一个|一条)?(?:事项)?(?:提醒|待办)|提醒我/u;
 
+const studyRequest=/^(?:(?:(?:请|绯月)[，,\s]*)*(?:陪我(?:学习|练日语|做题)|(?:打开|开始)(?:绯月)?(?:学习面板|语言对练|题库陪练|模拟考试)))\s*[。！!？?]?$/u;
+
 export function conversationRoute(text, mode = 'auto', withScreen = false) {
   if (mode === 'direct') return {kind:'direct'};
   if(diaryOpening.test(text)&&diaryWithdrawal.test(commandWords(text).replace(diaryOpening,'')))return {kind:'question'};
   if (mode === 'registration' || mode === 'supplement') return {kind:'registration'};
   if (mode === 'memory') return {kind:'memory'};
+  if(mode==='auto'&&!withScreen&&studyRequest.test(text.trim()))return {kind:'study'};
   if (/^(?:绯月[，,\s]*)?(?:看看?|查[看查]?|读|打开)?(?:我的|本期|最新)?(?:关注新闻|新闻简报)[。！!]?$/u.test(text.trim())) return {kind:'newsBriefing'};
   const xSearch=/^(?:(?:绯月|请|帮我|替我)[，,\s]*)*(?:(?:查|搜|搜索)(?:一下)?\s*(?:X(?:\.com)?|推特|Twitter)(?=$|[\s：:，,上帖推])(?:上(?:的)?)?(?:帖子|贴子|推文)?|(?:在|去)\s*(?:X(?:\.com)?|推特|Twitter)\s*上?\s*(?:搜索|搜|查)(?:一下)?)[：:，,\s]*(.+)$/iu.exec(text.trim());
   if(xSearch)return {kind:'search',query:xSearch[1].trim(),research:'x'};

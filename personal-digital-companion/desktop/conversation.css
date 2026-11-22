@@ -50,3 +50,24 @@ button.source{display:block;text-align:left;overflow-wrap:anywhere}
 .notice::before{display:none}
 .private-chat-invite{display:inline-flex;align-items:center;gap:7px}
 .private-chat-invite img{width:27px;height:27px;border-radius:50%;object-fit:cover}
+.question-quote{margin:4px 0;padding:3px 8px;border-inline-start:2px solid var(--fy-accent);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.question-citation{font-size:12px;margin:3px 0}
+.question-citation summary{display:flex;align-items:center;gap:5px;width:fit-content}
+#threadTabs{justify-content:space-between;gap:.35rem}
+#threadTabs .fy-seg{flex-wrap:wrap}
+.thread-summary{padding:.5rem .6rem;cursor:pointer}
+details.fy-card>summary.thread-summary{display:block}
+details[open]>.thread-summary>.thread-preview{display:none}
+.thread-summary p,.thread-message p{margin:.2rem 0;overflow-wrap:anywhere;white-space:pre-wrap}
+.thread-detail{padding:.55rem .65rem;min-width:0}
+.thread-source{margin-bottom:.55rem;color:var(--fy-muted);overflow-wrap:anywhere}
+.thread-talk{display:grid;gap:.4rem}
+.thread-message{border-radius:var(--fy-radius);background:var(--fy-surface);padding:.4rem .55rem;min-width:0;max-width:94%;justify-self:start}
+.thread-message[data-who="你"]{justify-self:end;background:var(--fy-soft)}
+.thread-actions{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.55rem}
+.thread-note{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem;width:100%;align-items:start}
+.thread-note textarea{width:100%;box-sizing:border-box;resize:vertical}
+.thread-note small{grid-column:1/-1}
+.thread-note[hidden],#threadTabs[hidden]{display:none}
+.ai-snapshot{margin:.45rem 0;min-width:0}
+.ai-snapshot .snapshot-text{white-space:pre-wrap;overflow-wrap:anywhere;margin:.2rem 0 .7rem}

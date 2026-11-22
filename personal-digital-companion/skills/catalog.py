@@ -1,4 +1,5 @@
 """以稳定 ID 查找 skill；内容更新时自动发布下一个十分位版本。"""
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -7,6 +8,7 @@ import shutil
 import tempfile
 import uuid
 import sys
+from skill_updates import SkillUpdates, markdown_body, run_cli
 
 ROOT = Path(__file__).resolve().parent
 
@@ -79,33 +81,60 @@ def child_skill(folder, purpose, version=None):
     return child, release, location
 
 
-def route_skill(hint, group="hints"):
+def route_skill(hint, group="hints", profile=None):
     root_version, folder = resolve_skill("feiyue-interaction")
     routes = json.loads((folder / "routes.json").read_bytes())
     skill = routes[group][hint]
     version, child = resolve_skill(skill)
-    def body(path):
-        return path.read_text(encoding="utf-8").split("---", 2)[2].strip()
-    instruction = body(folder / "SKILL.md") + "\n\n" + body(child / "SKILL.md")
-    selected = {"routerVersion": root_version, "skill": skill, "version": version, "content": body(child / "SKILL.md")}
+    installed = SkillUpdates(profile, ROOT) if profile is not None else None
+    active = installed.active() if installed else {}
+
+    def content(name, release, path):
+        override = installed.lookup(name, path, active) if installed else None
+        if override:
+            return override["version"], override["body"], override
+        return release, markdown_body((path / "SKILL.md").read_text(encoding="utf-8")), None
+
+    root_version, introduction, _ = content("feiyue-interaction", root_version, folder)
+    version, body, override = content(skill, version, child)
+    instruction = introduction + "\n\n" + body
+    selected = {"routerVersion": root_version, "skill": skill, "version": version, "content": body}
     if skill in routes.get("workRedrafts", {}):
         selected["workRedrafts"] = routes["workRedrafts"][skill]
     if hint == "attachmentRegistration" and group == "hints":
         sub, sub_version, location = child_skill(child, "registration")
+        sub_version, sub_body, _ = content(sub, sub_version, location)
         selected["child"] = {"skill": sub, "version": sub_version}
-        instruction += "\n\n" + body(location / "SKILL.md")
+        instruction += "\n\n" + sub_body
     local = child / "local-ai.json"
     if local.is_file():
         selected["localAi"] = json.loads(local.read_bytes())
+        if override:
+            selected["localAi"].update(override["prompts"])
+    if override and override["workflow"] is not None:
+        selected["workflow"] = override["workflow"]
     for key in ("schemas", "templates"):
         data_file = child / (key + ".json")
         if data_file.is_file():
             selected[key] = json.loads(data_file.read_bytes())
+    if installed and installed.warnings:
+        selected["warnings"] = installed.warnings
     return {**selected, "instruction": instruction}
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 2 and sys.argv[1] == "list":
-        print(json.dumps({p.parent.name: resolve_skill(p.parent.name)[0] for p in sorted(ROOT.glob("*/source"))}))
-    else:
-        print(json.dumps(route_skill(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "hints")))
+    try:
+        if len(sys.argv) == 2 and sys.argv[1] == "list":
+            result = {p.parent.name: resolve_skill(p.parent.name)[0] for p in sorted(ROOT.glob("*/source"))}
+        elif sys.argv[1:2] == ["external"]:
+            result = run_cli(sys.argv[2:], ROOT)
+        else:
+            parser = argparse.ArgumentParser(description=__doc__)
+            parser.add_argument("hint")
+            parser.add_argument("group", nargs="?", default="hints")
+            parser.add_argument("--profile", type=Path)
+            args = parser.parse_args()
+            result = route_skill(args.hint, args.group, args.profile)
+        print(json.dumps(result))
+    except (OSError, KeyError, ValueError) as error:
+        sys.exit(str(error))

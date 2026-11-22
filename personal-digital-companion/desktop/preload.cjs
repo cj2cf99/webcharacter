@@ -40,7 +40,6 @@ const api={
   onPosture:callback=>subscribe('desktop:posture',callback),
   onPointer:callback=>subscribe('desktop:pointer',callback),
   onVisible:callback=>subscribe('desktop:visible',callback),
-  onThought:callback=>subscribe('desktop:thought',callback),
   onWork:callback=>subscribe('desktop:work',callback),
 };
 if(process.argv.includes('--feiyue-benchmark')){

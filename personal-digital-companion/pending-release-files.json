@@ -1,0 +1,211 @@
+{
+  "installed": "G:\\selftool\\.release-feiyue-handbook-desktop-20261120\\personal-digital-companion",
+  "candidate": "G:\\selftool\\WebCharacter\\work\\feiyue-pending-release-20261122\\windows\\personal-digital-companion",
+  "files": [
+    {
+      "file": "desktop/conversation-details.mjs",
+      "before": "fc28662bb4ded7a2527f1adc023d170ac007a7eca371b2aacfbb741a67358e71",
+      "after": "dad004b9810005d0e1c435da7133a517686d143d5d903a417f6d947fb5025b91"
+    },
+    {
+      "file": "desktop/conversation-ui.mjs",
+      "before": "efe186abfedc6bd30372836d9ca85f9cba13d53e9f34265f81e82ce24d366131",
+      "after": "c300a19647c70b84753e098d084915fca6120c860a4b37eaaf7e4c926f4e1bc6"
+    },
+    {
+      "file": "desktop/diary-audit.mjs",
+      "before": "ea6c084261668784d886ff32ba7043d07a2f89d413535b5575d5cdb92dd1e54e",
+      "after": "da77ac334bac1090d028f6c30b6f95932508387350e2aa63b6d44f07a712053e"
+    },
+    {
+      "file": "desktop/emotion-initiative.mjs",
+      "before": "2e8da749e07271680a09df84a72a82cf42c11521a57f642074f35f4f03eb2a36",
+      "after": "bf09fa1993d25dea7f3b3f642a24f4a58d15f0c75b5149b5913b436db5195be6"
+    },
+    {
+      "file": "desktop/menu-layout.json",
+      "before": "45ea98479b1e126789f98a8948581633283aa485fb391c6203da3bbac4888717",
+      "after": "fb1b7e3bbaa21e960d71b29005cda3a89a19b68f4c55f4d3860e085008286bd3"
+    },
+    {
+      "file": "desktop/pending-questions.mjs",
+      "before": null,
+      "after": "debb67660f14c708e92aa75390b36b0175a2949e8b6196bad511bac31ce3661b"
+    },
+    {
+      "file": "desktop/personality-diary.mjs",
+      "before": "80e514b6f3abbc044931ef2a897d312ca561ec96f3bf1f59e3eb587144b0fd38",
+      "after": "37c5fc56deb9a70065d5eeee5ba57c679ed61321422e38a033bb8384471113b3"
+    },
+    {
+      "file": "desktop/personality-nags.mjs",
+      "before": "5a51f6650a856dbb7d68e356c074cb1f08781845356009f7d1fafb310b169430",
+      "after": "42183c4cc6e2ab36662e405dc05e7ebe66da1ed76c511bc4a1646fa3fc902386"
+    },
+    {
+      "file": "desktop/poll-scheduler.mjs",
+      "before": "ccd886192774eba6c6aac8c3790c494765519530d0b56b7aecc4456115da9e32",
+      "after": "87d04b35faf71dd837ce1baf5e8fcd2d3e3dba05764b2b38ea58f9a6a4e99786"
+    },
+    {
+      "file": "desktop/scene-curiosity.mjs",
+      "before": "bf3860a3cb422f00408e83331abd372fedfd5e59639e8bd207da2e747701f168",
+      "after": "e552e09d95e13dab5ae685d617264a065d5f7dd7bfc94e09cb09986998617b1d"
+    },
+    {
+      "file": "desktop/screen-question-host.mjs",
+      "before": "ec20644200a160976ecfe612498003fc28a3ac4ad62fa01c482a0fc7f5afbccd",
+      "after": "9ece1558161c3ff32a041e5b63573b99e104e223212a28a419cbb62b01506a2c"
+    },
+    {
+      "file": "desktop/screen-question-ui.mjs",
+      "before": "465a55d1f3fad85ecfea580b318b27f6f23cc63924c122c775997889c6e58b43",
+      "after": "a738fea3abc9469c0e8143afa53e6a42998f1d8b2dba3782a6fb8d3f2dbab279"
+    },
+    {
+      "file": "desktop/screen-question.html",
+      "before": "f37cd3a8945e26d9c1f6a0f51b2ffa7ea7fab6476322e3a2219fca9a67e73978",
+      "after": "906cc0dd1da0edd31652ab36b5dcb39a6c8c99b533a9953397464da06138dd57"
+    },
+    {
+      "file": "desktop/screen-question.css",
+      "before": "b6b68f6f3f33451ef540b2bc4d11d6d78a581de2fc9840a5e140dacba3d90685",
+      "after": "98e616675c1725cae3f6e8fd906eaef82b91de8696e01f3c1bc133fc14bd070a"
+    },
+    {
+      "file": "desktop/shell.mjs",
+      "before": "32d2cebb7356deb1f6e858e365e1e2e915239f3e0a87162b2359892b4a184ea0",
+      "after": "af45546dd2101644bb904f1b0a6f937ed4ac0202ab36e992fbe067f5fdef0a9d"
+    },
+    {
+      "file": "desktop/topic-memory.mjs",
+      "before": "948776f8142030824e2f1360b898171fb0d6f3b1e79363d3542290c4e76b6bc2",
+      "after": "bb53e038a0256cd180e1f383b7dec339203a0969e5606845d778562a562bf053"
+    },
+    {
+      "file": "skills/diary-audit/latest.json",
+      "before": "9fa019fe9d4b66203648df04a1c54435034942b528403d05526520a4bd4686a8",
+      "after": "e9a33ab807105712d178c090cdbd5339e7393d5e043d09ca122b8cc55671cfd6"
+    },
+    {
+      "file": "skills/diary-audit/source/local-ai.json",
+      "before": "9766e514d4f6cdbc161874babc794fa708ac1240127c552c742cde86ea0db3ed",
+      "after": "cb06f99311eb3692f1daeaab96ce62fd8e4e1cbabafd6c102bf5ad1bd6ecb815"
+    },
+    {
+      "file": "skills/diary-audit/source/SKILL.md",
+      "before": "502bee24a344566832d3595e26728574173d97bb6b5e74f5ef209accc7a01717",
+      "after": "7bb9a720880660873c1de9b7397f57f94720e570ebf7ff718e9d07f1e76aef70"
+    },
+    {
+      "file": "skills/diary-audit/versions/diary-audit-v1-5/local-ai.json",
+      "before": null,
+      "after": "9391eb14a909f4135c8754a03b996c1d2db1752fde53178047868a6c3876b414"
+    },
+    {
+      "file": "skills/diary-audit/versions/diary-audit-v1-5/SKILL.md",
+      "before": null,
+      "after": "42f2a5c684ff04645d4edd53059d637abc9a5b69a89adcbc17564a53a138fb94"
+    },
+    {
+      "file": "skills/diary-audit/versions/diary-audit-v1-6/local-ai.json",
+      "before": null,
+      "after": "cb06f99311eb3692f1daeaab96ce62fd8e4e1cbabafd6c102bf5ad1bd6ecb815"
+    },
+    {
+      "file": "skills/diary-audit/versions/diary-audit-v1-6/SKILL.md",
+      "before": null,
+      "after": "6c42e2c74ef5f7eb60e0ff4b71f2d4bc7ab58cedb43176e014872f00224aae04"
+    },
+    {
+      "file": "skills/diary-writing/latest.json",
+      "before": "6a1e2c7a10faa69bc77f400999fecd4de7c6a71816ccb826007ad6a0ab3f07f6",
+      "after": "2f22472c0b1b08d07c45fe2e84924fdf3c5bb781c653944460002f9d14a2c408"
+    },
+    {
+      "file": "skills/diary-writing/source/local-ai.json",
+      "before": "6344de9a2ab72f973668b361d29cd0c6f25ae63bfb24f1de79db102b381cf92e",
+      "after": "6c5ee0ad84ced4a4d6f15f9e822065953b6fb9d99292da0bab61e0f40236ffb0"
+    },
+    {
+      "file": "skills/diary-writing/versions/diary-writing-v1-4/local-ai.json",
+      "before": null,
+      "after": "4c2b6a4c23686957fa9edb203dc142a806286172e10af874bf705d302acf20cc"
+    },
+    {
+      "file": "skills/diary-writing/versions/diary-writing-v1-4/SKILL.md",
+      "before": null,
+      "after": "021d4912343bd36a409c4bb6b5ebf38352d78eed53681bd872a3f6b2142dec10"
+    },
+    {
+      "file": "skills/diary-writing/versions/diary-writing-v1-5/local-ai.json",
+      "before": null,
+      "after": "c3040dfa9c13af7ad96cc2ffb6b57a74e03fae9d6a48844eacc7ba18626d28ab"
+    },
+    {
+      "file": "skills/diary-writing/versions/diary-writing-v1-5/SKILL.md",
+      "before": null,
+      "after": "e17fa9c258eb2cdc7a8157b8176e2eb5ed9076ac5f732cb5dacc001524c024a2"
+    },
+    {
+      "file": "skills/diary-writing/versions/diary-writing-v1-6/local-ai.json",
+      "before": null,
+      "after": "22e0e85fe1bb2e6a9ee4d6dad476b69eb6c9cbacaab35640c24436af109b074a"
+    },
+    {
+      "file": "skills/diary-writing/versions/diary-writing-v1-6/SKILL.md",
+      "before": null,
+      "after": "4d4e27f0ca12749250646cc79d03499e917544740e505121c6a5f8aab088ff2c"
+    },
+    {
+      "file": "skills/diary-writing/versions/diary-writing-v1-7/local-ai.json",
+      "before": null,
+      "after": "000a1519bf3dc1fec30dbd79d9700e11a2e4bd4983bef710105238eefcf5cfa4"
+    },
+    {
+      "file": "skills/diary-writing/versions/diary-writing-v1-7/SKILL.md",
+      "before": null,
+      "after": "e4719860f70f8e932e5f5d9a4a80c4cc4aa42cfe4cc631b0750051aa55483364"
+    },
+    {
+      "file": "skills/diary-writing/versions/diary-writing-v1-8/local-ai.json",
+      "before": null,
+      "after": "de6149c0bea58ac55d3a22a2a765e1efb066d07eec8874c9fc2e6a8e749b44c4"
+    },
+    {
+      "file": "skills/diary-writing/versions/diary-writing-v1-8/SKILL.md",
+      "before": null,
+      "after": "93619f10fd5a5d869960d7c7f93d3928eac7800288056986a26f385fe47dc675"
+    },
+    {
+      "file": "skills/diary-writing/versions/diary-writing-v1-9/local-ai.json",
+      "before": null,
+      "after": "6c5ee0ad84ced4a4d6f15f9e822065953b6fb9d99292da0bab61e0f40236ffb0"
+    },
+    {
+      "file": "skills/diary-writing/versions/diary-writing-v1-9/SKILL.md",
+      "before": null,
+      "after": "f4ea8ef37e643759307f2e30190d8350feb34b7637830c8e884b3d286546dfee"
+    },
+    {
+      "file": "output/desktop-bundle/conversation-ui.mjs",
+      "before": "efe186abfedc6bd30372836d9ca85f9cba13d53e9f34265f81e82ce24d366131",
+      "after": "c300a19647c70b84753e098d084915fca6120c860a4b37eaaf7e4c926f4e1bc6"
+    },
+    {
+      "file": "output/desktop-bundle/screen-question-ui.mjs",
+      "before": "465a55d1f3fad85ecfea580b318b27f6f23cc63924c122c775997889c6e58b43",
+      "after": "a738fea3abc9469c0e8143afa53e6a42998f1d8b2dba3782a6fb8d3f2dbab279"
+    },
+    {
+      "file": "output/desktop-bundle/screen-question.html",
+      "before": "f37cd3a8945e26d9c1f6a0f51b2ffa7ea7fab6476322e3a2219fca9a67e73978",
+      "after": "906cc0dd1da0edd31652ab36b5dcb39a6c8c99b533a9953397464da06138dd57"
+    },
+    {
+      "file": "output/desktop-bundle/screen-question.css",
+      "before": "b6b68f6f3f33451ef540b2bc4d11d6d78a581de2fc9840a5e140dacba3d90685",
+      "after": "98e616675c1725cae3f6e8fd906eaef82b91de8696e01f3c1bc133fc14bd070a"
+    }
+  ]
+}

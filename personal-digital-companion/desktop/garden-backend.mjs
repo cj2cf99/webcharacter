@@ -75,3 +75,4 @@ export async function inspectGarden(db,plan,changes,scope=[]){
   const match=side=>ownersMatch&&changes.every(c=>same(rows.get(targetId(c))??null,c[side]));
   return {revision,before:match('before'),after:match('after')};
 }
+

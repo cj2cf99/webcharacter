@@ -3,6 +3,11 @@ export const endedNag=new Set(['用户结束','已解释','回合结束']);
 export const diaryOriginalKey='@refineOriginal';
 export const diaryReceiptKey='@refineReceipt';
 export const nagRefinementKey='_refinement';
+export const emptyDiaryBody='无所事事的一天';
+
+export function appendDiaryBody(prior,body){
+  return prior===emptyDiaryBody?body:prior+'\n\n'+body;
+}
 
 export async function refinementDigest(value){
   const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(value)));
@@ -18,7 +23,7 @@ export function refinementText(kind,record){
 export function canRefine(kind,record){
   if(kind==='diaries'){
     const body=record.body?.trim();
-    return Boolean(body&&body!=='无所事事的一天');
+    return Boolean(body&&body!==emptyDiaryBody);
   }
   return endedNag.has(record.status)&&Boolean(record.talk?.some(line=>line.text?.trim())||
     record.beforeEvaluation?.trim()||record.afterEvaluation?.trim());
@@ -43,7 +48,9 @@ export function refinementFields(kind,record,input){
   const fields=Object.fromEntries(Object.keys(previous).map(field=>[field,input[field]]));
   const length=value=>[...value].length;
   if(kind==='diaries'){
-    if(!canRefine(kind,fields)||length(fields.body)>5000||length(fields.summary)>200||/[\r\n]/u.test(fields.summary))return null;
+    const extraLines=fields.summary.split('\n').slice(1);
+    if(!canRefine(kind,fields)||length(fields.body)>5000||length(fields.summary)>200||fields.summary.includes('\r')||
+      extraLines.some(line=>!/^(?:你的日记|花园部署|当日消费)：\S/u.test(line)))return null;
   }else if(Object.entries(fields).some(([key,value])=>length(value)>(record.source==='audit'&&key==='afterEvaluation'?600:12000))){
     return null;
   }

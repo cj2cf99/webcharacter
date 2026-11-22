@@ -14,7 +14,7 @@ def request(key, path, payload=None):
     return data
 
 
-def reserve(account, directory, now):
+def reserve(account, directory, now, *, editorial=False):
     if not isinstance(account,dict) or str(account.get("current_plan")).lower() not in ("researcher","free") or (
             "paygo_limit" not in account or account["paygo_limit"] not in (None,0) or account.get("paygo_usage")!=0):
         raise ValueError("TAVILY_FREE_UNVERIFIED")
@@ -22,7 +22,8 @@ def reserve(account, directory, now):
     if type(limit) is not int or type(used) is not int or min(limit,used)<0:
         raise ValueError("TAVILY_FREE_UNVERIFIED")
     limit=min(limit,1000)
-    reserve_monthly("tavily",limit,max(0,limit-used),directory=directory,now=now)
+    bucket=("news-editorial",limit*7//10) if editorial else None
+    reserve_monthly("tavily",limit,max(0,limit-used),directory=directory,now=now,bucket=bucket)
 
 
 def x_post(url):

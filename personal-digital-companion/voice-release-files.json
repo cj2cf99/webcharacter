@@ -1,0 +1,176 @@
+{
+  "target": "G:\\selftool\\.release-feiyue-handbook-desktop-20261120\\personal-digital-companion",
+  "baseline": "2026-11-21 JST 正式安装快照",
+  "files": [
+    {
+      "path": "desktop/bubble-voice-capture.mjs",
+      "before": null,
+      "after": "307497d6e31064a181b2db7f00b52758476a7ee4b4149065d0108ef3df85a17d"
+    },
+    {
+      "path": "desktop/bubble-voice-processor.mjs",
+      "before": null,
+      "after": "4d02c325af0a3de5bc1dca5b25bdfdc090e47ec4acb14f3a80fa56ca0e7b1b3e"
+    },
+    {
+      "path": "desktop/bubble-voice-segments.mjs",
+      "before": null,
+      "after": "76398d15418880b5943ca1a7973a620b498217f0ee2718249cfc616bd546d670"
+    },
+    {
+      "path": "desktop/bubble-voice-ui.mjs",
+      "before": null,
+      "after": "3ed355a3f51f629d8fa65d8865eddd1c2eee16b6e8cd2e64cadb4158ef9ede75"
+    },
+    {
+      "path": "desktop/bubble-voice-worker.py",
+      "before": null,
+      "after": "a117f96cceed1351b7f7c427b6946aa444ce9f296e64c17ec294e0f89c6ad99a"
+    },
+    {
+      "path": "desktop/bubble-voice.mjs",
+      "before": null,
+      "after": "db5b105f41ed2b61a07642885d5abd4e1d72982199d363f1d77abcad4a4fb5a8"
+    },
+    {
+      "path": "desktop/dictation-host.mjs",
+      "before": null,
+      "after": "3810752fa1f0dfefba5e4706185b0ceb4409f9b770fa579fd2a3a8d7f35bdf07"
+    },
+    {
+      "path": "desktop/dictation-preload.cjs",
+      "before": null,
+      "after": "ae93261a59e0823bd92f9ab386b497dcc2570a1ee41b0ec0d4cbe87614c24499"
+    },
+    {
+      "path": "desktop/dictation-ui.mjs",
+      "before": null,
+      "after": "915382e9ee41c51a80cc4de68df4e1dde2fffe6c4ded284e740947a75d71ef90"
+    },
+    {
+      "path": "desktop/feiyue-surface.css",
+      "before": "4b7633888eab197246fe99953b2d09d86f35fa4153c0e7ae9d036b60d3e76c58",
+      "after": "8e392febaf3f0f5b468f85277a5e80c54d03d9b079c36c8928e4a60650cb53e7"
+    },
+    {
+      "path": "desktop/registration-review-ui.mjs",
+      "before": "3ea0c5a56bce5a80f0b4c64984c1a7dac841e2d21676ee31425c73f30ea25476",
+      "after": "2e23416c382366e01e4ad560358b80d8d4a99ca4e6692c4538132e8df8c4ff55"
+    },
+    {
+      "path": "desktop/registration-ui.mjs",
+      "before": "2547a5cb09af1e8442197587b4e11e4e36465f2ca3d09ccaf40746b74e806dc8",
+      "after": "83c0bdb1f331e76b527d9c357aa02804ee46e3afc53208d2437aa32fca24b632"
+    },
+    {
+      "path": "desktop/scene-ui.mjs",
+      "before": "331aa15a8d7320136d7308b634f782b3b136fdb79696b75aabac5993e6faad96",
+      "after": "39846a69666b9b3f5c04976be03e9bc72bfb9088a016e022b437f5acf565f47c"
+    },
+    {
+      "path": "desktop/screen-question-host.mjs",
+      "before": "cb769a62fca2d1bad6345ea19f867c49a4994ba1c20c3744910b6dabd5313aa9",
+      "after": "ec20644200a160976ecfe612498003fc28a3ac4ad62fa01c482a0fc7f5afbccd"
+    },
+    {
+      "path": "desktop/screen-question-preload.cjs",
+      "before": "d48532565d857bc413103051db901c537501f65e61c3fc3f1a53f86cdb2d7c31",
+      "after": "4e6ecfa1555c1f59282fb65e89496a4f8905ecd3734799894b8aee7f3115c009"
+    },
+    {
+      "path": "desktop/screen-question-ui.mjs",
+      "before": "b7761ed4f48e7e3270148d6d93fcfdba0b72ba0f138b26d7723eefcde01b7d2c",
+      "after": "465a55d1f3fad85ecfea580b318b27f6f23cc63924c122c775997889c6e58b43"
+    },
+    {
+      "path": "desktop/screen-question.css",
+      "before": "7d58880f979457281e9a7589399dc2ef70681cc8c2dca73d569c2ba2d4fbf86e",
+      "after": "b6b68f6f3f33451ef540b2bc4d11d6d78a581de2fc9840a5e140dacba3d90685"
+    },
+    {
+      "path": "desktop/screen-question.html",
+      "before": "261c1b6b137c9f8c2e773c86eb269856878ef8a97219fb5580e57912e6953e00",
+      "after": "f37cd3a8945e26d9c1f6a0f51b2ffa7ea7fab6476322e3a2219fca9a67e73978"
+    },
+    {
+      "path": "desktop/settings-ui.mjs",
+      "before": "4b1de1d727875df8ab28c0caff2d9a7e478c0d833aadad37c50d18c1288d5019",
+      "after": "a82d70a766c445ee8c09948efab0113face9ed53c82649ca858c894a2ff24710"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "before": "1c7fedb81f1ac9660ed28eaed3e129a9814c0fa26146a296b5447ee8627fbf0b",
+      "after": "32d2cebb7356deb1f6e858e365e1e2e915239f3e0a87162b2359892b4a184ea0"
+    },
+    {
+      "path": "desktop/source-updates.mjs",
+      "before": "d1d65769ddc670051c6c0ec6c2457b2d7f6e86c7c9df329b728be1b89ae58b18",
+      "after": "d3daedf334e6bbf576a025c1a1b4b98ba00b6472abe65c3eaaa5faff341f601b"
+    },
+    {
+      "path": "output/desktop-bundle/bubble-voice-capture.mjs",
+      "before": null,
+      "after": "307497d6e31064a181b2db7f00b52758476a7ee4b4149065d0108ef3df85a17d"
+    },
+    {
+      "path": "output/desktop-bundle/bubble-voice-processor.mjs",
+      "before": null,
+      "after": "4d02c325af0a3de5bc1dca5b25bdfdc090e47ec4acb14f3a80fa56ca0e7b1b3e"
+    },
+    {
+      "path": "output/desktop-bundle/bubble-voice-segments.mjs",
+      "before": null,
+      "after": "76398d15418880b5943ca1a7973a620b498217f0ee2718249cfc616bd546d670"
+    },
+    {
+      "path": "output/desktop-bundle/bubble-voice-ui.mjs",
+      "before": null,
+      "after": "3ed355a3f51f629d8fa65d8865eddd1c2eee16b6e8cd2e64cadb4158ef9ede75"
+    },
+    {
+      "path": "output/desktop-bundle/dictation-ui.mjs",
+      "before": null,
+      "after": "915382e9ee41c51a80cc4de68df4e1dde2fffe6c4ded284e740947a75d71ef90"
+    },
+    {
+      "path": "output/desktop-bundle/feiyue-surface.css",
+      "before": "4b7633888eab197246fe99953b2d09d86f35fa4153c0e7ae9d036b60d3e76c58",
+      "after": "8e392febaf3f0f5b468f85277a5e80c54d03d9b079c36c8928e4a60650cb53e7"
+    },
+    {
+      "path": "output/desktop-bundle/registration-review-ui.mjs",
+      "before": "3ea0c5a56bce5a80f0b4c64984c1a7dac841e2d21676ee31425c73f30ea25476",
+      "after": "2e23416c382366e01e4ad560358b80d8d4a99ca4e6692c4538132e8df8c4ff55"
+    },
+    {
+      "path": "output/desktop-bundle/registration-ui.mjs",
+      "before": "2547a5cb09af1e8442197587b4e11e4e36465f2ca3d09ccaf40746b74e806dc8",
+      "after": "83c0bdb1f331e76b527d9c357aa02804ee46e3afc53208d2437aa32fca24b632"
+    },
+    {
+      "path": "output/desktop-bundle/scene-ui.mjs",
+      "before": "331aa15a8d7320136d7308b634f782b3b136fdb79696b75aabac5993e6faad96",
+      "after": "39846a69666b9b3f5c04976be03e9bc72bfb9088a016e022b437f5acf565f47c"
+    },
+    {
+      "path": "output/desktop-bundle/screen-question-ui.mjs",
+      "before": "b7761ed4f48e7e3270148d6d93fcfdba0b72ba0f138b26d7723eefcde01b7d2c",
+      "after": "465a55d1f3fad85ecfea580b318b27f6f23cc63924c122c775997889c6e58b43"
+    },
+    {
+      "path": "output/desktop-bundle/screen-question.css",
+      "before": "7d58880f979457281e9a7589399dc2ef70681cc8c2dca73d569c2ba2d4fbf86e",
+      "after": "b6b68f6f3f33451ef540b2bc4d11d6d78a581de2fc9840a5e140dacba3d90685"
+    },
+    {
+      "path": "output/desktop-bundle/screen-question.html",
+      "before": "261c1b6b137c9f8c2e773c86eb269856878ef8a97219fb5580e57912e6953e00",
+      "after": "f37cd3a8945e26d9c1f6a0f51b2ffa7ea7fab6476322e3a2219fca9a67e73978"
+    },
+    {
+      "path": "output/desktop-bundle/settings-ui.mjs",
+      "before": "4b1de1d727875df8ab28c0caff2d9a7e478c0d833aadad37c50d18c1288d5019",
+      "after": "a82d70a766c445ee8c09948efab0113face9ed53c82649ca858c894a2ff24710"
+    }
+  ]
+}

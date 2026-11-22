@@ -61,6 +61,25 @@ function supportedTrends(summary, evidence) {
   });
 }
 
+export function supportedNewsTitle(title,evidence) {
+  if(typeof title!=='string'||[...title].length<12||[...title].length>46||/[\n\r！？!?]/u.test(title)||needsChinese(title))return false;
+  const latest=evidence.at(-1);
+  const basis=latest?[latest.title,latest.text].join('\n'):'';
+  if(/无(?:人员)?伤亡|零伤亡|多人伤亡|出现(?:人员)?伤亡|造成.{0,10}人伤亡/u.test(title)&&!/暂未发现|未发现/u.test(title)&&
+    /(?:暂未|尚未)发现.{0,4}伤亡/u.test(basis))return false;
+  if(/恢复正常|全面恢复|全线恢复/u.test(title)&&/限速/u.test(basis)&&!/恢复正常|全面恢复|全线恢复/u.test(basis))return false;
+  if(/部署|落地|投入使用|正式投产|承担|负责/u.test(title)&&!/计划|拟|将/u.test(title)&&
+    plannedNewsUpdate(basis))return false;
+  if(/^(?:美股|美日市场|科技股|AI\s*股|全球股市).{0,20}(?:跌|卖压|抛售)/iu.test(latest?.title??'')&&
+    !/美股|美日市场|科技股|AI\s*股|芯片股|纳指|纳斯达克|大盘|全球股市/iu.test(title))return false;
+  const numbers=new Set(evidence.flatMap(row=>[row.date,row.title,row.text].flatMap(text=>numericClaims(text,true))));
+  return numericClaims(title).every(claim=>numbers.has(claim))&&supportedTrends(title,evidence);
+}
+
+export function plannedNewsUpdate(basis) {
+  return /宣布.{0,12}计划|计划.{0,14}(?:部署|验证)|将承担/u.test(basis)&&!/已完成|已部署|已投入使用/u.test(basis);
+}
+
 export async function readNewsExcerpt(report,signal) {
   const result=await searchPublicWeb(report.title,signal,undefined,{mode:'page',page:report.url});
   signal.throwIfAborted();
@@ -71,24 +90,30 @@ export async function readNewsExcerpt(report,signal) {
 }
 
 export function createNewsEditor(model,read=readNewsExcerpt) {
-  return async function summarize(details,signal) {
+  return async function summarize(details,signal,{prompt=guidance,...job}={}) {
     const nodes=details.nodes.length>4?[details.nodes[0],...details.nodes.slice(-3)]:details.nodes;
     const evidence=nodes.map(node=>({date:stamp.format(node.at)+' JST',title:node.title,text:node.evidence}));
     const latest=evidence.at(-1);
-    if(!latest.text) {
+    const current=nodes.at(-1);
+    if(!latest.text || (current?.reports?.length>1&&(current.excerpts?.join('').length??0)<80)) {
       // 只读已入库的具体报道，沿用公开网页读取器的限制。
       const stop=AbortSignal.any([signal,AbortSignal.timeout(16000)]);
-      for (const report of nodes.at(-1).reports.slice(0,2)) {
+      const sources=new Set(), excerpts=new Set();
+      for (const report of current?.reports??[]) {
+        if (stop.aborted || sources.size===3) break;
+        const source=report.source||report.url;
+        if (sources.has(source)) continue;
+        sources.add(source);
         const text=await read(report,stop).catch(()=> '');
         signal.throwIfAborted();
-        if(text) {latest.text=text;break;}
-        if(stop.aborted)break;
+        if(text) excerpts.add(text);
       }
+      if(excerpts.size) latest.text=[latest.text,...excerpts].filter(Boolean).join('\n');
     }
     if(!evidence.some(row=>row.text))return '';
     if(model?.memory) {
       const stop=AbortSignal.any([signal,AbortSignal.timeout(40000)]);
-      const response=await model.memory(JSON.stringify(evidence),guidance,schema,stop,{name:'news-summary'}).catch(()=>null);
+      const response=await model.memory(JSON.stringify(evidence),prompt,schema,stop,{name:'news-summary',aiTier:'2',maxTokens:300,...job}).catch(()=>null);
       signal.throwIfAborted();
       const summary=response?.summary?.trim()??'';
       // 日期和时间整体校验，带单位的数量不能借用其他语境中的数字。

@@ -3,6 +3,7 @@ import {calendarContext,tokyoDate} from './calendar-date.mjs';
 import {imageSlots,resolveImageChoices} from './image-planning.mjs';
 import {conversationRoute,suppliedSummaryText} from './conversation-routing.mjs';
 import {responseMode,responseInstruction} from '../agent/assistant/response-style.mjs';
+import {planLocalOutput} from './local-output-budget.mjs';
 
 const threads = 4;
 const contextSize = 2048;
@@ -254,7 +255,15 @@ async function start() {
         timing.decode_ms=Math.round(performance.now()-first);
       }
       if(!outputGrammar)return output.trim();
-      const value = outputGrammar.parse(output);
+      let value;
+      try{value=outputGrammar.parse(output);}
+      catch(error){
+        if(timing)throw Object.assign(Error('本机结构化输出未完整结束'),{
+          code:timing.output_tokens>=maxTokens-1
+            ?(timing.budget_mode==='adaptive'&&maxTokens<timing.output_ceiling?'LOCAL_AI_ADAPTIVE_OUTPUT_BUDGET':'LOCAL_AI_OUTPUT_BUDGET')
+            :'LOCAL_AI_RESULT_INVALID',cause:error});
+        throw error;
+      }
 
       if (Object.hasOwn(value,'kind') && !kinds.has(value.kind)) throw Object.assign(Error(),{code:'LOCAL_AI_RESULT_INVALID'});
       return value;
@@ -351,27 +360,39 @@ async function start() {
           const instructions=[responseInstruction(mode,{direct}),data.skillInstruction?.response].filter(Boolean).join('\n');
           const reply=await pass(text,signal,instructions,previous,null,mode==='speech'||mode==='judgment'?256:512);
           result=reply?{kind:'chat',reply}:{error:'LOCAL_AI_RESULT_INVALID'};
-        }else if(hint==='interactionWork'||hint==='personalityMemory'&&data.skillInstruction?.name==='memory-refinement'){
-          const {instruction,schema,maxTokens=512}=data.skillInstruction;
+        }else if(hint==='interactionWork'||hint==='personalityMemory'){
+          const skill=data.skillInstruction;
+          const fixedContext=hint==='personalityMemory'&&!skill.aiTier&&!skill.boundedOutput&&skill.name!=='memory-refinement';
+          const {instruction,schema,maxTokens:requested=512,boundedOutput,adaptiveOutput,fullOutputBudget}=skill;
+          const maximum=model.gpuLayers>0?2048:1024;
+          const limit=fixedContext?420:boundedOutput?Math.max(64,Math.min(requested,maximum)):requested;
           const setup=performance.now();
-          const inputTokens=model.tokenize(text).length+model.tokenize(instruction).length;
+          const plan=planLocalOutput({text,stage:boundedOutput?adaptiveOutput:undefined,tokenize:value=>model.tokenize(value),
+            limit,retry:fullOutputBudget});
+          const maxTokens=plan.tokens;
+          const inputTokens=model.tokenize(text).length+model.tokenize([instruction,active?.calendar].filter(Boolean).join('\n')).length;
           const required=inputTokens+maxTokens+256;
-          if(required>16384)
-            throw Object.assign(Error('本轮交互资料超出本地上下文'),{code:'LOCAL_AI_CONTEXT_BUDGET'});
-          const workGrammar=await engine.createGrammarForJsonSchema(schema);
-          const workContext=required>contextSize?await model.createContext({contextSize:Math.ceil(required/1024)*1024,threads}):context;
-          const timing=data.skillInstruction.name==='memory-refinement'?
-            {input_tokens:inputTokens,output_tokens:0,setup_ms:Math.round(performance.now()-setup)}:undefined;
-          try{result=await pass(text,signal,instruction,undefined,workGrammar,maxTokens,workContext,timing);}
+          const timing=fixedContext||boundedOutput||skill.name==='memory-refinement'?
+            {input_tokens:inputTokens,output_tokens:0,output_limit:maxTokens,output_ceiling:limit,budget_mode:plan.mode,
+              material_tokens:plan.materialTokens,setup_ms:0}:undefined;
+          let workContext=context;
+          try{
+            if(plan.split)throw Object.assign(Error('本批预计输出超出当前设备预算，交给较小分片'),{code:'LOCAL_AI_BATCH_BUDGET'});
+            if(required>16384||boundedOutput&&required>8192||fixedContext&&required>contextSize)
+              throw Object.assign(Error('本轮交互资料超出本地上下文'),{code:'LOCAL_AI_CONTEXT_BUDGET'});
+            const workGrammar=await engine.createGrammarForJsonSchema(schema);
+            if(required>contextSize)workContext=await model.createContext({contextSize:Math.ceil(required/1024)*1024,threads});
+            if(timing){
+              timing.setup_ms=Math.round(performance.now()-setup);
+              timing.context_tokens=required>contextSize?Math.ceil(required/1024)*1024:contextSize;
+            }
+            result=await pass(text,signal,instruction,undefined,workGrammar,maxTokens,workContext,timing);
+          }
           finally{
             if(workContext!==context)await workContext.dispose();
             if(timing)send({type:'refinement-timing',id,timing});
           }
-        }else if (hint === 'serverTask' || hint === 'personalityMemory') {
-          if(hint==='personalityMemory'&&['emotion-appraisal','initiative-decision','topic-memory'].includes(data.skillInstruction.name)){
-            const used=model.tokenize(text).length+model.tokenize(data.skillInstruction.instruction).length;
-            if(used+420+32>contextSize)throw Object.assign(Error('本轮人格材料超出上下文'),{code:'LOCAL_AI_CONTEXT_BUDGET'});
-          }
+        }else if (hint === 'serverTask') {
           const taskGrammar = await engine.createGrammarForJsonSchema(data.skillInstruction.schema);
           result = await pass(text,signal,data.skillInstruction.instruction,undefined,taskGrammar,420);
         } else if (hint === 'image-plan') {
@@ -414,11 +435,12 @@ async function start() {
 
       } catch (error) {
         result = {error:signal.aborted?'LOCAL_AI_TIMEOUT':hint==='interactionWork'&&error instanceof SyntaxError?'LOCAL_AI_RESULT_INVALID':
-          ['LOCAL_AI_RESULT_INVALID','LOCAL_AI_CONTEXT_BUDGET'].includes(error?.code)?error.code:'LOCAL_AI_INFERENCE_FAILED'};
+          ['LOCAL_AI_RESULT_INVALID','LOCAL_AI_CONTEXT_BUDGET','LOCAL_AI_OUTPUT_BUDGET',
+            'LOCAL_AI_ADAPTIVE_OUTPUT_BUDGET','LOCAL_AI_BATCH_BUDGET'].includes(error?.code)?error.code:'LOCAL_AI_INFERENCE_FAILED'};
       } finally {
         active = null;
       }
-      if (!controller.signal.aborted || data.skillInstruction?.name==='memory-refinement'){
+      if (!controller.signal.aborted || data.skillInstruction?.aiTier || data.skillInstruction?.name==='memory-refinement'){
         send({type:'result',id,result});
       }
     })();

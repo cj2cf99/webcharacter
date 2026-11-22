@@ -128,3 +128,4 @@ export function selectRows(table,keys){
   invariant(tables.includes(table),'未知花园目标');
   return 'SELECT * FROM garden_'+table+' WHERE '+keys.map(k=>'('+where(k)+')').join(' OR ');
 }
+
