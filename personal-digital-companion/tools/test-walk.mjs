@@ -39,6 +39,7 @@ assert.equal(routes.get(upperRight.id).length,2,'错位三块屏通过中间屏�
 assert(!routes.has(corner.id),'窄角接触不足以通过角色画布');
 assert(!routes.has(taskbarGap.id),'任务栏或小条带不成为通过区');
 const snappedSize=displaySize(above,b);
+assert.deepEqual(displaySize(taskbarGap,b),b,'窄工作区只限制位置，保持普通动画尺寸');
 assert.deepEqual(snappedSize,{width:244,height:360});
 const snapped=displayPosition({x:332,y:-999},above,snappedSize);
 assert.equal(snapped.x,331,'DPI 网格以所属屏幕原点为准');

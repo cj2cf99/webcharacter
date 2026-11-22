@@ -10,6 +10,7 @@ export const pages = {
   'news-panel.html':['feiyue-surface.css','news-panel.css','news-weekly.css','news-editorial.css','news-layout.mjs','news-panel-ui.mjs','news-heatmap.mjs'],
   'scene.html':['feiyue-surface.css','scene.css','scene-ui.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
   'poll-settings.html':['feiyue-surface.css','poll-settings.css','poll-settings-ui.mjs'],
+  'thought.html':['feiyue-surface.css','thought.css'],
   'index.html':['style.css','configured-renderer.mjs','renderer.mjs','companion-player.mjs','companion-state.mjs','behavior-controller.mjs','screen-posture.mjs','sound.mjs','window-nodes.mjs'],
   'settings.html':['feiyue-surface.css','settings.css','settings-ui.mjs','effect-preview.mjs','companion-player.mjs','behavior-controller.mjs','window-nodes.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
   'message-box.html':['feiyue-surface.css','message-box.css','message-box-ui.mjs'],

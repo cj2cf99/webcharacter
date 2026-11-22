@@ -1,0 +1,16 @@
+{
+  "installedAt": "2026-11-23T05:01:05.7378539+09:00",
+  "version": "dda429cff282",
+  "manifest": "dda429cff282de7db0ecca6f872147c15962f29bde22dd6f299f5c931f823e2d",
+  "files": 16,
+  "oldPid": 28580,
+  "newPid": 25224,
+  "startedJst": "2026-11-23T05:01:04.3560000+09:00",
+  "directory": {
+    "skills": 24,
+    "unauthenticated": 401
+  },
+  "databaseBackup": "纯代码发布，无业务库变更",
+  "userAcceptance": "待用户复验",
+  "installedSmoke": "通过：画布 246 × 360，绘图像素 369 × 547，正常退场 6072 ms；独立临时资料"
+}

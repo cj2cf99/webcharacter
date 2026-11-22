@@ -135,3 +135,5 @@ node tools/check-project.mjs
 绯月桌面精灵的文字提醒修改及整组合并确认见[子项目开发记录](../personal-digital-companion/docs/DEVELOPMENT.md)和[使用说明](../personal-digital-companion/desktop/README.md)。本次完成桌面及两个 Worker 的本地源码接线与隔离验证。
 
 2026-11-23 04:57 JST，绯月正式版已安装新闻提醒修复 948648e620bb，安装后点击回归通过。[安装回执](../personal-digital-companion/RELEASE_REVIEW.md#新闻提醒正式安装回执--948648e620bb)
+
+2026-11-23 JST，绯月正式版的工作气泡独立显示在头顶。角色保持当前动画的指定尺寸，屏幕边缘由气泡避让。[桌宠固定尺寸与验证](../personal-digital-companion/docs/DEVELOPMENT.md#角色固定展示尺寸)

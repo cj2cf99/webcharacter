@@ -10,6 +10,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
 import {readFile,stat} from 'node:fs/promises';
 import {createMessageBoxes} from './message-box.mjs';
+import {createThoughtOverlay} from './thought-overlay.mjs';
 import {createPanelWindow} from './panel-window.mjs';
 import {attachSettings} from './settings-host.mjs';
 import {watchFileChanges,setLiveWarningLog,warnLiveUpdate} from './live-files.mjs';
@@ -68,8 +69,8 @@ export function waitForStartupReminders(signal){
   });
 }
 export function initialBounds(area,height=360){
-  const h=Math.min(height,area.height-24),w=Math.round(h*464/688);
-  return {x:Math.round(area.x+area.width-w-16),y:Math.round(area.y+area.height-h-12),width:w,height:h};
+  const width=Math.round(height*464/688);
+  return {x:area.x+Math.max(0,area.width-width-16),y:area.y+Math.max(0,area.height-height-12),width,height};
 }
 export async function startDesktop(electron,options={}){
   const {app,BrowserWindow,Tray,Menu,nativeImage,screen,ipcMain,session}=electron;
@@ -155,6 +156,7 @@ export async function startDesktop(electron,options={}){
     webPreferences:{preload:resolve(root,'desktop/preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,
       webSecurity:true,backgroundThrottling:true,spellcheck:false,
       additionalArguments:['--feiyue-actions',...(options.benchmark?['--feiyue-benchmark']:[])]}});
+  const thoughtOverlay=createThoughtOverlay(electron,{win,root,bundle});
   const pcSettings=attachSettings(electron,{win,profile,bundle,root,legacySound:sound,onDisplayChange:applyScreenLock});
   let confineToScreen=pcSettings.store.snapshot().config.confineToScreen;
   const baseLocalModel=options.localModel??(!options.benchmark&&electron.utilityProcess?createBalancedLocalModel({
@@ -177,7 +179,7 @@ export async function startDesktop(electron,options={}){
     const thought=label('正式 · ',transcription?.active)??(work?null:label('正式 · ',privateChat?.active??localPool?.active??taskThought)??label('闲时 · ',memoryThought??memoryResult)??pollThought);
     const encoded=JSON.stringify(thought);
     if(force||lastThought!==encoded){
-      lastThought=encoded;win.webContents.send('desktop:thought',thought);
+      lastThought=encoded;thoughtOverlay.set(thought);
     }
     const context=writing?'diary-review-idle':menuUnread?'reminder-idle':'';
     const executing=Boolean(transcription?.busy||privateChat?.active||localPool?.active||writing||pollExecuting||['nag','diaryAudit'].includes(backgroundKind)||tasks.activeCount()||screenQuestion.executing);
@@ -480,7 +482,7 @@ export async function startDesktop(electron,options={}){
       if(drag?.top)drag=null;
       if(win.isDestroyed())return;
       const current=win.getBounds();
-      const next={...current,width:bounds.width,height:bounds.height};
+      const next={...current,...displaySize(currentDisplay(),bounds)};
       if(reason==='drag-far'){
         const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
         next.x=Math.round(Math.max(area.x,Math.min(area.x+area.width-next.width,current.x+(current.width-next.width)/2)));
@@ -749,10 +751,11 @@ export async function startDesktop(electron,options={}){
     win.showInactive();
     // Windows 下透明且不可聚焦的桌宠需要显式层级才能恢复原生置顶标记。
     win.setAlwaysOnTop(true,'pop-up-menu');
+    thoughtOverlay.sync();
     win.webContents.send('desktop:visible',true);
     updatePosture(true);if(previousReady)beginPoll();
   }
-  function hide(){if(farewell)return;privateChat?.dismiss();scenePanel?.dismiss();screenQuestion.hide();detachAttachment('hidden');cancelMovement();travelPosture=null;drag=null;stopPoll();ignore(true);win.webContents.send('desktop:visible',false);win.hide();}
+  function hide(){if(farewell)return;privateChat?.dismiss();scenePanel?.dismiss();screenQuestion.hide();detachAttachment('hidden');cancelMovement();travelPosture=null;drag=null;stopPoll();ignore(true);win.webContents.send('desktop:visible',false);win.hide();thoughtOverlay.sync();}
   function setWork(value){
     work=value;if(value)suspendMemory();resetIdle();
     syncActivity();menu();
@@ -1044,7 +1047,7 @@ export async function startDesktop(electron,options={}){
     const media=files.filter(name=>/\.(webm|wav|mp3|ogg|flac|m4a)$/i.test(name));
     if(media.length)pcSettings.mediaChanged(media.map(name=>resolve(bundle,name)));
     if(files.includes('tray.png'))tray.setImage(nativeImage.createFromPath(resolve(bundle,'tray.png')));
-    for(const [page,panel] of [['index.html',win],['settings.html',pcSettings.panel],['weather.html',weather.panel],
+    for(const [page,panel] of [['index.html',win],['thought.html',thoughtOverlay.panel],['settings.html',pcSettings.panel],['weather.html',weather.panel],
       ['conversation.html',screenQuestion.details],['reminder-review.html',reminderReview?.panel],['poll-settings.html',pollSettings.panel],
       ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],['study.html',study.panel],
       ['screen-question.html',screenQuestion.panel],['registration-review.html',screenQuestion.inquiryPanel],['sound-settings.html',settingsWindow],
@@ -1079,10 +1082,10 @@ export async function startDesktop(electron,options={}){
       const size=displaySize(display,bounds),next={...displayPosition(win.getBounds(),display,size),...size};
       win.setBounds(next,false);
     }
-    updateFullscreen(true);updatePosture(true);
+    updateFullscreen(true);updatePosture(true);thoughtOverlay.place();
   }
   function cleanup(){
-    if(cleaned)return;cleaned=true;
+    if(cleaned)return;cleaned=true;thoughtOverlay.close();
     clearInterval(privateTimer);void privateChat?.close();
     reminderStartup.abort();
     interruptMemory();electron.powerMonitor?.removeListener?.('suspend',suspendMemory);
@@ -1132,7 +1135,7 @@ export async function startDesktop(electron,options={}){
       // 回执丢失或媒体损坏时取消本次退出，允许修复后重试。
       const timer=setTimeout(()=>finish(false),20000);
       farewell={ticket,finish};
-      win.webContents.send('desktop:thought',null);
+      thoughtOverlay.set(null);
       if(!win.isVisible())show();
       if(previousReady)win.webContents.send('desktop:action',{kind:'farewell',ticket});
     });
@@ -1249,6 +1252,6 @@ export async function startDesktop(electron,options={}){
   const remindersReady=waitForStartupReminders(reminderStartup.signal);
   if(!options.benchmark)checks.start();
   taskNotice(tasks.startup(remindersReady));
-  return {win,show,hide,moveTo,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,transcription,study,
+  return {win,show,hide,moveTo,thoughtOverlay,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,transcription,study,
     get localAPIAddress(){return localREST?.address??null;},getStats:()=>({pointerMessages,visible:win.isVisible(),ready:previousReady})};
 }

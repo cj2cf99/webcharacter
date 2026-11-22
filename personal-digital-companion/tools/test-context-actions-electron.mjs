@@ -46,41 +46,58 @@ async function test(){
   assert.ok(startupMs>=5900);
   console.log('PASS 启动首段挥手，随后响应已有未读提醒');
   const send=(channel,value)=>shell.win.webContents.send(channel,value);
+  const canvasSize=()=>shell.win.webContents.executeJavaScript(`(()=>{
+    const canvas=document.querySelector('#character'),rect=canvas.getBoundingClientRect();
+    return [rect.x,rect.y,rect.width,rect.height,canvas.width,canvas.height];
+  })()`);
+  const fixed=await canvasSize(),home=shell.win.getBounds();
+  const overlay=shell.thoughtOverlay;
+  assert.equal(overlay.panel,null);
+  const waitVisible=async()=>{
+    for(let i=0;i<100&&!overlay.panel?.isVisible();i++)await delay(20);
+    assert.ok(overlay.panel?.isVisible(),'进度窗已就绪');
+  };
   async function cloudState(){
-    return shell.win.webContents.executeJavaScript(`(()=>{
-      const cloud=document.querySelector('#thought'),bar=cloud.querySelector('progress');
-      const summary=cloud.querySelector('small');
-      return {hidden:cloud.hidden,text:cloud.innerText,counted:bar.hasAttribute('value'),barHidden:bar.hidden,
+    assert.deepEqual(await canvasSize(),fixed,'角色画布及绘图像素尺寸固定');
+    const pet=shell.win.getBounds(),bubble=overlay.panel.getBounds();
+    assert.equal(pet.width,home.width);assert.equal(pet.height,home.height);
+    assert.ok(bubble.y+bubble.height<=pet.y||bubble.x+bubble.width<=pet.x||
+      bubble.x>=pet.x+pet.width||bubble.y>=pet.y+pet.height,'气泡与角色窗口分离');
+    assert.equal(overlay.panel.isFocusable(),false);
+    return overlay.panel.webContents.executeJavaScript(`(()=>{
+      const cloud=document.querySelector('#thought'),bar=cloud.querySelector('progress'),summary=cloud.querySelector('small');
+      return {text:cloud.innerText,counted:bar.hasAttribute('value'),barHidden:bar.hidden,
         timeHidden:cloud.querySelector('time').hidden,summaryFits:summary.scrollHeight===summary.clientHeight,
-        clearOfHead:cloud.getBoundingClientRect().bottom<document.querySelector('#character').getBoundingClientRect().top,
         clickThrough:getComputedStyle(cloud).pointerEvents==='none'};
     })()`);
   }
-  send('desktop:thought',{title:'补写执行评价',stage:'整理归档',done:2,total:5});
-  await delay(40);
-  const counted=await cloudState();
-  assert.match(counted.text,/2\/5/);
-  assert.ok(counted.counted&&counted.clearOfHead&&counted.clickThrough);
-  send('desktop:thought',{title:'检查天气',stage:'正在查询'});
-  await delay(40);
-  const waiting=await cloudState();
+  async function display(value){
+    overlay.set(value);await waitVisible();await delay(40);return cloudState();
+  }
+  const counted=await display({title:'补写执行评价',stage:'整理归档',done:2,total:5});
+  assert.match(counted.text,/2\/5/);assert.ok(counted.counted&&counted.clickThrough);
+  assert.ok(overlay.panel.getBounds().y+overlay.panel.getBounds().height<=home.y,'头顶有空间时优先在上方显示');
+  const waiting=await display({title:'检查天气',stage:'正在查询'});
   assert.match(waiting.text,/正在查询/);assert.equal(waiting.counted,false);
-  send('desktop:thought',{title:'闲时 · 核对手记',goal:'我想核对近七天的手记，找出待确认的疑点'});
-  await delay(40);
-  const goal=await cloudState();
+  const goal=await display({title:'闲时 · 核对手记',goal:'我想核对近七天的手记，找出待确认的疑点'});
   assert.match(goal.text,/我想核对近七天的手记，找出待确认的疑点/);
-  assert.ok(goal.summaryFits&&goal.clearOfHead&&goal.timeHidden&&!goal.barHidden);
-  send('desktop:thought',{title:'闲时 · 核对手记',stage:'近七天手记没有新的关键疑点',durationMs:12500});
-  await delay(40);
-  const outcome=await cloudState();
+  assert.ok(goal.summaryFits&&goal.timeHidden&&!goal.barHidden);
+  const outcome=await display({title:'闲时 · 核对手记',stage:'近七天手记没有新的关键疑点',durationMs:12500});
   assert.match(outcome.text,/近七天手记没有新的关键疑点\s+用时 12\.5 秒/);
-  assert.ok(outcome.summaryFits&&outcome.clearOfHead&&outcome.clickThrough&&outcome.barHidden&&!outcome.timeHidden);
-  send('desktop:thought',{title:'正式 · 处理任务',stage:'步骤',done:1,total:2});
-  await delay(40);
-  const formal=await cloudState();
+  assert.ok(outcome.summaryFits&&outcome.clickThrough&&outcome.barHidden&&!outcome.timeHidden);
+  const formal=await display({title:'正式 · 处理任务',stage:'步骤',done:1,total:2});
   assert.ok(formal.counted&&formal.timeHidden&&!formal.barHidden);
-  send('desktop:thought',null);await delay(40);assert.equal((await cloudState()).hidden,true);
-  console.log('PASS 联想云位置、点击穿透、开工目的、结果与耗时、正式进度与收起');
+  assert.deepEqual(shell.win.getBounds(),home,'内容切换期间角色保持原位');
+  const area=electron.screen.getDisplayMatching(home).workArea;
+  shell.win.setBounds({...home,x:area.x,y:area.y});await delay(100);await cloudState();
+  assert.ok(overlay.panel.getBounds().x>=shell.win.getBounds().x+home.width,'左上角移到角色右侧');
+  shell.win.setBounds(home);await delay(100);
+  shell.hide();assert.equal(overlay.panel,null);
+  shell.show();await waitVisible();assert.match((await cloudState()).text,/1\/2/);
+  overlay.set(null);assert.equal(overlay.panel,null);assert.deepEqual(await canvasSize(),fixed);
+  overlay.set({title:'正在打开',stage:'等待'});overlay.set(null);await delay(80);
+  assert.equal(overlay.panel,null,'打开过程中取消也能收起');
+  console.log('PASS 进度、等待、目的、耗时、边缘避让、快速收起、重新显示；角色画布与窗口全程固定',fixed);
   send('desktop:idle-context','diary-review-idle');
   await waitFor('diary-review-idle');
   let start=events.length;

@@ -1,0 +1,88 @@
+{
+  "formalRoot": "G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion",
+  "formalBuild": "247f3713f3f2",
+  "installedSource": "7eb3f03d0a58a258486d699c60dd92906e59bf0a",
+  "sourceBase": "03942463b3de924c380ae45a0c29a30bfbbee1c6",
+  "items": [
+    {
+      "path": "desktop/shell.mjs",
+      "before": "2171ecf9e78b600c9d7717fd8fc4945b4c0a36fe7672109b2cfc441a6cd8b376",
+      "after": "db71a1538f9c7fa88dfcc7f990f34019a962a868c63df473bce088e5c6604f1e"
+    },
+    {
+      "path": "desktop/source-updates.mjs",
+      "before": "f7c71a805f1b5121132d54b7c6316a7c97b901aa1ece50d9c9f8841993a93084",
+      "after": "ffa8bdc4fb58780b036146cde52b31d8164e241b55301c47b06850c9987ffe40"
+    },
+    {
+      "path": "desktop/movement.mjs",
+      "before": "2473cdd7634117d8064c13b49674edda5a70eefde9ba27887af4d9b46058fb1d",
+      "after": "4fdb17b67a74b686df45c1e29938ea9738dbd331f407f9b548e378a632747387"
+    },
+    {
+      "path": "desktop/configured-renderer.mjs",
+      "before": "170150727d72f1cf55062df4d77d09f58c3a1d08ceadf00cbc4da50512985194",
+      "after": "0589ea1d500044b0cd352d4f4ebc4cf6e095cec711f33e8c845780806b9b5377"
+    },
+    {
+      "path": "desktop/index.html",
+      "before": "8152374c9378b053ec259c0eccde69208d1d7e1c33979fc8752380fadbb5308e",
+      "after": "640e80319938ce56db2573d831ba28b31c6fdb2d5151f5dca7896eb5ce778e80"
+    },
+    {
+      "path": "desktop/preload.cjs",
+      "before": "078ccc59b759aaea98da5dd2b85a96983889b9af04c16c1710e7721d0a4d06eb",
+      "after": "391e76378ceee5ea601457012977614334f69f1cf7730846cc7b3db5f147d1f8"
+    },
+    {
+      "path": "desktop/style.css",
+      "before": "5540ff5723afe292b9dab4f7f2210a6bb1c1dc50af38e1815a3ae14ccbd8a937",
+      "after": "89bf22cd04947b44586ecf1709995aaa47a72a004d249e645bd091acec4aa47d"
+    },
+    {
+      "path": "desktop/thought-overlay.mjs",
+      "before": null,
+      "after": "d6e59253310f0752d326ae26d741638bf14530ba0c93335a5f1cf38e1bde60db"
+    },
+    {
+      "path": "desktop/thought-preload.cjs",
+      "before": null,
+      "after": "88c3066b137e0e38d0197bbcd6b93facdd4f085c200e536939862bfd76f08d15"
+    },
+    {
+      "path": "desktop/thought.css",
+      "before": null,
+      "after": "42d800b7ff9f79fc5717b0979e3858442b6dd7360faeb6b0946252c4d97a0141"
+    },
+    {
+      "path": "desktop/thought.html",
+      "before": null,
+      "after": "93bc54f32869d3a7e1568eb5b7d0b619500eabd0f00b12d5850544775dc8bd28"
+    },
+    {
+      "path": "output/desktop-bundle/index.html",
+      "before": "e9712f6600673b6579dc1e26e3cf7f3806d8346ceb273ddaeb8468f8e6a44b70",
+      "after": "f4ccae433362418fd1db900bd61d9176014dafdc8a6b0f67204cc39974171105"
+    },
+    {
+      "path": "output/desktop-bundle/configured-renderer.mjs",
+      "before": "170150727d72f1cf55062df4d77d09f58c3a1d08ceadf00cbc4da50512985194",
+      "after": "0589ea1d500044b0cd352d4f4ebc4cf6e095cec711f33e8c845780806b9b5377"
+    },
+    {
+      "path": "output/desktop-bundle/style.css",
+      "before": "5540ff5723afe292b9dab4f7f2210a6bb1c1dc50af38e1815a3ae14ccbd8a937",
+      "after": "89bf22cd04947b44586ecf1709995aaa47a72a004d249e645bd091acec4aa47d"
+    },
+    {
+      "path": "output/desktop-bundle/thought.css",
+      "before": null,
+      "after": "42d800b7ff9f79fc5717b0979e3858442b6dd7360faeb6b0946252c4d97a0141"
+    },
+    {
+      "path": "output/desktop-bundle/thought.html",
+      "before": null,
+      "after": "93bc54f32869d3a7e1568eb5b7d0b619500eabd0f00b12d5850544775dc8bd28"
+    }
+  ]
+}
