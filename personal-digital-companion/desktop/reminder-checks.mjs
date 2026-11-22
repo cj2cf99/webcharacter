@@ -46,9 +46,10 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
   const audit=log&&createAutonomousAudit(db,log,now);
   const newsArchive=join(profile,'news-archive');
   const news=notifyNews&&createNewsBriefing(db,now,notifyNews,undefined,{archiveDir:newsArchive,compile:compileNews,editorial:newsEditorial});
+  const lastInspection=db.prepare('SELECT through FROM log_inspection WHERE id=1');
   const inspection=inspectRecent&&async function(signal){
     const through=now();
-    const previous=db.prepare('SELECT through FROM log_inspection WHERE id=1').get()?.through??0;
+    const previous=lastInspection.get()?.through??0;
     const from=Math.min(through,Math.max(previous,through-86400000));
     const {scanned,completed,failed,top}=await inspectRecent(from,through,signal);
     signal.throwIfAborted();
@@ -65,7 +66,10 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
   };
   const scheduler=createPollScheduler({db,handlers:{due,...handlers,inspection,news:news&&(signal=>news.poll(signal,()=>scheduler.get('news').enabled)),
     newsEditorial:news?.editorialStep&&(signal=>scheduler.get('news').enabled?news.editorialStep(signal):'新闻关注已暂停')},isBusy,changed,now,setTimer,clearTimer,add,audit,onIdleResult,
-    lastRun:id=>id==='news'?news?.last():lastRun?.(id),weatherLastAt:()=>{const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value).lastCheck;}});
+    lastRun:id=>{
+      if(id==='inspection')return lastInspection.get()?.through;
+      return id==='news'?news?.last():lastRun?.(id);
+    },weatherLastAt:()=>{const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value).lastCheck;}});
   return {
     start:scheduler.start,enqueue:scheduler.enqueue,polls:scheduler.snapshot,configure:scheduler.configure,
     latestNews:()=>news?.latest()??{state:'answer',text:'当前未启用新闻关注。'},

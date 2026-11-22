@@ -145,6 +145,44 @@ test('手记占用模型时巡检照常运行，暂停的核对延后再取件',
   assert.equal(auditCalls,2);
 });
 
+test('日志巡检重启后沿用上次成功时间和已设间隔，过期只补查一次',async t=>{
+  const profile=mkdtempSync(join(tmpdir(),'fy-inspection-restart-')),timers=new Map(),windows=[];
+  const minute=60_000;
+  let at=Date.parse('2026-11-23T04:03:00+09:00');
+  const options={profile,now:()=>at,isBusy:()=>false,
+    setTimer(fn,ms){const key=Symbol();timers.set(key,{fn,at:at+ms});return key;},clearTimer:key=>timers.delete(key),
+    inspectRecent:async(from,through)=>{
+      windows.push([from,through]);
+      return {scanned:1,completed:0,failed:1,top:[['TEST',1]]};
+    }};
+  let checks=createReminderChecks(options);
+  t.after(()=>{checks.close();rmSync(profile,{recursive:true,force:true});});
+  async function advance(ms){
+    at+=ms;
+    for(const [key,timer] of [...timers])if(timers.has(key)&&timer.at<=at){timers.delete(key);timer.fn();}
+    await settle();
+  }
+  function restart(){checks.close();checks=createReminderChecks(options);checks.start();}
+  checks.start();await advance(minute);
+  const first=at;
+  assert.deepEqual(windows,[[first-24*60*minute,first]]);
+  for(const gap of [18,5,6,4,9]){
+    await advance((gap-1)*minute);restart();await advance(minute);
+    assert.equal(checks.unread,1);
+    assert.equal(checks.polls()[0].nextAt,first+60*minute);
+  }
+  await advance(first+60*minute-at);
+  assert.deepEqual(windows[1],[first,at]);
+  checks.configure('inspection',{enabled:true,minutes:30,maximum:3});
+  restart();
+  assert.equal(checks.polls()[0].nextAt,at+30*minute);
+  checks.close();at+=100*minute;checks=createReminderChecks(options);checks.start();
+  await advance(minute);
+  assert.deepEqual(windows.slice(2),[[first+60*minute,at]]);
+  assert.equal(checks.unread,3);
+  assert.equal(checks.polls()[0].nextAt,at+30*minute);
+});
+
 test('异常退出后只把无回执的行动标记中断，耗时未知',async()=>{
   const db=new DatabaseSync(':memory:'),rows=[];
   const start=createAutonomousAudit(db,e=>rows.push(e),()=>1);

@@ -1766,3 +1766,18 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 从实际安装版加载模块、页面及预加载脚本，以独立 Electron 资料和模拟新闻运行 installed-check.mjs 通过。覆盖首次点击打开、复用最小化的简报并显示新报道、关闭、超时、重复更新和不抢焦点。Git 交付树新闻单元测试 18/18。日常真实新闻到达时的实点待用户确认。正式 API 对批次 feiyue-news-notice-20261123 回读 404，尚未提交；待花园线上版本迁移及最终清单确认。
 
 新闻提醒 948648e620bb 的安装源码、测试、11 项字节清单及安装回执已提交至 632da6b188cbab440a9114e80f1faab2ad087686，并推送至 origin/codex/workspace-checkpoint-20261120，远端读取与本地提交一致。
+
+
+## 2026-11-23 JST · Windows 绯月巡检重启间隔 · 19da7edac181
+
+用户根据提醒列表指出频率异常，核对缺陷与本地修复结果后明确要求“安装”。验收依据为 docs/DESIGN.md 的可调小时周期。上次成功巡检距今未满所设周期时，重启后等到原到期时间；过期在预热后检查一次。失败提醒与已读状态沿用现有记录。
+
+目标是 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion 的 Windows 安装版，开发来源为 G:/selftool/WebCharacter/personal-digital-companion，开发 Git 基线 03942463b3de924c380ae45a0c29a30bfbbee1c6，安装树 Git 基线 39fd098e40ebf7c2c82dd5a6f9944ae98055566e。准备时核对正式新闻提醒发布回执 948648e620bb、PID 28504、启动 04:57:53 JST 和原资料目录。按实际文件前像比较，唯一安装路径 desktop/reminder-checks.mjs，旧 SHA-256 为 152359e2e2bc4854bf9e7619ec760374051020a0a5344dce91b000455bf1cfc8，新值 ee6d10d2255db0a2164ca20621708d6f5950059f8ca4b207c27185181db7afc7。候选清单 SHA-256 为 19da7edac1810dbdd4ef557c3d7a2d7add6601c448638f8984dfe2e8abb6b874。可对比仓库根 work/feiyue-inspection-interval-20261123 中 before 和 candidate 的同名文件。
+
+旧版每次重启预热一分钟便再次扫描。新版复用已经和通知一同提交的 log_inspection.through，调度器按实际设置恢复到期时间。重点核对首次无游标、重启跨周期、调整周期及其他轮询独立性。已有表及提醒兼容。数据库迁移、数据回填、配置修改、业务数据备份、新依赖、云部署均无。保留安装文件前像用于恢复。
+
+实测 node --test agent/tests/autonomous-idle.test.mjs tools/test-reminder-checks.mjs 与 node --test tools/test-poll-settings.mjs 共 23 项通过；Electron 的 tools/test-panel-titlebar-electron.mjs 七面板通过。新增用例在旧代码重现多一条通知。在正式模块依赖上执行 node --test work/feiyue-inspection-interval-20261123/candidate-test.mjs，连续五次重启、自定 30 分钟和过期补一次均通过。pwsh -File work/feiyue-inspection-interval-20261123/install.ps1 -Mode Rehearse 通过中断恢复、完整替换及回退检查。
+
+安装时先复核前像、入口、进程与资料目录，等待在途任务，正常关闭应用，备份并替换一个模块，从原入口重启。失败则还原该文件并从原入口恢复。重启后核对运行进程、监听、摘要、轮询设置和资料完整性。用正式模块和隔离资料重跑重启回归，并在真实预热窗口后只读检查巡检时间。日常长期表现待观察。用户已明确授权安装本次修复；第三方独立审核未执行。安装回执、实际时间与 Git 同步在执行后补记。花园批次 feiyue-inspection-interval-20261123，默认登记；本次线上结构同步被自动审批拒绝，尚未生成可确认的精确清单，尚无花园写入。
+
+2026-11-23 05:00:25 JST 安装成功。版本 19da7edac181，单文件摘要与审核一致；原 PID 28504 正常退出，新 PID 28580 于 05:00:24 JST 从原入口启动，资料目录及 60 分钟设置保留。8 个本机库快速检查通过，REST v6 技能目录可用。node --test work/feiyue-inspection-interval-20261123/installed-test.mjs 通过。05:01:30 JST 只读回查，重启后巡检及巡检提醒均为 0，上次成功时间 04:58:53，下次按周期为 05:58:53。长期运行待用户观察。Git 使用独立工作树同步本次代码、回归和纪要；花园结构同步因跨项目自动审批拒绝，登记尚未提交。
