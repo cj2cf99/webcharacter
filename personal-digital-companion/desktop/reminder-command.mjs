@@ -9,7 +9,7 @@ const digit = s => /^\d+$/.test(s)?Number(s):s==='两'?2:s.includes('十')?
   (s[0]==='十'?1:'一二三四五六七八九'.indexOf(s[0])+1)*10+(s.endsWith('十')?0:'一二三四五六七八九'.indexOf(s.at(-1))+1):
   '零一二三四五六七八九'.indexOf(s);
 const pad = n=>String(n).padStart(2,'0');
-function timeValue(raw) {
+export function timeValue(raw) {
   if(/^(?:全天|无时间|取消时间)$/.test(raw))return '';
   const m=/^(凌晨|上午|早上|中午|下午|晚上)?\s*([零一二两三四五六七八九十\d]+)(?:[:：]([0-5]\d)|[点时](半|[零一二三四五六七八九十\d]+分?)?)$/.exec(raw);
   if(!m)throw Error('请给出明确时间，例如“下午三点”或“15:30”。');

@@ -12,7 +12,7 @@ import {createReminderApprovals} from './reminder-approvals.mjs';
 import {matchWeatherQuestion} from '../agent/weather/question.mjs';
 import {validAttachment} from './question-attachment.mjs';
 import {createImageTasks,imageRequest} from './image-tasks.mjs';
-import {attachmentRegistration,menuEntry,menuGuidance,readInteractionSkill,validatePreview} from './interaction-skills.mjs';
+import {attachmentRegistration,isSkillDirectoryQuestion,listInteractionSkills,menuEntry,menuGuidance,readInteractionSkill,validatePreview} from './interaction-skills.mjs';
 import {attachInquiry} from './registration-review-host.mjs';
 import {chatTotalMs,untilAbort} from './chat-budget.mjs';
 import {responseInstruction,responseMode} from '../agent/assistant/response-style.mjs';
@@ -210,7 +210,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       return {state:'answer',text:registrationPrompt,keepRegistrationMode:true};
     const registrationText=!hasAttachment&&route.kind==='registration'&&mode!=='supplement'&&!reference&&transcription?.fromThread
       &&!registrationNeedsText;
-    const known=route.kind==='question'&&(matchWeatherQuestion(text)||dateQuestion(text,tokyoDay(Date.now()))||menuGuidance(text)||imageRequest(text,0));
+    const known=route.kind==='question'&&(matchWeatherQuestion(text)||dateQuestion(text,tokyoDay(Date.now()))||menuGuidance(text)||isSkillDirectoryQuestion(text)||imageRequest(text,0));
     if(!text||[...text].length>(route.kind==='registration'?6000:2000))throw Error('内容为空或超过字数限制');
     if(hasAttachment||route.kind==='restart'||known&&imageRequest(text,0))return {legacy:true};
     const handled=!reference&&line.kind==='ordinary'&&(route.kind!=='question'&&route.kind!=='direct'||known);
@@ -570,6 +570,8 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         else result=checks.latestNews();
       }else if(route.kind==='search'){
         result=await lookup(route.query,route.summarize,route.images,route.research,route.page);
+      }else if(route.kind==='question'&&!route.fileName&&!(retry?route.withScreen:withScreen)&&isSkillDirectoryQuestion(text)){
+        result={state:'answer',text:await withinChat(listInteractionSkills(profile))};
       }else if(route.kind==='direct'){
         const previous=latest?.direct&&latest.state==='answer'?{用户:latest.question,绯月:latest.text}:undefined;
         const style=responseMode(userText);

@@ -32,6 +32,7 @@ import {attachScenePanel} from './scene-panel.mjs';
 import {createSceneCuriosity} from './scene-curiosity.mjs';
 import {localVision} from './local-vision.mjs';
 import {attachScreenQuestion} from './screen-question-host.mjs';
+import {setInteractionSkillProfile} from './interaction-skills.mjs';
 import {createBubbleVoice} from './bubble-voice.mjs';
 import {attachDictation} from './dictation-host.mjs';
 import {attachWeather} from './weather-host.mjs';
@@ -88,6 +89,7 @@ export async function startDesktop(electron,options={}){
   let sound=normalizeSound(DEFAULT_SOUND),settingsWindow=null;
   try{const saved=JSON.parse(readFileSync(soundFile,'utf8'));if(validSound(saved))sound=normalizeSound(saved);}catch{}
   app.setPath('userData',profile);
+  setInteractionSkillProfile(profile);
   await app.whenReady();
   const messages=options.messageBoxes??createMessageBoxes(electron,{bundle,root});
   const archive=options.memory??(!options.profile&&!options.benchmark&&process.platform==='win32'?createMemoryArchive():null);
@@ -1224,15 +1226,18 @@ export async function startDesktop(electron,options={}){
   if(options.localAPI||(!options.profile&&!options.benchmark&&process.platform==='win32')){
     try{
       localPool=createLocalTaskPool({file:resolve(profile,'local-batches.sqlite'),garden:options.localAPI?.garden??remoteGarden(),
-        record:tasks.recordLocalBatch,onProgress:()=>syncActivity(),
+        record:tasks.recordLocalBatch,registerReminder:tasks.registration?.submitReminder,onProgress:()=>syncActivity(),
         onResult:batch=>{
-          if(batch.state==='done')emotion?.accept({kind:'work',key:'batch/'+batch.id,at:Date.parse(batch.finished),title:batch.title});
-          const title=batch.state==='done'?'花园登记完成':'花园登记已暂停';
-          const content=batch.title+' · '+(batch.error??batch.steps.length+' 步已全部核对');
+          const reminder=batch.kind==='reminder';
+          if(batch.state==='done')emotion?.accept({kind:'work',key:(reminder?'reminder/':'batch/')+batch.id,at:Date.parse(batch.finished),title:batch.title});
+          const type=reminder?'提醒':'花园';
+          const title=type+(batch.state==='done'?'登记完成':'登记已暂停');
+          const content=batch.title+' · '+(batch.error??(reminder?'记录 #'+batch.recordId:batch.steps.length+' 步已全部核对'));
           tray?.displayBalloon?.({title,content,respectQuietTime:true});
         },
         // 登记批次只等正在执行的本机任务（逐个执行）；开工时让闲时工作暂停。问答、生图、轮询、开始工作模式不再阻挡。
-        canWork:()=>!privateChat?.active&&!transcription?.busy&&!quitPending&&!(tasks.executingCount?.()??0),onStart:()=>interruptMemory(),
+        canWork:()=>!privateChat?.active&&!transcription?.busy&&!quitPending&&!(tasks.executingCount?.()??0)
+          &&!(tasks.registration?.activeCount?.()??0),onStart:()=>interruptMemory(),
         hasRoom:()=>formalRoom(),
         queueInfo:()=>({used:formalUsed(),limit:FORMAL_LIMIT,tasks:tasks.formalCount?.()??0,
           running:localPool?.active?.title??((tasks.executingCount?.()??0)?taskThought?.title??'本机任务':null)})});

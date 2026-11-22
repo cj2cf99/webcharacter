@@ -333,3 +333,13 @@ Skill 要求保留有效原话、说话人、否定、纠正和原事件时间�
 ## 2026-11-22 JST · 绯月对话线
 
 [详细设计与验收清单](FEIYUE_CONVERSATION_THREADS_DESIGN.md)覆盖多线推进、关窗续聊、来源、每轮输入与明确收尾。关窗后原线仍可继续，分析和转录由已提交的输入进入后台合批。本次确认的三页签、留言合并续答及跨窗口的同线历史已更新至 T5 原型。依赖本机材料的续问按该设计执行手动补充、预览确认后的云端回退。正式接线待开发。需求及用户原话见[对话线需求](../REQUIREMENTS.md#2026-11-22-jst--绯月对话线)。
+
+## 2026-11-23 JST · 外置总纲和功能模板
+
+依据[本轮用户原话及验收](../REQUIREMENTS.md#2026-11-23-jst--外置总纲及功能-skill)，采用默认总纲、功能入口及版本快照。总纲继续按已登记的场景定位功能，资料目录下的 `skills/feiyue-interaction/active.json` 指向各功能当前版本。下次任务加载时读同一份总纲版本表。功能模板的可编辑部分为正文、现有阶段的短提示及已接入流程的结构化命令。内容校验后保存外置快照，原子切换总纲。随附版本提供初装和出错回退。桌面、Agent 和 ComfyUI 权限仍由程序控制。
+
+首个可调流程沿用普通对话转录。作业进入本机队列时保持现有调度，开工固定快照，根据模板执行归纳、拟稿及可选复核，沿用已实现的分批、字段校验及待用户确认的交回状态。已开始的任务跨时隙和重启复用加密作业内的快照。用户确认后继续使用既有业务写入。新增只读本机 REST `GET /v1/skills`，目录字段取总纲，使用现有回环及令牌规则。无数据库结构迁移、新依赖或新窗口。
+
+查阅全局规则 `C:/Users/asura/.codex/AGENTS.md`、全局 `G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md`、本项目 `AGENTS.md`、开发指南、`TASK_TEMPLATE_PREVIEW.md` 中的备忘录索引、`REQUIREMENT_CHANGES.md` 原 Skill 需求、`FORMAL_WORK_QUEUE.md` 和下方原对话转录设计。全局和项目索引未发现另立的开发设计备忘录。落实单人本机、按需读取、固定注册、原文引用和写入前确认。复用已有 Python 与 Node、回环 REST 和本机作业存储。详细操作见[外置 Skill 手册](SKILL_HOT_UPDATE.md)。
+
+2026-11-21 JST。需求经用户确认，随后用户下达「开发」。验收编号见 [本轮需求](../REQUIREMENTS.md)。开发实测见 [实现复核](reviews/LOCAL_FIRST_INTERACTION_IMPLEMENTATION_REVIEW_2026-11-21.md)。

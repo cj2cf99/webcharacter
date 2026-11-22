@@ -1,6 +1,7 @@
 import {DatabaseSync} from 'node:sqlite';
 import {join} from 'node:path';
 import {calendarDate,datePattern as calendarDatePattern,tokyoDate} from './calendar-date.mjs';
+import {timeValue} from './reminder-command.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
 import {prepareMainSiteTask} from '../agent/host/main-site-task-adapter.mjs';
 
@@ -77,16 +78,19 @@ function organize(output,turns,strict=false){
       }
       recentFactIds.push(item.id);fixed.push({type,matterId:item.id,params:{body:quote}});
     }
-    const reminder=/^(今天|明天|后天)\s*提醒我\s*([^，。；！？]+)(?:[，,]([^。；！？]+))?[。！]?$/u.exec(turn.text.trim());
+    const reminder=/^(今天|明天|后天)\s*([^，。；！？]*?)\s*提醒我\s*([^，。；！？]+)(?:[，,]([^。；！？]+))?[。！]?$/u.exec(turn.text.trim());
     if(reminder){
-      const [quote,day,heading,condition]=reminder;
+      const [quote,day,clock,heading,condition]=reminder;
+      let time='';
+      try{if(clock)time=timeValue(clock).slice(0,6);}catch{continue;}
+      const deadline=calendarDate(day,tokyoDate(turn.at))+time;
       const conditions=condition?[condition]:[];
       let item=requests.find(item=>item.evidence.some(ref=>ref.sourceId===turn.id&&quote.includes(ref.quote)));
       if(!item){
-        item={id:'reminder-'+turn.id,summary:heading,subject:'user',state:'planned',intent:'explicit',timeText:day,
+        item={id:'reminder-'+turn.id,summary:heading,subject:'user',state:'planned',intent:'explicit',timeText:day+clock,
           conditions,evidence:[{sourceId:turn.id,quote}]};requests.push(item);
       }
-      fixed.push({type:'reminders.create',matterId:item.id,params:{title:heading,content:condition,deadline:calendarDate(day,tokyoDate(turn.at))}});
+      fixed.push({type:'reminders.create',matterId:item.id,params:{title:heading,content:condition,deadline}});
     }
     const url=turn.text.match(/https?:\/\/[^\s，。！？；]+/iu)?.[0];
     const interest=url&&/^我(?:很|挺|比较)?(?:喜欢|对[^。]+感兴趣|想收藏|想保留|想留着)/u.test(turn.text.trim());
@@ -177,7 +181,7 @@ function draftCandidates(output,summary,turns,templates){
       if(anchors.length===1){
         const {title:heading,deadline,content}=anchors[0].params;
         if(!params.title&&heading)params.title=heading;
-        if(params.deadline?.slice(0,10)!==deadline)params.deadline=deadline;
+        if(deadline.includes('T')||params.deadline?.slice(0,10)!==deadline)params.deadline=deadline;
         if(content&&!params.content?.includes(content))params.content=content;
         if(content&&evidence.some(ref=>ref.quote.includes(content)))conditions.add(content);
       }
@@ -431,6 +435,8 @@ function candidateSignature(row){
 
 async function transcribeThread(job,model,skill,save){
   const templates=skill.templates.templates;
+  const [organizeCommand,classifyCommand,reviewCommand]=skill.workflow?.steps??[{run:'organize'},{run:'classify'}];
+  const prompt=(stage,command,extra='')=>[skill.localAi[stage],command.instruction,extra].filter(Boolean).join('\n');
   const menu=Object.entries(templates).map(([type,t])=>({type,useWhen:t.useWhen,required:t.required,defaults:t.defaults}));
   const history=job.history.slice(-4).map(({who,at,text})=>({speaker:who,text:text.slice(0,110),tokyo:localTime.format(at)+' JST'}));
   const turns=job.turns.flatMap(({id,at,text,handled,reference,backgroundRegistration})=>threadSections(text)
@@ -470,17 +476,47 @@ async function transcribeThread(job,model,skill,save){
     return {...summary,...Object.fromEntries(['actions','requests','signals'].map(key=>[key,summary[key].filter(item=>ids.has(item.id))])),
       recentFactIds:summary.recentFactIds.filter(id=>ids.has(id)),fixed:summary.fixed.filter(item=>ids.has(item.matterId))};
   }
+  async function reviewDraft(key,material,summary,result){
+    if(!reviewCommand||!result.rows.length||
+      reviewCommand.when==='has-missing-fields'&&result.rows.every(row=>!row.missing.length))return result;
+    const {rows}=result;
+    const notes=[...result.notes];
+    const candidates=rows.map(({id,type,params,evidence,missing})=>({id,type,params,evidence,missing}));
+    const reviewRules='candidate 的 missing 只报告该候选 missing 列表中的字段。漏写原话里的事项或条件用 unsupported，整条候选遗漏用 matter 的 missing。';
+    const issues=await step(key+'-review','review',{turns:material,organized:summary,candidates},
+      prompt('review',reviewCommand,reviewRules),700,output=>{
+        if(!Array.isArray(output.issues))throw Error('复核格式无效');
+        return output.issues;
+      });
+    const targets=new Map(rows.map(row=>['candidate:'+row.id,row.params.title||row.label]));
+    const complete=new Set(rows.filter(row=>!row.missing.length).map(row=>row.id));
+    for(const item of [...summary.actions,...summary.requests,...summary.signals])
+      targets.set('matter:'+item.id,item.summary);
+    for(const issue of issues){
+      if(issue.target==='candidate'&&issue.kind==='missing'&&complete.has(issue.id))continue;
+      const target=targets.get(issue.target+':'+issue.id),detail=string(issue.detail).slice(0,120);
+      if(target&&detail)notes.push('复核提醒「'+target+'」：'+detail);
+    }
+    return {rows,notes};
+  }
   async function draft(key,material,basis,summary,reference){
     const items=[...summary.actions,...summary.requests,...summary.signals];
     if(!items.length)return {rows:[],notes:[]};
     const types=new Set(summary.fixed.map(item=>item.type));
     const available=types.size===items.length?menu.filter(entry=>types.has(entry.type)||entry.type==='diaries.create'):menu;
     const name=key+'-classify';
+    let result;
     try{
-      return await step(name,'classify',{turns:material,history:reference,organized:summary,templates:available},
-        skill.localAi.classify+' 每项核对本批证据，保留状态和日期。选择适用的最少登记项，理由和缺项简写。历史只用于指代。',2048,
+      result=await step(name,'classify',{turns:material,history:reference,organized:summary,templates:available},
+        prompt('classify',classifyCommand,'每项核对本批证据，保留状态和日期。选择适用的最少登记项，理由和缺项简写。历史只用于指代。'),2048,
         output=>draftCandidates(output,summary,basis,templates));
     }catch(error){
+      if(error.code==='LOCAL_AI_RESULT_INVALID'&&items.every(item=>summary.fixed.some(fixed=>fixed.matterId===item.id))){
+        const attempt=job.steps[name];
+        attempt.output=draftCandidates({candidates:[],notes:[]},summary,basis,templates);
+        attempt.state='done';save('classify');
+        return reviewDraft(key,material,summary,attempt.output);
+      }
       if(!budgetFailure(error)||items.length===1&&!reference.length)throw error;
       job.steps[name].state='split';save('classify');
       const middle=Math.ceil(items.length/2);
@@ -493,6 +529,7 @@ async function transcribeThread(job,model,skill,save){
       }
       return {rows:revised.flatMap(part=>part.rows),notes:revised.flatMap(part=>part.notes)};
     }
+    return reviewDraft(key,material,summary,result);
   }
   async function analyze(key,material,reference){
     const basis=material.filter(item=>!item.handled).map(({sourceId:id,at,text})=>({id,at,text}));
@@ -500,7 +537,7 @@ async function transcribeThread(job,model,skill,save){
     let summary;
     try{
       summary=await step(name,'organize',{turns:material,history:reference},
-        skill.localAi.organize+' history 只作参考。候选只能引用 turns 的新发言及其 sourceId。已由入口处理的 handled=true 只作背景。证据尽量引用短原话。',1550,
+        prompt('organize',organizeCommand,'history 只作参考。候选只能引用 turns 的新发言及其 sourceId。已由入口处理的 handled=true 只作背景。证据尽量引用短原话。'),1550,
         output=>organize(output,basis,true));
     }catch(error){
       if(!budgetFailure(error)||material.length===1&&!reference.length&&Array.from(material[0].text).length<=200)throw error;
@@ -673,7 +710,9 @@ export function createConversationTranscription({profile,safeStorage,model,regis
     worker.active={id:job.id,title,stage:'正在准备本机模型'};
     save(job,'running');changed();
     try{
-      const skill=await loadSkill();
+      // 已开始的同一作业可能跨多个调度时隙或重启，复用原提示、步骤和输出约定。
+      const skill=job.skill??=await loadSkill();
+      save(job,'running');
       const signal=AbortSignal.timeout(skill.localAi.policy.timeBudgetMs);
       const progress=phase=>{
         job.stage=worker.active.stage=labels[phase];save(job,'running');changed();
@@ -682,6 +721,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
       job.durationMs=now()-job.closedAt;job.error=undefined;
       if(job.line)removeDuplicates(job);
       if(!job.result.rows.length)setRetention(job);
+      delete job.skill;
       save(job,job.result.rows.length?'ready':'empty');
       if(job.line)threadFinished(job.line);
       if(job.result.rows.length)try{notify(status(job));}catch{/* 任务管理仍可查看已保存的结果。 */}
