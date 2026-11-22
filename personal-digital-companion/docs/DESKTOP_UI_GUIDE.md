@@ -13,7 +13,7 @@
 | 绯月任务管理 | `desktop/task-inbox.*` | 本机执行中、云端未结束两个页签 |
 | 今日任务 | `desktop/reminder-review.*` | 逾期、今天、长期计划、不可改动四组 |
 | 三地天气 | `desktop/weather.*` | 每地一张卡片 |
-| 新闻简报 | `desktop/news-panel*`、`news-layout.mjs` | 月印窗体内使用纸色报面、宋体报头、分栏线；报道按内容配版，点击后在本栏展开 |
+| 新闻简报 | `desktop/news-panel*`、`news-weekly.css`、`news-layout.mjs` | 月印窗体、近七天事件总览；选中后左侧单列，右侧现状、时间线、配图与折叠来源。窄窗用详情抽屉 |
 | 轮询设定 | `desktop/poll-settings.*` | 每个轮询一张卡片，带开关 |
 | 随口登记、询问与确认 | `desktop/registration*.html`、`registration.css` | 共用样式 |
 | 消息框 | `desktop/message-box.*` | 透明无边框，`fy-compact` 紧凑标题栏 |

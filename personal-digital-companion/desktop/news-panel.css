@@ -40,6 +40,8 @@ body{margin:0}button{font:inherit;cursor:pointer}
 .tile-topic{letter-spacing:.09em;font-weight:650}
 #board>.cluster .tile:first-child .tile-topic{color:var(--seal)}
 .headline{font:700 19px/1.45 var(--fy-serif);text-wrap:pretty;overflow-wrap:anywhere}
+.summary{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;overflow-wrap:anywhere;color:var(--muted);font:13px/1.6 var(--fy-sans)}
+.summary[hidden]{display:none}
 .wide .headline,.lead .headline{font-size:24px}
 #board>.cluster .tile:first-child .headline{font:900 clamp(31px,4vw,50px)/1.22 var(--fy-serif);letter-spacing:-.035em;text-wrap:balance;max-width:24em}
 .rail .tile:first-child .headline{font-size:clamp(22px,2.45vw,32px);line-height:1.34}
@@ -49,10 +51,12 @@ body{margin:0}button{font:inherit;cursor:pointer}
 .picture:not(.ready){position:absolute;top:0;left:0;width:1px;height:1px;overflow:hidden}
 .fy-panel .story:has(.picture.ready){display:grid;grid-template-columns:minmax(0,1fr) min(28%,144px);column-gap:10px;align-items:start}
 .story:has(.picture.ready)>:not(.picture){grid-column:1}
-.picture.ready{grid-column:2;grid-row:1 / span 3;align-self:center;justify-self:end;max-width:100%}
+.picture.ready{grid-column:2;grid-row:1 / span 4;align-self:center;justify-self:end;max-width:100%}
 .picture img{display:block;width:auto;height:auto;max-width:100%;max-height:108px}
 .tile .details{margin-top:8px;border-top:1px solid var(--rule);padding-top:8px}
 .details p{font:16px/1.85 var(--fy-serif);white-space:pre-line;overflow-wrap:anywhere;margin:0 0 8px}
+.details .actions{display:grid;justify-items:start;gap:3px}
+.details .actions button{text-align:left;overflow-wrap:anywhere}
 .fy-panel .tile button:not(.story){background:none;border:0;border-radius:0;color:var(--seal);font:12px/1.6 var(--fy-sans);padding:4px 0;text-decoration:underline;text-underline-offset:3px}
 .fy-panel .tile button[hidden],.details[hidden]{display:none}
 #state{color:var(--muted);font:14px/1.6 var(--fy-sans)}

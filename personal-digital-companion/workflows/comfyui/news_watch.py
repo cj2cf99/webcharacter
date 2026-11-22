@@ -77,7 +77,7 @@ def fetch_topic(topic,days=3):
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["--image"]:
+    if sys.argv[1:2] in (["--image"], ["--image-full"]):
         import base64
         import subprocess
         from pathlib import Path
@@ -85,7 +85,8 @@ if __name__ == "__main__":
         from comfy_job import installation
         _, runtime, _ = installation()
         _, raw = Reader(seconds=9).read(sys.argv[2], "image")
-        preview = subprocess.run([str(runtime), "-B", str(Path(__file__).with_name("research_preview.py")), "--news"],
+        mode = "--news-full" if sys.argv[1] == "--image-full" else "--news"
+        preview = subprocess.run([str(runtime), "-B", str(Path(__file__).with_name("research_preview.py")), mode],
                                  input=raw, capture_output=True, check=True, timeout=8, creationflags=subprocess.CREATE_NO_WINDOW)
         print(base64.b64encode(preview.stdout).decode("ascii"))
         sys.exit(0)

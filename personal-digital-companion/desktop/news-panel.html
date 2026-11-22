@@ -1,11 +1,78 @@
 <!doctype html>
-<html lang="zh-CN" class="fy-panel"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:">
-<title>绯月 · 半日新闻</title><link rel="stylesheet" href="feiyue-surface.css"><link rel="stylesheet" href="news-panel.css"></head>
-<body><header class="fy-titlebar"><div class="fy-caption"><h1>新闻简报</h1></div><button id="refresh" aria-label="重新读取简报" title="重新读取简报">↻</button></header>
-<main class="fy-scroll"><div class="page">
-<div class="mast"><h2>绯月<span>半日新闻</span></h2><div class="engraving" aria-hidden="true"></div></div>
-<div class="folio"><nav aria-label="新闻分类" id="filters"></nav><div class="issue"><time id="edition"></time><span id="count"></span></div></div>
-<p id="state" role="status">正在读取本机简报…</p><div id="board"></div>
-</div></main><script type="module" src="news-panel-ui.mjs"></script></body></html>
+<html lang="zh-CN" class="fy-panel">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+  <title>绯月 · 七日新闻简报</title>
+  <link rel="stylesheet" href="feiyue-surface.css">
+  <link rel="stylesheet" href="news-panel.css">
+  <link rel="stylesheet" href="news-weekly.css">
+  <script type="module" src="news-panel-ui.mjs"></script>
+</head>
+<body>
+  <header class="fy-titlebar">
+    <div class="fy-caption"><h1>新闻简报</h1></div>
+    <button id="refresh" class="fy-icon" type="button" aria-label="刷新简报" title="刷新简报">↻</button>
+  </header>
+  <main class="fy-scroll">
+    <div class="page">
+      <header class="mast">
+        <div class="nameplate">
+          <h2>绯月<span>七日新闻</span></h2>
+          <p id="edition">东京时间 JST</p>
+        </div>
+        <div class="engraving" aria-hidden="true"></div>
+      </header>
+      <div class="folio">
+        <nav id="filters" aria-label="新闻栏目">
+          <button type="button" aria-pressed="true">全部</button>
+          <button type="button" aria-pressed="false">社会</button>
+          <button type="button" aria-pressed="false">科技</button>
+          <button type="button" aria-pressed="false">市场</button>
+        </nav>
+        <div class="folio-actions">
+          <span id="pending-archive" class="demo" hidden></span>
+          <button id="archive" type="button" class="paper-button">本地归档 ↗</button>
+        </div>
+      </div>
+      <div class="reader" id="reader">
+        <section class="overview" aria-label="七天事件">
+          <div class="list-heading">
+            <h3 id="overview-title" tabindex="-1">事件总览</h3>
+            <p id="count"></p>
+          </div>
+          <div id="status" class="notice" role="status" hidden></div>
+          <div id="event-list"></div>
+          <button id="more-events" type="button" class="paper-button" hidden>显示更多</button>
+          <div class="back-top-slot">
+            <button id="overview-top" type="button" class="back-top" aria-label="回到总览顶部" hidden>↑ 回到顶部</button>
+          </div>
+        </section>
+        <div class="reader-backdrop" id="detail-backdrop" aria-hidden="true" hidden></div>
+        <aside class="event-detail" id="event-detail" aria-labelledby="detail-title" hidden>
+          <div class="detail-toolbar">
+            <span>事件详情</span>
+            <button id="close-detail" type="button" class="paper-button">收起详情 <span aria-hidden="true">×</span></button>
+          </div>
+          <div id="detail-content"></div>
+          <div class="back-top-slot">
+            <button id="detail-top" type="button" class="back-top" aria-label="回到详情顶部" hidden>↑ 回到顶部</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+  <dialog id="photo-panel" aria-labelledby="photo-heading">
+    <header class="dialog-head">
+      <h2 id="photo-heading">新闻配图</h2>
+      <form method="dialog"><button type="submit" aria-label="关闭大图">×</button></form>
+    </header>
+    <figure class="photo-preview">
+      <img id="photo-full" alt="" decoding="async">
+      <figcaption id="photo-credit"></figcaption>
+      <p id="photo-state" class="notice" role="status" hidden></p>
+    </figure>
+  </dialog>
+</body>
+</html>
