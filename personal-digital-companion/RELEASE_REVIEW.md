@@ -1432,3 +1432,5 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 **花园实登。** 用户在看到实际结果和完整清单后明确选择「确认按清单登记」。SQL 与清单先提交到花园仓 Git `9a90af4a852daac17a0d17d9af853b1cf45d243b`，确认摘要 `e329cd09bb58d90ac7378f9d9433de3810a4d78e37239e3f5827d9400ab5b222`。重启后的正式 v5 REST 接收唯一批次 `feiyue-diary-opening-20261123`。2026-11-23 03:09:43.455 JST 完成，独立线上只读复核全部实际值一致。部署 #81，明细 #159，项目 #16，功能 #61，版本 30.0 → 31.0，花园修订 156。项目及功能基本资料、种子、独立改善与缺陷、关系、平台、链接、数据源和旧部署未列入本次写入。无 Cloudflare 主站代码部署。
 
 **签收与 Git 留痕。** 03:12:50.600 JST 已从正式 REST 签收，花园仓独立回读和签收回执提交为 `05ac7acdd197085e4cb03acefd68941c71e9e206`。花园 SQL 与回执按本机登记流程留在 Cloudflare 仓本地 `main`，该分支还有其他待同步提交。WebCharacter 源码同步结果随后补记。
+
+**WebCharacter 源码同步。** 发布提交 `5a60b2cb6a9d5eeaee7d58e3ef4326baafe27bf9` 已普通推送到 `origin/codex/workspace-checkpoint-20261120` 并从远端复核。
