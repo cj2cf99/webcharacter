@@ -6,9 +6,15 @@ function worst(row, side) {
 
 export function tilesFor(counts,{width,height}) {
   if (!counts.length || width<=0 || height<=0) return [];
-  const total=counts.reduce((sum,count)=>sum+count,0);
-  const waiting=counts.map((count,index)=>({index,area:count/total*width*height}))
-    .sort((a,b)=>b.area-a.area);
+  if (counts.length===1) {
+    return [{left:0,top:0,width:width>=height?width/2:width,height:width>=height?height:height/2}];
+  }
+  const rawTotal=counts.reduce((sum,count)=>sum+count,0);
+  // 超过一半的块压到与其余块等重，其他块之间仍按原报道数分配。
+  const weights=counts.map(count=>Math.min(count,rawTotal-count));
+  const total=weights.reduce((sum,count)=>sum+count,0);
+  const waiting=weights.map((count,index)=>({index,area:count/total*width*height}))
+    .sort((a,b)=>b.area-a.area||a.index-b.index);
   const result=[];
   let left=0, top=0;
   while(waiting.length) {
@@ -36,6 +42,7 @@ function place(element,rectangle) {
 
 function fitTitle(card,{width,height}) {
   const flat=width>=115&&height<63;
+  card.classList.toggle('heat-narrow',width<80);
   card.classList.toggle('heat-flat',flat);
   card.classList.toggle('heat-small',width<118||height<74);
   card.classList.toggle('heat-large',width>=280&&height>=205);
@@ -51,36 +58,27 @@ function fitTitle(card,{width,height}) {
   const lead=card.querySelector('.event-lead').getBoundingClientRect().height;
   const overhead=(showCount&&!flat?countLine+gap:0)+(lead?lead+gap:0);
   const lines=Math.max(0,Math.floor((available-overhead+.05)/line));
-  card.classList.toggle('heat-no-line',!lines);
+  card.classList.toggle('heat-no-line',!lines||width<27);
   card.style.setProperty('--title-lines',String(Math.max(1,lines)));
 }
 
 export function drawHeatmap(root) {
-  const groups=[...root.querySelectorAll('[data-heat-group]')];
-  const active=groups.length?groups.filter(group=>group.childElementCount):root.childElementCount?[root]:[];
+  if(!root.hasAttribute('data-heatmap'))return;
+  const cards=[...root.querySelectorAll('.event[data-reports]')];
   const size=root.getBoundingClientRect();
-  if (!active.length || !size.width || !size.height) return;
-  const maps=active.map(group=>{
-    const cards=[...group.children], counts=cards.map(card=>Number(card.dataset.reports));
-    return {group,cards,counts,total:counts.reduce((sum,count)=>sum+count,0)};
-  });
-  const total=maps.reduce((sum,map)=>sum+map.total,0);
-  const max=Math.max(...maps.flatMap(map=>map.counts));
-  const wide=size.width>=610;
-  let left=0,top=0;
-  for (const {group,cards,counts,total:subtotal} of maps) {
-    const fraction=subtotal/total;
-    const width=size.width*(wide?fraction:1);
-    const height=size.height*(wide?1:fraction);
-    if (group!==root) place(group,{left,top,width,height});
-    const rectangles=tilesFor(counts,{width,height});
-    for (const [index,card] of cards.entries()) {
-      const bounds=rectangles[index];
-      place(card,bounds);
-      card.style.setProperty('--heat',Math.round(21+65*Math.log1p(counts[index])/Math.log1p(max))+'%');
-      fitTitle(card,bounds);
-    }
-    if (wide) left+=width;
-    else top+=height;
+  if (!cards.length || !size.width || !size.height) return;
+  const counts=cards.map(card=>Number(card.dataset.reports));
+  const max=Math.max(...counts);
+  const rectangles=tilesFor(counts,size);
+  // 先更新所有块的几何尺寸，再按新尺寸计算标题的可见行数。
+  for (const [index,card] of cards.entries()) {
+    place(card,rectangles[index]);
+    card.style.setProperty('--heat',Math.round(21+65*Math.log1p(counts[index])/Math.log1p(max))+'%');
   }
+  for (const [index,card] of cards.entries())fitTitle(card,rectangles[index]);
+}
+
+export function clearHeatmapTile(card) {
+  for(const property of ['left','top','width','height','--heat','--title-lines'])card.style.removeProperty(property);
+  card.classList.remove('heat-flat','heat-small','heat-narrow','heat-large','heat-title-only','heat-no-line');
 }

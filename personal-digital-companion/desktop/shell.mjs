@@ -289,7 +289,7 @@ export async function startDesktop(electron,options={}){
       const result=await memoryJob(kind,reminderStartup.signal,true);
       if(!quitPending&&!cleaned){
         const message=typeof result==='string'?result:kind==='diary'
-          ?'这次整理已暂停，可从「阅读与学习 → 看绯月写日记」继续。'
+          ?'这次整理已暂停，可从「任务 → 看绯月写日记」继续。'
           :'这次整理已暂停，可从「任务 → 补写本机任务执行评价」继续。';
         await messages.showMessageBox({type:'info',title,message,buttons:['确定']});
       }

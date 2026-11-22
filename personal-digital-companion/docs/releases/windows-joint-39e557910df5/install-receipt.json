@@ -1,0 +1,21 @@
+{
+  "installedAt": "2026-11-23T05:53:18.2140655+09:00",
+  "startedJst": "2026-11-23T05:53:16.8970000+09:00",
+  "version": "39e557910df5",
+  "manifest": "39e557910df592f3c811caeea9fa0e05a6ce66bbf02956f622e16cfe3a3910df",
+  "files": 6,
+  "oldPid": 7140,
+  "newPid": 24524,
+  "finalHashesVerified": true,
+  "databaseQuickCheck": {
+    "emotions.sqlite": "ok",
+    "conversation-transcription.sqlite": "ok",
+    "local-batches.sqlite": "ok",
+    "tasks.sqlite": "ok",
+    "reminder-checks.sqlite": "ok",
+    "ai-requests.sqlite": "ok",
+    "personality-memory.sqlite": "ok",
+    "conversations.sqlite": "ok"
+  },
+  "garden": "用户明确跳过"
+}

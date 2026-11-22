@@ -1,0 +1,44 @@
+{
+  "items": [
+    {
+      "path": "desktop/emotion-initiative.mjs",
+      "before": "94e7a0d0db68d019a6be5d2f35eb3fcb10573fba2a1335b7a85ebea2c043003d",
+      "after": "277e79ddee88d2ed8b9f2561adb268992168367ba93485db0618f8d2de9ac400"
+    },
+    {
+      "path": "desktop/news-panel.html",
+      "before": "00fddd3a89c4b5b5717c5a08d924ddccd29b671dde2b5da1a3c1aa78fa16b561",
+      "after": "e3e4baf9e0c9cbbee37e6e406e8a9480ff1534e8f2a28b3908eee01fcac5be6b"
+    },
+    {
+      "path": "desktop/news-heatmap.mjs",
+      "before": "b0c179e70ec579a8d96ff24b46c6595481088955551337b79708c7bb04211093",
+      "after": "f46501caa87b54bd02c6d6ac93b49d0ad2dbe1bb787671c36d518cff8b38b1c9"
+    },
+    {
+      "path": "desktop/news-panel-ui.mjs",
+      "before": "31b9adf6e8a445c1fadda9e7ab4c0fcd0f65af7eabfc47283ebd4cc2f1f6631c",
+      "after": "f0abfebb78262719734a626933fbbb6a6a1d7f2589c34aa0be1d71a4208283fe"
+    },
+    {
+      "path": "desktop/news-editorial.css",
+      "before": "610bcf6a010b35923b18ecff162ffb7208cae318117aca955fa94d1495e28c10",
+      "after": "949971e1353f049a8bfd5f47d7d34b8fd95126d4b5134e72572c09ec30f04818"
+    },
+    {
+      "path": "desktop/news-weekly.css",
+      "before": "5f288c802a869d3c7da6c09d154e995c19aa5703aa03ddb2a462320fd8a176df",
+      "after": "a57ac0956ade1422f8cf8da5d8e1aaed810d3b56005a8111578393d0731acb35"
+    },
+    {
+      "path": "desktop/menu-layout.json",
+      "before": "62c6bda58fc609b99f0b9cd574fc749c905a9beb43afa2875987a5617c160da9",
+      "after": "ae1a992e6a3c16b4bf16f05907a2d6424fac5a92d41373a115527ebc27693528"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "before": "5b423962d9e87a30bdd7471f9f47611d55ff9f8df0abfb0c69b1facdd47ec3a2",
+      "after": "54799f93b06b4659c0965dfc84004aebfcd003022930f31bb08cdbfb3a1020b8"
+    }
+  ]
+}

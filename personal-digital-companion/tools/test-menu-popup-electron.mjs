@@ -42,6 +42,13 @@ async function main(){
       const labels=await js("[...document.querySelectorAll('#items > .item .label')].map(n=>n.textContent)");
       assert.deepEqual(labels,['问绯月','提醒（3 条未读）','今日任务','三地天气','本地复盘','阅读与学习','任务','桌宠动作','设置与维护']);
       assert.equal(await js("document.querySelectorAll('.group[aria-expanded=true]').length"),0,'重开菜单时所有分组均应折叠');
+      await js("[...document.querySelectorAll('.group')].find(b=>b.textContent.includes('任务') && !b.textContent.includes('待执行')).click()");
+      const visible=await js("[...document.querySelectorAll('.item')].filter(n=>n.offsetHeight>0).map(n=>n.textContent.trim())");
+      const di=visible.findIndex(t=>t.includes('看绯月写日记')),rv=visible.findIndex(t=>t.includes('补写本机任务执行评价'));
+      assert(di>=0&&rv===di+1,'两项任务未相邻显示');
+      await js("[...document.querySelectorAll('.item')].find(b=>b.textContent.includes('看绯月写日记')&&!b.classList.contains('group')).click()");
+      await until(()=>clicks.includes('writeDiary'),'未派发日记动作');
+      await open();
       const before=page().getBounds();
       assert(before.y+before.height<=area.y+area.height&&before.x+before.width<=area.x+area.width,'菜单超出工作区');
       writeFileSync(join(out,'menu-'+theme+'.png'),(await page().webContents.capturePage()).toPNG());

@@ -1,0 +1,374 @@
+--- installed/desktop/emotion-initiative.mjs
++++ candidate/desktop/emotion-initiative.mjs
+@@ -1,5 +1,6 @@
+ import {join} from 'node:path';
+ import {randomUUID} from 'node:crypto';
++import {chatTotalMs,memoryInferenceMs} from './chat-budget.mjs';
+ import {readFile} from 'node:fs/promises';
+ import {atomicFile,optional} from './memory-archive.mjs';
+ import {tokyoDay} from './conversation-history.mjs';
+@@ -125,7 +126,8 @@
+       const analyze=async(input,instruction,schema)=>{
+         const phase=schema.properties.entries?'propose':'decide';
+         audit[phase]={at:now(),input};await save();
+-        const answer=await model.memory(JSON.stringify(input),instruction,schema,signal,{name:skill.skill,version:skill.version});
++        const answer=await model.memory(JSON.stringify(input),instruction,schema,signal,
++          {name:skill.skill,version:skill.version,stage:phase,aiBudget:chatTotalMs+memoryInferenceMs});
+         audit[phase].endedAt=now();return answer;
+       };
+       const allowedProposal=structuredClone(proposal);
+--- installed/desktop/news-panel.html
++++ candidate/desktop/news-panel.html
+@@ -14,7 +14,7 @@
+ <body>
+   <header class="fy-titlebar">
+     <div class="fy-caption"><h1>新闻简报</h1></div>
+-    <button id="refresh" class="fy-icon" type="button" aria-label="刷新简报" title="刷新简报">↻</button>
++    <button id="refresh" class="fy-icon" type="button" aria-label="刷新简报" title="刷新简报"><span aria-hidden="true">↻</span></button>
+   </header>
+   <main class="fy-scroll">
+     <div class="page">
+@@ -44,7 +44,7 @@
+             <p id="count"></p>
+           </div>
+           <div id="status" class="notice" role="status" hidden></div>
+-          <div id="heat-key" class="heatmap-legend" hidden><span>周内热点</span><span>其他重点新闻</span><small>面积＝收录报道篇数</small></div>
++          <div id="heat-key" class="heatmap-legend" hidden><span>周内热点</span><span>其他重点新闻</span><small>面积按报道数分配 · 单块上限 50%</small></div>
+           <div id="digest-columns">
+           <section class="digest" aria-labelledby="hot-heading" hidden>
+             <h4 id="hot-heading">周内热点</h4>
+@@ -56,10 +56,10 @@
+           </section>
+           </div>
+           <details id="quiet-board" class="quiet-board" hidden>
+-            <summary>暂未更新 <span id="quiet-count"></span></summary>
++            <summary><span class="fy-caret" aria-hidden="true">›</span> 暂未更新 <span id="quiet-count"></span></summary>
+             <div id="quiet-list" class="event-grid"></div>
+           </details>
+-          <div id="event-list" class="event-grid"></div>
++          <div id="event-list" class="event-grid" hidden></div>
+           <button id="more-events" type="button" class="paper-button" aria-controls="event-list" aria-expanded="false" hidden>显示更多新闻</button>
+           <div class="back-top-slot">
+             <button id="overview-top" type="button" class="back-top" aria-label="回到总览顶部" hidden>↑ 回到顶部</button>
+--- installed/desktop/news-heatmap.mjs
++++ candidate/desktop/news-heatmap.mjs
+@@ -6,9 +6,15 @@
+ 
+ export function tilesFor(counts,{width,height}) {
+   if (!counts.length || width<=0 || height<=0) return [];
+-  const total=counts.reduce((sum,count)=>sum+count,0);
+-  const waiting=counts.map((count,index)=>({index,area:count/total*width*height}))
+-    .sort((a,b)=>b.area-a.area);
++  if (counts.length===1) {
++    return [{left:0,top:0,width:width>=height?width/2:width,height:width>=height?height:height/2}];
++  }
++  const rawTotal=counts.reduce((sum,count)=>sum+count,0);
++  // 超过一半的块压到与其余块等重，其他块之间仍按原报道数分配。
++  const weights=counts.map(count=>Math.min(count,rawTotal-count));
++  const total=weights.reduce((sum,count)=>sum+count,0);
++  const waiting=weights.map((count,index)=>({index,area:count/total*width*height}))
++    .sort((a,b)=>b.area-a.area||a.index-b.index);
+   const result=[];
+   let left=0, top=0;
+   while(waiting.length) {
+@@ -36,6 +42,7 @@
+ 
+ function fitTitle(card,{width,height}) {
+   const flat=width>=115&&height<63;
++  card.classList.toggle('heat-narrow',width<80);
+   card.classList.toggle('heat-flat',flat);
+   card.classList.toggle('heat-small',width<118||height<74);
+   card.classList.toggle('heat-large',width>=280&&height>=205);
+@@ -51,36 +58,27 @@
+   const lead=card.querySelector('.event-lead').getBoundingClientRect().height;
+   const overhead=(showCount&&!flat?countLine+gap:0)+(lead?lead+gap:0);
+   const lines=Math.max(0,Math.floor((available-overhead+.05)/line));
+-  card.classList.toggle('heat-no-line',!lines);
++  card.classList.toggle('heat-no-line',!lines||width<27);
+   card.style.setProperty('--title-lines',String(Math.max(1,lines)));
+ }
+ 
+ export function drawHeatmap(root) {
+-  const groups=[...root.querySelectorAll('[data-heat-group]')];
+-  const active=groups.length?groups.filter(group=>group.childElementCount):root.childElementCount?[root]:[];
++  if(!root.hasAttribute('data-heatmap'))return;
++  const cards=[...root.querySelectorAll('.event[data-reports]')];
+   const size=root.getBoundingClientRect();
+-  if (!active.length || !size.width || !size.height) return;
+-  const maps=active.map(group=>{
+-    const cards=[...group.children], counts=cards.map(card=>Number(card.dataset.reports));
+-    return {group,cards,counts,total:counts.reduce((sum,count)=>sum+count,0)};
+-  });
+-  const total=maps.reduce((sum,map)=>sum+map.total,0);
+-  const max=Math.max(...maps.flatMap(map=>map.counts));
+-  const wide=size.width>=610;
+-  let left=0,top=0;
+-  for (const {group,cards,counts,total:subtotal} of maps) {
+-    const fraction=subtotal/total;
+-    const width=size.width*(wide?fraction:1);
+-    const height=size.height*(wide?1:fraction);
+-    if (group!==root) place(group,{left,top,width,height});
+-    const rectangles=tilesFor(counts,{width,height});
+-    for (const [index,card] of cards.entries()) {
+-      const bounds=rectangles[index];
+-      place(card,bounds);
+-      card.style.setProperty('--heat',Math.round(21+65*Math.log1p(counts[index])/Math.log1p(max))+'%');
+-      fitTitle(card,bounds);
+-    }
+-    if (wide) left+=width;
+-    else top+=height;
++  if (!cards.length || !size.width || !size.height) return;
++  const counts=cards.map(card=>Number(card.dataset.reports));
++  const max=Math.max(...counts);
++  const rectangles=tilesFor(counts,size);
++  // 先更新所有块的几何尺寸，再按新尺寸计算标题的可见行数。
++  for (const [index,card] of cards.entries()) {
++    place(card,rectangles[index]);
++    card.style.setProperty('--heat',Math.round(21+65*Math.log1p(counts[index])/Math.log1p(max))+'%');
+   }
++  for (const [index,card] of cards.entries())fitTitle(card,rectangles[index]);
+ }
++
++export function clearHeatmapTile(card) {
++  for(const property of ['left','top','width','height','--heat','--title-lines'])card.style.removeProperty(property);
++  card.classList.remove('heat-flat','heat-small','heat-narrow','heat-large','heat-title-only','heat-no-line');
++}
+--- installed/desktop/news-panel-ui.mjs
++++ candidate/desktop/news-panel-ui.mjs
+@@ -1,5 +1,5 @@
+ import {cleanNewsTitle,needsChinese,newsHighlights} from './news-layout.mjs';
+-import {drawHeatmap} from './news-heatmap.mjs';
++import {clearHeatmapTile,drawHeatmap} from './news-heatmap.mjs';
+ 
+ const api=window.newsPanel, byId=id=>document.getElementById(id);
+ const main=document.querySelector('main'), reader=byId('reader'), overview=document.querySelector('.overview');
+@@ -18,16 +18,21 @@
+ let translationQueue=Promise.resolve();
+ let imageObserver;
+ let editionBoards,heatFrame;
+-function layoutHeatmap(){
+-  if(heatFrame||!editionBoards)return;
+-  heatFrame=requestAnimationFrame(()=>{
++function layoutHeatmap(immediate=false){
++  if(!editionBoards)return;
++  const draw=()=>{
+     heatFrame=null;
+     for(const map of [digest,board])drawHeatmap(map);
+-  });
+-}
+-const heatObserver=new ResizeObserver(layoutHeatmap);
++  };
++  if(immediate){
++    if(heatFrame)cancelAnimationFrame(heatFrame);
++    draw();
++  }else if(!heatFrame)heatFrame=requestAnimationFrame(draw);
++}
++const heatObserver=new ResizeObserver(()=>layoutHeatmap());
+ heatObserver.observe(digest);
+ heatObserver.observe(board);
++void document.fonts.ready.then(()=>layoutHeatmap());
+ 
+ function node(tag,cls,text) {
+   const el=document.createElement(tag);
+@@ -142,18 +147,21 @@
+   })():newsHighlights(matching);
+   const selectedPosition=rest.findIndex(row=>row.id===selected?.row.id);
+   if(selectedPosition>=0)limit=Math.max(limit,selectedPosition+1);
+-  const render=(target,rows)=>target.replaceChildren(...rows.map(row=>{
++  const render=(target,rows,heat=Boolean(membership))=>target.replaceChildren(...rows.map(row=>{
+     if(!cards.has(row.id)) {
+       const card=cardOf(row);
+       cards.set(row.id,card);
+       headlines.observe(card.article);
+     }
+-    return cards.get(row.id).article;
++    const article=cards.get(row.id).article;
++    if(!heat)clearHeatmapTile(article);
++    return article;
+   }));
+   render(hotBoard,hot);
+   render(keyBoard,key);
+-  render(quietList,quiet);
++  render(quietList,quiet,false);
+   render(board,rest.slice(0,limit));
++  board.hidden=!board.childElementCount;
+   quietBoard.hidden=!quiet.length;
+   byId('quiet-count').textContent=quiet.length+' 个话题';
+   byId('heat-key').hidden=!membership||!(hot.length+key.length);
+@@ -201,6 +209,7 @@
+   detail.hidden=false;
+   renderDetail(card);
+   syncDrawer();
++  layoutHeatmap(true);
+   if(!compact.matches)card.article.scrollIntoView({block:'nearest'});
+ }
+ function closeDetail(restoreFocus=true) {
+@@ -216,6 +225,7 @@
+   main.classList.remove('reading');
+   reader.classList.remove('is-reading');
+   syncDrawer();
++  layoutHeatmap(true);
+   main.scrollTop=overviewScroll;
+   if(restoreFocus&&card.toggle.isConnected) {
+     card.toggle.focus({preventScroll:true});
+@@ -458,6 +468,13 @@
+   }
+ }
+ 
++function showNewsUpdate(pending) {
++  const label=pending?'读取新增新闻':'刷新简报';
++  refresh.toggleAttribute('data-pending',pending);
++  refresh.setAttribute('aria-label',label);
++  refresh.title=label;
++}
++
+ async function load() {
+   const token=++generation;
+   refresh.disabled=true;
+@@ -480,8 +497,7 @@
+       setSelected(selected,true);
+       renderDetail(selected,true);
+     }
+-    refresh.textContent='↻';
+-    refresh.setAttribute('aria-label','刷新简报');
++    showNewsUpdate(false);
+   } catch {
+     if(token===generation)notice('简报暂时无法读取。',load);
+   } finally {
+@@ -505,7 +521,10 @@
+ for(const scroller of [main,overview,detail])scroller.addEventListener('scroll',syncTopButtons,{passive:true});
+ overviewTop.addEventListener('click',()=>scrollTop(overviewScroller(),byId('overview-title')));
+ detailTop.addEventListener('click',()=>scrollTop(detail,byId('detail-title')));
+-compact.addEventListener('change',syncDrawer);
++compact.addEventListener('change',()=>{
++  syncDrawer();
++  layoutHeatmap();
++});
+ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!photoPanel.open)closeDetail();});
+ photoPanel.addEventListener('close',()=>{
+   photoGeneration++;
+@@ -514,7 +533,6 @@
+ byId('archive').addEventListener('click',()=>void api.archive().catch(()=>notice('无法打开本机归档目录。')));
+ api.onNew(readNow=>{
+   if(readNow){void load();return;}
+-  refresh.textContent='有更新 ↻';
+-  refresh.setAttribute('aria-label','读取新增新闻');
++  showNewsUpdate(true);
+ });
+ void load();
+--- installed/desktop/news-editorial.css
++++ candidate/desktop/news-editorial.css
+@@ -9,6 +9,11 @@
+ .heatmap-legend[hidden], #digest-columns[data-count="0"] { display:none; }
+ .heatmap-legend small { color:var(--muted); margin-left:auto; font-size:11px; white-space:nowrap; }
+ .fy-panel #filters button { transition:none; }
++.fy-panel #refresh { position:relative; }
++#refresh[data-pending]::after {
++  content:''; position:absolute; inset:1px 1px auto auto; width:7px; height:7px;
++  border-radius:50%; background:var(--fy-accent); box-shadow:0 0 0 1px var(--fy-paper);
++}
+ main.fy-scroll, .overview { scrollbar-gutter:stable; }
+ [data-heatmap] {
+   position:relative; display:block; overflow:hidden; min-width:0;
+@@ -17,7 +22,7 @@
+ [data-heatmap]:empty { display:none; }
+ [data-heatmap] .digest { display:contents; }
+ [data-heatmap] .digest[hidden] { display:none; }
+-[data-heat-group] { position:absolute; display:block; }
++[data-heat-group] { display:contents; }
+ [data-heatmap] .event {
+   position:absolute; background:none; border:0; overflow:hidden;
+   --heat-tone:light-dark(#edb29c,#90462f);
+@@ -52,6 +57,7 @@
+ .fy-panel [data-heatmap] .heat-small .event-toggle { padding:5px; gap:3px; }
+ .fy-panel [data-heatmap] .heat-flat .event-toggle { flex-direction:row; align-items:center; }
+ [data-heatmap] .heat-flat .event-title { flex:0 1 auto; }
++[data-heatmap] .heat-narrow .event-title { display:block; white-space:nowrap; text-overflow:ellipsis; }
+ [data-heatmap] .heat-title-only .heat-count, [data-heatmap] .heat-no-line .event-title { display:none; }
+ .fy-panel [data-heatmap] .heat-large .event-toggle { justify-content:flex-end; padding:clamp(14px,3vw,32px); gap:8px; }
+ [data-heatmap] .heat-large .event-title { font-size:clamp(21px,3.2vw,40px); max-width:32ch; }
+@@ -77,8 +83,8 @@
+ .source-links > ul:focus-visible { outline:1px solid var(--seal); outline-offset:2px; }
+ .quiet-board,.news-wind { margin-top:12px; border-block-start:1px solid var(--rule); }
+ .quiet-board > summary,.news-wind > summary { padding:8px 0; cursor:pointer; color:var(--seal); font-weight:750; }
+-.quiet-board > summary span,.heat-count { color:var(--muted); font:600 12px/1.4 var(--fy-sans); }
+-.quiet-board > summary span { margin-inline-start:6px; }
++.quiet-board > summary { display:flex; align-items:center; gap:6px; }
++#quiet-count,.heat-count { color:var(--muted); font:600 12px/1.4 var(--fy-sans); }
+ #quiet-list .event-lead { display:none; }
+ .wind-history > li details summary strong { display:block; color:var(--print); font:750 16px/1.4 var(--fy-serif); }
+ .wind-history > li:first-child::before { background:var(--seal); }
+--- installed/desktop/news-weekly.css
++++ candidate/desktop/news-weekly.css
+@@ -25,6 +25,7 @@
+ #more-events { margin:9px 0; }
+ .reader { min-height:0; }
+ .overview { min-width:0; min-height:0; }
++#event-list[hidden] { display:none; }
+ #event-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 20px; }
+ .fy-panel .event { min-width:0; border-top:1px solid var(--rule); background:none; }
+ .event h4 { margin:0; height:100%; }
+--- installed/desktop/menu-layout.json
++++ candidate/desktop/menu-layout.json
+@@ -3,27 +3,27 @@
+   {"action":"privateChat","tone":"hot"},
+   {"action":"notices","icon":"🔔","tone":"hot"},
+   {"action":"continueNag","label":"待确认","icon":"💭","tone":"hot"},
+-  "-",
+   {"action":"today","label":"今日任务","icon":"📋"},
+   {"action":"weather","label":"三地天气","icon":"⛅"},
+-  {"action":"news","label":"新闻简报","icon":"📰"},
+-  {"action":"study","label":"陪我学习","icon":"📚"},
+   {"action":"review","label":"本地复盘","icon":"📖"},
+-  {"action":"knowledge","label":"知识库","icon":"🗂"},
+   "-",
++  {"label":"阅读与学习","icon":"📚","items":[
++    {"action":"news","label":"新闻简报","icon":"📰"},
++    {"action":"knowledge","label":"知识库","icon":"🗂"},
++    {"action":"study","label":"陪我学习","icon":"📚"},
++    {"action":"writeDiary","label":"看绯月写日记","icon":"✍"}
++  ]},
+   {"label":"任务","icon":"🧩","items":[
+     {"action":"pendingCheck","label":"提醒检查 · 待执行","icon":"⏱","tone":"hot"},
+     {"action":"tasks","label":"绯月任务管理","icon":"🗂"},
+     {"action":"retry","label":"中断任务与补传","icon":"🔁"},
+     {"action":"log","label":"任务日志","icon":"📜"},
++    {"action":"reviewLocalTasks","label":"补写本机任务执行评价","icon":"📝"},
+     "-",
+     {"action":"restoreTerminal","label":"恢复本机任务终端 ID","icon":"🛠"}
+   ]},
+-  {"label":"日记与评价","icon":"📔","items":[
+-    {"action":"writeDiary","label":"看绯月写日记","icon":"✍"},
+-    {"action":"reviewLocalTasks","label":"补写本机任务执行评价","icon":"📝"}
+-  ]},
+   {"label":"桌宠动作","icon":"🎀","items":[
++    {"action":"visibility","icon":"👁"},
+     {"action":"work","icon":"💼"},
+     {"action":"move","label":"移动到","icon":"🖥"},
+     {"action":"home","label":"回到右下角","icon":"↘"},
+@@ -44,9 +44,7 @@
+     {"action":"loginStart","label":"登录 Windows 后延迟 1 分钟启动","icon":"🚀"},
+     {"action":"connection","label":"云端连接","icon":"☁"},
+     "-",
+-    {"action":"restart","label":"重启绯月","icon":"♻","tone":"danger"}
+-  ]},
+-  "-",
+-  {"action":"visibility","icon":"👁"},
+-  {"action":"quit","label":"退出","icon":"⏻","tone":"danger"}
++    {"action":"restart","label":"重启绯月","icon":"♻","tone":"danger"},
++    {"action":"quit","label":"退出","icon":"⏻","tone":"danger"}
++  ]}
+ ]
+--- installed/desktop/shell.mjs
++++ candidate/desktop/shell.mjs
+@@ -292,7 +292,9 @@
+     try{
+       const result=await memoryJob(kind,reminderStartup.signal,true);
+       if(!quitPending&&!cleaned){
+-        const message=typeof result==='string'?result:'这次整理已暂停，可以再从「日记与评价」菜单继续。';
++        const message=typeof result==='string'?result:kind==='diary'
++          ?'这次整理已暂停，可从「阅读与学习 → 看绯月写日记」继续。'
++          :'这次整理已暂停，可从「任务 → 补写本机任务执行评价」继续。';
+         await messages.showMessageBox({type:'info',title,message,buttons:['确定']});
+       }
+     }

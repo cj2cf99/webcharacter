@@ -1,0 +1,32 @@
+--- installed/desktop/menu-layout.json
++++ candidate/desktop/menu-layout.json
+@@ -10,15 +10,15 @@
+   {"label":"阅读与学习","icon":"📚","items":[
+     {"action":"news","label":"新闻简报","icon":"📰"},
+     {"action":"knowledge","label":"知识库","icon":"🗂"},
+-    {"action":"study","label":"陪我学习","icon":"📚"},
+-    {"action":"writeDiary","label":"看绯月写日记","icon":"✍"}
++    {"action":"study","label":"陪我学习","icon":"📚"}
+   ]},
+   {"label":"任务","icon":"🧩","items":[
++    {"action":"writeDiary","label":"看绯月写日记","icon":"✍"},
++    {"action":"reviewLocalTasks","label":"补写本机任务执行评价","icon":"📝"},
+     {"action":"pendingCheck","label":"提醒检查 · 待执行","icon":"⏱","tone":"hot"},
+     {"action":"tasks","label":"绯月任务管理","icon":"🗂"},
+     {"action":"retry","label":"中断任务与补传","icon":"🔁"},
+     {"action":"log","label":"任务日志","icon":"📜"},
+-    {"action":"reviewLocalTasks","label":"补写本机任务执行评价","icon":"📝"},
+     "-",
+     {"action":"restoreTerminal","label":"恢复本机任务终端 ID","icon":"🛠"}
+   ]},
+--- installed/desktop/shell.mjs
++++ candidate/desktop/shell.mjs
+@@ -293,7 +293,7 @@
+       const result=await memoryJob(kind,reminderStartup.signal,true);
+       if(!quitPending&&!cleaned){
+         const message=typeof result==='string'?result:kind==='diary'
+-          ?'这次整理已暂停，可从「阅读与学习 → 看绯月写日记」继续。'
++          ?'这次整理已暂停，可从「任务 → 看绯月写日记」继续。'
+           :'这次整理已暂停，可从「任务 → 补写本机任务执行评价」继续。';
+         await messages.showMessageBox({type:'info',title,message,buttons:['确定']});
+       }

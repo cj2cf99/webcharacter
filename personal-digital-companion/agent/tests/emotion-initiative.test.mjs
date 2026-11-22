@@ -74,7 +74,11 @@ test('一次闲时名额，两次评估，从原始事实生成候选，只实�
   const root=await mkdtemp(join(tmpdir(),'feiyue-round-')),at=Date.now(),store=createEmotionStore(root,{now:()=>at});
   try{
     store.accept({key:'chat/title',kind:'chat',user:'老公想听我的新结论',at});
-    const calls=[],model={async memory(input,instruction,schema){
+    const controller=new AbortController();
+    const calls=[],model={async memory(input,instruction,schema,signal,options){
+      assert.equal(signal,controller.signal);
+      assert.equal(options.stage,calls.length?'decide':'propose');
+      assert.equal(options.aiBudget,180_000);
       calls.push(JSON.parse(input));return schema.properties.entries?{entries:[
         {source:0,sin:1,type:'clarify',want:'确认这笔费用',condition:'他告诉我用途'},
         {source:1,sin:1,type:'share',want:'分享结论',condition:'收到评价'}],act:true}:
@@ -83,7 +87,7 @@ test('一次闲时名额，两次评估，从原始事实生成候选，只实�
     const ready=createInitiative({emotion:{store,expression:()=>({word:'开心',grade:4})},root,model,now:()=>at,
       load:async()=>({version:'1',localAi:{propose:'p',decide:'d',nextStep:'n'}})});
     const n={source:'paylog',source_id:'123',title:'书店消费'};
-    const out=await ready.choose([n],new AbortController().signal,()=>true);
+    const out=await ready.choose([n],controller.signal,()=>true);
     assert.equal(out.source,n);assert.equal(calls.length,2);assert.ok(!('mood' in calls[0]));assert.equal(calls[1].mood.word,'开心');
     assert.equal(store.pool.waiting().length,1);await out.finish(true,'已展示');
     assert.equal(store.pool.unsettled(),undefined);assert.equal(store.snapshot().desire.want,'确认这笔费用');

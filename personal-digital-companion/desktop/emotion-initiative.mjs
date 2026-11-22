@@ -1,5 +1,6 @@
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
+import {chatTotalMs,memoryInferenceMs} from './chat-budget.mjs';
 import {readFile} from 'node:fs/promises';
 import {atomicFile,optional} from './memory-archive.mjs';
 import {tokyoDay} from './conversation-history.mjs';
@@ -125,7 +126,8 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,que
       const analyze=async(input,instruction,schema)=>{
         const phase=schema.properties.entries?'propose':'decide';
         audit[phase]={at:now(),input};await save();
-        const answer=await model.memory(JSON.stringify(input),instruction,schema,signal,{name:skill.skill,version:skill.version});
+        const answer=await model.memory(JSON.stringify(input),instruction,schema,signal,
+          {name:skill.skill,version:skill.version,stage:phase,aiBudget:chatTotalMs+memoryInferenceMs});
         audit[phase].endedAt=now();return answer;
       };
       const allowedProposal=structuredClone(proposal);

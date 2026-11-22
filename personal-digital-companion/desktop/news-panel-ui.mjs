@@ -1,5 +1,5 @@
 import {cleanNewsTitle,needsChinese,newsHighlights} from './news-layout.mjs';
-import {drawHeatmap} from './news-heatmap.mjs';
+import {clearHeatmapTile,drawHeatmap} from './news-heatmap.mjs';
 
 const api=window.newsPanel, byId=id=>document.getElementById(id);
 const main=document.querySelector('main'), reader=byId('reader'), overview=document.querySelector('.overview');
@@ -18,16 +18,21 @@ let items=[], selected=null, active='全部', limit=0, overviewScroll=0, generat
 let translationQueue=Promise.resolve();
 let imageObserver;
 let editionBoards,heatFrame;
-function layoutHeatmap(){
-  if(heatFrame||!editionBoards)return;
-  heatFrame=requestAnimationFrame(()=>{
+function layoutHeatmap(immediate=false){
+  if(!editionBoards)return;
+  const draw=()=>{
     heatFrame=null;
     for(const map of [digest,board])drawHeatmap(map);
-  });
+  };
+  if(immediate){
+    if(heatFrame)cancelAnimationFrame(heatFrame);
+    draw();
+  }else if(!heatFrame)heatFrame=requestAnimationFrame(draw);
 }
-const heatObserver=new ResizeObserver(layoutHeatmap);
+const heatObserver=new ResizeObserver(()=>layoutHeatmap());
 heatObserver.observe(digest);
 heatObserver.observe(board);
+void document.fonts.ready.then(()=>layoutHeatmap());
 
 function node(tag,cls,text) {
   const el=document.createElement(tag);
@@ -142,18 +147,21 @@ function renderList() {
   })():newsHighlights(matching);
   const selectedPosition=rest.findIndex(row=>row.id===selected?.row.id);
   if(selectedPosition>=0)limit=Math.max(limit,selectedPosition+1);
-  const render=(target,rows)=>target.replaceChildren(...rows.map(row=>{
+  const render=(target,rows,heat=Boolean(membership))=>target.replaceChildren(...rows.map(row=>{
     if(!cards.has(row.id)) {
       const card=cardOf(row);
       cards.set(row.id,card);
       headlines.observe(card.article);
     }
-    return cards.get(row.id).article;
+    const article=cards.get(row.id).article;
+    if(!heat)clearHeatmapTile(article);
+    return article;
   }));
   render(hotBoard,hot);
   render(keyBoard,key);
-  render(quietList,quiet);
+  render(quietList,quiet,false);
   render(board,rest.slice(0,limit));
+  board.hidden=!board.childElementCount;
   quietBoard.hidden=!quiet.length;
   byId('quiet-count').textContent=quiet.length+' 个话题';
   byId('heat-key').hidden=!membership||!(hot.length+key.length);
@@ -201,6 +209,7 @@ function choose(card) {
   detail.hidden=false;
   renderDetail(card);
   syncDrawer();
+  layoutHeatmap(true);
   if(!compact.matches)card.article.scrollIntoView({block:'nearest'});
 }
 function closeDetail(restoreFocus=true) {
@@ -216,6 +225,7 @@ function closeDetail(restoreFocus=true) {
   main.classList.remove('reading');
   reader.classList.remove('is-reading');
   syncDrawer();
+  layoutHeatmap(true);
   main.scrollTop=overviewScroll;
   if(restoreFocus&&card.toggle.isConnected) {
     card.toggle.focus({preventScroll:true});
@@ -458,6 +468,13 @@ async function renderDetail(card,keepScroll=false) {
   }
 }
 
+function showNewsUpdate(pending) {
+  const label=pending?'读取新增新闻':'刷新简报';
+  refresh.toggleAttribute('data-pending',pending);
+  refresh.setAttribute('aria-label',label);
+  refresh.title=label;
+}
+
 async function load() {
   const token=++generation;
   refresh.disabled=true;
@@ -480,8 +497,7 @@ async function load() {
       setSelected(selected,true);
       renderDetail(selected,true);
     }
-    refresh.textContent='↻';
-    refresh.setAttribute('aria-label','刷新简报');
+    showNewsUpdate(false);
   } catch {
     if(token===generation)notice('简报暂时无法读取。',load);
   } finally {
@@ -505,7 +521,10 @@ backdrop.addEventListener('click',()=>closeDetail());
 for(const scroller of [main,overview,detail])scroller.addEventListener('scroll',syncTopButtons,{passive:true});
 overviewTop.addEventListener('click',()=>scrollTop(overviewScroller(),byId('overview-title')));
 detailTop.addEventListener('click',()=>scrollTop(detail,byId('detail-title')));
-compact.addEventListener('change',syncDrawer);
+compact.addEventListener('change',()=>{
+  syncDrawer();
+  layoutHeatmap();
+});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!photoPanel.open)closeDetail();});
 photoPanel.addEventListener('close',()=>{
   photoGeneration++;
@@ -514,7 +533,6 @@ photoPanel.addEventListener('close',()=>{
 byId('archive').addEventListener('click',()=>void api.archive().catch(()=>notice('无法打开本机归档目录。')));
 api.onNew(readNow=>{
   if(readNow){void load();return;}
-  refresh.textContent='有更新 ↻';
-  refresh.setAttribute('aria-label','读取新增新闻');
+  showNewsUpdate(true);
 });
 void load();

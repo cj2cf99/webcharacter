@@ -9,15 +9,15 @@
   "-",
   {"label":"阅读与学习","icon":"📚","items":[
     {"action":"news","label":"新闻简报","icon":"📰"},
-    {"action":"study","label":"陪我学习","icon":"📚"},
-    {"action":"writeDiary","label":"看绯月写日记","icon":"✍"}
+    {"action":"study","label":"陪我学习","icon":"📚"}
   ]},
   {"label":"任务","icon":"🧩","items":[
+    {"action":"writeDiary","label":"看绯月写日记","icon":"✍"},
+    {"action":"reviewLocalTasks","label":"补写本机任务执行评价","icon":"📝"},
     {"action":"pendingCheck","label":"提醒检查 · 待执行","icon":"⏱","tone":"hot"},
     {"action":"tasks","label":"绯月任务管理","icon":"🗂"},
     {"action":"retry","label":"中断任务与补传","icon":"🔁"},
     {"action":"log","label":"任务日志","icon":"📜"},
-    {"action":"reviewLocalTasks","label":"补写本机任务执行评价","icon":"📝"},
     "-",
     {"action":"restoreTerminal","label":"恢复本机任务终端 ID","icon":"🛠"}
   ]},
