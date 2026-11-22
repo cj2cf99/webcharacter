@@ -1531,3 +1531,10 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 2026-11-23 03:17:00 JST，候选 9f30f8978053 安装及后检完成。原 PID 2356 正常退出，新 PID 23656 在 03:16:59.671 JST 从原应用入口、原资料目录启动。14 项文件摘要、原快捷方式、登录项和回环 REST v6 通过。未认证访问技能目录返回 401，认证读取 22 项，随附对话转录为 1.7、默认整理和拟稿两步。原花园和提醒路由在册。对话转录 8 条、花园批次 27 条、REST 提醒 1 条及轮询配置保持，相关五个 SQLite 库和安装备份均通过检查。旧代码和库备份位于 G:/selftool/WebCharacter/work/feiyue-skill-release/install-backup-20261123-031650，机器回执为同目录上级 install-receipt.json。正式安装使用 install.ps1 -Mode Install。正式个人资料未写入试验数据，桌宠目视交互待用户验收。
 
 本次不涉及 Worker、数据库结构迁移、回填、新凭据或端口。Git 同步和花园登记分别留痕。花园生产未写入，SQL 未提交，待当前线上基线制单及用户具体清单确认。
+
+
+#### Git 同步与花园登记草案
+
+在独立工作树基于远端 0394246 组装发布源码，先纳入已实装 REST v5 的提醒兼容依赖，再合并冻结的 14 文件变更，保留基线已提交的其他开发内容。精确暂存 29 项，`git diff --cached --check` 通过。运行 `node --test --test-reporter=spec agent/tests/skill-hot-update.test.mjs agent/tests/skill-directory-question.test.mjs agent/tests/local-rest-garden.test.mjs agent/tests/local-rest-reminders.test.mjs agent/tests/registration-flow.test.mjs tools/test-conversation-transcription.mjs`，51 项通过、0 项失败。发布源码提交 `e817e393651a2d72cf549d71ea144a98763e0e6f` 已推送至 `origin/codex/workspace-checkpoint-20261120`，回读与本地一致。
+
+花园已完成只读结构同步，新增结构对象 0 个。线上修订 156，确认归属「网页角色组件」#16 →「绯月（桌面精灵）」#61，已核对当前版本 31.0 和上次发布 #81。草案 `feiyue-skill-hot-update-20261123` 新增发布 #82 和明细 #160，状态为发布成功，时间为 2026-11-23 03:17:00 JST，推出版本 32.0。审核摘要 `f102031f64319f041d1482a6a2870b5df84e79a1499ea85565ccb7dce78c8c31`。具体清单待用户确认，SQL 尚未提交，花园生产尚未写入。
