@@ -227,12 +227,12 @@ export function createAiRequestQueue({file,execute,interpret,log,safeStorage}){
           if(job.signal)timers.push(job.signal);
           const signal=AbortSignal.any(timers);
           job.active=true;
-          const started=performance.now(),snapshot=safeStorage?row.id+'-'+attempt:undefined;
-          start(()=>execute(input,signal,job.progress),signal,outcome=>{
+          const started=performance.now(),attemptId=row.id+'-'+attempt,snapshot=safeStorage?attemptId:undefined;
+          start(()=>execute(input,signal,job.progress,attemptId),signal,outcome=>{
             job.active=false;
             buffer={row,attempt,outcome,snapshot,cancelled:outcome.failure&&(job.signal?.aborted||lifetime.signal.aborted)};
             void log?.({direction:'local',route:'AI 询问池',stage:snapshotStatus(buffer)==='cancelled'?'取消':input.phase==='simple'?input.skill?.stage??'处理':input.phase,
-              skill:input.skill?.name,ai_step_id:snapshot,duration_ms:Math.round(performance.now()-started),error:outcome.failure?.code});
+              skill:input.skill?.name,ai_attempt_id:attemptId,ai_step_id:snapshot,duration_ms:Math.round(performance.now()-started),error:outcome.failure?.code});
           });
         }else if(!raw.get())armed=false;
       }

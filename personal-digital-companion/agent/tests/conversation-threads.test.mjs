@@ -291,6 +291,30 @@ test('巡检合并同一手记的两条失败回执，保留独立失败及补�
     {scanned:7,completed:0,failed:3,top:[[error,2],['TimeoutError',1]]});
 });
 
+test('巡检归并跨秒的新推理回执和旧版双记，同时保留独立失败',async t=>{
+  const {profile}=fixture(t),at=Date.parse('2026-11-23T01:37:10+09:00');
+  let now=at;
+  const log=createTaskTrafficLog(profile,{clock:()=>now});
+  const error='LOCAL_AI_OUTPUT_BUDGET';
+  const skill='diary-writing';
+  await log.write({route:'本地 AI',skill,error,ai_attempt_id:'sample-1'});
+  now+=1000;
+  await log.write({route:'AI 询问池',skill,error,ai_attempt_id:'sample-1'});
+  await log.write({route:'本地 AI',skill,error,ai_attempt_id:'sample-2'});
+  await log.write({route:'AI 询问池',skill,error,ai_attempt_id:'sample-3'});
+  now+=1000;
+  await log.write({route:'本地 AI',skill,error});
+  await log.write({route:'AI 询问池',skill,error});
+  await log.write({route:'AI 询问池',skill,error});
+  await log.write({route:'AI 询问池',skill,error:'LOCAL_AI_TIER_WAIT'});
+  await log.write({route:'本地 AI',skill,error:'LOCAL_AI_CONTEXT_BUDGET'});
+  await log.write({route:'AI 询问池',skill,error:'LOCAL_AI_CONTEXT_BUDGET'});
+  assert.deepEqual(await log.inspectRecent(at,now+1000,new AbortController().signal),
+    {scanned:10,completed:0,failed:8,top:[[error,5],['LOCAL_AI_CONTEXT_BUDGET',2],['LOCAL_AI_TIER_WAIT',1]]});
+  assert.deepEqual(await log.inspectRecent(at+1000,now+1000,new AbortController().signal),
+    {scanned:9,completed:0,failed:7,top:[[error,4],['LOCAL_AI_CONTEXT_BUDGET',2],['LOCAL_AI_TIER_WAIT',1]]});
+});
+
 test('动态额度按实际待整理的新材料与事项数量计算，预估超限时拆分',()=>{
   const tokenize=text=>text.match(/\S+/gu)??[];
   const estimate=(stage,value,limit=1024,retry=false)=>planLocalOutput({text:JSON.stringify(value),stage,tokenize,limit,retry});

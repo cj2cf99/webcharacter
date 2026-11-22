@@ -76,9 +76,10 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
   }
   async function inspectRecent(from,to,signal){
     await pending;
-    const days=[...new Set([tokyoDay(from),tokyoDay(to)])];
+    const lookback=from-5000;
+    const days=[...new Set([tokyoDay(lookback),tokyoDay(from),tokyoDay(to)])];
     const files=memory?days.flatMap(day=>['任务通信.jsonl','历史通信.jsonl'].map(name=>join(memory.folder(day),'日志',name))):[previous,file];
-    const counts=new Map(),paired=new Map();
+    const counts=new Map(),paired=new Map(),attempts=new Map();
     let scanned=0,completed=0,failed=0;
     function report(code,total=1){
       failed+=total;counts.set(code,(counts.get(code)??0)+total);
@@ -90,22 +91,34 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
         const row=peek(line);
         if(!row||row.route==='分析专家巡检')continue;
         const at=Date.parse(row.time);
-        if(!Number.isFinite(at)||at<from||at>=to)continue;
-        scanned++;
-        if(row.category==='绯月自主行动'&&row.stage==='完成')completed++;
+        if(!Number.isFinite(at)||at<lookback||at>=to)continue;
+        if(at>=from){
+          scanned++;
+          if(row.category==='绯月自主行动'&&row.stage==='完成')completed++;
+        }
         const code=word(row.error??row.code??String(row.result??'').match(/\bLOCAL_AI_[A-Z_]+\b/u)?.[0]);
         if(recoveryCodes.has(code)||row.stage==='取消'||row.skill==='emotion-appraisal'&&['AI 询问池','本地 AI'].includes(row.route))continue;
         if(!code&&row.stage!=='失败')continue;
-        const ai=row.route==='本地 AI'&&['diary-writing','diary-audit'].includes(row.skill);
-        const skill=ai?row.skill:row.category==='绯月自主行动'&&['失败','查询失败'].includes(row.stage)?diaryFailures.get(row.route):undefined;
+        const modelRoute=row.route==='本地 AI'||row.route==='AI 询问池';
+        if(modelRoute&&code&&id(row.ai_attempt_id)){
+          const key=JSON.stringify([row.ai_attempt_id,code]);
+          if(!attempts.has(key)||attempts.get(key).at>at)attempts.set(key,{at,code});
+          continue;
+        }
+        if(at<from)continue;
+        const legacyModelReceipt=row.route==='本地 AI'||row.route==='AI 询问池'&&code==='LOCAL_AI_OUTPUT_BUDGET';
+        const diaryModel=legacyModelReceipt&&['diary-writing','diary-audit'].includes(row.skill);
+        const skill=diaryModel?row.skill:row.category==='绯月自主行动'&&['失败','查询失败'].includes(row.stage)?diaryFailures.get(row.route):undefined;
         if(skill&&code){
-          // 旧日志没有共享任务编号；仅合并同秒、同一手记技能的一对推理和任务失败回执。
-          const key=JSON.stringify([at,skill,code]),group=paired.get(key)??{code,ai:0,task:0};
-          group[ai?'ai':'task']++;paired.set(key,group);
+          // 旧手记回执没有共享编号，按同秒各层的记录数保留独立失败。
+          const key=JSON.stringify([at,skill,code]),group=paired.get(key)??{code,model:0,queue:0,task:0};
+          group[row.route==='本地 AI'?'model':row.route==='AI 询问池'?'queue':'task']++;
+          paired.set(key,group);
         }else report(code??'自主任务失败');
       }
     }
-    for(const {code,ai,task} of paired.values())report(code,Math.max(ai,task));
+    for(const {at,code} of attempts.values())if(at>=from)report(code);
+    for(const {code,model,queue,task} of paired.values())report(code,Math.max(model,queue,task));
     return {scanned,completed,failed,top:[...counts].sort((a,b)=>b[1]-a[1]).slice(0,5)};
   }
   // 恢复前读同一东京日的日志；在写入队列内核对，不能再等待队列自身。

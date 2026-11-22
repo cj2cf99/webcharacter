@@ -504,7 +504,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     let result;
     try{result=await rate(data,e.id);}
     catch(error){
-      if(isSource||!/LOCAL_AI_(?:OUTPUT_BUDGET|CONTEXT_BUDGET)/u.test(error.code??error.message))throw error;
+      if(isSource||!/LOCAL_AI_(?:OUTPUT_BUDGET|CONTEXT_BUDGET|DIARY_REVIEW_BUDGET)/u.test(error.code??error.message))throw error;
       const segments=Array.from(data);
       if(segments.length<=360)throw error;
       const chunks=[];
@@ -537,11 +537,12 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     let deferred=0;
     for(let index=0;index<items.length;){
       signal.throwIfAborted();
-      const group=items.slice(index,index+(model.aiAck?20:1));
+      const group=items.slice(index,index+(model.aiAck?4:1));
       const pending=new Map();
       const results=await Promise.allSettled(group.map(async event=>{
-        const failure=db.prepare('SELECT attempts,at FROM material_review_failures WHERE id=?').get(event.id);
-        if(failure&&(failure.attempts>=3||now()-failure.at<60_000))return {deferred:true};
+        const failure=db.prepare('SELECT attempts,at,code FROM material_review_failures WHERE id=?').get(event.id);
+        const legacyRetry=['LOCAL_AI_OUTPUT_BUDGET','LOCAL_AI_TIER_WAIT'].includes(failure?.code);
+        if(failure&&(failure.attempts>=3&&!legacyRetry||now()-failure.at<60_000))return {deferred:true};
         if(pending.has(event.id)){
           const rating=await pending.get(event.id);
           return rating&&{...rating,existing:true};
@@ -551,13 +552,19 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
         return work;
       }));
       signal.throwIfAborted();
+      if(results.every(result=>result.status==='rejected'&&result.reason?.code==='LOCAL_AI_GPU_DEFERRED'))
+        return deferred+items.length-index;
       for(const [offset,result] of results.entries()){
         const event=group[offset];
         if(result.status==='rejected'){
           const code=result.reason?.code??result.reason?.message??'LOCAL_AI_INFERENCE_FAILED';
-          if(!/^LOCAL_AI_/u.test(code))throw result.reason;
-          if(code!=='LOCAL_AI_GPU_DEFERRED')put(`INSERT INTO material_review_failures VALUES(?,1,?,?) ON CONFLICT(id)
-            DO UPDATE SET attempts=attempts+1,code=excluded.code,at=excluded.at`,event.id,code,now());
+          if(code!=='AI_REVIEW_REJECTED'&&!/^LOCAL_AI_/u.test(code))throw result.reason;
+          if(!['LOCAL_AI_GPU_DEFERRED','LOCAL_AI_TIER_WAIT'].includes(code)){
+            const terminal=code==='AI_REVIEW_REJECTED'||code==='LOCAL_AI_DIARY_REVIEW_BUDGET';
+            const storedCode=code==='LOCAL_AI_OUTPUT_BUDGET'?'LOCAL_AI_DIARY_REVIEW_BUDGET':code;
+            put(`INSERT INTO material_review_failures VALUES(?,?,?,?) ON CONFLICT(id)
+              DO UPDATE SET attempts=max(attempts+1,excluded.attempts),code=excluded.code,at=excluded.at`,event.id,terminal?3:1,storedCode,now());
+          }
           deferred++;
         }else if(result.value?.deferred)deferred++;
         else apply(event,result.value,index);

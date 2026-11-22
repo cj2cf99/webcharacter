@@ -195,6 +195,134 @@ test('9B 资源延后后重启接着当前阶段，业务落盘后才清理结�
   finally{db.close();}
 });
 
+test('行动评价截断后改走 9B 并保留原材料，资源等待跨重启，明确重试沿用最后阶段',async t=>{
+  const {file,after}=fixture(t),calls=[],logs=[];
+  const original='我把第二份通知撤销，明早仍按原计划发送第一份。';
+  const schema={...textSchema,properties:{...textSchema.properties,review:{type:'string'}},required:['text','review']};
+  const fail=code=>{throw Object.assign(Error(code),{code});};
+  const ask=(ai,key)=>ai.memory(original,'保留行动与原话',schema,signal(),{
+    name:'diary-writing',version:'1.9',stage:'reviewAction',aiReview:true,aiCheckpoint:key,maxTokens:450,
+  });
+  const start=(waiting,terminal=false)=>createAiWorkflowModel({file,log:event=>logs.push(event),model:model({
+    async memory(text,prompt,schema,_signal,skill){
+      calls.push([skill.aiTier,isReviewer(schema),skill.aiAttemptId]);
+      if(terminal||skill.aiTier==='2')fail('LOCAL_AI_OUTPUT_BUDGET');
+      if(waiting)fail('LOCAL_AI_TIER_WAIT');
+      if(isReviewer(schema))return review(schema);
+      assert.equal(JSON.parse(text).材料,original);
+      assert.equal(schema.properties.review.maxLength,90);
+      assert.ok(skill.maxTokens>=768);
+      assert.match(prompt,/只返回指定 JSON/);
+      return {text:original,review:'我记住两份通知的区别了。'};
+    },
+  })});
+  const first=start(true);
+  try{await assert.rejects(ask(first,'待续材料'),{code:'LOCAL_AI_TIER_WAIT'});}
+  finally{await first.close();}
+  assert.deepEqual(calls.map(call=>call[0]),['2','9']);
+  assert.deepEqual(calls.map(call=>call[2]),logs.map(row=>row.ai_attempt_id));
+  calls.length=0;
+  const second=start(false);
+  try{
+    assert.equal((await ask(second,'待续材料')).text,original);
+    assert.deepEqual(calls.map(call=>call.slice(0,2)),[['9',false],['9',true]]);
+  }finally{await second.close();}
+  calls.length=0;
+  const third=start(false,true);after(()=>third.close());
+  for(let times=0;times<2;times++)await assert.rejects(ask(third,'最终超限'),{code:'LOCAL_AI_DIARY_REVIEW_BUDGET'});
+  assert.deepEqual(calls.map(call=>call[0]),['2','9','9']);
+});
+
+test('显卡忙时补评只试一个小批次，恢复后原材料可继续完成',async t=>{
+  const {profile,file,after}=fixture(t);
+  let unavailable=true,attempts=0;
+  const tasks=Array.from({length:10},(_,i)=>({at,task_id:'fixture-'+i,title:'检查资料 '+i,action:'已完成',detail:'原件已收到 '+i}));
+  const ai=createAiWorkflowModel({file,model:model({async memory(text,_prompt,schema){
+    attempts++;
+    if(unavailable)throw Object.assign(Error('等待显卡'),{code:'LOCAL_AI_GPU_DEFERRED'});
+    return isReviewer(schema)?review(schema):{text,review:'我确认收到原件。'};
+  }})});
+  const diary=createPersonalityDiary({profile,model:ai,now:()=>at,weather:()=>[],
+    memory:{archiveDays:()=>[day],read:d=>[],readTasks:d=>d===day?tasks:[]},request:()=>{throw Error('隔离测试不联网');}});
+  after(async()=>{diary.close();await ai.close();});
+  assert.match(await diary.run('task-review',signal()),/另有 10 条保留待核查/);
+  assert.equal(attempts,4);
+  unavailable=false;
+  assert.match(await diary.run('task-review',signal()),/补写 10 条执行评价/);
+  assert.equal(attempts,24);
+});
+
+test('补评审核改写不能绕过短评限制或清空有正文的评价',async t=>{
+  const {file,after}=fixture(t);
+  const calls=[];
+  const schema={...textSchema,properties:{...textSchema.properties,review:{type:'string'}},required:['text','review']};
+  const draft={text:'原件已收到，补件还没有。',review:'我会记住补件还没到。'};
+  let field='review',replacement;
+  const ai=createAiWorkflowModel({file,model:model({async memory(_text,_prompt,schema,_signal,skill){
+    calls.push(skill.aiTier);
+    if(!isReviewer(schema))return draft;
+    return skill.aiTier==='2'?review(schema,'edit',{field,replacement}):review(schema);
+  }})});
+  after(()=>ai.close());
+  for(const value of ['较长的评价'.repeat(20),'   ']){
+    replacement=value;
+    calls.length=0;
+    assert.deepEqual(await ai.memory(draft.text,'保留原文',schema,signal(),{
+      name:'diary-writing',version:'1.9',stage:'reviewAction',aiReview:true,
+    }),draft);
+    assert.deepEqual(calls,['2','2','9','9']);
+  }
+  field='text';
+  replacement='原件已收到，补件还未收到。收件人已确认缺件并登记处理时间，后续仍需按原要求取得补件。'.repeat(3);
+  calls.length=0;
+  assert.deepEqual(await ai.memory(draft.text,'保留原文',schema,signal(),{
+    name:'diary-writing',version:'1.9',stage:'reviewAction',aiReview:true,
+  }),{...draft,text:replacement});
+  assert.deepEqual(calls,['2','2']);
+});
+
+test('旧版已保存的较长补评可经审核续办',async t=>{
+  const {file,after}=fixture(t),calls=[];
+  const shape={...textSchema,properties:{...textSchema.properties,review:{type:'string'}},required:['text','review']};
+  const skill={name:'diary-writing',version:'1.9',stage:'reviewAction'};
+  const candidate={text:'原件已收到。',review:'这是先前按旧版要求留下的评价。'.repeat(8)};
+  const first=createAiWorkflowModel({file,model:model()});
+  await first.close();
+  const db=new DatabaseSync(file);
+  try{
+    db.prepare("INSERT INTO ai_requests(id,group_id,checkpoint,priority,state,input) VALUES('old','old','旧草稿',1,'parked',?)")
+      .run(JSON.stringify({phase:'4-check',text:candidate.text,instruction:'保留原文',schema:shape,skill,candidate}));
+  }finally{db.close();}
+  const ai=createAiWorkflowModel({file,model:model({async memory(_text,_prompt,schema,_signal,skill){
+    calls.push(skill.aiTier);
+    return review(schema);
+  }})});
+  after(()=>ai.close());
+  assert.deepEqual(await ai.memory(candidate.text,'保留原文',shape,signal(),{
+    ...skill,aiReview:true,aiCheckpoint:'旧草稿',
+  }),candidate);
+  assert.deepEqual(calls,['4']);
+});
+
+test('单条补评最终被拒仍会留痕，同批和后续材料继续保存',async t=>{
+  const {profile,file,after}=fixture(t);
+  const tasks=Array.from({length:5},(_,i)=>({at,task_id:'fixture-'+i,title:i?'检查资料 '+i:'专门拒绝的资料',action:'已完成',detail:'原件已收到 '+i}));
+  const ai=createAiWorkflowModel({file,model:model({async memory(text,_prompt,schema){
+    if(isReviewer(schema))return review(schema,text.includes('专门拒绝的资料')?'revise':'accept');
+    return {text:'原件已收到。',review:'我确认收到原件。'};
+  }})});
+  const diary=createPersonalityDiary({profile,model:ai,now:()=>at,weather:()=>[],
+    memory:{archiveDays:()=>[day],read:()=>[],readTasks:d=>d===day?tasks:[]},request:()=>{throw Error('隔离测试不联网');}});
+  after(async()=>{diary.close();await ai.close();});
+  assert.match(await diary.run('task-review',signal()),/补写 4 条执行评价.*另有 1 条保留待核查/);
+  const db=new DatabaseSync(join(profile,'personality-memory.sqlite'),{readOnly:true});
+  try{
+    assert.deepEqual(db.prepare('SELECT code,attempts FROM material_review_failures').all().map(row=>({...row})),
+      [{code:'AI_REVIEW_REJECTED',attempts:3}]);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM materials').get().n,4);
+  }finally{db.close();}
+});
+
 test('本地整理、服务器文本校对、本地评价、多阶段日记和旧唠叨共享单个模型时隙',async t=>{
   const {profile,file,after}=fixture(t),seen=[],active={count:0};
   const {DB,sqlite,close}=openTestDatabase();
