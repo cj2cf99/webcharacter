@@ -1,0 +1,184 @@
+--- a/desktop/panel-window.mjs
++++ b/desktop/panel-window.mjs
+@@ -4,8 +4,11 @@
+ 
+ export function showPanel(panel){
+   panel.show();
+-  // Windows 隐藏启动可能吞掉第一次显示请求，页面已经就绪时补一次。
+-  if(process.platform==='win32'&&!panel.isVisible())panel.show();
++  // Windows 隐藏启动时，窗口可能获得焦点却仍不可见。先显示，再激活同一个窗口。
++  if(process.platform==='win32'&&!panel.isVisible()){
++    panel.showInactive();
++    panel.show();
++  }
+ }
+ 
+ function readOverlay(file){
+--- a/desktop/menu-popup.mjs
++++ b/desktop/menu-popup.mjs
+@@ -1,4 +1,5 @@
+ import {resolve} from 'node:path';
++import {showPanel} from './panel-window.mjs';
+ import {pathToFileURL} from 'node:url';
+ 
+ // 自绘右键菜单：仍由主进程的原生 Menu 提供条目、勾选状态和点击逻辑，这里只负责显示。
+@@ -54,7 +55,7 @@
+       // 只有本次 show() 等待中的首个尺寸才显示窗口；关闭后迟到的尺寸消息不会把菜单重新弹出。
+       if(!pending&&!shown)return;
+       place(WIDTH+SHADOW*2,height+SHADOW*2);
+-      if(pending){pending=false;shown=true;win.show();win.focus();onOpen();}
++      if(pending){pending=false;shown=true;showPanel(win);win.focus();onOpen();}
+     });
+     contents.ipc.on('menu:choose',(event,path)=>{
+       if(!own(event)||!Array.isArray(path)||!path.every(Number.isInteger))return;
+--- a/desktop/message-box.mjs
++++ b/desktop/message-box.mjs
+@@ -1,4 +1,4 @@
+-import {createPanelWindow} from './panel-window.mjs';
++import {createPanelWindow,showPanel} from './panel-window.mjs';
+ import {resolve} from 'node:path';
+ import {pathToFileURL} from 'node:url';
+ 
+@@ -37,9 +37,9 @@
+       });
+       contents.ipc.on('message-box:ready',(event,height)=>{
+         if(!own(event)||!Number.isFinite(height)||panel.isVisible())return;
+-        clearTimeout(readyTimer);
+         panel.setBounds(position(Math.min(maxHeight,Math.max(120,Math.ceil(height)))));
+-        panel.show();
++        showPanel(panel);
++        if(panel.isVisible())clearTimeout(readyTimer);
+       });
+       contents.ipc.on('message-box:choose',(event,index)=>{
+         if(!own(event)||!Number.isInteger(index)||index<0||index>=buttons.length)return;
+--- a/desktop/task-inbox-host.mjs
++++ b/desktop/task-inbox-host.mjs
+@@ -1,13 +1,13 @@
+ import {resolve} from 'node:path';
+ import {pathToFileURL} from 'node:url';
+-import {createPanelWindow} from './panel-window.mjs';
++import {createPanelWindow,showPanel} from './panel-window.mjs';
+ 
+ export function attachTaskInbox(electron,{bundle,root,flow,visible=true}) {
+   const {ipcMain}=electron;
+   const entry=resolve(bundle,'task-inbox.html');
+   const url=pathToFileURL(entry).href;
+   const methods=['local','tasks','chains','detail','receipts','claim','inspect','resume','transcripts','transcript','transcriptEdit','transcriptDecision','transcriptRetry'];
+-  let panel=null;
++  let panel=null,loading;
+   for(const method of methods){
+     ipcMain.handle('task-inbox:'+method,async(event,value)=>{
+       if(!panel||panel.isDestroyed()||event.sender!==panel.webContents||event.senderFrame!==panel.webContents.mainFrame)
+@@ -29,23 +29,21 @@
+   }
+   return {
+     async open(transcriptId){
+-      if(panel&&!panel.isDestroyed()){
+-        if(transcriptId)panel.webContents.send('task-inbox:show-transcript',transcriptId);
+-        if(visible){panel.show();panel.focus();}
+-        return;
++      if(!panel||panel.isDestroyed()){
++        const created=createPanelWindow(electron,{title:'绯月任务管理',width:550,height:440,minWidth:360,minHeight:320,
++          show:false,autoHideMenuBar:true,webPreferences:{preload:resolve(root,'desktop/task-inbox-preload.cjs'),
++            nodeIntegration:false,contextIsolation:true,sandbox:true}},root);
++        panel=created;
++        created.webContents.setWindowOpenHandler(()=>({action:'deny'}));
++        created.webContents.on('will-navigate',(event,target)=>{if(target!==url)event.preventDefault();});
++        created.once('closed',()=>{if(panel===created)panel=null;});
++        loading=created.loadFile(entry).catch(error=>{if(!created.isDestroyed())created.destroy();throw error;});
+       }
+-      const window=createPanelWindow(electron,{title:'绯月任务管理',width:550,height:440,minWidth:360,minHeight:320,
+-        show:false,autoHideMenuBar:true,webPreferences:{preload:resolve(root,'desktop/task-inbox-preload.cjs'),
+-          nodeIntegration:false,contextIsolation:true,sandbox:true}},root);
+-      panel=window;
+-      window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
+-      window.webContents.on('will-navigate',(event,target)=>{if(target!==url)event.preventDefault();});
+-      window.once('closed',()=>{if(panel===window)panel=null;});
+-      try{await window.loadFile(entry);}
+-      catch(error){if(!window.isDestroyed())window.destroy();throw error;}
++      const window=panel;
++      await loading;
+       if(panel===window&&!window.isDestroyed()){
+         if(transcriptId)window.webContents.send('task-inbox:show-transcript',transcriptId);
+-        if(visible){window.show();window.focus();}
++        if(visible){showPanel(window);window.focus();}
+       }
+     },
+     get panel(){return panel;},
+--- a/desktop/poll-settings-host.mjs
++++ b/desktop/poll-settings-host.mjs
+@@ -1,6 +1,6 @@
+ import {resolve} from 'node:path';
+ import {pathToFileURL} from 'node:url';
+-import {createPanelWindow} from './panel-window.mjs';
++import {createPanelWindow,showPanel} from './panel-window.mjs';
+ 
+ export function attachPollSettings(electron,{root,bundle,checks}){
+   let panel,loading;
+@@ -24,7 +24,7 @@
+     }
+     const current=panel;await loading;
+     if(current!==panel||current.isDestroyed())return;
+-    current.show();current.focus();
++    showPanel(current);current.focus();
+     if(queue)current.webContents.send('poll-settings:queue');
+   }
+   return {open,get panel(){return panel;},
+--- a/desktop/settings-host.mjs
++++ b/desktop/settings-host.mjs
+@@ -1,6 +1,6 @@
+-import {createPanelWindow} from './panel-window.mjs';
++import {createPanelWindow,showPanel} from './panel-window.mjs';
+ import {SettingsStore} from './settings-store.mjs';
+-import {watchFileChanges} from './live-files.mjs';
++import {watchFileChanges,warnLiveUpdate} from './live-files.mjs';
+ import {resolve} from 'node:path';
+ import {pathToFileURL} from 'node:url';
+ export function attachSettings(electron,{win,profile,bundle,root,legacySound,onDisplayChange}){
+@@ -27,7 +27,25 @@
+  };
+  for(const [channel,fn]of Object.entries(handlers))ipcMain.handle(channel,async(e,arg)=>{if(!trusted(e))throw Error('仅本地可信窗口可修改');return fn(e,arg);});
+  const runtime=(e,value)=>{if(e.sender!==win.webContents||e.senderFrame!==win.webContents.mainFrame)return;lastRuntime=value;panel?.webContents.send('pc:runtime',value);};ipcMain.on('pc:runtime',runtime);
+- function open(){if(panel&&!panel.isDestroyed()){panel.show();panel.focus();return;}panel=createPanelWindow(electron,{width:1200,height:850,minWidth:700,minHeight:550,autoHideMenuBar:true,title:'绯月设置 · 本地 PC',webPreferences:{preload:resolve(root,'desktop/preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true}},root);const entry=resolve(bundle,'settings.html'),url=pathToFileURL(entry).href;panel.webContents.setWindowOpenHandler(()=>({action:'deny'}));panel.webContents.on('will-navigate',(e,u)=>{if(u!==url)e.preventDefault();});panel.on('closed',()=>{panel=null;});panel.loadFile(entry);}
++ function open(){
++   if(panel&&!panel.isDestroyed()){
++     if(!panel.webContents.isLoadingMainFrame()){showPanel(panel);panel.focus();}
++     return;
++   }
++   const created=createPanelWindow(electron,{width:1200,height:850,minWidth:700,minHeight:550,show:false,
++     autoHideMenuBar:true,title:'绯月设置 · 本地 PC',webPreferences:{preload:resolve(root,'desktop/preload.cjs'),
++       nodeIntegration:false,contextIsolation:true,sandbox:true}},root);
++   panel=created;
++   const entry=resolve(bundle,'settings.html'),url=pathToFileURL(entry).href;
++   created.webContents.setWindowOpenHandler(()=>({action:'deny'}));
++   created.webContents.on('will-navigate',(e,u)=>{if(u!==url)e.preventDefault();});
++   created.once('closed',()=>{if(panel===created)panel=null;});
++   created.loadFile(entry).then(()=>{
++     if(panel===created&&!created.isDestroyed()){showPanel(created);created.focus();}
++   }).catch(error=>{
++     if(!created.isDestroyed()){created.destroy();warnLiveUpdate('动画与声音',error);}
++   });
++ }
+  function close(){stopWatching();for(const name of Object.keys(handlers))ipcMain.removeHandler(name);ipcMain.removeListener('pc:runtime',runtime);panel?.destroy();}
+  return {open,close,store,mediaChanged,get panel(){return panel}};
+ }
+--- a/desktop/screen-question-host.mjs
++++ b/desktop/screen-question-host.mjs
+@@ -1098,7 +1098,7 @@
+     }
+     inputMode=mode==='registration'?'registration':'auto';
+     if(disposed)return;
+-    if(panel&&!panel.isDestroyed()){if(!ready)return;place();panel.webContents.send('screen-qa:mode',inputMode);if(visible){panel.show();panel.focus();}return;}
++    if(panel&&!panel.isDestroyed()){if(!ready)return;place();panel.webContents.send('screen-qa:mode',inputMode);if(visible){showPanel(panel);panel.focus();}return;}
+     if(idleDraft)inputMode=idleDraft.mode;
+     if(registration?.hasSaved?.()&&!chainActions.length)chainActions=['resume'];
+     const created=createPanelWindow(electron,{width:360,height:260,show:false,frame:false,transparent:true,resizable:false,hasShadow:false,skipTaskbar:true,alwaysOnTop:true,title:'绯月 · 提问',
+@@ -1138,7 +1138,7 @@
+     try{await created.loadFile(entry);}catch(error){if(panel!==created||created.isDestroyed())return;created.destroy();throw error;}
+     if(disposed||panel!==created||created.isDestroyed())return;
+     if(forNag?.signal?.aborted){created.destroy();return;}
+-    ready=true;place();created.webContents.send('screen-qa:changed',view());if(visible){if(line)showPanel(created);else created.show();created.focus();}
++    ready=true;place();created.webContents.send('screen-qa:changed',view());if(visible){showPanel(created);created.focus();}
+   }
+   function close(){if(disposed)return;disposed=true;clearTimeout(organizationTimer);draftWork?.abort();registrationDraft=null;pendingQuestion?.();inquiry.close();hide();details.close();records.close?.();
+     if(threads)void threadReplies.close().finally(()=>threads.close());

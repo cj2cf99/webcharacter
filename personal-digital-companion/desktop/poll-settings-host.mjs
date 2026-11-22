@@ -1,6 +1,6 @@
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {createPanelWindow} from './panel-window.mjs';
+import {createPanelWindow,showPanel} from './panel-window.mjs';
 
 export function attachPollSettings(electron,{root,bundle,checks}){
   let panel,loading;
@@ -24,7 +24,7 @@ export function attachPollSettings(electron,{root,bundle,checks}){
     }
     const current=panel;await loading;
     if(current!==panel||current.isDestroyed())return;
-    current.show();current.focus();
+    showPanel(current);current.focus();
     if(queue)current.webContents.send('poll-settings:queue');
   }
   return {open,get panel(){return panel;},

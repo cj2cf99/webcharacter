@@ -4,8 +4,11 @@ import {watchFileChanges,warnLiveUpdate} from './live-files.mjs';
 
 export function showPanel(panel){
   panel.show();
-  // Windows 隐藏启动可能吞掉第一次显示请求，页面已经就绪时补一次。
-  if(process.platform==='win32'&&!panel.isVisible())panel.show();
+  // Windows 隐藏启动时，窗口可能获得焦点却仍不可见。先显示，再激活同一个窗口。
+  if(process.platform==='win32'&&!panel.isVisible()){
+    panel.showInactive();
+    panel.show();
+  }
 }
 
 function readOverlay(file){

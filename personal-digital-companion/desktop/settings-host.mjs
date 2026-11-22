@@ -1,6 +1,6 @@
-import {createPanelWindow} from './panel-window.mjs';
+import {createPanelWindow,showPanel} from './panel-window.mjs';
 import {SettingsStore} from './settings-store.mjs';
-import {watchFileChanges} from './live-files.mjs';
+import {watchFileChanges,warnLiveUpdate} from './live-files.mjs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 export function attachSettings(electron,{win,profile,bundle,root,legacySound,onDisplayChange}){
@@ -27,7 +27,25 @@ export function attachSettings(electron,{win,profile,bundle,root,legacySound,onD
  };
  for(const [channel,fn]of Object.entries(handlers))ipcMain.handle(channel,async(e,arg)=>{if(!trusted(e))throw Error('仅本地可信窗口可修改');return fn(e,arg);});
  const runtime=(e,value)=>{if(e.sender!==win.webContents||e.senderFrame!==win.webContents.mainFrame)return;lastRuntime=value;panel?.webContents.send('pc:runtime',value);};ipcMain.on('pc:runtime',runtime);
- function open(){if(panel&&!panel.isDestroyed()){panel.show();panel.focus();return;}panel=createPanelWindow(electron,{width:1200,height:850,minWidth:700,minHeight:550,autoHideMenuBar:true,title:'绯月设置 · 本地 PC',webPreferences:{preload:resolve(root,'desktop/preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true}},root);const entry=resolve(bundle,'settings.html'),url=pathToFileURL(entry).href;panel.webContents.setWindowOpenHandler(()=>({action:'deny'}));panel.webContents.on('will-navigate',(e,u)=>{if(u!==url)e.preventDefault();});panel.on('closed',()=>{panel=null;});panel.loadFile(entry);}
+ function open(){
+   if(panel&&!panel.isDestroyed()){
+     if(!panel.webContents.isLoadingMainFrame()){showPanel(panel);panel.focus();}
+     return;
+   }
+   const created=createPanelWindow(electron,{width:1200,height:850,minWidth:700,minHeight:550,show:false,
+     autoHideMenuBar:true,title:'绯月设置 · 本地 PC',webPreferences:{preload:resolve(root,'desktop/preload.cjs'),
+       nodeIntegration:false,contextIsolation:true,sandbox:true}},root);
+   panel=created;
+   const entry=resolve(bundle,'settings.html'),url=pathToFileURL(entry).href;
+   created.webContents.setWindowOpenHandler(()=>({action:'deny'}));
+   created.webContents.on('will-navigate',(e,u)=>{if(u!==url)e.preventDefault();});
+   created.once('closed',()=>{if(panel===created)panel=null;});
+   created.loadFile(entry).then(()=>{
+     if(panel===created&&!created.isDestroyed()){showPanel(created);created.focus();}
+   }).catch(error=>{
+     if(!created.isDestroyed()){created.destroy();warnLiveUpdate('动画与声音',error);}
+   });
+ }
  function close(){stopWatching();for(const name of Object.keys(handlers))ipcMain.removeHandler(name);ipcMain.removeListener('pc:runtime',runtime);panel?.destroy();}
  return {open,close,store,mediaChanged,get panel(){return panel}};
 }

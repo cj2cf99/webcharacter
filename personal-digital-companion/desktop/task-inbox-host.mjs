@@ -1,13 +1,13 @@
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {createPanelWindow} from './panel-window.mjs';
+import {createPanelWindow,showPanel} from './panel-window.mjs';
 
 export function attachTaskInbox(electron,{bundle,root,flow,visible=true}) {
   const {ipcMain}=electron;
   const entry=resolve(bundle,'task-inbox.html');
   const url=pathToFileURL(entry).href;
   const methods=['local','tasks','chains','detail','receipts','claim','inspect','resume','transcripts','transcript','transcriptEdit','transcriptDecision','transcriptRetry'];
-  let panel=null;
+  let panel=null,loading;
   for(const method of methods){
     ipcMain.handle('task-inbox:'+method,async(event,value)=>{
       if(!panel||panel.isDestroyed()||event.sender!==panel.webContents||event.senderFrame!==panel.webContents.mainFrame)
@@ -29,23 +29,21 @@ export function attachTaskInbox(electron,{bundle,root,flow,visible=true}) {
   }
   return {
     async open(transcriptId){
-      if(panel&&!panel.isDestroyed()){
-        if(transcriptId)panel.webContents.send('task-inbox:show-transcript',transcriptId);
-        if(visible){panel.show();panel.focus();}
-        return;
+      if(!panel||panel.isDestroyed()){
+        const created=createPanelWindow(electron,{title:'绯月任务管理',width:550,height:440,minWidth:360,minHeight:320,
+          show:false,autoHideMenuBar:true,webPreferences:{preload:resolve(root,'desktop/task-inbox-preload.cjs'),
+            nodeIntegration:false,contextIsolation:true,sandbox:true}},root);
+        panel=created;
+        created.webContents.setWindowOpenHandler(()=>({action:'deny'}));
+        created.webContents.on('will-navigate',(event,target)=>{if(target!==url)event.preventDefault();});
+        created.once('closed',()=>{if(panel===created)panel=null;});
+        loading=created.loadFile(entry).catch(error=>{if(!created.isDestroyed())created.destroy();throw error;});
       }
-      const window=createPanelWindow(electron,{title:'绯月任务管理',width:550,height:440,minWidth:360,minHeight:320,
-        show:false,autoHideMenuBar:true,webPreferences:{preload:resolve(root,'desktop/task-inbox-preload.cjs'),
-          nodeIntegration:false,contextIsolation:true,sandbox:true}},root);
-      panel=window;
-      window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
-      window.webContents.on('will-navigate',(event,target)=>{if(target!==url)event.preventDefault();});
-      window.once('closed',()=>{if(panel===window)panel=null;});
-      try{await window.loadFile(entry);}
-      catch(error){if(!window.isDestroyed())window.destroy();throw error;}
+      const window=panel;
+      await loading;
       if(panel===window&&!window.isDestroyed()){
         if(transcriptId)window.webContents.send('task-inbox:show-transcript',transcriptId);
-        if(visible){window.show();window.focus();}
+        if(visible){showPanel(window);window.focus();}
       }
     },
     get panel(){return panel;},

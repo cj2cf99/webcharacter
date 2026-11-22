@@ -1,0 +1,39 @@
+{
+  "items": [
+    {
+      "path": "desktop/panel-window.mjs",
+      "before": "3607709fc532a1e3fd1ce6df0663ac2f5b43f942741878d71026f80ebf5b9ae1",
+      "after": "8ebed45aceccb34dc90eda5b0d082cb783bd9ffa63959821e1785807a934c6d1"
+    },
+    {
+      "path": "desktop/menu-popup.mjs",
+      "before": "bb4683bac6235b689243f3d4e1a1e3b18161593bccd5f00cfed7213fd3a53754",
+      "after": "b510b0d0a9c3037a1af839a7b165da87e3ef1098c3ac7090714dfdd1f0393ed2"
+    },
+    {
+      "path": "desktop/message-box.mjs",
+      "before": "a0f6756981fe09a630b5bd55acd516fd8dd408565b09cdd8e89c6697de166faa",
+      "after": "a4b48129cf7095d256115fe01086cfc3638471c1c1c1cc9cba3af3da3694afb3"
+    },
+    {
+      "path": "desktop/task-inbox-host.mjs",
+      "before": "f2c47332c77d6b8595c7963b8aea0413d2ea3f50f69118cdb4522fe9baff6064",
+      "after": "8231a752088ae12106fa8ec79010e3df812c5ff564fbc4a56e5a464d7775655a"
+    },
+    {
+      "path": "desktop/poll-settings-host.mjs",
+      "before": "a13b70a61300d1daca6d0b6ad3e45b229bcc6b33dd791e772660b9f72f761b84",
+      "after": "6fb225b7b53f0b207f6228373a04316443882b0bd7986e360ccc658dcd60f022"
+    },
+    {
+      "path": "desktop/settings-host.mjs",
+      "before": "018bb9ae5515340bbd5ef00b3e0f023cf1d61eda551ff77b8549530595270fb5",
+      "after": "d71a8f141d868f99c73a2d169113f641f04438c752fa6f098c43b711c3acecd9"
+    },
+    {
+      "path": "desktop/screen-question-host.mjs",
+      "before": "e3c88c22c734c773c0a7d72eb10ba72368f11c311b35a66fbe95c1265b7d0a11",
+      "after": "a77ae19c459c95d2dde1ea3c9345c41d9e82fd56e340485907d35d4595b59b9c"
+    }
+  ]
+}

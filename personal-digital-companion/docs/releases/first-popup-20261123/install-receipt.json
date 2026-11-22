@@ -1,0 +1,13 @@
+{
+  "version": "54fe5c562796",
+  "manifest": "54fe5c5627967cec48b1c178a714a0e34694156a52b2ffdf4978e72f31c10819",
+  "installedAt": "2026-11-23T06:39:56.9794125+09:00",
+  "files": 7,
+  "oldPid": 21824,
+  "newPid": 33120,
+  "startedJst": "2026-11-23T06:39:56.249+09:00",
+  "restVersion": 7,
+  "installedChecksPassed": 13,
+  "databaseQuickChecksPassed": 8,
+  "gardenSubmitted": false
+}

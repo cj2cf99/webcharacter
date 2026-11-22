@@ -1056,7 +1056,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     }
     inputMode=mode==='registration'?'registration':'auto';
     if(disposed)return;
-    if(panel&&!panel.isDestroyed()){if(!ready)return;place();panel.webContents.send('screen-qa:mode',inputMode);if(visible){panel.show();panel.focus();}return;}
+    if(panel&&!panel.isDestroyed()){if(!ready)return;place();panel.webContents.send('screen-qa:mode',inputMode);if(visible){showPanel(panel);panel.focus();}return;}
     if(idleDraft)inputMode=idleDraft.mode;
     if(registration?.hasSaved?.()&&!chainActions.length)chainActions=['resume'];
     const created=createPanelWindow(electron,{width:360,height:260,show:false,frame:false,transparent:true,resizable:false,hasShadow:false,skipTaskbar:true,alwaysOnTop:true,title:'绯月 · 提问',
@@ -1096,7 +1096,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     try{await created.loadFile(entry);}catch(error){if(panel!==created||created.isDestroyed())return;created.destroy();throw error;}
     if(disposed||panel!==created||created.isDestroyed())return;
     if(forNag?.signal?.aborted){created.destroy();return;}
-    ready=true;place();created.webContents.send('screen-qa:changed',view());if(visible){if(line)showPanel(created);else created.show();created.focus();}
+    ready=true;place();created.webContents.send('screen-qa:changed',view());if(visible){showPanel(created);created.focus();}
   }
   function close(){if(disposed)return;disposed=true;clearTimeout(organizationTimer);draftWork?.abort();registrationDraft=null;pendingQuestion?.();inquiry.close();hide();details.close();records.close?.();
     if(threads)void threadReplies.close().finally(()=>threads.close());

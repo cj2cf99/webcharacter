@@ -145,3 +145,5 @@ node tools/check-project.mjs
 
 
 2026-11-23 05:42:45 JST，Windows 正式绯月安装菜单候选 9c9f31935a3a，常态一级从 13 项减为 8 项。安装目录的角色与托盘右键、分组展开、Esc 及隐藏动作已用临时资料复验通过。用户确认安装并跳过花园登记。
+
+2026-11-23 06:39:56 JST，Windows 绯月安装首击弹窗修复 54fe5c562796。角色、托盘和系统回退共 13 项实装模块测试通过，菜单内容与名称沿用原安装版。发布差异及安装回执见 personal-digital-companion/docs/releases/first-popup-20261123。

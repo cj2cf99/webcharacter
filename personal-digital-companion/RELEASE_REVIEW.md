@@ -1954,3 +1954,29 @@ Git 以远端 6562e7d 为比较基线，只纳入七项实现差异、三处测�
 
 
 联合版 39e557910df5 与菜单补装 a413300b5062 的代码、测试及两次安装回执已提交并普通推送至 origin/codex/workspace-checkpoint-20261120，发布提交 c786f0490bcf6b07ea895224c5173059609e292a 与首次远端回读一致。两次均按用户指令跳过花园登记。
+
+## 2026-11-23 JST · Windows 弹窗首击修复 · 54fe5c562796
+
+用户要求“顺便再次矫正第一遍弹窗不显示的bug”，在开发版六个入口冷启动复测结果说明后明确指示“安装”。本次交付 Windows 正式版的弹窗可见性修复。验收以角色或托盘打开一次后窗口已加载、可见、未最小化、获得焦点，且只建窗及载入一次为准。确认框持续无法显示时须释放自绘窗口并回退原系统对话框。任务提醒入口应显示什么尚待确认，菜单结构与技能均不在这次清单中。
+
+正式目标 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion，预检 PID 21824，06:07:02 JST 启动，REST v7。依据启动参数、回环、资料目录、桌面快捷方式、登录项及七项实装字节确定基线。源自 WebCharacter/personal-digital-companion 的开发修正，Git 发布分支参考 2c353dac0838297ee394c9f6b324eef4b1e23b39。文件级前后 SHA-256 与完整文本差异见 docs/releases/first-popup-20261123/windows-files.json、windows.patch。清单 SHA-256 为 54fe5c5627967cec48b1c178a714a0e34694156a52b2ffdf4978e72f31c10819。第三方可在正式前像上应用该差异逐件复验。
+
+- desktop/panel-window.mjs 首次主动显示后 Windows 仍隐藏时，先显示后激活同一窗口。
+- desktop/menu-popup.mjs 自绘右键菜单首开走共用显示入口。
+- desktop/task-inbox-host.mjs 任务管理等相同窗口的加载完成后再发送定位、显示及聚焦。
+- desktop/poll-settings-host.mjs 轮询设定及队列定位用共用显示入口。
+- desktop/settings-host.mjs 动画与声音从加载即建窗显示改为页面加载完成后主动显示，复用同一设置窗口。
+- desktop/screen-question-host.mjs 仅把普通问答首开和复用改为统一主动显示；正式版现有新闻、学习等分流的顺序按现场保留。
+- desktop/message-box.mjs 确认框检查可见后才解除超时保护，否则保留现有系统对话框回退。
+
+数据库结构、回填、生产业务写入、配置、依赖及 Worker 部署影响均为无。纯代码安装仅备份七个程序文件。准备目录 work/feiyue-first-popup-install-20261123。pwsh -NoProfile -File verify.ps1 -Mode candidate 使用正式树、临时资料及逐项覆盖的候选字节。六个角色自然冷启动、六个托盘吞掉首次显示模拟、一次持续隐藏确认框回退，13/13 通过。pwsh -NoProfile -File install.ps1 -Mode Rehearse 的中断与完整替换回退都通过。相同脚本 -Mode Preflight 通过，七项现场前像一致，八个既有数据库只读快检正常。开发阶段的桌面壳、问答、设置、轮询、消息框及标题栏回归通过。
+
+重点核对异常隐藏是否在同次点击纠正、快速重复打开是否共用加载、确认框失败时是否只回退一次。安装前再次校验范围和前像，等待空闲，正常关闭、备份及替换七件，再经原启动入口重启。命令 pwsh -NoProfile -File install.ps1 -Mode Install。核实新实例与 REST 身份、登录启动项、资料目录和实装哈希；从实际文件运行 verify.ps1 -Mode installed 复验。启动或替换异常依次恢复本次程序备份并启动原版。用户实际桌面体验、安装回执及 Git 远端回读待补记。第三方独立审核未执行。
+
+本次花园默认登记，未获具体清单确认。自动审批拒绝为本次登记运行 db:sync-schema，理由是该操作可能影响生产数据库且缺少本次明确授权。花园元数据尚未写入，未取得编号。安装结果与登记分别记录。
+
+### Windows 正式安装结果 · 2026-11-23 06:39:56 JST
+
+版本 `54fe5c562796` 已正常重启。原 PID 21824，新 PID 33120。七个实装文件的 SHA-256 均与候选清单相符。正式目录、启动入口、资料目录和 REST v7 已核实，八个既有数据库只读快检通过。安装回执摘录见 `docs/releases/first-popup-20261123/install-receipt.json`。
+
+对正式模块执行 `pwsh -NoProfile -File verify.ps1 -Mode installed`，在临时资料中启动独立 Electron 进程，13/13 通过。六个入口为右键菜单、任务管理、轮询设定、动画与声音、问绯月、确认对话框。角色入口自然冷启动及托盘入口模拟丢失首次显示均通过，每例仅创建及加载一个窗口。持续隐藏时确认框释放，系统对话框恰好回退一次。用户日常桌面体验待反馈。花园未提交，无批次。Git 远端回读另记。

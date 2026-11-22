@@ -1,4 +1,4 @@
-import {createPanelWindow} from './panel-window.mjs';
+import {createPanelWindow,showPanel} from './panel-window.mjs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
@@ -37,9 +37,9 @@ export function createMessageBoxes(electron,{bundle,root}){
       });
       contents.ipc.on('message-box:ready',(event,height)=>{
         if(!own(event)||!Number.isFinite(height)||panel.isVisible())return;
-        clearTimeout(readyTimer);
         panel.setBounds(position(Math.min(maxHeight,Math.max(120,Math.ceil(height)))));
-        panel.show();
+        showPanel(panel);
+        if(panel.isVisible())clearTimeout(readyTimer);
       });
       contents.ipc.on('message-box:choose',(event,index)=>{
         if(!own(event)||!Number.isInteger(index)||index<0||index>=buttons.length)return;

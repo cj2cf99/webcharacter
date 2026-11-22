@@ -1,4 +1,5 @@
 import {resolve} from 'node:path';
+import {showPanel} from './panel-window.mjs';
 import {pathToFileURL} from 'node:url';
 
 // 自绘右键菜单：仍由主进程的原生 Menu 提供条目、勾选状态和点击逻辑，这里只负责显示。
@@ -54,7 +55,7 @@ export function createMenuPopup(electron,{bundle,root,readCycle=()=>null,onOpen=
       // 只有本次 show() 等待中的首个尺寸才显示窗口；关闭后迟到的尺寸消息不会把菜单重新弹出。
       if(!pending&&!shown)return;
       place(WIDTH+SHADOW*2,height+SHADOW*2);
-      if(pending){pending=false;shown=true;win.show();win.focus();onOpen();}
+      if(pending){pending=false;shown=true;showPanel(win);win.focus();onOpen();}
     });
     contents.ipc.on('menu:choose',(event,path)=>{
       if(!own(event)||!Array.isArray(path)||!path.every(Number.isInteger))return;
