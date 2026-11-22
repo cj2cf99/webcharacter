@@ -19,6 +19,7 @@
     "reminderConsent": "reminder-review",
     "memory": "activity-review",
     "diaryAudit": "diary-audit",
+    "newsEditorial": "news-editorial",
     "diaryWriting": "diary-writing",
     "memoryRefinement": "memory-refinement",
     "emotionAppraisal": "emotion-appraisal",
@@ -30,7 +31,7 @@
     "image": "image-task-chain"
   },
   "menu": {
-    "news": "public-lookup",
+    "news": "news-editorial",
     "question": "personal-conversation",
     "continueNag": "personal-conversation",
     "registration": "record-submission",
