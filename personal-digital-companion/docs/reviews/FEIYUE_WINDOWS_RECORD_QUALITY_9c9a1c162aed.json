@@ -1,0 +1,177 @@
+{
+  "installedBase": "c2da3c2ccbf0",
+  "sourceBase": "03942463b3de924c380ae45a0c29a30bfbbee1c6",
+  "rest": 6,
+  "items": [
+    {
+      "path": "desktop/personality-nags.mjs",
+      "before": "d270678c0bfe31a2b356a7f17e43e59a5e5484feb2bcaf78adcc4c4b47582a5d",
+      "after": "ab487353af5f6203f4e2eec5575246f4155b658c91c4c37d42017d28695e8b1d"
+    },
+    {
+      "path": "desktop/nag-reply-check.mjs",
+      "before": null,
+      "after": "8f971ef2684434d60a2373ef84fc2674c38a3408d23c603fbb276fb803d80b6a"
+    },
+    {
+      "path": "desktop/memory-refinement.mjs",
+      "before": null,
+      "after": "b4b4d790968cffc996797c6574a7c3ffae45ba68e4ee2a9b368a2c42b4225e31"
+    },
+    {
+      "path": "agent/assistant/memory-refinement.mjs",
+      "before": null,
+      "after": "7d336ae4697a981cad627f0c85db6bbf19a172d169082ba8b8cdb3640f0cac70"
+    },
+    {
+      "path": "desktop/personality-diary.mjs",
+      "before": "d14cd0423c2a99ea037f087e36a969e2325f524153267f20d5072a214a1cbabc",
+      "after": "c6e06e9982539f6e3a1d018d3b75b2e4d523cc05003405bebcf921f02664ac0a"
+    },
+    {
+      "path": "desktop/ai-workflow-model.mjs",
+      "before": "0bd7b654f409b8fc6a8c9d058554fe836827657e70c931654519b1044b6c3a41",
+      "after": "c23966fda60741ebe1b8c80cb1abb19392aab7fb8dc62f5df9ebe7ba1e0e8474"
+    },
+    {
+      "path": "desktop/pending-questions.mjs",
+      "before": "4f688641b3d9c1c501d2effe9718e99600852db860562d7cafe37768442f8275",
+      "after": "9ae13e5a6bd3f662a3793fdfbceda268a1dbff31fa6ab2d96a0163092844d0d6"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "before": "6c0c1c465c7ed08d1ec07ae56e6f8366d24ae1412c7a2a27b08f69f4d94a09a7",
+      "after": "0cbce8a5e4b5e1ef98b3544381c73df6a82b209a4c99f5c6a5fbfa8f668d699e"
+    },
+    {
+      "path": "desktop/poll-scheduler.mjs",
+      "before": "aa4a8978043807dc2b542e7b994d8eef4bf3bafcc6acd55b325e67cceacaff81",
+      "after": "817a209b4d4e4555508e6f5bbffc1721fed6f5c5309ac19ac30321cb3b708df3"
+    },
+    {
+      "path": "desktop/conversation-ui.mjs",
+      "before": "942cb01533d32fbcebbd4cafb5ca8fa673817ab7eb113b967e32187b70e13c82",
+      "after": "88f8d8b3baeb0fc162d8316730d22798d9e156879045d0897df6082d6d6459e8"
+    },
+    {
+      "path": "desktop/conversation.css",
+      "before": "91e8f3178f2bd0b221e54947d70e31a0a2d25d08463c58d2120f3f3a1f9e04ee",
+      "after": "de75ba3a0a86fea8bbe7487586bb352df54a3b0105475d091076508bcbe32e7c"
+    },
+    {
+      "path": "output/desktop-bundle/conversation-ui.mjs",
+      "before": "942cb01533d32fbcebbd4cafb5ca8fa673817ab7eb113b967e32187b70e13c82",
+      "after": "88f8d8b3baeb0fc162d8316730d22798d9e156879045d0897df6082d6d6459e8"
+    },
+    {
+      "path": "output/desktop-bundle/conversation.css",
+      "before": "91e8f3178f2bd0b221e54947d70e31a0a2d25d08463c58d2120f3f3a1f9e04ee",
+      "after": "de75ba3a0a86fea8bbe7487586bb352df54a3b0105475d091076508bcbe32e7c"
+    },
+    {
+      "path": "skills/feiyue-interaction/source/routes.json",
+      "before": "3ee8fd63a11da55a9fb1d554ef29b3570af30e0152d47c9534fea8e2aa70dbd5",
+      "after": "0e118209ba889438944c2d3c559c802c1afe35e68ccfa969146de241631f6d77"
+    },
+    {
+      "path": "skills/personal-conversation/source/local-ai.json",
+      "before": "44d3030c5273e4d90bdd6a9f46ecbd01ed4c7902ca3216b36022cedc6e653a06",
+      "after": "5121238ea8d50f2eca7463a2cef880b29100d7a49d3a8ab94e4bee1571177cdb"
+    },
+    {
+      "path": "skills/personal-conversation/source/SKILL.md",
+      "before": "ad3934d830991c90a78dcfbf508cab7adfc53fd7b2cce95bd7849dd2141902a2",
+      "after": "279208d1e575ef866911e59e33a6a65a990733d0fb1b99f34124850ca6f08f55"
+    },
+    {
+      "path": "skills/personal-conversation/versions/personal-conversation-v2-5/local-ai.json",
+      "before": null,
+      "after": "5121238ea8d50f2eca7463a2cef880b29100d7a49d3a8ab94e4bee1571177cdb"
+    },
+    {
+      "path": "skills/personal-conversation/versions/personal-conversation-v2-5/SKILL.md",
+      "before": null,
+      "after": "5b26161617db41c845097d454c4ef71eec51cbee52b656fc1f37a526974ee029"
+    },
+    {
+      "path": "skills/personal-conversation/latest.json",
+      "before": "716368008f26b5d88b345ea1dfc3464fc8a1698d1d33b24483b392d6b333c193",
+      "after": "4dfcd3bfd46b6d947e54bef3191ff712c379e68e7ba7449a897d6a4f4a988f86"
+    },
+    {
+      "path": "skills/diary-writing/source/local-ai.json",
+      "before": "6c5ee0ad84ced4a4d6f15f9e822065953b6fb9d99292da0bab61e0f40236ffb0",
+      "after": "bc4aab14ffe28d3263b05532d7453b5f55648f0c5c34f64b69f5ac84b8e82f75"
+    },
+    {
+      "path": "skills/diary-writing/source/SKILL.md",
+      "before": "7c8cc816f2981775b829911fbc7e14636f77e732537cd0a85570e8dce2cfd042",
+      "after": "3a35adc5b1db6ca5d67014502895547a50e2c4d7ef07176c807272515f5fab0b"
+    },
+    {
+      "path": "skills/diary-writing/versions/diary-writing-v2-0/local-ai.json",
+      "before": null,
+      "after": "bc4aab14ffe28d3263b05532d7453b5f55648f0c5c34f64b69f5ac84b8e82f75"
+    },
+    {
+      "path": "skills/diary-writing/versions/diary-writing-v2-0/SKILL.md",
+      "before": null,
+      "after": "a52ba2fdbd79432927e164ee99db34f825c3c599c915276affa911088f2ac209"
+    },
+    {
+      "path": "skills/diary-writing/latest.json",
+      "before": "2f22472c0b1b08d07c45fe2e84924fdf3c5bb781c653944460002f9d14a2c408",
+      "after": "7c4941837bb9854c7633c55fdbe4ed7d8256cec06aedfccc9205e675f015b36b"
+    },
+    {
+      "path": "skills/memory-refinement/source/local-ai.json",
+      "before": null,
+      "after": "3325d8004ca3c1aa5892a2683acbba43f43335a97284002b63293de280971ea3"
+    },
+    {
+      "path": "skills/memory-refinement/source/schemas.json",
+      "before": null,
+      "after": "a468e91570a6e72ba6bfdf31948f830b991694f3ba3fa10755f1d7e5c20c331e"
+    },
+    {
+      "path": "skills/memory-refinement/source/SKILL.md",
+      "before": null,
+      "after": "95ebbf46d0544100e16b8dc84366f3336c3ce755333c7cd0da1ef91d93e784d8"
+    },
+    {
+      "path": "skills/memory-refinement/versions/memory-refinement-v1-6/local-ai.json",
+      "before": null,
+      "after": "3325d8004ca3c1aa5892a2683acbba43f43335a97284002b63293de280971ea3"
+    },
+    {
+      "path": "skills/memory-refinement/versions/memory-refinement-v1-6/schemas.json",
+      "before": null,
+      "after": "a468e91570a6e72ba6bfdf31948f830b991694f3ba3fa10755f1d7e5c20c331e"
+    },
+    {
+      "path": "skills/memory-refinement/versions/memory-refinement-v1-6/SKILL.md",
+      "before": null,
+      "after": "3fe2c3b8d9dc605178859829f4bb42830579144e1f701e179d4e265dbab9a5ca"
+    },
+    {
+      "path": "skills/memory-refinement/latest.json",
+      "before": null,
+      "after": "3aafc1898c54f07478cda2220add0b3f4ff2c96b21227ffc1c55634bfbb946b6"
+    },
+    {
+      "path": "skills/feiyue-interaction/versions/feiyue-interaction-v3-2/routes.json",
+      "before": null,
+      "after": "0e118209ba889438944c2d3c559c802c1afe35e68ccfa969146de241631f6d77"
+    },
+    {
+      "path": "skills/feiyue-interaction/versions/feiyue-interaction-v3-2/SKILL.md",
+      "before": null,
+      "after": "4dd850a3c457c496ee4b5f1ac1be1fd9454168afee5e7cf3691656ad73f619fb"
+    },
+    {
+      "path": "skills/feiyue-interaction/latest.json",
+      "before": "0f05a89d36bfadaf0953da060abe767b3617efca831fcee802c9780acd0f0888",
+      "after": "96c95244e186f5b1e7ed7f4719fbfd19dbc4427b31cf92a42383eb21d4692d1e"
+    }
+  ]
+}

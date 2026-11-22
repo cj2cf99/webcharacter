@@ -185,6 +185,7 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
     void execute(j,due);
   }
   function initial(j){
+    if(j.id==='refinement')return Math.max(now(),warmUntil)+memoryLimit+60_000;
     if(j.id==='aiHeartbeat')return now()+j.minutes*60_000;
     // 避免手记核对从同一分钟耗尽共享预算，导致修订每轮都排不到。
     if(j.id==='refinement')return Math.max(now(),warmUntil)+memoryLimit+60_000;

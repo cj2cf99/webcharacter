@@ -197,7 +197,7 @@ export async function startDesktop(electron,options={}){
   let diary,nags,curiosity,scenePanel,backgroundJob,backgroundController,backgroundKind;
   const memoryTitles={curiosity:'此刻所想',diary:'写日记',review:'补行动评价',nag:'准备念叨',diaryAudit:'核对手记',
     refinement:'修订手记与唠叨','task-review':'补写执行评价'};
-  const memoryPolls=['diary','diaryAudit','nag','review','curiosity',...(tasks.weatherRequest?['refinement']:[])];
+  const memoryPolls=['diary','diaryAudit','nag','review','curiosity','refinement'];
   const hasMemory=Boolean(memory?.readTasks&&localModel?.memory&&!options.benchmark);
   const memoryIdle=()=>!transcription?.busy&&!privateChat?.active&&!scenePanel?.panel&&!quitPending&&!work&&!localPool?.active&&!screenQuestion.hasLocalWork&&!screenQuestion.panel&&!screenQuestion.inquiryPanel&&
     !reminderReview?.panel?.isVisible()&&!taskInbox?.panel?.isVisible()&&tasks.activeCount()===0&&(!tasks.canPoll||tasks.canPoll());

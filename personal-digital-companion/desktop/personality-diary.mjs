@@ -9,6 +9,7 @@ import {readInteractionSkill} from './interaction-skills.mjs';
 import {createMemoryRefinement} from './memory-refinement.mjs';
 import {readDiarySources} from './diary-sources.mjs';
 import {answeredQuestion,isPendingQuestion,pendingLimit,questionTarget,questionText} from './pending-questions.mjs';
+import {appendDiaryBody,emptyDiaryBody} from '../agent/assistant/memory-refinement.mjs';
 
 const hash=s=>createHash('sha256').update(s).digest('hex');
 const schema=names=>({type:'object',properties:Object.fromEntries(names.map(k=>[k,{type:'string'}])),required:names,additionalProperties:false});
@@ -50,6 +51,19 @@ function dialogueText(original,cleaned){
   const labels=['你说：','绯月当时回复：'].filter(label=>original.includes(label));
   if(!labels.length||labels.some(label=>!cleaned.includes(label)))return original;
   return cleaned;
+}
+function narrativeParagraph({content,label},review,{text,comment}){
+  const lineKey=line=>line.trim().normalize('NFKC').replace(/[。？！!?]+$/u,'');
+  const source=[label?'来源摘记：'+content:content,'当时的评价：'+review];
+  const seen=new Set([content,review].flatMap(value=>value.split('\n')).map(lineKey));
+  const additions=text.split('\n').map(line=>line.trim()).filter(line=>{
+    const key=lineKey(line);
+    if(!key||seen.has(key)||/^(?:来源摘记|当时的评价|绯月私语|你说|绯月当时回复)\s*[：:]/u.test(line))return false;
+    seen.add(key);return true;
+  });
+  const privateWords=comment.replace(/^绯月私语\s*[：:]\s*/u,'').trim();
+  return [source[0],...additions,source[1],
+    privateWords&&!seen.has(lineKey(privateWords))?'绯月私语：'+privateWords:''].filter(Boolean).join('\n');
 }
 function* materialChunks(day,source,at,text){
   const chars=Array.from(cleanMemory(text));
@@ -103,8 +117,13 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
   const originals=createOriginalFiles({db,profile,memory,request,report:reportOriginals});
   const rows=(sql,...args)=>db.prepare(sql).all(...args);
   const put=(sql,...args)=>db.prepare(sql).run(...args);
-  const refinement=request&&model?.memory&&createMemoryRefinement({db,api,model,now,clean:cleanMemory,
-    evidence:refinementEvidence,cache:cacheRefined});
+  const refinement=model?.memory&&createMemoryRefinement({db,api:request?api:undefined,model,now,clean:cleanMemory,
+    evidence:refinementEvidence,cache:cacheRefined,
+    isLocalNag:id=>db.prepare("SELECT json_extract(json,'$.localOnly') AS private FROM nags WHERE id=?").get(id)?.private===1,
+    readLocalNags:()=>rows(`SELECT json FROM nags WHERE json_extract(json,'$.localOnly')=1 AND json_extract(json,'$.source')<>'audit'
+      AND json_extract(json,'$.status') IN ('用户结束','已解释','回合结束') ORDER BY rowid`).map(row=>JSON.parse(row.json)),
+    writeLocalNag:(previous,next)=>put('UPDATE nags SET json=?,dirty=0 WHERE id=? AND json=?',
+      JSON.stringify(next),previous.id,JSON.stringify(previous)).changes});
   const threadStamp=db.prepare('SELECT at FROM schedule WHERE job=?');
   const takeThread=db.prepare(`INSERT INTO schedule(job,at) VALUES(?,?)
     ON CONFLICT(job) DO UPDATE SET at=excluded.at WHERE schedule.at<?`);
@@ -239,7 +258,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
   function cacheNag(id,full){
     const current=db.prepare('SELECT json,dirty FROM nags WHERE id=?').get(id);
     const existing=current&&JSON.parse(current.json);
-    if(current?.dirty||existing?.localQuestion&&(existing.localOnly||!answeredQuestion(existing))||existing?.revision>=full.revision)return;
+    if(current?.dirty||existing?.localOnly||existing?.localQuestion&&!answeredQuestion(existing)||existing?.revision>=full.revision)return;
     if(isPendingQuestion(full)&&!existing&&nags().filter(isPendingQuestion).length>=pendingLimit)return;
     const merged={...full};
     if(existing?.localOriginals){
@@ -267,7 +286,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
           const local=db.prepare(diary?'SELECT json FROM pages WHERE id=?':'SELECT json,dirty FROM nags WHERE id=?').get(id);
           if(local){
             const n=JSON.parse(local.json);
-            if(local.dirty||n.localQuestion&&(n.localOnly||!answeredQuestion(n))||n.revision>=item.revision)continue;
+            if(local.dirty||n.localOnly||n.localQuestion&&!answeredQuestion(n)||n.revision>=item.revision)continue;
           }
           const full=await api(kind+'/'+encodeURIComponent(id),undefined,signal);
           signal?.throwIfAborted();
@@ -329,6 +348,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
         OR id=? ORDER BY rowid DESC LIMIT 4`,id,record.source==='nag'?record.source_id:'');
     const result=linked.flatMap(row=>{
       const entry=JSON.parse(row.json);
+      if(entry.localOnly)return [];
       return (entry.talk??[]).filter(line=>line.who==='你').slice(-3).map(line=>
         ({kind:'关联唠叨 '+row.id,day:tokyoDay(Date.parse(line.at)),snippet:safeOutput(line.text,240)}));
     });
@@ -355,7 +375,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     return stored;
   }
   function saveNag(n){
-    const dirty=!n.localQuestion||(!n.localOnly&&answeredQuestion(n));
+    const dirty=!n.localOnly&&(!n.localQuestion||answeredQuestion(n));
     n.revision++;put('INSERT OR REPLACE INTO nags VALUES(?,?,?)',n.id,JSON.stringify(n),Number(dirty));
   }
   function transaction(work){
@@ -374,7 +394,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     let failed;
     for(const row of rows('SELECT id,json FROM nags WHERE dirty=1')){
       const n=JSON.parse(row.json);
-      if(n.localQuestion&&(!answeredQuestion(n)||n.localOnly))continue;
+      if(n.localOnly||n.localQuestion&&!answeredQuestion(n))continue;
       try{
         if(typeof n.mood==='string'&&Array.from(n.mood).length>40){
           n.mood=safeOutput(n.mood,40);n.revision++;
@@ -592,7 +612,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
         const list=await api('diaries?day='+r.day,undefined,signal);
         const last=list.items[0];
         const prior=last&&await api('diaries/'+r.day+'.'+last.part,undefined,signal);
-        const grow=prior&&Array.from(prior.body+'\n\n'+batch.body).length<=5000;
+        const grow=fits(prior,batch.body);
         const part=grow?prior.part:(prior?.part??0)+1;
         const result=await originals.prepare('diaries',r.day+'.'+part,r.day,grow?prior.automaticTxt:null,packet.sections,signal);
         packet.plan={part,revision:grow?prior.revision:0,...result};
@@ -649,9 +669,9 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
   function latestPage(day){
     return pages(day).filter(p=>p.day===day).sort((a,b)=>b.part-a.part)[0];
   }
-  const fits=(prior,body)=>prior&&Array.from(prior.body+'\n\n'+body).length<=5000;
+  const fits=(prior,body)=>prior&&Array.from(appendDiaryBody(prior.body,body)).length<=5000;
   function extendPage(prior,batch){
-    return fits(prior,batch.body)?{...batch,body:prior.body+'\n\n'+batch.body,threads:prior.threads}:{...batch,threads:[]};
+    return fits(prior,batch.body)?{...batch,body:appendDiaryBody(prior.body,batch.body),threads:prior.threads}:{...batch,threads:[]};
   }
   function rankDiaryParts(day){
     const drafts=pendingDiaryParts(day);
@@ -719,7 +739,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     for(const line of (prior?.summary||'').split('\n')){
       const source=/^(你的日记|花园部署|当日消费)：(.+)$/.exec(line);
       if(source)sections.set(source[1],source[2]);
-      else if(line)local.push(line);
+      else if(line&&line!==emptyDiaryBody)local.push(line);
     }
     let summary=local.join(' '),tags=label;
     if(label){
@@ -777,7 +797,8 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
       const review=stage==='reviewAction'||stage==='reviewSource';
       const maxTokens=review?Math.max(450,Math.min(2048,Math.ceil(Array.from(data).length*1.4)+280)):650;
       const meta={...skill,stage,boundedOutput:true,backgroundBudget:true,maxTokens,aiBudget:45000,
-        ...(model.aiAck?{aiCheckpoint,aiTier:'2',aiReview:review||stage==='narrate'}:{})};
+        ...(model.aiAck?{aiCheckpoint,aiTier:'2',aiReview:review||stage==='narrate',
+          aiReviewGuidance:selected.localAi.qualityReview}:{})};
       return think(data,prompt,fields,signal,meta);
     };
     if(model.aiAck)write.key=(data,stage,id)=>'diary:'+selected.version+':'+id+':'+stage+':'+hash(data);
@@ -826,8 +847,8 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
         const narrateKey=write.key?.(excerpt,'narrate',e.id);
         const v=await write(excerpt,'narrate',['text','comment','thread'],narrateKey);
         if(!v.text||!v.comment)throw Error('日记草稿字段不完整');
-        const paragraph=[e.label?'来源摘记：'+e.content:null,v.text,'当时的评价：'+rated.review,'绯月私语：'+v.comment].filter(Boolean).join('\n');
-        const body=e.label?'【'+e.label+'】\n'+(e.sections?paragraph:paragraph.replace(/\n\s*\n/g,'\n')):e.content+'\n'+paragraph;
+        const paragraph=narrativeParagraph(e,rated.review,v);
+        const body=e.label?'【'+e.label+'】\n'+(e.sections?paragraph:paragraph.replace(/\n\s*\n/g,'\n')):paragraph;
         const thread=questionText(e.remaining||(!e.fromNag&&v.thread));
         const threads=[];
         if(thread){
@@ -841,7 +862,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
         prior=extendPage(prior,batch);
       }
       if(mode==='diary'&&!offline)rankDiaryParts(day);
-      if(mode==='diary'&&!offline&&!external.errors.length&&!deferred&&!substantive&&!db.prepare('SELECT 1 FROM pages WHERE day=?').get(day))stage(day,'empty-'+day,{body:'无所事事的一天',summary:'无所事事的一天',mood:'平静',tags:[],weather:sky,threads:[]},null);
+      if(mode==='diary'&&!offline&&!external.errors.length&&!deferred&&!substantive&&!db.prepare('SELECT 1 FROM pages WHERE day=?').get(day))stage(day,'empty-'+day,{body:emptyDiaryBody,summary:emptyDiaryBody,mood:'平静',tags:[],weather:sky,threads:[]},null);
       if(mode==='diary'&&!offline)try{await syncDrafts();}catch(error){signal.throwIfAborted();offline=error;}
     }
     progress({stage:mode==='review'?'同步本地记录':'整理手记收尾'});

@@ -9,6 +9,7 @@ import {personalityMemory} from '../assistant/personality-memory.mjs';
 import {refinementInterval} from '../assistant/memory-refinement.mjs';
 import {createMemoryRefinement} from '../../desktop/memory-refinement.mjs';
 import {createReminderChecks} from '../../desktop/reminder-checks.mjs';
+import {createPersonalityDiary} from '../../desktop/personality-diary.mjs';
 
 const day='2026-11-22', at='2026-11-22T02:00:00.000Z';
 const recordPath=`diaries/${day}.1`,refinePath=recordPath+'/refine';
@@ -86,6 +87,169 @@ test('旧记录备份只能固定一次，已结束唠叨只改评价，空日�
   assert.equal(raw._refinement.original.afterEvaluation,nag.afterEvaluation);
   await api('diaries',{...batch,body:'无所事事的一天'});
   assert.equal((await request(refinePath,{baseRevision:1,refineId:'empty',fields:{body:'假补写',summary:'测试'}})).status,409);
+});
+
+test('旧服务的修订读取返回 404 时跳过，入口上线后继续原记录',async t=>{
+  const profile=mkdtempSync(join(tmpdir(),'feiyue-refine-legacy-'));
+  const requests=[];
+  let missing=true;
+  const archived={...nag,talk:[{who:'绯月',text:'你愿意听我讲故事吗？',at},
+    {who:'你',text:'我给你讲故事。',at},{who:'绯月',text:'我给你讲故事，你听。',at}]};
+  const {api,request}=fixture(t);
+  await api('nags',archived);
+  const diary=createPersonalityDiary({profile,now:()=>Date.parse(at),
+    model:{memory:()=>assert.fail('可证的更正不需要模型')},
+    request(path,options){
+      const target=path.slice('/api/memory/'.length);
+      requests.push([target,options.method]);
+      if(missing&&target.endsWith('/refine'))return Response.json({error:'原记录不可用'},{status:404});
+      return request(target,options.body&&JSON.parse(options.body));
+    }});
+  t.after(()=>{diary.close();rmSync(profile,{recursive:true,force:true});});
+  await diary.refine(signal);
+  assert.equal(await diary.refine(signal),'本轮没有符合条件的修订');
+  assert.ok(requests.some(([path])=>path==='nags/closed/refine'));
+  assert.ok(requests.every(([,method])=>method==='GET'));
+  missing=false;
+  await diary.refine(signal);
+  assert.match(await diary.refine(signal),/已修订唠叨/);
+  const saved=(await api('nags/closed/refine')).record;
+  assert.deepEqual(saved.talk,archived.talk);
+  assert.match(saved.afterEvaluation,/我听你讲故事/);
+});
+
+test('事后修订移除历史空占位，保留来源摘要和原话，唠叨只追加更正',async t=>{
+  const {api}=fixture(t);
+  const body='你说：已经装好了。\n\n我等到了最新的结果。';
+  const summary='你的日记：安装顺利\n当日消费：配件 480 日元';
+  await api('diaries',{...batch,body:'无所事事的一天\n\n'+body,summary:'无所事事的一天\n'+summary});
+  const archived={...nag,talk:[{who:'绯月',text:'好了吗？',at},{who:'你',text:'已经装好。',at},
+    {who:'绯月',text:'还没动工就慢慢准备吧。',at}]};
+  await api('nags',archived);
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+  const runner=createMemoryRefinement({db,api,clean:text=>text.trim(),
+    loadSkill:async name=>name==='memoryRefinement'?{skill:'memory-refinement',version:'1.0',content:'固定复审',schemas,localAi}:
+      {version:'1.0',content:'现行格式'},
+    model:{async memory(text,prompt,_schema,_signal,skill){
+      const data=JSON.parse(text);
+      if(skill.stage==='plan')return {organize:data.record.kind==='唠叨'?'纠正把已完成误写成未动工':'',additions:'',format:''};
+      if(skill.stage==='draft'){
+        const {part}=data;
+        return {text:part.field==='afterEvaluation'?part.text+'\n绯月后记：我当时把已经装好听成尚未动工。':part.text,note:''};
+      }
+      assert.match(prompt,/固定复审/);
+      return {decision:'accept',part:'',reason:''};
+    }}
+  });
+  assert.match(await runner.run(signal),/已修订日记/);
+  const diary=await api(recordPath);
+  assert.equal(diary.body,body);
+  assert.equal(diary.summary,summary);
+  assert.match(await runner.run(signal),/已修订唠叨/);
+  const corrected=await api('nags/closed');
+  assert.deepEqual(corrected.talk,archived.talk);
+  assert.match(corrected.afterEvaluation,/绯月后记：我当时把已经装好听成尚未动工/);
+});
+
+test('明确待复核的唠叨按原话补记，保留整段发言和原评价',async t=>{
+  const {api}=fixture(t);
+  const archived={...nag,talk:[{who:'绯月',text:'什么时候到？',at},{who:'你',text:'最迟九点。',at},
+    {who:'绯月',text:'这句我先记下，之后我会按你的原话再核对。',at}],
+    afterEvaluation:'已保存原话，待复核这轮回应。'};
+  await api('nags',archived);
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+  const runner=createMemoryRefinement({db,api,clean:text=>text.trim(),
+    loadSkill:async name=>name==='memoryRefinement'?{skill:'memory-refinement',version:'1.0',content:'固定复审',schemas,localAi}:
+      {version:'1.0',content:'现行格式'},
+    model:{memory(){assert.fail('证据明确的更正不需要额外推理');}}
+  });
+  await runner.run(signal);
+  assert.match(await runner.run(signal),/已修订唠叨/u);
+  const {record,receipt}=await api('nags/closed/refine');
+  assert.deepEqual(record.talk,archived.talk);
+  assert.equal(record.afterEvaluation,archived.afterEvaluation+'\n绯月后记：重新核对这轮，你当时说的是「最迟九点。」');
+  assert.equal(receipt.revision,archived.revision+1);
+  await runner.run(signal);await runner.run(signal);
+  assert.equal((await api('nags/closed/refine')).record.revision,receipt.revision);
+});
+
+test('两条旧私密唠叨离线逐条补记，重开数据库后不重复也不外发',async t=>{
+  const profile=mkdtempSync(join(tmpdir(),'feiyue-nag-private-'));
+  let requests=0;
+  const model={memory(){assert.fail('本机可证的补记不需要模型');}};
+  const offline=()=>{requests++;assert.fail('私密唠叨不应走网络');};
+  let diary=createPersonalityDiary({profile,model,request:offline,now:()=>Date.parse(at)});
+  t.after(()=>{diary.close();rmSync(profile,{recursive:true,force:true});});
+  const sample=id=>({...nag,id,localOnly:true,revision:0,talk:[{who:'你',text:'最迟九点。',at},
+    {who:'绯月',text:'这句我先记下，之后我会按你的原话再核对。',at}]});
+  const first=sample('private-one');
+  first.talk.push({who:'你',text:'我给你讲故事。',at},{who:'绯月',text:'我给你讲故事。',at});
+  diary.saveNag(first);
+  diary.saveNag(sample('private-two'));
+  const before=diary.nags();
+  await diary.syncNags(signal);
+  assert.match(await diary.refine(signal),/已修订本机唠叨 private-one/u);
+  assert.equal(diary.nags().filter(n=>n.afterEvaluation.includes('绯月后记')).length,1);
+  diary.close();
+  diary=createPersonalityDiary({profile,model,now:()=>Date.parse(at)});
+  assert.match(await diary.refine(signal),/已修订本机唠叨 private-two/u);
+  assert.match(await diary.refine(signal),/本轮没有符合条件/u);
+  const corrected=diary.nags();
+  for(const record of before){
+    const next=corrected.find(row=>row.id===record.id);
+    assert.deepEqual(next.talk,record.talk);
+    assert.ok(next.afterEvaluation.startsWith(record.afterEvaluation+'\n绯月后记：重新核对这轮，你当时说的是「最迟九点。」'));
+    assert.equal(next.afterEvaluation.includes('我听你讲故事。'),record.id===first.id);
+    assert.equal(next.revision,record.revision+1);
+  }
+  assert.equal(requests,0);
+  const db=new DatabaseSync(join(profile,'personality-memory.sqlite'),{readOnly:true});
+  try{
+    const rows=db.prepare('SELECT data FROM memory_refinements WHERE active=0').all().map(row=>JSON.parse(row.data));
+    assert.equal(rows.length,2);
+    assert.ok(rows.every(row=>row.localOnly&&row.previous.afterEvaluation===nag.afterEvaluation));
+  }finally{db.close();}
+
+  diary.close();
+  const listCalls=[];
+  const request=async (path,{method})=>{
+    listCalls.push([path,method]);
+    assert.match(path,/^\/api\/memory\/(?:diaries|nags)\?page=0$/u);
+    return Response.json(path.includes('/nags')?{items:[{...sample(first.id),revision:20}],total:1}:{items:[],total:0});
+  };
+  diary=createPersonalityDiary({profile,model,request,now:()=>Date.parse(at)});
+  await diary.refresh(signal);
+  await diary.refine(signal);await diary.refine(signal);
+  assert.deepEqual(diary.nags(),corrected);
+  assert.equal(listCalls.length,4);
+  assert.ok(listCalls.every(([,method])=>method==='GET'));
+});
+
+test('远端修订准备好后改成私密，放弃待提交稿且不发写请求',async t=>{
+  const {api}=fixture(t);
+  const before={...nag,talk:[{who:'你',text:'最迟九点。',at},
+    {who:'绯月',text:'这句我先记下，之后我会按你的原话再核对。',at}]};
+  await api('nags',before);
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+  let privateNow=false,reads=0,writes=0;
+  const runner=createMemoryRefinement({db,clean:text=>text.trim(),isLocalNag:()=>privateNow,
+    async api(path,body){
+      if(body)writes++;
+      const result=await api(path,body);
+      if(path==='nags/closed/refine'&&++reads===2)privateNow=true;
+      return result;
+    },
+    loadSkill:async name=>name==='memoryRefinement'?{skill:'memory-refinement',version:'1.0',content:'固定复审',schemas,localAi}:
+      {version:'1.0',content:'现行格式'},
+    model:{memory(){assert.fail('此用例应在调用模型前结束');}}
+  });
+  await runner.run(signal);
+  assert.match(await runner.run(signal),/已停止远端修订/u);
+  assert.equal(writes,0);
+  assert.deepEqual(await api('nags/closed'),before);
+  const row=db.prepare('SELECT active,data FROM memory_refinements').get();
+  assert.equal(row.active,0);
+  assert.equal(JSON.parse(row.data).cancelled,true);
 });
 
 test('拟稿断点、技能版本、丢失回执、追加与本机单任务归档',async t=>{

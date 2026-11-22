@@ -29,8 +29,8 @@ function valid(value,schema){
 
 function formatReview(input,final){
   const keys=Object.keys(input.candidate??{}).filter(key=>typeof input.candidate[key]==='string');
-  const properties={decision:{enum:final?['accept','revise']:['accept','edit','revise']},
-    reason:{type:'string',maxLength:100}};
+  const reason={type:'string',maxLength:100},decision={enum:final?['accept','revise']:['accept','edit','revise']};
+  const properties=input.skill.aiReviewGuidance?{reason,decision}:{decision,reason};
   if(!final)Object.assign(properties,{field:{enum:['',...keys]},replacement:{type:'string',maxLength:240}});
   return {type:'object',properties,required:Object.keys(properties),additionalProperties:false};
 }
@@ -66,9 +66,11 @@ function callDetails(input){
       skill:diary?{...skill,aiTier:tier,maxTokens:Math.max(skill.maxTokens??0,768)}:{...skill,aiTier:tier}};
   }
   const final=phase==='4-check';
+  const guidance=skill.aiReviewGuidance?' '+skill.aiReviewGuidance:'';
+  const reviewTier=phase==='2-check'&&skill.name==='diary-writing'&&skill.stage==='narrate'?'4':tier;
   return {text:JSON.stringify({材料:text,任务:instruction,草稿:input.candidate,先前意见:input.reason}),
-    instruction:final?'对当前草稿做最终判定。保留文字。符合原任务和证据时填 accept，否则填 revise。reason 写明错误位置和原因。':reviewRule,
-    schema:formatReview(input,final),skill:{...skill,aiTier:tier,maxTokens:final?130:250}};
+    instruction:(final?'对当前草稿做最终判定。保留文字。符合原任务和证据时填 accept，否则填 revise。reason 写明错误位置和原因。':reviewRule)+guidance,
+    schema:formatReview(input,final),skill:{...skill,aiTier:reviewTier,maxTokens:final?130:250}};
 }
 
 function interpret(input,outcome){
@@ -119,12 +121,14 @@ export function createAiWorkflowModel({model,file,log,safeStorage}){
     execute(input,signal,progress,attempt){
       const {text,instruction,schema,skill}=callDetails(input);
       progress?.(input.phase==='simple'?'本地思索…':{
-        '2-write':'2B 正在生成…','2-check':'2B 正在校对…','9-write':'9B 正在补正…',
+        '2-write':'2B 正在生成…','2-check':skill.aiTier+'B 正在校对…','9-write':'9B 正在补正…',
         '9-check':'9B 正在校对…','4-check':'4B 正在做最终判定…'}[input.phase]);
       return model.memory(text,instruction,schema,signal,{...skill,aiAttemptId:attempt});
     }});
   async function memory(text,instruction,schema,signal,options={}){
-    const {aiReview=false,aiCheckpoint,aiPriority=1,aiCurrentPriority,aiDeferred=false,aiKeep,aiFallback,aiBudget,...skill}=options;
+    const {aiReview=false,aiCheckpoint,aiPriority=1,aiCurrentPriority,aiDeferred=false,aiKeep,aiFallback,aiBudget,aiPrivate=false,...skill}=options;
+    if(aiPrivate)return queue.front(active=>model.memory(text,instruction,schema,
+      aiBudget?AbortSignal.any([active,AbortSignal.timeout(aiBudget)]):active,skill),signal);
     const outcome=await queue.submit({phase:aiReview?'2-write':'simple',text,instruction,schema,skill,keep:aiKeep,fallback:aiFallback},{
       signal,priority:aiPriority,currentPriority:aiCurrentPriority,checkpoint:aiCheckpoint,immediate:!aiDeferred,budget:aiBudget});
     if(outcome.failure)throw routeError(outcome.failure.message,outcome.failure.code);

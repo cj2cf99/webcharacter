@@ -2,7 +2,8 @@ import {randomUUID} from 'node:crypto';
 import {tokyoDay} from './conversation-history.mjs';
 import {untilAbort} from './chat-budget.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
-import {canRefine,checkedRefinement,endedNag,protectedDiaryText,refinementDigest,refinementInterval,refinementText} from '../agent/assistant/memory-refinement.mjs';
+import {canRefine,checkedRefinement,emptyDiaryBody,endedNag,protectedDiaryText,refinementDigest,refinementInterval,refinementText} from '../agent/assistant/memory-refinement.mjs';
+import {nagCorrectionAfterword} from './nag-reply-check.mjs';
 
 const limit=20;
 const size=144;
@@ -62,8 +63,16 @@ function diaryParts(body,quotes){
 }
 
 function splitFields(fields,quotes){
+  const bodyPrefix=emptyDiaryBody+'\n\n';
+  const realBody=fields.body?.startsWith(bodyPrefix)?fields.body.slice(bodyPrefix.length):null;
+  const mixedDiary=realBody&&quotes.every(quote=>realBody.includes(quote));
   return Object.entries(fields).flatMap(([field,text])=>{
-    const parts=field==='body'?diaryParts(text,quotes):chunks(text);
+    const placeholder=mixedDiary&&(field==='body'?bodyPrefix:field==='summary'?emptyDiaryBody+'\n':'');
+    const removePlaceholder=placeholder&&text.startsWith(placeholder);
+    const rest=removePlaceholder?text.slice(placeholder.length):text;
+    const parts=field==='body'?diaryParts(rest,quotes):
+      removePlaceholder?[{text:rest,fixed:true}]:chunks(rest);
+    if(removePlaceholder)parts.unshift({text:placeholder,removePlaceholder:true});
     if(!parts.length)parts.push({text:''});
     return parts.map((part,index)=>({...part,id:field+'-'+(index+1),field,last:index===parts.length-1}));
   });
@@ -99,7 +108,7 @@ function cooling(receipt,now){
   return Boolean(receipt&&now-Date.parse(receipt.refineDatetime)<refinementInterval);
 }
 
-export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Date.now,loadSkill=readInteractionSkill}){
+export function createMemoryRefinement({db,api,model,evidence,clean,cache,readLocalNags,writeLocalNag,isLocalNag,now=Date.now,loadSkill=readInteractionSkill}){
   db.exec(`CREATE TABLE IF NOT EXISTS memory_refinements (
     task_id TEXT PRIMARY KEY, active INTEGER NOT NULL, data TEXT NOT NULL);
     CREATE UNIQUE INDEX IF NOT EXISTS memory_refinements_one ON memory_refinements(active) WHERE active=1;
@@ -115,6 +124,7 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Da
   const writeChecked=db.prepare('INSERT OR REPLACE INTO memory_refinement_checked VALUES(?,?,?)');
   const readScan=db.prepare('SELECT data FROM memory_refinement_scan WHERE id=1');
   const writeScan=db.prepare('INSERT OR REPLACE INTO memory_refinement_scan VALUES(1,?)');
+  const saveLocalHistory=db.prepare('INSERT INTO memory_refinements VALUES(?,0,?)');
   let running=false;
   let outputKey;
 
@@ -130,6 +140,33 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Da
 
   async function fingerprint(job,fields){
     return refinementDigest([fields,job.format.version,job.skill.version,job.evidence,job.quotes]);
+  }
+
+  function correctedNagFields(record,correction){
+    const previous=refinementText('nags',record);
+    if(!correction||previous.afterEvaluation.includes(correction))return null;
+    const afterEvaluation=[previous.afterEvaluation,correction].filter(Boolean).join('\n');
+    return checkedRefinement('nags',record,{...previous,afterEvaluation});
+  }
+
+  async function reviseLocalNag(signal,progress){
+    for(const record of readLocalNags?.()??[]){
+      const fields=correctedNagFields(record,nagCorrectionAfterword(record,clean));
+      if(!fields)continue;
+      const receipt={refineId:randomUUID(),revision:record.revision+1,refineDatetime:new Date(now()).toISOString(),
+        digest:await refinementDigest(fields)};
+      signal.throwIfAborted();
+      progress({stage:'补记本机唠叨'});
+      db.exec('BEGIN');
+      try{
+        const updated=writeLocalNag(record,{...record,afterEvaluation:fields.afterEvaluation,revision:receipt.revision});
+        if(updated)saveLocalHistory.run(receipt.refineId,JSON.stringify({kind:'nags',id:record.id,baseRevision:record.revision,
+          previous:refinementText('nags',record),fields,note:'我按原话补了一条本机更正。',receipt,localOnly:true}));
+        db.exec('COMMIT');
+        if(updated)return '已修订本机唠叨 '+record.id;
+      }catch(error){db.exec('ROLLBACK');throw error;}
+    }
+    return '';
   }
 
   async function complete(job,remote){
@@ -155,14 +192,22 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Da
     const list=await api(kind+'?page='+from.page,undefined,signal);
     signal.throwIfAborted();
     const page=list.items.slice(from.offset);
-    const offset=page.findIndex(item=>kind==='diaries'||endedNag.has(item.status));
+    const offset=page.findIndex(item=>kind==='diaries'||endedNag.has(item.status)&&!isLocalNag?.(item.id));
     scan.next=kind==='diaries'?'nags':'diaries';
     if(offset<0||from.offset+offset+1>=list.items.length){
       scan[kind]=(from.page+1)*limit<list.total?{page:from.page+1,offset:0}:{page:0,offset:0};
     }else scan[kind]={page:from.page,offset:from.offset+offset+1};
     if(offset<0){writeScan.run(JSON.stringify(scan));return null;}
     const id=idOf(kind,page[offset]),route={kind,id};
-    const remote=await api(pathFor(route),undefined,signal);
+    let remote;
+    try{remote=await api(pathFor(route),undefined,signal);}
+    catch(error){
+      signal.throwIfAborted();
+      // 旧服务尚无修订入口，记录在列表读取后被删除也会返回 404。
+      if(error.status!==404)throw error;
+      writeScan.run(JSON.stringify(scan));
+      return null;
+    }
     signal.throwIfAborted();
     if(!canRefine(kind,remote.record)||cooling(remote.receipt,now())){
       writeScan.run(JSON.stringify(scan));return null;
@@ -185,9 +230,10 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Da
 
   async function rebase(job,remote,signal){
     const {record,quotes}=remote;
-    const sources=await evidence?.(job.kind,job.id,record,signal,remote.subject)??[];
-    signal.throwIfAborted();
     const previous=refinementText(job.kind,record),context=contextFor(record);
+    const correction=job.kind==='nags'&&record.source!=='audit'?nagCorrectionAfterword(record,clean):'';
+    const sources=correction?[]:await evidence?.(job.kind,job.id,record,signal,remote.subject)??[];
+    signal.throwIfAborted();
     if(job.submission&&JSON.stringify([previous,context,sources,quotes])===
         JSON.stringify([job.previous,job.context,job.evidence,job.quotes])){
       job.baseRevision=record.revision;
@@ -198,7 +244,7 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Da
     if(job.plan||job.submission){
       job.previousDraft={baseRevision:job.baseRevision,previous:job.previous,plan:job.plan,drafts:job.drafts,reviews:job.reviews};
     }
-    Object.assign(job,{baseRevision:record.revision,previous,parts:splitFields(previous,quotes??[]),context,evidence:sources,quotes,
+    Object.assign(job,{baseRevision:record.revision,previous,parts:splitFields(previous,quotes??[]),context,evidence:sources,quotes,correction,
       plan:null,drafts:{},reviews:[],partPlans:{},partReviews:{},note:'',submission:null,sent:false});
   }
 
@@ -264,10 +310,19 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Da
     return true;
   }
 
+  function cancelRemoteIfPrivate(job){
+    if(job.kind!=='nags'||!isLocalNag?.(job.id))return false;
+    history.run(JSON.stringify({kind:job.kind,id:job.id,baseRevision:job.baseRevision,
+      previous:job.previous,fields:job.submission?.fields,localOnly:true,cancelled:true}),job.taskId);
+    return true;
+  }
+
   async function submit(job,signal,progress){
     progress({stage:'核对修订回执'});
+    if(cancelRemoteIfPrivate(job))return '这条唠叨改为仅本机，已停止远端修订';
     const path=pathFor(job),remote=await api(path,undefined,signal);
     signal.throwIfAborted();
+    if(cancelRemoteIfPrivate(job))return '这条唠叨改为仅本机，已停止远端修订';
     if(verifyReceipt(job,remote))return complete(job,remote);
     if(remote.record.revision!==job.baseRevision){
       if(job.sent&&remote.receipt?.revision>job.baseRevision+1)throw Error('最近回执已有更新，本次提交仍待核对');
@@ -284,9 +339,10 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Da
         return '文种格式已更新，下轮接着修订同一条';
       }
     }
+    progress({stage:'提交已复核的修订'});
+    if(cancelRemoteIfPrivate(job))return '这条唠叨改为仅本机，已停止远端修订';
     const {refineId,fields}=job.submission;
     job.sent=true;store(job);
-    progress({stage:'提交已复核的修订'});
     await api(path,{refineId,baseRevision:job.baseRevision,fields},signal);
     signal.throwIfAborted();
     const saved=await api(path,undefined,signal);
@@ -299,14 +355,28 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Da
     if(running)return {deferred:true};
     running=true;
     try{
+      signal.throwIfAborted();
+      const local=await reviseLocalNag(signal,progress);
+      if(local)return local;
+      if(!api)return '本轮没有符合条件的本机修订';
       let job=JSON.parse(active.get()?.data??'null');
       if(!job)job=await choose(signal);
       if(!job)return '本轮没有符合条件的修订';
+      if(cancelRemoteIfPrivate(job))return '这条唠叨改为仅本机，已停止远端修订';
       if(job.submission&&job.sent)return await submit(job,signal,progress);
       const format=await loadSkill(formatHint(job.kind));
       signal.throwIfAborted();
       if(format.version!==job.format.version)useFormat(job,format);
       if(job.submission)return await submit(job,signal,progress);
+      if(job.correction){
+        const fields=correctedNagFields({...job.context,...job.previous},job.correction);
+        if(fields){
+          job.note='我按原话补了一条更正，保留了当时的发言。';
+          job.submission={refineId:randomUUID(),fields,digest:await refinementDigest(fields)};
+          store(job);
+          return await submit(job,signal,progress);
+        }
+      }
       if(job.parts.some(part=>!part.fixed&&!job.drafts[part.id]&&[...part.text].length>size)){
         job.parts=job.parts.flatMap(part=>{
           if(part.fixed||job.drafts[part.id]||[...part.text].length<=size)return [part];
@@ -326,11 +396,15 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Da
           parts:overview.map(({id,text,fixed})=>({id,text:long?shorten(text,55):text,fixed}))},signal,270);
         store(job);
       }
-      const hasFormatCleanup=parts.some(part=>!part.fixed&&part.field==='body'&&tidyDiaryPart(part.text,part.last)!==part.text);
+      const hasFormatCleanup=parts.some(part=>part.removePlaceholder||
+        !part.fixed&&part.field==='body'&&tidyDiaryPart(part.text,part.last)!==part.text);
       if(!long&&!hasFormatCleanup&&Object.values(job.plan).every(value=>!value.trim()))return await complete(job);
       for(let index=0;index<parts.length;index++){
         const part=parts[index];
         if(job.drafts[part.id])continue;
+        if(part.removePlaceholder){
+          job.drafts[part.id]={text:'',note:'我移除了已有正文的空日记占位。'};store(job);continue;
+        }
         if(part.fixed){job.drafts[part.id]={text:part.text,note:''};store(job);continue;}
         const note=job.reviews.at(-1)?.reason;
         const extend=part.last&&['body','afterEvaluation'].includes(part.field);

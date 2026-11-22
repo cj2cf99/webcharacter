@@ -38,7 +38,7 @@ function threadCard(row,data,shown=false){
   const summary=element('summary','','thread-summary');
   const title=row.title||row.preview?.text?.slice(0,28)||'新对话';
   summary.append(head(title,chip(state,row.closed!==null?'ok':tone),element('time',time)));
-  if(row.preview?.text&&row.preview.text!==title)summary.append(element('p',row.preview.text,'fy-clamp'));
+  if(row.preview?.text&&row.preview.text!==title)summary.append(element('p',row.preview.text,'thread-preview fy-clamp'));
   if(row.sourceLabel)summary.append(element('small',row.sourceLabel,'fy-meta'));
   const detail=element('div','','thread-detail');
   cardNode.append(summary,detail);cardNode.dataset.thread=row.id;

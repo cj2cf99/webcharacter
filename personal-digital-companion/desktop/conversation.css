@@ -57,6 +57,7 @@ button.source{display:block;text-align:left;overflow-wrap:anywhere}
 #threadTabs .fy-seg{flex-wrap:wrap}
 .thread-summary{padding:.5rem .6rem;cursor:pointer}
 details.fy-card>summary.thread-summary{display:block}
+details[open]>.thread-summary>.thread-preview{display:none}
 .thread-summary p,.thread-message p{margin:.2rem 0;overflow-wrap:anywhere;white-space:pre-wrap}
 .thread-detail{padding:.55rem .65rem;min-width:0}
 .thread-source{margin-bottom:.55rem;color:var(--fy-muted);overflow-wrap:anywhere}

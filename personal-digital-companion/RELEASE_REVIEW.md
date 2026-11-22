@@ -1603,3 +1603,47 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 使用实际安装路径的模型、服务及页面，以临时测试资料运行 installed-replay.mjs。截图样例在 CPU 上用时 26.021 秒，回执为 keep、空引文，SQLite 中同一欲求及满足条件保留，档位 −4、奖励维持 0。验收标题对照返回 satisfied、原文引证、维持 3 次，未重建同一欲求。正向对照的内心话仍带期待语气。任务日志分段、原始 JSON 折叠及展开回读、深浅色和窄窗通过；正式个人资料的日常使用体验待用户复验。本次无迁移，按用户决定跳过花园登记。
 
 本次正式安装的发布源码、技能、测试及审核记录已从独立工作树普通推送到 origin/codex/workspace-checkpoint-20261120，远端回读提交 827d0a476d9c91085fc981790070c8806fab4d2b 与发布源码一致。该发布工作树三组专项测试 41/41 通过。
+
+## 2026-11-23 JST · Windows 绯月唠叨与手记固定复审
+
+**需求与验收。** 用户报告对话历史在展开时重复显示相同文字，续答会重复旧问题，有时答错场景或人物。要求复审现有唠叨及日记，固定写入 Skill，能当场改就当场改，否则事后按原话逐条补记。以原四条真实对话试错，加正常回应对照，保留原始发言并控制耗时和 token。需求依据见来源子项目 `REQUIREMENTS.md` 的「唠叨与日记的固定复审」和「人物归属、事后更正与响应时效」，设计和六轮开发自审见 `docs/FEIYUE_PERSONALITY_MEMORY.md` 及 `docs/reviews/FEIYUE_RECORD_QUALITY_REVIEW_2026-11-23.md`。验收覆盖展开后仍可读正文及来源、正确归属、旧问题不再复述、正常回复一次推理、失败后的补记与版本回读以及发言原样保留。
+
+**目标与比较。** Windows 本机正式绯月，根目录 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，沿用应用入口和 `output/desktop-profile`。只读核对实装基线 `4f12e1d6d84e`、回环 REST v6、PID 11844、启动时间 2026-11-23 04:03:19.596 JST。来源为 `G:/selftool/WebCharacter/personal-digital-companion`，Git 基线 `03942463b3de924c380ae45a0c29a30bfbbee1c6` 加固定复审的工作区差异。对实装前像逐段合入，保留正式 Skill 热更新宿主、天气、任务和花园接口。候选 `58a789073314`，清单 SHA-256 `58a789073314ed72cae48baf89a2d102d9523c4b062f8dde6f051ddd071e64b3`。`G:/selftool/WebCharacter/work/feiyue-record-quality-windows-20261123` 保存 `prepare.mjs`、`windows-files.json` 和各项前像与候选。共 34 项，18 项既有文件及 16 项新增。Worker 代码、知识库、新闻和其他并行开发无发布差异。
+
+**逐项变更。**
+
+- `desktop/conversation-ui.mjs`、`desktop/conversation.css` 和 `output/desktop-bundle/` 下对应两项。收起时保留预览，展开时只隐藏卡头的重复预览，详情中保留发言、说话人、来源和继续回复。维持原月印标题栏和 JST 时间展示。
+- `desktop/personality-nags.mjs`、`desktop/nag-reply-check.mjs`、`desktop/pending-questions.mjs`。新增可以根据原话确定的角色纠正，对照同线原答及已出现的话拦截旧题复述、历史长答串场和空占位。一般回复一次模型生成，必要时额外改写一次，合计 25 秒预算。二次结果仍不合格则保留原话并明确留待复核。正常回应或必要短引文照常显示。
+- `desktop/personality-diary.mjs`、`desktop/ai-workflow-model.mjs`。写入前清除生成字段中的重复语句及伪栏目，保留来源原话和既有评价，成文复审核对归属。新增正文替换空占位的组装规则，云端追加仍由服务端接口负责。
+- `desktop/memory-refinement.mjs`、`agent/assistant/memory-refinement.mjs`、`desktop/shell.mjs`、`desktop/poll-scheduler.mjs`。复用闲时队列做逐条修订和回执检查。私密唠叨在本机补记，关联的原始发言字段保持等值。同步记录需要服务端 `/refine`，旧接口的读取若返回 404，跳过该次记录，无写请求，到后续轮询再检查。服务端可用后，按原记录编号进行修订和独立回读。
+- `skills/feiyue-interaction` 的路由、3.2 版本指针和快照，以及 `personal-conversation` 2.5、`diary-writing` 2.0、`memory-refinement` 1.6 的源码、版本指针和快照。固定即时回应、手记成文和事后修订规则。隔离目录读取到 23 项能力及以上三个随附版本，实装预检三项均无外置覆写。
+
+**数据和配置影响。** 用户原话、说话人、时间、现有附件和原编号继续保留。安装不批量回填。启动时在本机 `personality-memory.sqlite` 新建三张可重建的修订表和活动任务索引，在 `reminder-checks.sqlite` 增加每 60 分钟的闲时修订轮询。新轮询错开启动批次，已有轮询沿用原设置。无云端迁移、凭据、端口、依赖、模型文件或本机 REST 版本变化。
+
+**实际验证。**
+
+- `node prepare.mjs` 为候选 ESM 运行 `node --check`，验证各 Skill 的实际路由和值。来源项目 `node --test agent/tests/conversation-threads.test.mjs agent/tests/personality-memory.test.mjs agent/tests/diary-audit.test.mjs agent/tests/memory-refinement.test.mjs` 76 项通过。隔离实装候选运行同组桌面专项 74 项通过。两项网页身份与 TXT 上传路由用例依赖未纳入的 Worker 接线，在仅桌面隔离树中失败，使用 `--test-skip-pattern '网页只读|绯月以桌宠身份上传'` 单独排除，来源测试全量通过。候选 `node --test --test-name-pattern '成文|首问' agent/tests/ai-workflow.test.mjs` 的成文归属修正通过。
+- `node nag-fast-replay.mjs --no-baseline` 实际 4B CPU 回放。四条归档坏稿均纠正，五条对照原样通过。强制改写失败可按原话补记，五次隔离试修各写一次并回读，正式唠叨原话在回放前后等值。正常实模 9.7 秒，292 输入 token、91 输出 token，无额外复审调用。两条确需改写的推理分别为 13.2 和 14.2 秒，分别为 262+62、278+83 token。旧服务 404 的独立回归核对无写入，接口恢复后原记录成功补记、原话严格等值。`node diary-record-replay.mjs` 对 16 篇只读排查及四篇隔离试修全部通过。
+- 隐藏 Electron 使用隔离资料运行 `tools/run-electron-check.mjs tools/test-conversation-threads-electron.mjs`，浅色及 `--dark` 均通过，包括展开去重、原话、来源、切线、便签和 360px 布局。旧实装树的 `node tools/test-desktop-shell.mjs` 在旧测试查找「特殊菜单」的标签时停止，正式菜单已经使用其它名称。实际窗口的关键路径用上述 Electron 测试及安装预检补充。正式界面和实际长期轮询待发布后确认。
+- 在同一隔离树运行 `tools/run-electron-check.mjs tools/test-release-panel-titlebar-electron.mjs`。七个面板的深浅色、原生标题栏、热加载及轮询设定通过。旧巡检的菜单标签断言已过期，源项目完整版包含候选范围外的情绪日志展示。隔离用例仅去除该段情绪日志断言，保留其余检查。
+- `pwsh -NoProfile -File install.ps1 -Mode Preflight` 34 项前像和新增路径、实际启动入口、进程、原资料及七个 SQLite 库完整性通过，检查时无在途任务。`pwsh -NoProfile -File install.ps1 -Mode Rehearse` 隔离演练通过，包括第一项替换后中断回退和全量回退。
+
+**未完成事项和审核关注。** 四条真实归档属于已同步记录。按现有发布记录，已发布的 `subscriptions-api` 基线缺少 `/refine`，Windows 先更新时这四条的正式同步补记及旧日记的正式逐条修订仍待配套服务发布。尚未写正式历史。请重点核对旧服务 404 回退、未来重试和回执、本机私密记录不外发、展开时正文可见、正常回复不增加固定模型调用、原话等值及冷启动错峰。第三方独立审核未执行。
+
+**安装和恢复。** 正式安装命令为候选目录下 `pwsh -NoProfile -File install.ps1 -Mode Install`。需用户明确授权；安装前再次核对清单和正式前像，等待任务收齐，正常退出旧应用，备份旧文件及七个 SQLite 库，原子替换并按原入口启动。后检核对新 PID、启动时间、34 个摘要、REST v6、已认证和未认证的技能目录、三项技能实际版本、原提醒和任务、本机三张修订表及一项新轮询、七库完整性、原有唠叨发言及日记缓存摘要。失败时正常退出候选、恢复已核验的文件并重启基线，保留 SQLite 备份，不自动用旧备份覆盖用户资料。安装后另记实际完成时刻、回执、Git 同步及用户界面复验。
+
+**确认与花园。** 本候选的具体安装及受控重启待用户确认，未安装、重启、提交或推送。按最新规则默认登记，草案编号 `feiyue-record-quality-20261123`、归属待正式读取场景核对「网页角色组件 → 绯月（桌面精灵）」。准确清单须使用实际安装结果、当时的线上结构和版本，展示后另经用户确认。当前制单所复用的 `G:/cloudflare/myapp/src/features/garden/store.mjs` 按发布次数推导版本，成功新增一次发布会增加主版本，和新规则要求的 0.1 不一致。等能用实际花园模型校验 0.1 后再准备正式登记，不手填版本。未生成本次 SQL、未提交花园批次、未写花园生产库。
+
+### 9c9a1c162aed · 安装前基线变动与复核
+
+用户回复「确认」，授权前述 Windows 记录复审更新及受控重启。正式安装首次检查发现四个界面文件已随情绪复盘 `c2da3c2ccbf0` 实装更新。校验在停机前退出，旧候选没有写入或重启。当前正式 PID 26996，2026-11-23 04:21:52.512 JST 启动，REST v6。
+
+本次安装清单保留原来的 34 个路径与全部功能差异，只重新基于当前正式文件应用对话预览去重。`node verify-rebase.mjs` 证明 30 项前后摘要与用户确认时一致。其余 `desktop/conversation-ui.mjs`、`desktop/conversation.css` 和 `output/desktop-bundle` 下对应四项，反向撤销同一去重差异后均逐字节还原当前情绪复盘文件。新的 SHA-256 为 `9c9a1c162aed7fbcd3f39361f3fb8a496cc2988e8f244b09b8ad4cda56a33086`。原清单和首次校验回执保存在候选目录 `approved-58a789073314`，新清单和比较证明见 `windows-files.json` 与 `rebase-proof.json`。
+
+`install.ps1 -Mode Preflight` 和 `-Mode Rehearse` 在新清单上通过。四项去重移植在隔离 Electron 验证，浅深色均保留原话和来源，标题栏、轮询设定、情绪日志分段及原始快照回读均通过。已确认的安装范围、SQLite 本地变更、回退方式及 Worker 和花园待办沿用前述记录。
+
+### 9c9a1c162aed · 正式实装结果
+
+2026-11-23 04:26:38 JST，已按用户确认完成 Windows 正式安装并受控重启。基线情绪复盘 `c2da3c2ccbf0` 保留。旧 PID 26996 正常退出，新 PID 11376 于 04:26:37.259 JST 经原入口启动。34 项文件摘要、REST v6、23 项技能、原提醒与轮询、七个 SQLite 库完整性均通过。新增三张本机修订表和一项闲时轮询。唠叨 17 条及会话发言 53 条保持，原话和日记缓存摘要在安装前后相同。通过新进程再次读回随附 `personal-conversation` 2.5、`diary-writing` 2.0、`memory-refinement` 1.6 与 `emotion-appraisal` 2.3。
+
+机器回执位于 `G:/selftool/WebCharacter/work/feiyue-record-quality-windows-20261123/install-receipt.json`，旧文件和七库备份保存在同目录下 `install-backup-20261123-042627`。用户界面复验待执行。Worker 未随本次发布，已同步旧记录的逐条补记待配套接口。花园仍按默认登记处理，现用制单模型与 0.1 步长的差异未解决，待核对兼容模型后按实际结果制单并确认，当前无花园写入。Git 同步结果另记。

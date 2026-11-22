@@ -2,6 +2,7 @@ import {untilAbort} from './chat-budget.mjs';
 import {createDiaryAudit} from './diary-audit.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
 import {createHash} from 'node:crypto';
+import {deferredNagReply,explicitRoleCorrection,nagReplyKey as replyKey,reusedLongReply} from './nag-reply-check.mjs';
 import {tokyoDay} from './conversation-history.mjs';
 import {cleanMemory} from './personality-diary.mjs';
 import {answeredQuestion,emptyFollowUp,isPendingQuestion,pendingLimit,questionReminder,questionTarget,questionText,sameQuestion} from './pending-questions.mjs';
@@ -13,7 +14,8 @@ const unknown=s=>!s||/未知|其他|不明|未分类|未分類|unknown|other/i.t
 const brief=(s,n)=>Array.from(cleanMemory(s)).slice(0,n).join('');
 const iso=at=>new Date(at).toISOString();
 const citationLength=150;
-const replyKey=text=>text?.normalize('NFKC').toLowerCase().replace(/^(?:夫君|老公|亲爱的|绯月)[,:、\s]+/u,'').replace(/[\p{P}\s]/gu,'');
+const replyBudget=25000;
+const replyStatus=value=>value.deferred||value.next.trim()?'回合结束':'已解释';
 
 function repeatsQuestion(text,questions){
   const key=replyKey(text);
@@ -60,13 +62,13 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
   function save(n){n.localQuestion=true;store.saveNag(n);changed();if(answeredQuestion(n)&&!n.localOnly)void sync();}
   const audit=createDiaryAudit({store,show,idle,canContinue,save,now,random});
   function talk(n,who,text){n.talk.push({who,text,at:iso(now())});}
-  async function think(stage,data,fields,signal,aiPriority,aiCurrentPriority){
-    const skill=await readInteractionSkill('basicNag');signal.throwIfAborted();
+  async function think(stage,data,fields,signal,aiPriority,aiCurrentPriority,selected){
+    const skill=selected??await readInteractionSkill('basicNag');signal.throwIfAborted();
     const prompt=skill.localAi?.[stage];if(!prompt)throw Error('念叨技能缺少阶段 '+stage);
-    const guidance=stage==='open'?' question 写明希望他回答或核实的一件具体事，可用自然的请求语气。若只是关心、分享或事情已核实，question 填空字符串 ""。score 表示绯月现在有多想弄清：1 为稍有好奇，3 为值得关心，5 为关系、处境或安排上特别重要。':
-      stage==='reply'?' evaluation 简短写清他刚才说自己在担心什么、想做什么或确认了什么，保持原本的人和事。reply 根据该理解直接回复他，先回应「最新发言」，再用自己的话接住他的心意。一两句，最多 150 字。旧问题只供理解，不延续旧猜测，不复述旧问或整句原话。只有具体缺口才在 next 问新问题，否则 next 填成空字符串 ""。':'';
+    const guidance=stage==='open'?' question 写明希望他回答或核实的一件具体事，可用自然的请求语气。若只是关心、分享或事情已核实，question 填空字符串 ""。score 表示绯月现在有多想弄清：1 为稍有好奇，3 为值得关心，5 为关系、处境或安排上特别重要。':'';
     return store.think(data,prompt+guidance,fields,signal,{name:skill.skill,version:skill.version,stage,
-      aiReview:stage==='open',aiTier:stage==='reply'?'4':'2',aiBudget:stage==='reply'?25000:undefined,aiPriority,aiCurrentPriority});
+      aiReview:stage==='open',aiTier:stage==='reply'?'4':'2',aiBudget:stage==='reply'?replyBudget:undefined,aiPriority,aiCurrentPriority,
+      ...(stage==='reply'?{boundedOutput:true,maxTokens:384}:{})});
   }
   const assessments=new Map();
   async function verdict(stage,data,signal){
@@ -85,8 +87,14 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
   async function candidates(signal){
     const archive=store.nags();
     const day=i=>tokyoDay(now()-i*dayMs),known=new Set(archive.map(questionTarget));
-    const pool=archive.filter(n=>answeredQuestion(n)&&n.source!=='nag'&&n.remaining&&!emptyFollowUp(n.remaining)&&!known.has('nag/'+n.id))
-      .map(n=>({source:'nag',source_id:n.id,title:n.remaining,reason:'念叨里还有待核实的下文',stats:'',priority:3}));
+    const pool=archive.flatMap(n=>{
+      if(!answeredQuestion(n)||n.source==='nag'||known.has('nag/'+n.id))return [];
+      const question=questionText(n.remaining);
+      const key=replyKey(question);
+      // 旧记录曾将复述用户原话、或已发出的追问写成待续事项。
+      if(!key||n.talk.some(t=>['绯月','你'].includes(t.who)&&replyKey(t.text)===key))return [];
+      return [{source:'nag',source_id:n.id,title:question,reason:'念叨里还有待核实的下文',stats:'',priority:3}];
+    });
     for(const p of store.pages(day(6)).filter(p=>p.day>=day(6)&&p.day<=day(0))){
       for(const t of p.threads.slice(0,3)){
         const id=p.day+'.'+p.part+'/'+t.no;
@@ -180,7 +188,10 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
   function finish(n,status){
     n.status=status;
     if(status==='用户结束')talk(n,'结束记录','老公闷闷的不理我了');
-    if(status==='回合结束')n.remaining=n.next||n.title;
+    if(status==='回合结束'){
+      if(n.next)n.remaining=n.next;
+      else delete n.remaining;
+    }
     save(n);
     if(n.localInitiativeRound)emotion?.feedback(n.localInitiativeRound,status);
   }
@@ -192,17 +203,49 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       此前情绪:n.mood,当前心情:emotion?.expression(),同线依据:thread?.context&&{...history,目的:replyKey(purpose)===currentQuestion?undefined:purpose}};
     const questions=[n.next,n.talk[0]?.who==='绯月'?n.talk[0].text:undefined,
       ...n.talk.filter(t=>t.who==='绯月'&&/[？?]\s*$/u.test(t.text)).map(t=>t.text)].map(replyKey);
-    const userLines=input.最新发言.map(t=>replyKey(t.原话)).filter(Boolean);
-    const rewrite={改写要求:'先用自己的话接住他刚说的具体顾虑或事实，再给出针对这一点的回应。别用泛泛的安慰代替，也别叙述对话经过。',最新发言:input.最新发言};
-    for(let attempt=0;attempt<2;attempt++){
-      const data=attempt?rewrite:input;
-      const v=await think('reply',JSON.stringify(data),['evaluation','mood','reply','next'],signal,thread?.priority,thread?.currentPriority);
-      signal.throwIfAborted();
-      if(!v.reply?.trim()||!v.evaluation||!v.mood||typeof v.next!=='string')throw Error('回应尚未生成');
-      if(repeatsQuestion(v.reply,questions)||userLines.includes(replyKey(v.reply)))continue;
-      return emptyFollowUp(v.next)||repeatsQuestion(v.next,questions)?{...v,next:''}:v;
+    const userLines=[...input.最新发言.map(t=>t.原话),...n.talk.filter(t=>t.who==='你').map(t=>t.text)].map(replyKey).filter(Boolean);
+    const latestText=input.最新发言.map(t=>t.原话).join('\n');
+    const latestKey=replyKey(latestText),replyContexts=new Map();
+    for(const [index,turn] of n.talk.entries()){
+      if(turn.who!=='绯月')continue;
+      const key=replyKey(turn.text),previous=n.talk[index-1];
+      if(key.length>=12&&!replyContexts.get(key)){
+        replyContexts.set(key,previous?.who==='你'&&replyKey(previous.text)===latestKey);
+      }
     }
-    throw Object.assign(Error('续答重复了之前的发言，原话已保存，可以重试。'),{code:'NAG_REPLY_REPEATED'});
+    const skill=await readInteractionSkill('basicNag');
+    const deadline=AbortSignal.timeout(replyBudget),wait=AbortSignal.any([signal,deadline]);
+    let mood=n.mood||'平静';
+    for(let attempt=0;attempt<2;attempt++){
+      signal.throwIfAborted();
+      if(deadline.aborted)break;
+      const data=attempt?{改写要求:'上一稿复述或串场。先接住刚说的具体事实或顾虑，一句就够，不引入旧话题。',最新发言:input.最新发言}:input;
+      let v;
+      try{
+        v=await untilAbort(think('reply',JSON.stringify(data),['evaluation','mood','reply','next'],wait,
+          thread?.priority,thread?.currentPriority,skill),wait);
+      }catch(error){
+        signal.throwIfAborted();
+        if(attempt&&(deadline.aborted||['LOCAL_AI_TIMEOUT','LOCAL_AI_OUTPUT_BUDGET','LOCAL_AI_TIER_WAIT'].includes(error.code)))break;
+        throw error;
+      }
+      signal.throwIfAborted();
+      if(!v.reply?.trim()||!v.evaluation||!v.mood||typeof v.next!=='string'){
+        if(attempt)break;
+        throw Error('回应尚未生成');
+      }
+      mood=v.mood;
+      const key=replyKey(v.reply);
+      const role=explicitRoleCorrection(latestText,v.reply);
+      if(role)return {reply:role,evaluation:'已按你的原话核对人物归属。',mood,next:''};
+      if(!key||repeatsQuestion(v.reply,questions)||userLines.includes(key)||
+        !replyContexts.get(key)&&(replyContexts.has(key)||
+          key.length>=45&&reusedLongReply(key,latestText,thread?.archive??store.nags(),n.id)))continue;
+      const next=questionText(v.next);
+      return {...v,next:next&&!repeatsQuestion(next,questions)&&!userLines.includes(replyKey(next))&&
+        !explicitRoleCorrection(latestText,next)?next:''};
+    }
+    return {reply:deferredNagReply,evaluation:'已保存原话，待复核这轮回应。',mood,next:'',deferred:true};
   }
   function remind(added=false){
     const queue=pendingQuestions(),preferred=queue[0];
@@ -253,7 +296,8 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       if(candidate){
         const {source,reading}=candidate;
         progress({stage:'准备一个待确认问题'});
-        const v=reading?await diaryOpening(candidate,signal):
+        const v=reading?await diaryOpening(candidate,signal):source.source==='nag'?
+          {question:source.title,evaluation:source.reason,mood:'关心'}:
           await think('open',JSON.stringify([source.title,source.reason,source.stats,emotion?.expression()]),['question','evaluation','mood','score'],signal);
         signal.throwIfAborted();
         if(v?.question?.trim()&&!emptyFollowUp(v.question)){
@@ -289,7 +333,8 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       const next=followUp(n,heard);
       if(!next||ended(n)){
         talk(n,'绯月',heard.reply);n.next=questionText(heard.next);
-        await complete(n,heard.next.trim()?'回合结束':'已解释',signal);return '已按上次留下的解释收尾';
+        await complete(n,replyStatus(heard),signal);
+        return heard.deferred?heard.reply:'已按上次留下的解释收尾';
       }
       talk(n,'绯月',heard.reply);setFollowUp(n,next);save(n);
     }
@@ -330,7 +375,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       const next=followUp(n,v);
       talk(n,'绯月',v.reply);n.next=questionText(v.next);
       if(!next||ended(n)){
-        await complete(n,v.next.trim()?'回合结束':'已解释',session.controller.signal);active=null;
+        await complete(n,replyStatus(v),session.controller.signal);active=null;
         return {text:v.reply,done:true,finished:true};
       }
       setFollowUp(n,next);save(n);
@@ -354,7 +399,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
   async function threadAnswer(line,messages,{signal,priority,currentPriority,context,stillLatest,isOpen}){
     if(active?.id===line.id)active.leave('later');
     audit.detachThread(line.id);
-    const n=store.nags().find(row=>row.id===line.id);
+    const archive=store.nags(),n=archive.find(row=>row.id===line.id);
     if(!n)throw Error('原质问暂时无法读取');
     const key=messages[0].id;
     if(n.localThreadReceipts?.[key])return n.localThreadReceipts[key];
@@ -387,18 +432,18 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       finish(n,'已解释');
       return result;
     }
-    const v=await appraise(n,text,signal,{priority,currentPriority,context});
+    const v=await appraise(n,text,signal,{priority,currentPriority,context,archive});
     if(!isOpen())return;
     n.afterEvaluation=v.evaluation;n.mood=v.mood;delete n.localMoodStrength;
     const next=followUp(n,v);
     talk(n,'绯月',v.reply);n.next=questionText(v.next);
     if((!next||ended(n))&&stillLatest()){
-      const result={reply:v.reply+'\n这件事我先记到这里啦。',next:'结束'};
+      const result={reply:v.deferred?v.reply:v.reply+'\n这件事我先记到这里啦。',next:'结束'};
       await onAnswered?.(n,signal);
       signal.throwIfAborted();
       if(!stillLatest())return isOpen()?receipt({reply:v.reply,next:'回应'}):undefined;
       (n.localThreadReceipts??={})[key]=result;
-      finish(n,v.next.trim()?'回合结束':'已解释');
+      finish(n,replyStatus(v));
       return result;
     }
     if(next)setFollowUp(n,next);
