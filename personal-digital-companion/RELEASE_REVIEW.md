@@ -1334,3 +1334,5 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 **花园登记。** 用 `npm.cmd run db:sync-schema` 和绯月 v5 的 `inspect` 核对线上实际结构及修订 149。由 `prepare` 生成 `feiyue-rest-reminders-20261123` 待确认草案及两步精确 SQL，确认摘要 `02dc5bc17da3c599d241b5e49c1c644323e55d2c7c9f9135c1c7bcf663244511`。归属「网页角色组件 #16 → 绯月（桌面精灵）#61」，拟新增部署 #76、明细 #154 和已完成改善 #81。草案留在调用端，等待用户明确确认具体内容。未提交花园 SQL，未入队，也未写入花园。
 
 来源代码和本次发布记录在独立分支 `codex/feiyue-rest-reminders` 留痕。远端尚未同步。
+
+**GitHub 推送回执。** 2026-11-23 00:51:22 JST，绯月 REST v5 的来源提交 `38d18513ad45fc9659280d320aeb34ebd78e130f` 已推送至 `cj2cf99/webcharacter` 的 `codex/feiyue-rest-reminders`，并从 GitHub 读回相同提交。花园批次仍待具体清单确认。
