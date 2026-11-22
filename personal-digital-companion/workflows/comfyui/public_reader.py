@@ -3,7 +3,6 @@ import http.client
 import html
 import ipaddress
 import json
-import os
 from xml.etree import ElementTree
 import re
 import socket
@@ -188,21 +187,6 @@ def news(reader,query):
         except (ValueError,TypeError,OverflowError):
             pass
         return ""
-    key=os.getenv("BRAVE_SEARCH_API_KEY")
-    if key:
-        url="https://api.search.brave.com/res/v1/news/search?"+urlencode(dict(q=query,count=5,freshness="pd",country="ALL"))
-        status,_,raw=reader.get(url,1_000_000,{"X-Subscription-Token":key})
-        if status!=200:
-            raise ValueError("Brave 新闻接口未返回结果（HTTP "+str(status)+"）")
-        rows=[]
-        for item in json.loads(raw).get("results",[]):
-            link=item.get("url","")
-            if link.startswith("https://") and item.get("title"):
-                rows.append(dict(title=item["title"][:200],url=link,snippet=" · ".join(filter(None,[
-                    urlsplit(link).hostname,stamp(item.get("page_age")),re.sub(r"<[^>]+>","",item.get("description",""))[:250]]))))
-        if not rows:
-            raise ValueError("最近 24 小时没有找到相关新闻")
-        return rows[:3]
     rows = rss_news(reader, query)
     if not rows:
         raise ValueError("Google 新闻没有返回相关报道")
