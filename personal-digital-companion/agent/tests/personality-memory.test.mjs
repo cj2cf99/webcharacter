@@ -515,6 +515,73 @@ test('等待期间留下解释但推理中断，恢复后用已存原话收尾',
   await engine.resume(n.id,new AbortController().signal);assert.equal(saved.status,'已解释');assert.equal(saved.next,'');assert.equal(saved.afterEvaluation,'明白用途了。');await engine.close();
 });
 
+test('手记首问先核对原题及后文，确认缺项才生成自然问话并引用原句',async t=>{
+  const archive=[];
+  const evidence='术语表更新已核验，原记录在哪个页面还没告诉你。';
+  const target='术语表更新的原记录所在页面';
+  const question='有空告诉我从哪儿能打开那份原件就好。';
+  const originalTitle='原记录如何检索';
+  let excerpt='',body='',later,expectedLines,check={},session,onCheck,checks=0,writes=0;
+  const store={nags:()=>archive,pages:()=>[{day,part:1,threads:[{no:1,text:originalTitle}]}],
+    syncNags:async()=>{},api:async()=>({records:[],complete:true}),saveNag:()=>{},
+    queueQuestion(n){archive.push(n);return true;},
+    questionCitation:(n,expanded)=>expanded?{quote:excerpt,body}:
+      {reference:day+' · 第 1 篇 · 悬念 1',label:'手记对话摘录',excerpt:n.localQuestionEvidence??excerpt},
+    think:async(data,_prompt,fields,_signal,skill)=>{
+      if(skill.stage==='diaryOpeningCheck'){
+        checks++;
+        const lines=(expectedLines??[excerpt]).map((原文,index)=>({行:index+1,原文}));
+        assert.deepEqual(JSON.parse(data),{原题:originalTitle,出处:lines,...(later?{同篇后文:later}:{})});
+        onCheck?.();
+        return check;
+      }
+      assert.equal(skill.stage,'diaryOpeningWrite');
+      writes++;
+      assert.deepEqual(JSON.parse(data),{已核对的待答信息:target,相关出处:expectedLines?.at(-1)??evidence});
+      assert.deepEqual(fields,['question']);
+      return {question};
+    }};
+  const engine=createPersonalityNags({store,now:()=>start,idle:()=>true,show:value=>{session=value;return true;}});
+  t.after(()=>engine.close());
+  const signal=new AbortController().signal;
+  assert.equal(await engine.poll(signal),'没有待问事项');
+  assert.equal(checks,0);
+  excerpt=evidence;
+  for(const rejected of [{state:'unrelated',line:'0'},
+    {state:'open',line:'1',answer:'项目更新页'}, {state:'open',line:'3'}]){
+    check={target,answer:'',...rejected};
+    assert.equal(await engine.poll(signal),'没有待问事项');
+  }
+  later='后来补记：原记录就在项目更新页。';
+  body='你说：'+evidence+'\n'+later;
+  check={target,state:'answered',answer:'项目更新页',line:'0'};
+  assert.equal(await engine.poll(signal),'没有待问事项');
+  later='前情摘录：'+evidence+'\n后来补记：原记录就在项目更新页。';
+  body='你说：'+evidence+'\n'+later;
+  assert.equal(await engine.poll(signal),'没有待问事项');
+  assert.equal(writes,0);
+  assert.equal(archive.length,0);
+  later=undefined;body='';
+  check={target,state:'open',answer:'',line:'1'};
+  const interrupted=new AbortController();
+  onCheck=()=>interrupted.abort();
+  await assert.rejects(engine.poll(interrupted.signal),{name:'AbortError'});
+  assert.equal(writes,0);
+  onCheck=undefined;
+  const longLead='整理旧便签'.repeat(36)+'，';
+  const missing='术语表更新的原记录在哪个页面目前还没告诉我。';
+  excerpt=longLead+missing;
+  expectedLines=[longLead.slice(0,150),longLead.slice(150),missing];
+  check={target,state:'open',answer:'',line:'3'};
+  assert.equal((await engine.poll(signal)).detail,'已新增 1 个待确认问题');
+  assert.equal(writes,1);
+  assert.equal(archive[0].localQuestionEvidence,missing);
+  assert.equal(archive[0].talk[0].text,question);
+  assert.equal(archive[0].beforeEvaluation,'想听你补充手记里还没答复的这一项。');
+  await engine.resume(archive[0].id,signal);
+  assert(session.prompt.includes(missing+'\n'+question));
+});
+
 test('无追问占位词正常收笔，重启清理仍等待作答的同类旧记录',async()=>{
   const opening={who:'绯月',text:'什么时候回来？'};
   const answer={who:'你',text:'吃过晚饭就回来。'};
@@ -539,11 +606,11 @@ test('无追问占位词正常收笔，重启清理仍等待作答的同类旧�
   assert.equal(current.status,'已解释');
   assert.equal(current.next,'');
   assert.equal(current.remaining,undefined);
-  next=opening.text;
+  next='什么时候回来';
   await engine.resume(unresolved.id,new AbortController().signal);
   assert.equal((await session.reply('还不知道。')).finished,true);
   assert.equal(unresolved.status,'回合结束');
-  assert.equal(unresolved.remaining,opening.text);
+  assert.equal(unresolved.remaining,next);
   await engine.close();
 });
 

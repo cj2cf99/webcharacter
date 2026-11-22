@@ -118,10 +118,28 @@ test('主动分享分支想要用户回答时，只登记一个本机确认事�
       speak:()=>assert.fail('要回答的问题不直接弹出'),queueClarification:item=>{questions.push(item);return true;},
       model:{memory:async(_i,_p,schema)=>schema.properties.entries?
         {act:true,entries:[{source:0,type:'clarify',sin:1,want:'想弄清行程',condition:'听到解释'}]}:
-        {action:'speak',conclusion:'想核实临时调整',message:'今天为什么提前出门呢？',next:'等他有空解释'}}});
+        {action:'speak',conclusion:'想核实临时调整',message:'有空跟我说说今天提前出门的原因。',next:'等他有空解释'}}});
     assert.match((await runner.choose([],new AbortController().signal,()=>true)).detail,/加入待确认/);
     assert.equal(questions.length,1);assert.equal(questions[0].ref,'chat/book');
+    assert.equal(questions[0].title,'有空跟我说说今天提前出门的原因。');
     assert.equal(store.pool.recent().status,'done');assert.equal(store.pool.feedback(),undefined);
+  }finally{store.close();await rm(root,{recursive:true,force:true});}
+});
+test('分享关心时按交流意图派发，句末问号也不产生待确认',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'feiyue-initiative-care-')),at=Date.now();
+  const store=createEmotionStore(root,{now:()=>at});
+  const message='这阵子辛苦了，今晚对自己好一点，好不好？';
+  const spoken=[];
+  try{
+    store.accept({key:'chat/work',kind:'chat',user:'最近在加班。',at});
+    const runner=createInitiative({root,now:()=>at,emotion:{store,expression:()=>({word:'关心'})},load:async()=>({localAi:{}}),
+      queueClarification:()=>assert.fail('关心的话不应登记为待确认'),
+      speak:async(_id,text)=>{spoken.push(text);return true;},
+      model:{memory:async(_i,_p,schema)=>schema.properties.entries?
+        {act:true,entries:[{source:0,type:'share',sin:1,want:'表达关心',condition:'让他知道我关心他'}]}:
+        {action:'speak',conclusion:'想让他放松一点',message,next:'以后再关心他的近况'}}});
+    await runner.choose([],new AbortController().signal,()=>true);
+    assert.deepEqual(spoken,[message]);
   }finally{store.close();await rm(root,{recursive:true,force:true});}
 });
 test('私人话题问句进入专聊，具体事实核实沿用待确认',async()=>{

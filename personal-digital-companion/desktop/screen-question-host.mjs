@@ -145,9 +145,12 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const error=!finished&&line.error;
     const response=message?.who==='绯月';
     const prompt=line.kind==='question'&&line.rounds===0&&response;
+    const openingSource=prompt&&!finished&&!waiting&&!error&&line.source?.kind==='diary'&&line.source.excerpt?
+      [line.source.reference&&'来源 · '+line.source.reference,line.source.excerpt].filter(Boolean).join('\n'):undefined;
     return {threadId:line.id,threadInput:true,state:waiting?'waiting':error?'error':message?'answer':'idle',
       text:finished?(line.endedBy==='你'?'好，这个话题先收到这里。':message?.text):waiting?'已收到，正在想…':
         error?error.text:response?message.text:message?'这句话已存到对话里。':'想聊什么，或记点什么？',
+      openingSource,
       question:message?.who==='你'?message.text:prompt?undefined:line.messages.findLast(item=>item.who==='你')?.text,
       audit:line.kind==='question'&&!finished,nag:line.kind==='question'&&!finished,nagReply:line.kind==='question',
       retryable:Boolean(error),canCloud:Boolean(error?.canCloud),

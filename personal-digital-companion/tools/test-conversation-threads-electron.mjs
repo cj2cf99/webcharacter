@@ -129,7 +129,7 @@ async function testWindows(){
   },async close(){}};
   queue=createAiWorkflowModel({model,file:join(profile,'ai-requests.sqlite'),safeStorage:electron.safeStorage});
   transcription=createConversationTranscription({profile,safeStorage:electron.safeStorage,model:queue,notify:item=>notices.push(item)});
-  const question={id:'audit-fixture',title:'下次一起听雨？',next:'下次一起听雨？',reason:'昨晚听见雨声',created_at:new Date().toISOString(),
+  const question={id:'audit-fixture',source:'diary',source_id:'2026-11-22.3/2',title:'下次一起听雨？',next:'下次一起听雨？',reason:'昨晚听见雨声',created_at:new Date().toISOString(),
     citation:{label:'手记对话摘录',reference:'第 3 篇 · 悬念 2',excerpt:'「下次想和你一起听雨。」'},
     talk:[{who:'绯月',text:'下次一起听雨？',at:new Date().toISOString()}]};
   const proactive=[];
@@ -153,6 +153,8 @@ async function testWindows(){
   assert.equal(transcription.list().length,0);
   await review("[...document.querySelectorAll('.thread-actions button')].find(b=>b.textContent==='继续聊天').click()");
   await wait(()=>host.panel&&bubble("document.querySelector('#answer').textContent.includes('一起听雨')"));
+  assert.deepEqual(await bubble("[document.querySelector('#asked').textContent,document.querySelector('#answer').textContent]"),
+    ['来源 · 第 3 篇 · 悬念 2\n「下次想和你一起听雨。」','下次一起听雨？']);
   await bubble("document.querySelector('#question').value='好啊';document.querySelector('#questionForm').requestSubmit()");
   await wait(()=>bubble("!document.querySelector('#finishThread').hidden && document.querySelector('#questionForm').hidden"));
   assert.equal(proactive.length,1);

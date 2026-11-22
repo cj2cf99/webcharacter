@@ -3,7 +3,7 @@ import {tokyoDay} from './conversation-history.mjs';
 import {cleanMemory} from './personality-diary.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
 import {untilAbort} from './chat-budget.mjs';
-import {isPendingQuestion,pendingLimit,questionTarget,questionText as question} from './pending-questions.mjs';
+import {isPendingQuestion,pendingLimit,questionTarget,questionText as question,sameQuestion} from './pending-questions.mjs';
 
 const dayMs=86400000;
 const nextBatch=Symbol('手记核对分批继续');
@@ -172,7 +172,7 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
       else{
         const next=question(v.next);
         if(!next)throw Error('未取得有效追问');
-        if(!n.talk.some(t=>t.who==='绯月'&&t.text===next)){
+        if(!n.talk.some(t=>t.who==='绯月'&&sameQuestion(t.text,next))){
           n.next=next;n.questions++;line(n,'绯月',next);if(!thread)save(n);
           return {text:next};
         }

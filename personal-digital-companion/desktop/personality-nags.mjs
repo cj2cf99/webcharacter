@@ -4,7 +4,7 @@ import {readInteractionSkill} from './interaction-skills.mjs';
 import {createHash} from 'node:crypto';
 import {tokyoDay} from './conversation-history.mjs';
 import {cleanMemory} from './personality-diary.mjs';
-import {answeredQuestion,emptyFollowUp,isPendingQuestion,pendingLimit,questionReminder,questionTarget,questionText} from './pending-questions.mjs';
+import {answeredQuestion,emptyFollowUp,isPendingQuestion,pendingLimit,questionReminder,questionTarget,questionText,sameQuestion} from './pending-questions.mjs';
 
 const dayMs=86400000;
 const game=/游戏|遊戲|ゲーム|娱乐|娛樂|娯楽|gaming|entertainment/i;
@@ -12,6 +12,21 @@ const refund=/退款|返金|退费|refund/i;
 const unknown=s=>!s||/未知|其他|不明|未分类|未分類|unknown|other/i.test(s);
 const brief=(s,n)=>Array.from(cleanMemory(s)).slice(0,n).join('');
 const iso=at=>new Date(at).toISOString();
+const citationLength=150;
+
+function diaryCitationLines(reading){
+  return reading.split(/(?<=[。！？?!；;])|\r?\n/u).flatMap(line=>{
+    if(Array.from(line).length<=citationLength)return [line];
+    return line.split(/(?<=[，,、：:])/u).flatMap(part=>{
+      const characters=Array.from(part);
+      const sections=[];
+      for(let start=0;start<characters.length;start+=citationLength){
+        sections.push(characters.slice(start,start+citationLength).join(''));
+      }
+      return sections;
+    });
+  }).map(line=>line.trim()).filter(Boolean);
+}
 
 export function createPersonalityNags({store,emotion,initiative,show,idle,canContinue=()=>true,notify=()=>{},changed=()=>{},onAnswered,questionImage,now=Date.now,random=Math.random}){
   let active=null,syncJob=null,stopped=false,working=false;
@@ -41,8 +56,8 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
   async function think(stage,data,fields,signal,aiPriority,aiCurrentPriority){
     const skill=await readInteractionSkill('basicNag');signal.throwIfAborted();
     const prompt=skill.localAi?.[stage];if(!prompt)throw Error('念叨技能缺少阶段 '+stage);
-    const guidance=stage==='open'?' score 表示绯月现在有多想弄清：1 为稍有好奇，3 为值得关心，5 为关系、处境或安排上特别重要。':
-      stage==='reply'?' 收笔时把 next 填成空字符串 ""。':'';
+    const guidance=stage==='open'?' question 写明希望他回答或核实的一件具体事，可用自然的请求语气。若只是关心、分享或事情已核实，question 填空字符串 ""。score 表示绯月现在有多想弄清：1 为稍有好奇，3 为值得关心，5 为关系、处境或安排上特别重要。':
+      stage==='reply'?' 关心或感想放在 reply。有具体缺口才在 next 提出一件要他回答的事。收笔时把 next 填成空字符串 ""。':'';
     return store.think(data,prompt+guidance,fields,signal,{name:skill.skill,version:skill.version,stage,
       aiReview:['open','reply'].includes(stage),aiTier:'2',aiPriority,aiCurrentPriority});
   }
@@ -114,6 +129,41 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     }
     return pool.concat(expenses);
   }
+  function pickCandidate(pool){
+    const start=Math.floor(random()*pool.length);
+    for(let offset=0;offset<pool.length;offset++){
+      const source=pool[(start+offset)%pool.length];
+      if(source.source!=='diary')return {source};
+      const citation=store.questionCitation?.(source,true);
+      const reading=cleanMemory(citation?.quote);
+      if(!reading)continue;
+      const body=cleanMemory(citation.body);
+      const position=body.indexOf(reading);
+      // 已绑定的原话有时会在回顾中再次引用，不能因此丢弃其中的后续答复。
+      const later=position<0?'':body.slice(position+reading.length).trim();
+      return {source,reading,later};
+    }
+  }
+  async function diaryOpening({source,reading,later},signal){
+    const skill=await readInteractionSkill('basicNag');
+    signal.throwIfAborted();
+    const lines=diaryCitationLines(reading);
+    const data={原题:source.title,出处:lines.map((原文,index)=>({行:index+1,原文})),同篇后文:later||undefined};
+    const options={name:skill.skill,version:skill.version,boundedOutput:true,maxTokens:220,aiBudget:45_000};
+    const check=await store.think(JSON.stringify(data),
+      '先在 target 简短写出原题所问的一个答复项，再用原文和后文核对它。state 填 answered（已有答复）、open（材料明确说这个答复项还缺）、unrelated（材料没有涉及或无法确认）。只因材料里没有答案，就归 unrelated；不能把没提到的题当成未解。其他事项有缺口也归 unrelated。后文已有答复时填 answered。例：问资料去哪儿找，原文只说更新已验或只是关心，归 unrelated；写了资料在哪个页面归 answered；明确说资料页面还不清楚才归 open。问是否同行，已约好同行就归 answered，即使开门时间未知。answered 时 answer 写真实答复内容，否定答复也算。open 时 answer 留空，line 写说明该答复项还缺的行号整数。没有答复内容也没有原题缺项时归 unrelated。只做答案核对，别改写题目。',
+      ['target','state','answer','line'],signal,{...options,stage:'diaryOpeningCheck',citationCount:lines.length});
+    signal.throwIfAborted();
+    const original=lines[Number(check.line)-1];
+    if(check.state!=='open'||check.answer||!check.target||!original)return;
+    const evidence=original;
+    const draft=await store.think(JSON.stringify({已核对的待答信息:check.target,相关出处:evidence}),
+      '用绯月的口吻直接问对方这项已核对的待答信息。一句问话或自然请托即可，保留自然句尾，省略称呼。出处已经单独显示，问话无需逐字重复出处。只问指定的待答信息。',
+      ['question'],signal,{...options,stage:'diaryOpeningWrite'});
+    signal.throwIfAborted();
+    const question=questionText(draft.question?.replace(/^绯月[，,:：、]\s*/u,''));
+    if(question&&question.length<=64)return {question,evidence,evaluation:'想听你补充手记里还没答复的这一项。',mood:'关心'};
+  }
   function ended(n){return n.questions>=3||n.turns>=Math.min(6,n.limit??6);}
   async function complete(n,status,signal){
     await onAnswered?.(n,signal);
@@ -180,15 +230,19 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       if(pendingQuestions().length>=pendingLimit)return {detail:remind()};
       let pool=[];
       try{pool=await candidates(signal);}catch(error){signal.throwIfAborted();if(!initiative&&!pending())throw error;}
-      if(pool.length){
-        const source=pool[Math.floor(random()*pool.length)];
+      const candidate=pickCandidate(pool);
+      if(candidate){
+        const {source,reading}=candidate;
         progress({stage:'准备一个待确认问题'});
-        const v=await think('open',JSON.stringify([source.title,source.reason,source.stats,emotion?.expression()]),['question','evaluation','mood','score'],signal);
+        const v=reading?await diaryOpening(candidate,signal):
+          await think('open',JSON.stringify([source.title,source.reason,source.stats,emotion?.expression()]),['question','evaluation','mood','score'],signal);
         signal.throwIfAborted();
-        const mood=emotion?.expression().word??v.mood;
-        if(!v.evaluation||!mood||!questionText(v.question))throw Error('没有取得可用的念叨问题');
-        if(/^[1-5]$/u.test(v.score)&&source.source!=='diary')source.priority=Number(v.score);
-        if(enqueue(source,{prompt:v.question,evaluation:v.evaluation,mood}))return {detail:'已新增 1 个待确认问题'};
+        if(v?.question?.trim()&&!emptyFollowUp(v.question)){
+          const mood=emotion?.expression().word??v.mood;
+          if(!v.evaluation||!mood||!questionText(v.question))throw Error('没有取得可用的念叨问题');
+          if(/^[1-5]$/u.test(v.score)&&source.source!=='diary')source.priority=Number(v.score);
+          if(enqueue(reading?{...source,localQuestionEvidence:v.evidence}:source,{prompt:v.question,evaluation:v.evaluation,mood}))return {detail:'已新增 1 个待确认问题'};
+        }
       }
       if(pending())return {detail:remind()};
       if(initiative){
@@ -271,7 +325,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
   }
   function followUp(n,v){
     const next=questionText(v.next);
-    return next&&!n.talk.some(t=>t.who==='绯月'&&t.text===next)?next:'';
+    return next&&!n.talk.some(t=>t.who==='绯月'&&sameQuestion(t.text,next))?next:'';
   }
   function setFollowUp(n,next){n.next=next;n.questions++;n.turns++;talk(n,'绯月',next);}
   async function completeTopic(n,signal){

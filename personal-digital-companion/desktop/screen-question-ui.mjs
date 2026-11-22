@@ -170,8 +170,10 @@ function render(value){
   const waiting=value.state==='waiting';
   if(waiting!==busy){busy=waiting;resetIdle();}
   reply.dataset.state=value.state;reply.setAttribute('aria-busy',String(busy));
-  byId('asked').hidden=!value.question;
-  byId('asked').textContent=value.question??'';
+  const asked=byId('asked');
+  asked.hidden=!value.openingSource&&!value.question;
+  asked.dataset.source=String(Boolean(value.openingSource));
+  asked.textContent=value.openingSource??value.question??'';
   const scene=byId('nagContext');
   scene.hidden=!value.sceneImage;
   if(value.sceneImage){

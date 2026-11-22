@@ -1404,3 +1404,31 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 **来源 Git 同步。** 已安装修复和实际清单的来源提交 86e56ec5ba31ae78ccc76cdef1e9b5f709edcf20 已推送，并回读 origin/codex/workspace-checkpoint-20261120 核对一致。
 
 **花园登记与回执。** 用户明确确认原清单。绯月正式 REST v5 校验原批次不存在，复核生产修订 154 及结构无新增，先提交精确 SQL b56753f0653680e7367e0bb7275f8f306018a719 后仅提交一次。批次 feiyue-action-review-budget-20261123 于 2026-11-23 02:21:27 JST 完成，状态 done，1/1 verified。独立线上回读确认「网页角色组件 #16 → 绯月（桌面精灵）#61」、部署 #80 和明细 #158、版本 29.0 → 30.0、修订 155，发布标记唯一。2026-11-23 02:21:32 JST 签收并回读。完整回执 G:/cloudflare/myapp/database/changes/feiyue-action-review-budget-20261123/execution-receipt.json。主项目 844 项测试通过，Wrangler dry-run 通过。清单、SQL 和回执三项已推送至 codex/garden-feiyue-action-review-budget-20261123，远端提交 104bd7123de0a27f17ede5546887678f8b3582c9 已核对。
+
+## 2026-11-23 JST · Windows 绯月手记首问与待确认
+
+**用户要求及验收。** 用户指出关心不必写成问句，要求先检查原题还缺什么、后文有无回答，确认仍缺才结合出处自然发问，避免词语重合判断。依原 11 个真实模型场景、三个补测及自审新增的重复出处和长句场景，核对实际入队和气泡。验收包含关心、已答及明确否定不入队，未决事项只问原题同一项，重复引用后仍检查补答，长句选出可读来由，界面分开展示原话和问句。已按用户要求写入项目「对话、摘要与待确认的开发注意事项」并在 WebCharacter 总开发指南建立索引。
+
+**目标、基线与差异范围。** 仅发布 Windows 本机绯月。实际待发布项目 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，旧实例 PID 14388，JST 2026-11-23 02:10:19.240 启动，实际运行 `desktop`，资料 `output/desktop-profile`，回环 REST v5。已核对监听进程、桌面快捷方式和 HKCU 登录入口；旧安装版本 `2165f39c88c7` 的五个文件摘要与实际一致。正式目录 Git 参考 `39fd098e40ebf7c2c82dd5a6f9944ae98055566e`。来源项目 `G:/selftool/WebCharacter/personal-digital-companion` 在其 Git `ac7a2b37c6f5485325b235e9cdb60eb457ae27b3` 上的定向改动。以实际旧文件为前像三方比较，`personality-diary.mjs` 保留实装的行动评价修正，`screen-question-host.mjs` 仅合入 `threadView`，未带其他对话路由工作。候选 `1a04985f6789`，清单 SHA-256 `1a04985f6789173fc980290c41b2d8c4c34ae7ad52d93e05886d98cb844d09f0`，8 个源码文件另同步 2 份正式入口读取的资源。源码固定为首次实模候选清单 577c66c3b36d 的实际合成结果，后续工作区续答与知识卡片改动均排除。清单、候选及十项前像在 `G:/selftool/WebCharacter/work/feiyue-diary-opening-release-20261123`。
+
+| 文件 | 改动与前后行为 |
+| --- | --- |
+| `desktop/pending-questions.mjs`、`desktop/diary-audit.mjs` | 保留原句尾标点。历史问号与无问号变体仍去重，无追问占位不入队。 |
+| `desktop/emotion-initiative.mjs` | 按核实意图区分待确认和普通关心，不再用问号决定队列。 |
+| `desktop/personality-diary.mjs`、`desktop/personality-nags.mjs` | 已绑定原话和可定位后文参与原题核对，已答或无依据止于核对。原话重复不丢后答，长句分成可选短段。只依据有效缺项生成自然问话，引用按编号从已读原文取得。撰写不附带无依据的开口动作，开口理由用已核对结果。 |
+| `desktop/screen-question-host.mjs`、`desktop/screen-question-ui.mjs`、`desktop/screen-question.css` | 首次气泡把原话和问句分别显示，历史发言与原来源入口保持原样。 |
+| `output/desktop-bundle/screen-question-ui.mjs`、`output/desktop-bundle/screen-question.css` | 同步与对应源码相同的字节。这是实际运行读取的镜像。最初隔离验证定位了只更新源码会导致正式入口引用空白的问题，最终包锁定镜像前后摘要。 |
+
+**数据库、数据和配置。** 无业务 SQL、迁移或回填。保留现有悬念、手记、待确认、本机资料、技能、模型、队列、端口和凭据。无 Cloudflare Worker 部署。花园为获确认后的一次发布元数据登记，按现行规则免整库加密快照。Windows 安装前留存十文件前像，安全退出后针对现有 `personality-memory.sqlite`、`conversations.sqlite`、`reminder-checks.sqlite`、`local-batches.sqlite`、`ai-requests.sqlite` 作本机 SQLite 级备份与完整性检查。不以备份覆盖自然新增资料。
+
+**验证。** 从实装前像组装隔离副本。实际 Electron 运行 `tools/run-electron-check.mjs output/initiative-real-model-recheck.mjs --verify` 完整回放 17/17，复验实际队列、原文及气泡问句。`test-conversation-threads-electron.mjs` 浅色和 `--dark`、`test-panel-titlebar-electron.mjs` 七个面板通过，测试前后十项摘要一致。隔离测试以候选桌面搭配开发仓目前使用的模拟 Worker 夹具，执行 `node --test agent/tests/personality-memory.test.mjs agent/tests/diary-audit.test.mjs agent/tests/emotion-initiative.test.mjs agent/tests/autonomous-idle.test.mjs`，70/70。配合打包目录里早期的测试副本曾出现缺少夹具和旧接口校验差异，未用其替代模拟服务或安装云端代码。来源自审已通过四轮并最后两轮连续无问题，真实模型独立复查 6/6，桌面构建及界面通过。工作区全量 458/459，已知范围外的新闻摘要夹具缺 `reports`，不影响本次候选。开发注意事项见 `docs/DEVELOPMENT.md`，自审见 `docs/reviews/FEIYUE_DIARY_SELF_AUDIT_2026-11-23.md`，候选日志在上述工作目录。正式装好后的实际入口和长期自然轮询尚未验证。独立第三方 AI 审核未执行。
+
+**部署步骤、风险与恢复。** 用户明确确认上述候选后，重新核对正式 PID、启动时刻、十项前像和当前在途业务。待原正式任务、对话、转录、花园及提醒允许正常退出后，使用 `work/feiyue-diary-opening-release-20261123/install.ps1 -Install` 执行保留正式入口的受控重启。校验实际进程、回环端口、各文件摘要、原轮询和待处理状态，按正式已装文件核对气泡与真实模型行为。若更新/启动失败，正常退出候选并恢复同次已核验的前像，再从旧入口启动。现有待确认和历史发言不批量改写，现场自然发生的资料保留。发布后记录实际版本、时间、后检和 Git 提交/普通推送/远端核对，档案排除无关开发改动。
+
+**花园与授权。** 用户已要求部署并表达登记意愿。本次候选的正式安装与受控重启尚待明确确认。已按说明「结构同步新增 0 项」，线上只读基线修订 155，网页角色组件 #16 → 绯月（桌面精灵）#61 当前 30.0。模型预演成功时新增部署 #81 与明细 #159，预计 30.0 → 31.0、修订 155 → 156，批次预留 `feiyue-diary-opening-20261123`。项目与功能基本资料、种子、独立改善及缺陷、关系、平台、链接、数据源、既有发布无需更新。这里只是预案。安装完成后按真实结果与最新基线给出完整清单，经明确确认，先提交最终 SQL，再从新实例 `/infoguide` 核对身份、走本机 REST 一次登记、独立回读与签收。若失败，另以实情准备「发布中」，不生成成功版本。实际安装、登记及本次 Git 同步均未执行。
+
+**实际安装与后检。** 用户明确确认安装本次候选。2026-11-23 03:03:50.761 JST 正式安装 `1a04985f6789`，PID 从 14388 切换到 2356，新实例于 03:03:49.047 JST 启动。正式进程、REST 监听、桌面快捷方式、登录启动项和十项文件摘要均复核。正常退出后完成十项文件及五个 SQLite 本机备份。重启后五个库的完整性检查、待确认、原轮询、提醒和队列回读一致。正式版日常交互和长期自然轮询待用户复验。来源 Git 基线再移植安装差异时保留开发版已有的记忆细化及刷新路径，隔离重跑四个专项测试文件 70/70；实际安装的十项摘要单独保存在 `docs/reviews/FEIYUE_WINDOWS_DIARY_OPENING_RELEASE_1a04985f6789.json`。
+
+**花园实登。** 用户在看到实际结果和完整清单后明确选择「确认按清单登记」。SQL 与清单先提交到花园仓 Git `9a90af4a852daac17a0d17d9af853b1cf45d243b`，确认摘要 `e329cd09bb58d90ac7378f9d9433de3810a4d78e37239e3f5827d9400ab5b222`。重启后的正式 v5 REST 接收唯一批次 `feiyue-diary-opening-20261123`。2026-11-23 03:09:43.455 JST 完成，独立线上只读复核全部实际值一致。部署 #81，明细 #159，项目 #16，功能 #61，版本 30.0 → 31.0，花园修订 156。项目及功能基本资料、种子、独立改善与缺陷、关系、平台、链接、数据源和旧部署未列入本次写入。无 Cloudflare 主站代码部署。
+
+**签收与 Git 留痕。** 03:12:50.600 JST 已从正式 REST 签收，花园仓独立回读和签收回执提交为 `05ac7acdd197085e4cb03acefd68941c71e9e206`。花园 SQL 与回执按本机登记流程留在 Cloudflare 仓本地 `main`，该分支还有其他待同步提交。WebCharacter 源码同步结果随后补记。
