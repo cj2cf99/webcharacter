@@ -1647,3 +1647,7 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 2026-11-23 04:26:38 JST，已按用户确认完成 Windows 正式安装并受控重启。基线情绪复盘 `c2da3c2ccbf0` 保留。旧 PID 26996 正常退出，新 PID 11376 于 04:26:37.259 JST 经原入口启动。34 项文件摘要、REST v6、23 项技能、原提醒与轮询、七个 SQLite 库完整性均通过。新增三张本机修订表和一项闲时轮询。唠叨 17 条及会话发言 53 条保持，原话和日记缓存摘要在安装前后相同。通过新进程再次读回随附 `personal-conversation` 2.5、`diary-writing` 2.0、`memory-refinement` 1.6 与 `emotion-appraisal` 2.3。
 
 机器回执位于 `G:/selftool/WebCharacter/work/feiyue-record-quality-windows-20261123/install-receipt.json`，旧文件和七库备份保存在同目录下 `install-backup-20261123-042627`。用户界面复验待执行。Worker 未随本次发布，已同步旧记录的逐条补记待配套接口。花园仍按默认登记处理，现用制单模型与 0.1 步长的差异未解决，待核对兼容模型后按实际结果制单并确认，当前无花园写入。Git 同步结果另记。
+
+#### 9c9a1c162aed · Git 同步回执
+
+绯月 Windows 记录复审源码提交 `9c3183d8bd206183edfc282f7085b5a0b5e9f9be` 已普通推送至 `origin/codex/workspace-checkpoint-20261120` 并回读确认。来源测试档在隔离 Git 基线上通过 30 项专项及 1 项手记成文回归，三项 Skill 解析为正式随附版本。仅同步本次 Windows 范围，独立 Worker 发布和花园登记继续待办。
