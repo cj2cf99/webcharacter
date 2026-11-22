@@ -77,6 +77,82 @@ test('下一期不存在时，完成回执保留为待核对而不补发完成',
   assert.deepEqual(calls, ['GET', 'POST', 'GET']);
 });
 
+test('长期计划只接受当前快照的有效工时，事实回执包含登记时间', async t => {
+  const fixture = openTestDatabase();
+  t.after(fixture.close);
+  fixture.sqlite.exec(`CREATE TABLE reminders(seq INTEGER,title,content,deadline,level,regDatetime,isFinished,recurrence,recurrenceNextSeq,planner_dispatch_id);
+    CREATE TABLE reminder_links(target_todo_id);
+    INSERT INTO reminders VALUES(8,'普通计划','','${today}','中','r8',0,NULL,NULL,'dispatch'),
+      (9,'里程碑','','${today}','中','r9',0,NULL,NULL,'milestone'),
+      (10,'超市会员日','','${today}','中','r10',0,NULL,NULL,NULL);`);
+  let revision = 1, writes = 0;
+  const recordedAt = '2026-11-20T01:00:00Z';
+  const service = createReminderReview({db: fixture.DB, visible: () => fixture.DB, getDates: () => ({today, tomorrow}),
+    present: () => ({}), memberDays: () => [], mutate: () => assert.fail('不得从通用提醒路径登记'),
+    planner: {
+      lookup(row) {
+        return {id: row.planner_dispatch_id, recordable: row.seq === 8 && !writes, revision, plannedHours: 2,
+          actualHours: writes ? 0 : null, recordedAt: writes ? recordedAt : null};
+      },
+      record(entry, hours) {
+        assert.equal(entry.id, 'dispatch');
+        assert.equal(hours, 0);
+        writes++;
+        fixture.sqlite.prepare('UPDATE reminders SET isFinished=1 WHERE seq=8').run();
+      },
+    }});
+  const list = await service.list();
+  assert.equal(list.items.find(row => row.id === 8).plannerWork.plannedHours, 2);
+  assert.equal(list.items.find(row => row.id === 9).plannerWork, undefined);
+  const host = {changeReviewReminder: async (...args) => {
+    try { return await service.change(...args); }
+    catch (error) { return {error: error.message, status: error.status}; }
+  }};
+  const write = input => handleReminderReview(new Request('https://api.test', {method: 'POST', body: JSON.stringify(input)}),
+    host, '/api/reminder-review/8');
+  const command = {action: 'record-hours', today, version: list.items.find(row => row.id === 8).version, actualHours: 0};
+  assert.equal((await write({...command, actualHours: '0'})).status, 400);
+  assert.equal((await write({...command, actualHours: 25})).status, 400);
+  assert.equal((await write({...command, actualHours: -1})).status, 400);
+  assert.equal((await write({...command, dispatchId: 'tampered'})).status, 400);
+  revision++;
+  assert.equal((await write(command)).status, 409);
+  command.version = (await service.list()).items.find(row => row.id === 8).version;
+  assert.equal((await write(command)).status, 200);
+  assert.equal((await write(command)).status, 409);
+  assert.deepEqual((await service.status(8)).plannerRecord, {dispatchId: 'dispatch', actualHours: 0, recordedAt});
+  assert.equal(writes, 1);
+});
+
+test('桌面登记工时后核对同一派发及实际投入，暂缺证据只读重核', async () => {
+  const item = {id: 8, title: '当前计划', group: 'locked', reason: '由长期计划管理',
+    plannerWork: {dispatchId: 'this-dispatch'}, deadline: today, identity: 'row-8', version: valid.version};
+  const writes = [];
+  let correct = false;
+  const recordedAt = '2026-11-20T01:00:00Z';
+  const flow = createReminderReviewFlow({async request(path, options) {
+    if (path.endsWith('review')) return Response.json({today, tomorrow, items: [item]});
+    if (options.method === 'POST') {
+      writes.push(JSON.parse(options.body));
+      throw new Error('模拟响应断开');
+    }
+    return Response.json({identity: item.identity, finished: true,
+      plannerRecord: {dispatchId: correct ? item.plannerWork.dispatchId : 'other-dispatch', actualHours: 0, recordedAt}});
+  }});
+  await flow.load();
+  await assert.rejects(flow.apply([{id: 8, action: 'complete'}]), /不能执行/);
+  await assert.rejects(flow.apply([{id: 8, action: 'record-hours', actualHours: null}]), /不能执行/);
+  const sent = await flow.apply([{id: 8, action: 'record-hours', actualHours: 0}]);
+  assert.equal(sent.results[0].result, 'unknown');
+  assert.equal(sent.unchanged, 0);
+  correct = true;
+  const [readback] = (await flow.load()).report.results;
+  assert.equal(readback.result, 'recorded');
+  assert.equal(readback.actualHours, 0);
+  assert.equal(readback.recordedAt, recordedAt);
+  assert.deepEqual(writes, [{action: 'record-hours', today, version: item.version, actualHours: 0}]);
+});
+
 test('刷新补核对已成功但回读失败的延期，不再发送写入', async () => {
   const row = {id: 8, title: '取资料', deadline: today + 'T09:00:00+09:00', identity: 'same', version: valid.version};
   const calls = [];
