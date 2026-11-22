@@ -22,7 +22,7 @@ export async function checkDueItems(request,signal,onStudyComplete){
 
 // 复盘窗口多数只看最新几条：检查记录和提醒每页 8 条，由新到旧。
 const PAGE=8;
-export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,log,notifyNews,compileNews,onIdleResult,changed=()=>{},now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout}){
+export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,log,inspectRecent,notifyNews,compileNews,onIdleResult,changed=()=>{},now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout}){
   const db=new DatabaseSync(join(profile,'reminder-checks.sqlite'));
   db.exec(`CREATE TABLE IF NOT EXISTS checks(
     id INTEGER PRIMARY KEY, day TEXT NOT NULL, at INTEGER NOT NULL, due INTEGER NOT NULL,
@@ -30,6 +30,7 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
     CREATE INDEX IF NOT EXISTS checks_day ON checks(day,id);
     CREATE TABLE IF NOT EXISTS weather_state(id INTEGER PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS notices(id INTEGER PRIMARY KEY,at INTEGER NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,seen INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS log_inspection(id INTEGER PRIMARY KEY CHECK(id=1),through INTEGER NOT NULL);
     UPDATE checks SET status='中断',detail='检查过程中绯月已退出，结果未知' WHERE status='检查中';`);
   const insert=db.prepare('INSERT INTO checks(day,at,due,project,status,detail,misses) VALUES(?,?,?,?,?,?,?)');
   let closed=false;
@@ -45,7 +46,24 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
   const audit=log&&createAutonomousAudit(db,log,now);
   const newsArchive=join(profile,'news-archive');
   const news=notifyNews&&createNewsBriefing(db,now,notifyNews,undefined,{archiveDir:newsArchive,compile:compileNews});
-  const scheduler=createPollScheduler({db,handlers:{due,...handlers,news:news&&(signal=>news.poll(signal,()=>scheduler.get('news').enabled))},isBusy,changed,now,setTimer,clearTimer,add,audit,onIdleResult,
+  const inspection=inspectRecent&&async function(signal){
+    const through=now();
+    const previous=db.prepare('SELECT through FROM log_inspection WHERE id=1').get()?.through??0;
+    const from=Math.min(through,Math.max(previous,through-86400000));
+    const {scanned,completed,failed,top}=await inspectRecent(from,through,signal);
+    signal.throwIfAborted();
+    const stamp=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',dateStyle:'short',timeStyle:'medium'});
+    const detail=stamp.format(from)+' ～ '+stamp.format(through)+' JST · '+scanned+' 条日志，完成 '+completed+' 项。'+
+      (failed?'失败日志 '+failed+' 条 · '+top.map(([code,n])=>code+' × '+n).join('，'):'无事发生。');
+    db.exec('BEGIN');
+    try{
+      if(failed)db.prepare('INSERT INTO notices(at,title,body) VALUES(?,?,?)').run(through,'绯月 · 任务日志巡检',detail);
+      db.prepare('INSERT OR REPLACE INTO log_inspection VALUES(1,?)').run(through);
+      db.exec('COMMIT');
+    }catch(error){db.exec('ROLLBACK');throw error;}
+    changed();return detail;
+  };
+  const scheduler=createPollScheduler({db,handlers:{due,...handlers,inspection,news:news&&(signal=>news.poll(signal,()=>scheduler.get('news').enabled))},isBusy,changed,now,setTimer,clearTimer,add,audit,onIdleResult,
     lastRun:id=>id==='news'?news?.last():lastRun?.(id),weatherLastAt:()=>{const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value).lastCheck;}});
   return {
     start:scheduler.start,enqueue:scheduler.enqueue,polls:scheduler.snapshot,configure:scheduler.configure,
@@ -59,7 +77,7 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
     get unread(){return db.prepare('SELECT count(*) AS n FROM notices WHERE seen=0').get().n;},
     weatherDiary(day){
       const start=Date.parse(day+'T00:00:00+09:00');
-      return db.prepare('SELECT id,at,body FROM notices WHERE at>=? AND at<? ORDER BY at,id').all(start,start+86400000);
+      return db.prepare("SELECT id,at,body FROM notices WHERE at>=? AND at<? AND title<>'绯月 · 任务日志巡检' ORDER BY at,id").all(start,start+86400000);
     },
     weatherState(){const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value);},
     saveWeather(value,brief,at){

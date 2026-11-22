@@ -1,4 +1,4 @@
-import {appendFile, mkdir, open, rename, stat} from 'node:fs/promises';
+import {appendFile, mkdir, open, readFile, rename, stat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tokyoDay} from './conversation-history.mjs';
 import {refusalExcerpt} from '../agent/host/refusal-response.mjs';
@@ -72,6 +72,30 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
     await pending;
     return readStoredPage(cursor,day);
   }
+  async function inspectRecent(from,to,signal){
+    await pending;
+    const days=[...new Set([tokyoDay(from),tokyoDay(to)])];
+    const files=memory?days.flatMap(day=>['任务通信.jsonl','历史通信.jsonl'].map(name=>join(memory.folder(day),'日志',name))):[previous,file];
+    const counts=new Map();
+    let scanned=0,completed=0,failed=0;
+    for(const path of files){
+      signal.throwIfAborted();
+      const log=await readFile(path,{encoding:'utf8',signal}).catch(error=>{if(error.code!=='ENOENT')throw error;return '';});
+      for(const line of log.split('\n')){
+        const row=peek(line);
+        if(!row||row.route==='分析专家巡检')continue;
+        const at=Date.parse(row.time);
+        if(!Number.isFinite(at)||at<from||at>=to)continue;
+        scanned++;
+        if(row.category==='绯月自主行动'&&row.stage==='完成')completed++;
+        const code=word(row.error??row.code??String(row.result??'').match(/\bLOCAL_AI_[A-Z_]+\b/u)?.[0]);
+        if(!code&&row.stage!=='失败')continue;
+        failed++;
+        const label=code??'自主任务失败';counts.set(label,(counts.get(label)??0)+1);
+      }
+    }
+    return {scanned,completed,failed,top:[...counts].sort((a,b)=>b[1]-a[1]).slice(0,5)};
+  }
   // 恢复前读同一东京日的日志；在写入队列内核对，不能再等待队列自身。
   async function hasReceipt(row){
     let cursor=null;
@@ -126,7 +150,7 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
   }
   return {
     get file(){return memory?join(memory.folder(tokyoDay(clock())),'日志','任务通信.jsonl'):file;},
-    write, readPage, flush: () => pending, failed: () => failed,
+    write, readPage, inspectRecent, flush: () => pending, failed: () => failed,
     wrap(request) {
       return async (path, options = {}) => {
         // The query can hold filters and headers carry credentials. Record identifiers and statuses only.

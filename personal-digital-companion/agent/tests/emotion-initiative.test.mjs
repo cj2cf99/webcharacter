@@ -142,7 +142,7 @@ test('较早达标但没有可用动作的系列让出本轮，保留待执行�
   }finally{store.close();await rm(root,{recursive:true,force:true});}
 });
 test('公开查询写入前失败可在下轮重试，只传公开词且有结果才登记',async()=>{
-  const root=await mkdtemp(join(tmpdir(),'feiyue-web-retry-'));let at=Date.now(),attempts=0,writes=0;
+  const root=await mkdtemp(join(tmpdir(),'feiyue-web-retry-'));let at=Date.parse('2026-11-22T08:00:00Z'),attempts=0,writes=0;
   const store=createEmotionStore(root,{now:()=>at,roll:()=>3}),signal=new AbortController().signal;
   try{
     store.accept({key:'chat/bird',at,kind:'chat',user:'我在家附近看到了翠鸟',publicTerm:'翠鸟习性'});

@@ -13,13 +13,14 @@ const types=[
   {id:'diary',name:'写日记',minutes:720},
   {id:'review',name:'补行动评价',minutes:60},
   {id:'refinement',name:'修订手记与唠叨',minutes:60},
+  {id:'inspection',name:'分析专家巡检',minutes:60},
 ];
 
 const goals={tasks:'检查云端待办并处理可领取任务',due:'检查今日到期和逾期事项',weather:'核对三地天气变化与预警',
   aiHeartbeat:'检查当前云端 AI 接口是否可用',
   diaryAudit:'核对近七天的手记，找出待确认的疑点',curiosity:'按设置观察当前场景并判断是否分享',nag:'核对待续事项并决定本轮主动行动',
   news:'查阅关注主题的公开报道，有新消息时提醒',diary:'整理未入册的素材并跟进未解悬念',review:'核查待整理专题并补写缺失的行动评价',
-  refinement:'逐条核对绯月已保存的手记或唠叨，修订后保存'};
+  refinement:'逐条核对绯月已保存的手记或唠叨，修订后保存',inspection:'检查最近的本机任务完成与失败记录'};
 
 export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,clearTimer,add,audit,onIdleResult,weatherLastAt,lastRun=()=>null}){
   db.exec(`CREATE TABLE IF NOT EXISTS local_polls (

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>绯月 · 本地复盘原型</title>
+  <link rel="stylesheet" href="../../desktop/feiyue-surface.css">
+  <link rel="stylesheet" href="preview.css">
+  <script defer src="preview.js"></script>
+</head>
+<body>
+  <main class="review" id="review" aria-label="本地复盘原型">
+    <header class="fy-titlebar">
+      <div class="fy-caption"><h1>本地复盘</h1></div>
+      <div class="tools"><span class="fy-meta">原型 · 模拟数据</span><button type="button" id="theme">切换浅色</button></div>
+    </header>
+    <nav class="fy-bar" aria-label="复盘视图">
+      <div class="fy-seg" role="group" aria-label="对话列表">
+        <button type="button" data-view="pending" aria-pressed="true">待确认 <span id="pendingCount">1</span></button>
+        <button type="button" data-view="ongoing" aria-pressed="false">进行中的对话 <span id="ongoingCount">1</span></button>
+        <button type="button" data-view="history" aria-pressed="false">对话历史</button>
+      </div>
+      <label id="dateFilter" class="fy-meta" hidden>日期 <input type="date" id="day" value="2026-11-22" aria-label="东京日期"></label>
+      <span class="fy-grow"></span><span class="fy-meta">东京时间</span>
+    </nav>
+    <div class="review-layout" id="layout">
+      <section class="thread-list" aria-label="对话线列表">
+        <p id="listSummary" class="fy-section"></p>
+        <div class="fy-list" id="threads"></div>
+      </section>
+      <section class="thread-detail" id="detail" aria-label="对话详情" aria-busy="false">
+        <button type="button" class="back" id="back">‹ 返回列表</button>
+        <div id="detailContent"></div>
+      </section>
+    </div>
+  </main>
+  <main id="chat" class="bubble chat-preview" aria-label="绯月对话气泡原型" hidden>
+    <header class="fy-titlebar fy-compact">
+      <div class="fy-caption"><h1>绯月</h1></div>
+      <button type="button" id="chatHistory">对话记录</button>
+      <button type="button" id="close" aria-label="关闭气泡">×</button>
+    </header>
+    <div class="chat-body">
+      <p id="chatTitle" class="fy-meta chat-topic"></p>
+      <ol id="chatMessages" class="messages" aria-live="polite"></ol>
+      <form id="chatForm" class="chat-composer">
+        <textarea id="reply" rows="2" aria-label="发给绯月" placeholder="想和绯月说点什么…" required></textarea>
+        <button class="primary" type="submit">发送 ↗</button>
+      </form>
+    </div>
+  </main>
+  <dialog id="source" aria-labelledby="sourceTitle">
+    <div class="dialog-head"><h2 id="sourceTitle"></h2><form method="dialog"><button aria-label="关闭来源">关闭</button></form></div>
+    <p class="fy-meta" id="sourceMeta"></p>
+    <div id="sourceContent"></div>
+  </dialog>
+</body>
+</html>

@@ -51,14 +51,15 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
     stopRun();
     return failure;
   }
-  async function writer(signal){
+  async function writer(signal,aiPriority,aiCurrentPriority){
     const skill=await untilAbort(loadSkill(),signal);
     return async(stage,data,fields,signal,steps)=>{
       signal.throwIfAborted();
       const input=JSON.stringify(data),key=steps&&digest(stage+'\n'+input);
       if(key&&steps[key])return steps[key];
       const prompt=skill.localAi[stage]+(stage==='compare'?' refs 的第一项必须是「主篇可选」为 true 的材料，其余可作为旁证。':'');
-      const result=await untilAbort(store.think(input,prompt,fields,signal,{name:skill.skill,version:skill.version}),signal);
+      const result=await untilAbort(store.think(input,prompt,fields,signal,{name:skill.skill,version:skill.version,stage,
+        aiPriority,aiCurrentPriority,aiBudget:45000,boundedOutput:true,backgroundBudget:!aiPriority,maxTokens:stage==='compare'?950:460}),signal);
       signal.throwIfAborted();
       if(key){steps[key]=result;store.saveAuditState(state);}
       return result;
@@ -141,32 +142,35 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
     n.status='意外中断';save(n);
     return {text:'回答已留在本机，可以从「待确认」继续。',done:true};
   }
-  async function advance(n,write,signal){
-    if(!canContinue())return pause(n);
-    const turns=await answerContext(n,write,signal);
-    const input={矛盾:n.reason,主问题:n.title,问答:turns};
+  async function advance(n,write,signal,thread){
+    if(!thread&&!canContinue())return pause(n);
+    const turns=thread?undefined:await answerContext(n,write,signal);
+    const input={矛盾:n.reason,主问题:n.title,问答:turns,同线依据:thread?.context};
     const {keywords}=await write('keywords',input,['keywords'],signal);
     const terms=keywords.split(/[，,、\s]+/u).filter(Boolean);
     const hits=await untilAbort(store.auditAssociations(terms,signal),signal);
     signal.throwIfAborted();
     if(hits.length)input.本机线索=hits.slice(0,3);
-    if(!canContinue())return pause(n);
+    if(!thread&&!canContinue())return pause(n);
     let closingStatus='回合结束';
     if(n.questions<3){
       const v=await write('reply',input,['complete','next'],signal);
       signal.throwIfAborted();
-      if(!canContinue())return pause(n);
+      if(thread&&!thread.isOpen())return;
+      if(!thread&&!canContinue())return pause(n);
       if(!['1','0'].includes(v.complete))throw Error('回答完整度尚未判明');
       if(v.complete==='1')closingStatus='已解释';
       else{
         const next=question(v.next);
         if(!next)throw Error('未取得有效追问');
         if(!n.talk.some(t=>t.who==='绯月'&&t.text===next)){
-          n.next=next;n.questions++;line(n,'绯月',next);save(n);
+          n.next=next;n.questions++;line(n,'绯月',next);if(!thread)save(n);
           return {text:next};
         }
       }
     }
+    if(thread&&!thread.isOpen())return;
+    if(thread&&!thread.stillLatest())return {text:'我听见了，我再看看你刚补的这句。'};
     mood(n);
     const answers=Array.from(n.talk.filter(t=>t.who==='你').map(t=>cleanMemory(t.text)).join('\n'));
     const closing=closingStatus==='回合结束'?'\n还有细节待确认。':'';
@@ -174,8 +178,8 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
     const room=600-Array.from('你说「」'+closing+feeling).length;
     const excerpt=answers.length>room?'…'+answers.slice(1-room).join(''):answers.join('');
     const text='你说「'+excerpt+'」'+closing+feeling;
-    n.status=closingStatus;n.afterEvaluation=text;save(n);
-    return {text,done:true};
+    n.status=closingStatus;n.afterEvaluation=text;if(!thread)save(n);
+    return {text,done:true,finished:true};
   }
   async function showQuestion(n,signal){
     const controller=new AbortController();
@@ -254,5 +258,9 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
     }finally{working=false;}
   }
   return {prepare,resume,recover:()=>Boolean(store.auditState().run),get active(){return Boolean(active);},
+    detachThread:id=>{if(active?.id===id)active.leave('later');},
+    async threadAnswer(n,signal,priority,stillLatest,context,isOpen,currentPriority){
+      return advance(n,await writer(signal,priority,currentPriority),signal,{stillLatest,context,isOpen});
+    },
     close(){active?.leave('interrupted');}};
 }

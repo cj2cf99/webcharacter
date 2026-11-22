@@ -12,6 +12,126 @@ const schedule=document.getElementById('schedule'),checkPages=document.getElemen
 let targetView,checkPage=0,nextAt=null,countdown,checksRefresh;
 const noticeControls=document.getElementById('noticeControls'),noticeDetail=document.getElementById('noticeDetail');
 let noticeFilter='unread';
+const threadTabs=document.getElementById('threadTabs');
+const threadButtons=[...threadTabs.querySelectorAll('[data-category]')];
+const briefTime=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+const tokyoDay=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo'});
+let threadData,openedThread,threadRefresh;
+function button(label,action){
+  const node=element('button',label);
+  node.type='button';
+  node.onclick=async()=>{
+    node.disabled=true;
+    try{await action();}
+    catch(error){status.textContent=error.message||'操作失败，请重试。';}
+    finally{node.disabled=false;}
+  };
+  return node;
+}
+function threadCard(row,data,shown=false){
+  const tone=row.closed!==null?'muted':row.error?'danger':row.pending?'info':'accent';
+  const cardNode=card('details',tone);
+  const time=row.latest&&tokyoDay.format(row.latest)===data.day?briefTime.format(row.latest):'最新 '+short.format(row.latest);
+  const state=row.closed!==null?'已结束':row.rounds>100?'只读':row.error?'可重试':row.pending?'等绯月回':'等你回';
+  const summary=element('summary','','thread-summary');
+  const title=row.title||row.preview?.text?.slice(0,28)||'新对话';
+  summary.append(head(title,chip(state,row.closed!==null?'ok':tone),element('time',time)));
+  if(row.preview?.text&&row.preview.text!==title)summary.append(element('p',row.preview.text,'fy-clamp'));
+  if(row.sourceLabel)summary.append(element('small',row.sourceLabel,'fy-meta'));
+  const detail=element('div','','thread-detail');
+  cardNode.append(summary,detail);cardNode.dataset.thread=row.id;
+  let reading=0;
+  async function fill(){
+    const token=++reading;
+    openedThread=row.id;
+    detail.replaceChildren(element('p','正在读取发言…','fy-meta'));
+    try{
+      const value=await api.thread(row.id);
+      if(token!==reading||!cardNode.open||!cardNode.isConnected)return;
+      const source=element('details','','thread-source');
+      source.append(element('summary',value.source?.label||'来源'));
+      source.append(element('p',[value.origin,value.source?.reference,value.source?.excerpt||(!value.source?.url?'来源未保存':'')].filter(Boolean).join('\n')));
+      if(value.source?.url)source.append(button('打开原件',()=>api.openSource(value.source.url)));
+      const talk=element('section','','thread-talk');
+      for(const message of value.messages){
+        const entry=element('article','','thread-message');entry.dataset.who=message.who;
+        entry.append(element('small',message.who+' · '+stamp(message.at),'fy-meta'),element('p',message.text));
+        if(message.transcriptId)entry.append(button('查看待确认卡',()=>api.threadDraft(value.id,message.transcriptId)));
+        for(const ref of message.sources??[])if(ref.url)entry.append(button(ref.title||'打开来源',()=>api.openSource(ref.url)));
+        talk.append(entry);
+      }
+      const actions=element('div','','thread-actions');
+      if(value.closed===null||value.rounds>100)actions.append(button('继续聊天',()=>api.openThread(value.id)));
+      if(value.error&&value.closed===null&&value.rounds<=100)actions.append(button('重试',()=>api.retryThread(value.id)));
+      if(value.organizationId)actions.append(button('查看整理进度',()=>api.threadDraft(value.id,value.organizationId)));
+      if(value.closed===null&&value.rounds<=100){
+        const note=element('form','','thread-note');
+        const text=element('textarea','');
+        text.rows=2;text.maxLength=2000;text.placeholder='留言给绯月…';text.setAttribute('aria-label','简单回复');text.required=true;
+        const send=element('button','发送便签');send.type='submit';
+        const feedback=element('small','','fy-meta');feedback.setAttribute('role','status');
+        const quick=button('简单回复',()=>{note.hidden=!note.hidden;if(!note.hidden)text.focus();});
+        let key;
+        note.hidden=true;
+        note.append(text,send,feedback);
+        text.oninput=()=>{key=undefined;};
+        note.onsubmit=async event=>{
+          event.preventDefault();if(!text.value.trim()||send.disabled)return;
+          send.disabled=true;
+          try{
+            const receipt=await api.note(value.id,{text:text.value,messageId:key??=crypto.randomUUID()});
+            if(!receipt.accepted)throw Error('便签未能提交');
+            text.value='';key=undefined;feedback.textContent='已留言，回复后可在这里查看。';
+          }catch(error){feedback.textContent=error.message;}
+          finally{send.disabled=false;}
+        };
+        actions.append(quick,note);
+      }
+      detail.replaceChildren(source,talk,actions);
+    }catch{
+      if(token===reading&&cardNode.open)detail.replaceChildren(button('读取失败 · 重试',fill));
+    }
+  }
+  cardNode.ontoggle=()=>{if(cardNode.open)void fill();else if(openedThread===row.id)openedThread=null;};
+  cardNode.open=shown;
+  return cardNode;
+}
+function drawThreads(data){
+  threadData=data;
+  document.getElementById('questionCount').textContent=data.counts.question??0;
+  document.getElementById('activeCount').textContent=data.counts.ordinary??0;
+  for(const tab of threadButtons)tab.setAttribute('aria-pressed',String(tab.dataset.category===data.category));
+  const rows=data.rows.map((row,index)=>stagger(threadCard(row,data,row.id===(data.target??openedThread)),index));
+  for(const entry of data.special){
+    const item=card('section','accent');
+    item.append(head(entry.title||'绯月专聊',chip(entry.status,'accent')),button('打开专聊',()=>api.resumeAudit(entry.id)));
+    rows.push(item);
+  }
+  if(data.target&&!data.rows.some(row=>row.id===data.target)){
+    const target=card('section','accent');
+    const loading=element('p','正在定位对话…','fy-meta');
+    target.append(loading);rows.unshift(target);
+    void api.thread(data.target).then(value=>{
+      if(target.isConnected&&value)target.replaceWith(threadCard(value,data,true));
+    }).catch(()=>{loading.textContent='这条对话暂时无法读取。';});
+  }
+  if(data.legacy.length){
+    const old=card('details','muted');
+    old.append(element('summary','旧对话记录（'+data.legacy.length+'）'));
+    const contents=element('div','','thread-detail');
+    let page=0;
+    function drawLegacy(){
+      contents.replaceChildren(...data.legacy.slice(page*PAGE,(page+1)*PAGE).map(turn=>legacyCard(turn,data.day)));
+      if(page>0)contents.append(button('较新',()=>{page--;drawLegacy();}));
+      if((page+1)*PAGE<data.legacy.length)contents.append(button('较早',()=>{page++;drawLegacy();}));
+    }
+    old.addEventListener('toggle',()=>{if(old.open&&!contents.childElementCount)drawLegacy();});
+    old.append(contents);rows.push(old);
+  }
+  list.replaceChildren(...rows);
+  setPager(data.page,data.pages);
+  status.textContent=rows.length?'':{questions:'没有待确认的提问。',active:'没有进行中的对话。',history:'当天还没有对话。'}[data.category];
+}
 function setPager(page,pages,more=page+1<pages){
   checkPages.hidden=page===0&&!more;
   document.getElementById('checkPage').textContent=pages?(page+1)+' / '+pages:'第 '+(page+1)+' 页';
@@ -205,6 +325,39 @@ async function decide(input){
     await load(undefined,'pending');
   }
 }
+function appendQuestionCitation(card,question){
+  const source=question.citation;
+  if(!source)return;
+  card.append(element('p','来源 · '+source.reference,'fy-meta'));
+  if(source.excerpt)card.append(element('blockquote',source.label+'\n'+source.excerpt,'question-quote'));
+  if(!source.canExpand){
+    if(!source.excerpt)card.append(element('p','本机暂无对应手记。','fy-meta'));
+    return;
+  }
+  const details=element('details','','question-citation');
+  const summary=element('summary','');
+  const caret=element('span','›','fy-caret');
+  caret.setAttribute('aria-hidden','true');
+  summary.append(caret,document.createTextNode('查看来源上下文'));
+  const content=element('div','');
+  let loading=false,loaded=false;
+  details.append(summary,content);
+  details.ontoggle=async()=>{
+    if(!details.open||loading||loaded)return;
+    loading=true;
+    content.textContent='正在读取来源…';
+    try{
+      const result=await api.questionCitation(question.id);
+      if(!result?.body&&!result?.quote)throw Error();
+      content.replaceChildren();
+      if(result.quote&&result.quote!==source.excerpt)content.append(element('blockquote',result.label+'\n'+result.quote,'question-quote'));
+      if(result.body)content.append(element('small','来源手记','fy-meta'),element('p',result.body));
+      loaded=true;
+    }catch{content.textContent='暂时无法读取来源，收起后可重新展开。';}
+    finally{loading=false;}
+  };
+  card.append(details);
+}
 function renderPending(data,explicit){
   const sections=[];
   function button(label,run){const b=element('button',label);b.onclick=run;return b;}
@@ -227,7 +380,10 @@ function renderPending(data,explicit){
       resume.classList.add('private-chat-invite');
       resume.prepend(portrait);
       if(question.active&&question.stage)s.append(element('p',question.stage,'fy-clamp'));
-    }else s.append(element('p',question.title,'fy-clamp'));
+    }else{
+      s.append(element('p',question.title,'fy-clamp'));
+      appendQuestionCitation(s,question);
+    }
     s.append(resume);
     sections.push(s);
   }
@@ -287,8 +443,57 @@ function logRow(line){
   if(Object.keys(detail).length){
     const more=element('details',''),summary=element('summary','');
     summary.append(element('span','›','fy-caret'),document.createTextNode(' 明细'));summary.className='fy-meta';
-    more.append(summary,element('pre',JSON.stringify(detail,null,2)));row.append(more);
+    more.append(summary,element('pre',JSON.stringify(detail,null,2)));
+    if(detail.ai_step_id&&api.aiStep){
+      const snapshot=element('details','');
+      snapshot.append(element('summary','AI 调用快照'));
+      snapshot.ontoggle=async()=>{
+        if(!snapshot.open||snapshot.childElementCount>1)return;
+        const output=element('pre','正在读取…');snapshot.append(output);
+        try{
+          const data=await api.aiStep(detail.ai_step_id);
+          output.textContent=data?JSON.stringify(data,null,2):'快照未找到';
+        }catch{output.textContent='快照读取失败，关闭后可重试。';snapshot.addEventListener('toggle',()=>{if(!snapshot.open)output.remove();},{once:true});}
+      };
+      more.append(snapshot);
+    }
+    row.append(more);
   }
+  return row;
+}
+function legacyCard(turn,date){
+  const row=card('details',turn.state==='error'?'danger':turn.failures?.length?'warn':'accent');
+  const summary=document.createElement('summary'),answer=element('div','','answer');
+  summary.append(element('span','›','fy-caret'),element('time','我 · '+clock.format(turn.at)+(turn.retry?' · 手动重试':'')),element('span',turn.question,'q fy-clamp'));
+  const speaker=turn.state==='error'?'处理状态':'绯月';
+  answer.append(element('small',speaker+(turn.answeredAt?' · '+clock.format(turn.answeredAt):'')),element('p',turn.text));
+  appendImage(answer,turn.image);
+  if(turn.report?.job===turn.id)answer.append(reportButton(date,turn.id,'查看图像报告'));
+  if(turn.failures?.length){
+    const errors=element('section','');
+    errors.className='failure-log';
+    errors.append(element('strong','错误记录（'+turn.failures.length+'）'));
+    for(const entry of turn.failures){
+      const label=[new Date(entry.at).toLocaleString('zh-CN',{timeZone:'Asia/Tokyo',hour12:false})+' JST',entry.operation,
+        entry.attempt?'第 '+entry.attempt+' 次请求':'',entry.phase,entry.durationMs+' ms'].filter(Boolean).join(' · ');
+      const codes=[entry.httpStatus&&'HTTP '+entry.httpStatus,entry.code,entry.serviceCode!==entry.code&&entry.serviceCode,entry.ray&&'Ray ID '+entry.ray].filter(Boolean).join(' · ');
+      errors.append(element('time',label),element('p',[codes,entry.text].filter(Boolean).join('\n')));
+    }
+    answer.append(errors);
+  }
+  for(const source of turn.sources??[]){
+    let url;
+    try{url=new URL(source?.url);}catch{continue;}
+    if(!['http:','https:'].includes(url.protocol))continue;
+    const button=element('button',url.hostname+' · '+(source.title??'来源'));
+    button.className='source';button.onclick=()=>api.openSource(source.url);
+    if(source.preview?.startsWith('data:image/')){
+      const img=document.createElement('img');img.loading='lazy';img.width=144;img.alt=source.title;img.src=source.preview;
+      button.prepend(img);
+    }
+    answer.append(button);
+  }
+  row.append(summary,answer);
   return row;
 }
 async function load(date,requestedView,explicit=true,cursor=null) {
@@ -311,7 +516,9 @@ async function load(date,requestedView,explicit=true,cursor=null) {
     view=data.view;
     targetView=view;
     for(const id of ['tasks','chat','checks','notices','pending','log'])document.getElementById(id).setAttribute('aria-pressed',String(id===view));
-    day.parentElement.hidden=view==='pending'||view==='notices'||view==='log'&&!data.dated;
+    threadTabs.hidden=!data.category;
+    if(!data.category)threadData=null;
+    day.parentElement.hidden=view==='pending'||view==='notices'||view==='log'&&!data.dated||Boolean(data.category&&data.category!=='history');
     refreshLog.hidden=view!=='log'&&view!=='checks';refreshLog.title=view==='checks'?'刷新检查记录':'刷新日志';
     if(view==='checks'){renderChecks(data);return;}
     if(view==='notices'){renderNotices(data);return;}
@@ -323,6 +530,7 @@ async function load(date,requestedView,explicit=true,cursor=null) {
       return;
     }
     if(view==='pending'){renderPending(data,explicit);return;}
+    if(data.category){drawThreads(data);return;}
     if(view==='tasks'){
       const shown=new Set();
       showLocal(newestFirst(data.events).map(event=>{
@@ -342,35 +550,7 @@ async function load(date,requestedView,explicit=true,cursor=null) {
     }
     let focus=null;
     const rows=data.turns.map(turn=>()=>{
-      const row=card('details',turn.state==='error'?'danger':turn.failures?.length?'warn':'accent');
-      const summary=document.createElement('summary'),answer=element('div','','answer');
-      summary.append(element('span','›','fy-caret'),element('time','我 · '+clock.format(turn.at)+(turn.retry?' · 手动重试':'')),element('span',turn.question,'q fy-clamp'));
-      const speaker=turn.state==='error'?'处理状态':'绯月';
-      answer.append(element('small',speaker+(turn.answeredAt?' · '+clock.format(turn.answeredAt):'')),element('p',turn.text));
-      appendImage(answer,turn.image);
-      if(turn.report?.job===turn.id)answer.append(reportButton(data.day,turn.id,'查看图像报告'));
-      if(turn.failures?.length){
-        const errors=element('section','');
-        errors.className='failure-log';
-        errors.append(element('strong','错误记录（'+turn.failures.length+'）'));
-        for(const entry of turn.failures){
-          const label=[new Date(entry.at).toLocaleString('zh-CN',{timeZone:'Asia/Tokyo',hour12:false})+' JST',entry.operation,
-            entry.attempt?'第 '+entry.attempt+' 次请求':'',entry.phase,entry.durationMs+' ms'].filter(Boolean).join(' · ');
-          const codes=[entry.httpStatus&&'HTTP '+entry.httpStatus,entry.code,entry.serviceCode!==entry.code&&entry.serviceCode,entry.ray&&'Ray ID '+entry.ray].filter(Boolean).join(' · ');
-          errors.append(element('time',label),element('p',[codes,entry.text].filter(Boolean).join('\n')));
-        }
-        answer.append(errors);
-      }
-      for(const source of turn.sources??[]){
-        const button=element('button',new URL(source.url).hostname+' · '+source.title);
-        button.className='source';button.onclick=()=>api.openSource(source.url);
-        if(source.preview?.startsWith('data:image/')){
-          const img=document.createElement('img');img.loading='lazy';img.width=144;img.alt=source.title;img.src=source.preview;
-          button.prepend(img);
-        }
-        answer.append(button);
-      }
-      row.append(summary,answer);
+      const row=legacyCard(turn,data.day);
       if(turn.id===data.selectedId){row.open=true;focus=row;}
       return row;
     });
@@ -383,11 +563,19 @@ async function load(date,requestedView,explicit=true,cursor=null) {
     if(token===generation){refreshLog.removeAttribute('aria-busy');status.classList.toggle('fy-empty',!list.childElementCount);}
   }
 }
-day.addEventListener('change',()=>{if(day.value)void load(day.value,view);});
+day.addEventListener('change',()=>{if(day.value)void load(day.value,view,true,threadData?{category:'history',page:0}:null);});
 for(const id of ['tasks','chat','checks','notices','pending','log'])document.getElementById(id).onclick=()=>load(day.value||undefined,id);
+for(const tab of threadButtons)tab.onclick=()=>{
+  openedThread=null;
+  void load(day.value,'chat',true,{category:tab.dataset.category,page:0});
+};
+document.getElementById('newThread').onclick=()=>api.newThread().catch(error=>{status.textContent=error.message;});
 refreshLog.onclick=()=>load(day.value,view,true,view==='checks'?checkPage:null);
 function checkPageAt(page){return load(day.value,view,false,view==='notices'?{page,filter:noticeFilter}:page);}
 function turnPage(step){
+  if(view==='chat'&&threadData){
+    openedThread=null;void load(day.value,'chat',false,{category:threadData.category,page:threadData.page+step});return;
+  }
   if(view==='chat'||view==='tasks'){local.page+=step;drawLocal();list.parentElement.scrollTop=0;return;}
   if(view==='log'){
     const index=logIndex+step,cursor=logCursors[index];
@@ -410,4 +598,12 @@ api.onChecks?.(()=>{
 });
 api.onPending?.(()=>{if(view==='pending'&&!deciding)void load(undefined,'pending',false);});
 api.onTasks?.(()=>{if(targetView==='tasks'&&!report.open)void load(day.value,'tasks',false);});
+api.onThreads?.(()=>{
+  if(view!=='chat'||!threadData)return;
+  clearTimeout(threadRefresh);
+  threadRefresh=setTimeout(()=>{
+    if(view==='chat'&&threadData&&!list.querySelector('.thread-note:focus-within'))
+      void load(day.value,'chat',false,{category:threadData.category,page:threadData.page,target:openedThread});
+  },350);
+});
 api.onSelect(()=>load());void load();

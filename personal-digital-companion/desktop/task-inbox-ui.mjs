@@ -91,7 +91,7 @@ async function loadTranscripts(){
   byId('transcript-items').hidden=Boolean(shownTranscript);
   if(!shownTranscript){
     byId('transcript-items').replaceChildren(...items.map(item=>{
-      const card=row('对话内容转录',[transcriptStates[item.state],stamp(item.at),item.stage,item.count?`${item.count} 项`:'']);
+      const card=row('对话内容转录',[item.needsReview?'待核查':transcriptStates[item.state],stamp(item.at),item.stage,item.count?`${item.count} 项`:'']);
       const button=node('button','查看结果');button.type='button';button.onclick=()=>void showTranscript(item.id).catch(error=>putNotice(error.message));
       card.append(button);return card;
     }));
@@ -187,11 +187,25 @@ function renderTranscript(){
     byId('local-message').hidden=false;byId('local-items').hidden=false;
     void loadTranscripts().catch(error=>putNotice(error.message));
   }),
-    node('strong',transcriptStates[data.state]||data.state));
+    node('strong',data.needsReview?'待核查':transcriptStates[data.state]||data.state));
   if(data.durationMs!=null)bar.append(node('small',`${Math.round(data.durationMs/1000)} 秒`));
   if(['failed','submit-pending'].includes(data.state))bar.append(button('重试',()=>void transcriptAction('transcriptRetry',data.id)));
   body.replaceChildren(bar);
   if(data.error)body.append(node('p',data.error));
+  if(data.steps?.length){
+    const activity=node('details');activity.append(node('summary','AI 分析与转录 · '+data.steps.length+' 步'));
+    activity.addEventListener('toggle',()=>{
+      if(!activity.open||activity.childElementCount>1)return;
+      for(const [index,step] of data.steps.entries()){
+        const part=node('details');
+        const stage=step.id.includes('classify')?'转录':'分析';
+        part.append(node('summary',(index+1)+' · '+stage+' · '+({done:'完成',split:'已拆小',failed:'失败',waiting:'等待',running:'处理中',unknown:'上次结果未知'}[step.state]??step.state)));
+        part.append(node('pre',JSON.stringify({输入:step.input,调用记录:step.attempts,有效输出:step.output,错误:step.error},null,2)));
+        activity.append(part);
+      }
+    });
+    body.append(activity);
+  }
   if(!data.result)return;
   const notes=node('details');notes.append(node('summary','查看整理摘要'));
   for(const [key,label] of [['actions','已发生'],['requests','可能的委托'],['signals','登记线索']]){

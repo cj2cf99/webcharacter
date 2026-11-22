@@ -2,9 +2,10 @@ export const pendingLimit=20;
 export const isPendingQuestion=n=>['提问中','等待回应','意外中断'].includes(n.status);
 export const answeredQuestion=n=>['已解释','回合结束'].includes(n.status)&&n.talk?.some(t=>t.who==='你'&&t.text?.trim());
 export const questionTarget=n=>n.source+'/'+(n.source==='diary'||n.source==='audit'?n.source_id.replace(/\.0+(?=\d)/u,'.'):n.source_id);
+export const emptyFollowUp=text=>typeof text==='string'&&/^(?:无|無|无追问|没有追问|无需追问|none|null|n\/a)\s*[。？！!?]*$/iu.test(text.trim());
 export const questionText=value=>{
   const text=typeof value==='string'?value.trim().replace(/[。？！!?]+$/u,''):'';
-  if(!text||/[\r\n？?]/u.test(text))return '';
+  if(!text||emptyFollowUp(text)||/[\r\n？?]/u.test(text))return '';
   return text+'？';
 };
 

@@ -116,9 +116,16 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Da
   const readScan=db.prepare('SELECT data FROM memory_refinement_scan WHERE id=1');
   const writeScan=db.prepare('INSERT OR REPLACE INTO memory_refinement_scan VALUES(1,?)');
   let running=false;
+  let outputKey;
+
+  function acknowledge(){
+    model.aiAck?.(outputKey);
+    outputKey=undefined;
+  }
 
   function store(job){
     if(!checkpoint.run(JSON.stringify(job),job.taskId).changes)throw Error('本机修订任务已变化');
+    acknowledge();
   }
 
   async function fingerprint(job,fields){
@@ -206,26 +213,38 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Da
       note:{...base.properties.note,maxLength:48}}}:stage==='review'?
       {...base,properties:{...base.properties,decision:{enum:['accept','revise']}}}:base;
     const draftField=data.part?.field;
+    const queued=Boolean(model.aiAck);
+    const originalDates=queued&&draftField&&draftField!=='summary'?
+      [...new Set(data.part.text.match(/(?:周|星期|礼拜)[一二三四五六日天]|[0-9]{1,2}月[0-9]{1,2}[日号]|[0-9]{4}-[0-9]{2}-[0-9]{2}/gu)??[])]:[];
+    const deduplicated=queued&&draftField?.endsWith('Evaluation')&&!data.materials?.length?
+      tidyDiaryPart(data.part.text,false):null;
+    const aiFallback=deduplicated&&deduplicated!==data.part.text?{text:deduplicated.trim(),note:'我合并了相邻的重复语句。'}:undefined;
+    if(queued&&draftField==='summary')Object.assign(schema.properties.text,{maxLength:64,pattern:'^[^\\r\\n]+$'});
     const formatRule=draftField==='summary'?'只写一行简短摘要。禁止换行、栏目、日期抬头或重复正文。':
       draftField==='body'?'只编辑给定正文片段。沿用有效栏目，禁止生成整篇日记的日期抬头、摘要、天气、情绪或标签。':
       '当前文种格式：'+shorten(format.content,220);
     const instruction=[skill.localAi.rules??shorten(skill.content,220),skill.localAi[stage],
       stage==='review'?'复核结论只允许 accept 或 revise。':'',formatRule].filter(Boolean).join('\n');
-    const deadline=AbortSignal.timeout(interactionBudget);
-    const wait=AbortSignal.any([signal,deadline]);
+    const modelData=queued&&draftField==='summary'?{原摘要:data.part.text,当前正文:shorten(data.revisedBody,320)}:data;
+    const aiCheckpoint=queued?'refine:'+job.taskId+':'+await refinementDigest([stage,skill.version,format.version,job.baseRevision,modelData]):undefined;
+    const deadline=queued?null:AbortSignal.timeout(interactionBudget);
+    const wait=deadline?AbortSignal.any([signal,deadline]):signal;
     let output;
     try{
-      output=await untilAbort(model.memory(JSON.stringify(data),instruction,schema,wait,
-        {name:skill.skill,version:skill.version,stage,maxTokens:tokens}),wait);
+      output=await untilAbort(model.memory(JSON.stringify(modelData),instruction,schema,wait,
+        {name:skill.skill,version:skill.version,stage,maxTokens:tokens,...(queued?{aiCheckpoint,aiReview:stage==='draft',aiTier:'2',aiFallback,
+          ...(originalDates.length?{aiKeep:{text:originalDates}}:{})}:{})}),wait);
     }catch(error){
       signal.throwIfAborted();
-      if(deadline.aborted)throw Object.assign(Error('本机修订单次思索达到 15 秒，已保留进度'),{code:'LOCAL_AI_REFINEMENT_TIMEOUT'});
+      if(deadline?.aborted||error.code==='TimeoutError'||error.code==='LOCAL_AI_TIMEOUT')
+        throw Object.assign(Error('本机修订单次思索达到 15 秒，已保留进度'),{code:'LOCAL_AI_REFINEMENT_TIMEOUT'});
       throw error;
     }
     signal.throwIfAborted();
     if(!output||!schema.required.every(key=>typeof output[key]==='string'&&
         (!schema.properties[key].enum||schema.properties[key].enum.includes(output[key]))&&
         (!schema.properties[key].maxLength||[...output[key]].length<=schema.properties[key].maxLength)))throw Error('修订阶段结果格式无效');
+    outputKey=aiCheckpoint;
     return Object.fromEntries(schema.required.map(key=>[key,output[key]]));
   }
 
@@ -335,11 +354,16 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Da
         let text=draft.text.trim()===inputPart.text.trim()?inputPart.text:clean(draft.text);
         if(part.field==='body'){
           const headers=/^\s*【(?:摘要|天气|情绪|标签)】/mu;
-          if(headers.test(text)&&!headers.test(part.text))throw Error('正文段落带入了篇首字段，已保留其他进度');
+          if(headers.test(text)&&!headers.test(part.text)){
+            acknowledge();
+            throw Error('正文段落带入了篇首字段，已保留其他进度');
+          }
           text=tidyDiaryPart(text,part.last);
         }
-        if(part.field==='summary'&&(/[\r\n]/u.test(text)||/^【.+?】/u.test(text)))
+        if(part.field==='summary'&&(/[\r\n]/u.test(text)||/^【.+?】/u.test(text))){
+          acknowledge();
           throw Error('摘要须为一行文字，已保留正文稿件');
+        }
         const unchanged=text.trim()===part.text.trim();
         const wrapped=text?(part.afterFixed?'\n\n':part.text.match(/^\s*/u)[0])+text+part.text.match(/\s*$/u)[0]:text;
         const alteredByHost=inputPart.text!==part.text||clean(draft.text)!==text;
@@ -394,7 +418,7 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,now=Da
       job.submission={refineId:randomUUID(),fields,digest:reviewDigest};
       store(job);
       return await submit(job,signal,progress);
-    }finally{running=false;}
+    }finally{outputKey=undefined;running=false;}
   }
   return {run};
 }

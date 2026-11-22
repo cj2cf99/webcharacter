@@ -93,8 +93,10 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     CREATE TABLE IF NOT EXISTS material_sources(id TEXT PRIMARY KEY,source TEXT NOT NULL,at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS compared(id TEXT PRIMARY KEY);
     CREATE TABLE IF NOT EXISTS cleaned(id TEXT PRIMARY KEY,content TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS material_review_failures(id TEXT PRIMARY KEY, attempts INTEGER NOT NULL, code TEXT NOT NULL, at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS drafts(id TEXT PRIMARY KEY,day TEXT,packet TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS pages(id TEXT PRIMARY KEY,day TEXT,json TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS diary_thread_sources(id TEXT PRIMARY KEY,quote TEXT NOT NULL,label TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS nags(id TEXT PRIMARY KEY, json TEXT NOT NULL, dirty INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS diary_audit_state(id INTEGER PRIMARY KEY CHECK(id=1), json TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS schedule(job TEXT PRIMARY KEY,at INTEGER NOT NULL);`);
@@ -193,6 +195,30 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
   const pages=(since='')=>rows('SELECT json FROM pages WHERE day>=? ORDER BY day DESC,id DESC',since).map(r=>JSON.parse(r.json));
   const nags=()=>rows('SELECT json FROM nags ORDER BY rowid DESC').map(r=>JSON.parse(r.json));
   const cachePage=p=>put('INSERT OR REPLACE INTO pages VALUES(?,?,?)',p.day+'.'+p.part,p.day,JSON.stringify(p));
+  const lookupThreadSource=db.prepare('SELECT quote,label FROM diary_thread_sources WHERE id=?');
+  const lookupPage=db.prepare('SELECT json FROM pages WHERE id=?');
+  function questionCitation(n,expanded=false){
+    if(n.source!=='diary')return;
+    const id=questionTarget(n).slice('diary/'.length);
+    const match=/^(\d{4}-\d{2}-\d{2})\.(\d+)\/(\d+)$/u.exec(id);
+    if(!match)return;
+    const [,day,part,no]=match;
+    const reference=day+' · 第 '+part+' 篇 · 悬念 '+no;
+    const page=JSON.parse(lookupPage.get(day+'.'+part)?.json??'null');
+    const saved=lookupThreadSource.get('diary/'+id);
+    if(expanded)return {quote:saved?.quote,label:saved?.label,body:page?.body};
+    // 旧悬念只有篇号。只展示在手记对话里唯一命中的引文所在行。
+    const phrases=[...new Set([n.title,n.next].filter(Boolean).join('\n')
+      .matchAll(/[「『“‘]([^」』”’\r\n]{2,})[」』”’]/gu).map(m=>m[1]))];
+    const lines=saved||!phrases.length?[]:(page?.body??'').split('\n')
+      .filter(line=>line.startsWith('你说：')&&phrases.every(text=>line.includes(text)));
+    const quote=saved?.quote??(lines.length===1?lines[0].slice('你说：'.length):'');
+    const chars=Array.from(quote);
+    const phrase=phrases.find(text=>quote.includes(text));
+    const start=phrase?Math.max(0,Array.from(quote.slice(0,quote.indexOf(phrase))).length-44):0;
+    const excerpt=quote?(start?'…':'')+chars.slice(start,start+150).join('')+(chars.length>start+150?'…':''):'';
+    return {reference,label:saved?.label??'手记对话摘录',excerpt,canExpand:Boolean(page?.body||chars.length>150)};
+  }
   function cacheRefined(kind,record){
     if(kind==='diaries'){
       const local=db.prepare('SELECT json FROM pages WHERE id=?').get(record.day+'.'+record.part);
@@ -382,9 +408,10 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
   }
   const days=()=>[1,0,2,3,4,5,6].map(i=>tokyoDay(now()-i*86400000));
   async function events(day,tasksOnly=false,external=[],signal){
-    const [turns,tasks]=await Promise.all([tasksOnly?[]:memory.read(day),memory.readTasks(day)]);
+    const [turns,tasks,sourceItems]=await Promise.all([tasksOnly?[]:memory.read(day),memory.readTasks(day),external]);
     const events=[],pending=[];
     function add(source,at,text,dialogue=false,label,fields=[[label||'原文',text]]){
+      const originalDialogue=dialogue?fields.map(([who,line])=>who+'：'+cleanMemory(line)).join('\n'):undefined;
       if(signal){
         const parts=fields.map(([name,value],i)=>{
           const raw=String(value??'');
@@ -394,13 +421,13 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
           const legacy=[...materialChunks(day,source,at,text)].map(m=>m.id);
           const id=hash(JSON.stringify([day,source,at,fields]));
           if(storedReview(id)!==undefined||!legacy.length||!legacy.every(id=>db.prepare('SELECT covered FROM materials WHERE id=?').get(id)?.covered)){
-            pending.push({id,source,at,dialogue,label,fields,parts,legacy});return;
+            pending.push({id,source,at,dialogue,label,fields,parts,legacy,originalDialogue});return;
           }
         }
       }
       if(!Number.isFinite(at)||!text.trim())return;
       for(const {id,content} of materialChunks(day,source,at,text)){
-        events.push({id,source:String(source),at,content,dialogue,label,fromNag:String(source).startsWith('nag')});
+        events.push({id,source:String(source),at,content,dialogue,label,originalDialogue,fromNag:String(source).startsWith('nag')});
       }
     }
     const protectedTurns=new Map();
@@ -417,7 +444,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     if(tasksOnly)return {items:events};
     await topics?.ready?.catch(()=>{});
     for(const t of topics?.facts(day)??[])add('topic:'+t.id+':'+t.revision,t.updated,'专题核实：'+t.title+'。'+t.summary,false,'专题记忆',[['专题标题',t.title],['专题摘要',t.summary]]);
-    for(const r of external)add(r.source,r.at,r.content,false,r.label,r.fields);
+    for(const r of sourceItems)add(r.source,r.at,r.content,false,r.label,r.fields);
     const notices=weather(day);
     for(const r of notices)add('notice:'+r.id,r.at,'绯月播报：'+r.body,false,undefined,[['绯月播报',r.body]]);
     for(const n of nags()){
@@ -446,7 +473,8 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
       for(const [i,[name,value]] of e.fields.entries()){
         if(value)lines.push(name+'：'+(e.parts[i]?await excerpt(e.parts[i],signal):cleanMemory(value)));
       }
-      events.push({id:e.id,source:e.source,at:e.at,label:e.label,dialogue:e.dialogue,fromNag:String(e.source).startsWith('nag'),content:lines.join('\n'),sections,legacy:e.legacy});
+      events.push({id:e.id,source:e.source,at:e.at,label:e.label,dialogue:e.dialogue,originalDialogue:e.originalDialogue,
+        fromNag:String(e.source).startsWith('nag'),content:lines.join('\n'),sections,legacy:e.legacy});
     }
     for(const event of events)if(protectedTurns.has(event.source))event.keepDialogue=true;
     return {items:events.sort((a,b)=>a.at-b.at),weather:safeOutput(notices.at(-1)?.body??turns.find(r=>/天气|预警/.test(r.question??''))?.text??'无记录',160)};
@@ -463,10 +491,30 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
   async function review(day,e,write){
     const prior=storedReview(e.id);
     if(prior!==undefined&&(!e.keepDialogue||prior))return prior;
-    const result=e.label||e.sections?{text:e.content,...await write(JSON.stringify({来源:e.label,记录:e.content}),
-      'reviewSource',['review'])}:
-      await write(e.content,'reviewAction', ['review','text']);
-    return transaction(()=>{
+    const isSource=Boolean(e.label||e.sections);
+    const data=isSource?JSON.stringify({来源:e.label,记录:e.content}):e.content;
+    const step=isSource?'reviewSource':'reviewAction';
+    const fields=isSource?['review']:['review','text'];
+    const keys=[];
+    function rate(input,id){
+      const key=write.key?.(input,step,id);
+      if(key)keys.push(key);
+      return write(input,step,fields,key);
+    }
+    let result;
+    try{result=await rate(data,e.id);}
+    catch(error){
+      if(isSource||!/LOCAL_AI_(?:OUTPUT_BUDGET|CONTEXT_BUDGET)/u.test(error.code??error.message))throw error;
+      const segments=Array.from(data);
+      if(segments.length<=360)throw error;
+      const chunks=[];
+      for(let i=0;i<segments.length;i+=360)chunks.push(segments.slice(i,i+360).join(''));
+      const reviewed=[];
+      for(const [index,chunk] of chunks.entries())reviewed.push(await rate(chunk,e.id+'-part-'+index));
+      result={text:reviewed.map(item=>item.text).filter(Boolean).join('\n'),review:safeOutput(reviewed.map(item=>item.review).filter(Boolean).join('；'),360)};
+    }
+    if(isSource)result.text=e.content;
+    const saved=transaction(()=>{
       const cached=storedReview(e.id);
       if(cached!==undefined&&(!e.keepDialogue||cached))return cached;
       if(e.keepDialogue&&!result.text){
@@ -481,6 +529,42 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
       put('INSERT OR IGNORE INTO material_sources VALUES(?,?,?)',e.id,e.source,e.at);
       return {...storedReview(e.id),existing:false};
     });
+    for(const key of keys)model.aiAck?.(key);
+    put('DELETE FROM material_review_failures WHERE id=?',e.id);
+    return saved;
+  }
+  async function reviewMaterials(day,items,write,signal,apply){
+    let deferred=0;
+    for(let index=0;index<items.length;){
+      signal.throwIfAborted();
+      const group=items.slice(index,index+(model.aiAck?20:1));
+      const pending=new Map();
+      const results=await Promise.allSettled(group.map(async event=>{
+        const failure=db.prepare('SELECT attempts,at FROM material_review_failures WHERE id=?').get(event.id);
+        if(failure&&(failure.attempts>=3||now()-failure.at<60_000))return {deferred:true};
+        if(pending.has(event.id)){
+          const rating=await pending.get(event.id);
+          return rating&&{...rating,existing:true};
+        }
+        const work=review(day,event,write);
+        pending.set(event.id,work);
+        return work;
+      }));
+      signal.throwIfAborted();
+      for(const [offset,result] of results.entries()){
+        const event=group[offset];
+        if(result.status==='rejected'){
+          const code=result.reason?.code??result.reason?.message??'LOCAL_AI_INFERENCE_FAILED';
+          if(!/^LOCAL_AI_/u.test(code))throw result.reason;
+          if(code!=='LOCAL_AI_GPU_DEFERRED')put(`INSERT INTO material_review_failures VALUES(?,1,?,?) ON CONFLICT(id)
+            DO UPDATE SET attempts=attempts+1,code=excluded.code,at=excluded.at`,event.id,code,now());
+          deferred++;
+        }else if(result.value?.deferred)deferred++;
+        else apply(event,result.value,index);
+        index++;
+      }
+    }
+    return deferred;
   }
   async function flush(signal){
     const drafts=rows('SELECT * FROM drafts ORDER BY rowid');
@@ -499,7 +583,8 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
         put('UPDATE drafts SET packet=? WHERE id=?',JSON.stringify(packet),r.id);
       }
       const plan=packet.plan;
-      const send=plan?{...batch,txtUpdate:{part:plan.part,revision:plan.revision,head:plan.head}}:batch;
+      const send={...batch,threads:batch.threads.map(({citation,...thread})=>thread)};
+      if(plan)send.txtUpdate={part:plan.part,revision:plan.revision,head:plan.head};
       let receipt;
       try{receipt=await api('diaries',send,signal);}catch(error){
         if(plan&&error.status===409){delete packet.plan;put('UPDATE drafts SET packet=? WHERE id=?',JSON.stringify(packet),r.id);}
@@ -522,6 +607,12 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
       }
       transaction(()=>{
         cachePage(p);
+        for(const {citation,text,at} of batch.threads){
+          if(!citation?.quote)continue;
+          const thread=p.threads?.find(t=>t.text===text&&t.at===at);
+          if(thread)put('INSERT OR IGNORE INTO diary_thread_sources VALUES(?,?,?)',
+            'diary/'+p.day+'.'+p.part+'/'+thread.no,citation.quote,citation.label);
+        }
         originals.confirm(plan?.group);
         for(const id of packet.legacy??[])put('UPDATE materials SET covered=1 WHERE id=?',id);
         put('UPDATE materials SET covered=1 WHERE id=?',r.id);
@@ -645,36 +736,42 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
   }
   async function reviewLocalTasks(signal,progress,write){
     const dates=await memory.archiveDays();
-    let added=0,checked=0,skipped=0;
+    let added=0,checked=0,skipped=0,deferred=0;
     for(const day of dates){
       signal.throwIfAborted();
       progress({stage:'读取 '+day});
       const {items}=await events(day,true);
-      for(const [index,e] of items.entries()){
-        signal.throwIfAborted();
+      deferred+=await reviewMaterials(day,items,write,signal,(_event,rated,index)=>{
         progress({stage:day,done:index,total:items.length});
-        const rated=await review(day,e,write);
         checked++;
         if(!rated)skipped++;
         else if(!rated.existing)added++;
-      }
+      });
       if(items.length)progress({stage:day,done:items.length,total:items.length});
     }
-    return '已检查 '+dates.length+' 个归档日期的 '+checked+' 条任务素材，已有 '+(checked-added-skipped)+' 条评价，补写 '+added+' 条执行评价，空正文跳过 '+skipped+' 条。评价保存在本机，写日记时随相关段落上传。';
+    return '已检查 '+dates.length+' 个归档日期的 '+checked+' 条任务素材，已有 '+(checked-added-skipped)+' 条评价，补写 '+added+' 条执行评价，空正文跳过 '+skipped+' 条。'+(deferred?'另有 '+deferred+' 条保留待核查。':'')+'评价保存在本机，写日记时随相关段落上传。';
   }
   async function run(mode,signal,progress=()=>{},step){
     signal.throwIfAborted();
     const selected=await readInteractionSkill('diaryWriting');
     const skill={name:selected.skill,version:selected.version};
-    const write=(data,stage,fields)=>{
+    const write=(data,stage,fields,aiCheckpoint)=>{
       const prompt=selected.localAi?.[stage];
       if(typeof prompt!=='string'||!prompt.trim())throw Error('手记技能缺少阶段指令：'+stage);
-      return think(data,prompt,fields,signal,skill);
+      const review=stage==='reviewAction'||stage==='reviewSource';
+      const maxTokens=review?Math.max(450,Math.min(2048,Math.ceil(Array.from(data).length*1.4)+280)):650;
+      const meta={...skill,stage,boundedOutput:true,backgroundBudget:true,maxTokens,aiBudget:45000,
+        ...(model.aiAck?{aiCheckpoint,aiTier:'2',aiReview:review||stage==='narrate'}:{})};
+      return think(data,prompt,fields,signal,meta);
     };
-    if(mode==='task-review')return reviewLocalTasks(signal,progress,write);
+    if(model.aiAck)write.key=(data,stage,id)=>'diary:'+selected.version+':'+id+':'+stage+':'+hash(data);
+    if(mode==='task-review'){
+      put('UPDATE material_review_failures SET attempts=0,at=0 WHERE attempts>=3');
+      return reviewLocalTasks(signal,progress,write);
+    }
     let offline;
     let synced=0;
-    let addedReviews=0;
+    let addedReviews=0,deferredReviews=0;
     const sourceErrors=[];
     const syncDrafts=async()=>{synced+=await flush(signal);};
     if(mode==='diary'){
@@ -686,30 +783,32 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     for(const [index,day] of period.entries()){
       signal.throwIfAborted();
       progress({stage:'整理 '+day,done:index,total:period.length});
-      const external=mode==='diary'&&!offline?await readDiarySources(api,day,signal):{items:[],errors:[]};
+      const sources=mode==='diary'&&!offline?readDiarySources(api,day,signal):Promise.resolve({items:[],errors:[]});
+      const [external,{items,weather:sky}]=await Promise.all([sources,
+        events(day,false,sources.then(result=>result.items),mode==='diary'?signal:undefined)]);
       if(external.errors.length)sourceErrors.push(day+' '+external.errors.join('、'));
-      const {items,weather:sky}=await events(day,false,external.items,mode==='diary'?signal:undefined);
       const pending=[];
       let substantive=false;
-      for(const e of items){
-        signal.throwIfAborted();
-        const rated=await review(day,e,write);
-        if(!rated)continue;
+      const deferred=await reviewMaterials(day,items,write,signal,(e,rated)=>{
+        if(!rated)return;
         if(!rated.existing)addedReviews++;
         substantive=true;
+        const citation={quote:e.originalDialogue||e.content,label:e.originalDialogue?'对话原文摘录':e.label||'取材记录'};
         e.content=e.sections?e.content:e.dialogue?dialogueText(e.content,rated.content):rated.content;
         facts.push({...e,day});
-        if(mode==='review'||rated.covered||db.prepare('SELECT 1 FROM drafts WHERE id=?').get(e.id))continue;
-        pending.push({e,rated});
-      }
+        if(mode==='review'||rated.covered||db.prepare('SELECT 1 FROM drafts WHERE id=?').get(e.id))return;
+        pending.push({e,rated,citation});
+      });
+      deferredReviews+=deferred;
       let mood;
       let prior=latestPage(day);
       for(const {packet:{batch}} of pendingDiaryParts(day))prior=extendPage(prior,batch);
-      for(const {e,rated} of pending){
+      for(const {e,rated,citation} of pending){
         if(offline&&db.prepare('SELECT 1 FROM drafts WHERE day=?').get(day))continue;
         if(!mood)mood=await writingMood(day,prior,pending,write);
         const excerpt=JSON.stringify({来源:e.label||'本机行动',事实:e.content,行动评价:rated.review,基础情绪:mood,日期:day,天气:sky});
-        const v=await write(excerpt,'narrate',['text','comment','thread']);
+        const narrateKey=write.key?.(excerpt,'narrate',e.id);
+        const v=await write(excerpt,'narrate',['text','comment','thread'],narrateKey);
         if(!v.text||!v.comment)throw Error('日记草稿字段不完整');
         const paragraph=[e.label?'来源摘记：'+e.content:null,v.text,'当时的评价：'+rated.review,'绯月私语：'+v.comment].filter(Boolean).join('\n');
         const body=e.label?'【'+e.label+'】\n'+(e.sections?paragraph:paragraph.replace(/\n\s*\n/g,'\n')):e.content+'\n'+paragraph;
@@ -717,25 +816,27 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
         const threads=[];
         if(thread){
           const priority=await reviewDiaryThread({fact:e.content,summary:prior?.summary,question:thread},write);
-          if(priority)threads.push({text:thread,asked:Boolean(e.remaining),at:e.at,priority});
+          if(priority)threads.push({text:thread,asked:Boolean(e.remaining),at:e.at,priority,citation});
         }
         const header=await summarize(e.content,fits(prior,body)?prior:null,write,e.label);
         const batch={body,summary:header.summary,tags:tagsOf(header),mood,weather:sky,threads};
         stage(day,e.id,batch,null,e.sections,e.legacy,true);
+        model.aiAck?.(narrateKey);
         prior=extendPage(prior,batch);
       }
       if(mode==='diary'&&!offline)rankDiaryParts(day);
-      if(mode==='diary'&&!offline&&!external.errors.length&&!substantive&&!db.prepare('SELECT 1 FROM pages WHERE day=?').get(day))stage(day,'empty-'+day,{body:'无所事事的一天',summary:'无所事事的一天',mood:'平静',tags:[],weather:sky,threads:[]},null);
+      if(mode==='diary'&&!offline&&!external.errors.length&&!deferred&&!substantive&&!db.prepare('SELECT 1 FROM pages WHERE day=?').get(day))stage(day,'empty-'+day,{body:'无所事事的一天',summary:'无所事事的一天',mood:'平静',tags:[],weather:sky,threads:[]},null);
       if(mode==='diary'&&!offline)try{await syncDrafts();}catch(error){signal.throwIfAborted();offline=error;}
     }
     progress({stage:mode==='review'?'同步本地记录':'整理手记收尾'});
     if(mode==='review')await flush(signal);
     if(offline)throw offline;
-    if(mode==='review')return '本轮补写 '+addedReviews+' 条行动评价。';
+    if(mode==='review')return '本轮补写 '+addedReviews+' 条行动评价。'+(deferredReviews?'另有 '+deferredReviews+' 条保留待核查。':'');
     await followThreads(period,facts.sort((a,b)=>b.at-a.at),signal,syncDrafts,write,step);
     await originals.notify('diaries');
     if(sourceErrors.length)throw Error('已同步 '+synced+' 段手记，部分素材待下次补读：'+sourceErrors.join('；'));
-    return synced?'已同步 '+synced+' 段绯月的手记。':'已核对最近七天的手记，本轮上传 0 段。'+(facts.length?'已收录的素材没有需要补写的内容。':'本轮没有读到可入册的事实。');
+    const result=synced?'已同步 '+synced+' 段绯月的手记。':'已核对最近七天的手记，本轮上传 0 段。'+(facts.length?'已收录的素材没有需要补写的内容。':'');
+    return result+(deferredReviews?'另有 '+deferredReviews+' 条素材保留待核查。':!synced&&!facts.length?'本轮没有读到可入册的事实。':'');
   }
   async function recordScene(s,signal=new AbortController().signal){
     if(s.record==='none')return;
@@ -757,7 +858,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     }
     if(!prior||JSON.stringify(n)!==prior.json)saveNag(n);
   }
-  return {recordScene,run,refine:refinement?.run,think,nagText,api,nags,pages,refresh,explanations,auditAssociations,queueQuestion,
+  return {recordScene,run,refine:refinement?.run,think,nagText,api,nags,pages,refresh,explanations,auditAssociations,queueQuestion,questionCitation,
     verdict(key,value){
       const id='nag-verdict/'+key+'/';
       if(value==='是'||value==='否')put('INSERT OR IGNORE INTO compared VALUES(?)',id+value);

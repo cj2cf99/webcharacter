@@ -1,0 +1,185 @@
+import * as electron from 'electron';
+import assert from 'node:assert/strict';
+import {mkdtempSync,mkdirSync,rmSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join,resolve} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
+import {attachScreenQuestion} from '../desktop/screen-question-host.mjs';
+import {createConversationTranscription} from '../desktop/conversation-transcription.mjs';
+import {createAiWorkflowModel} from '../desktop/ai-workflow-model.mjs';
+import {createLocalModel,desktopModelPath} from '../desktop/local-model.mjs';
+import {tokyoDate} from '../desktop/calendar-date.mjs';
+
+const root=resolve(import.meta.dirname,'..'),bundle=resolve(root,'output/desktop-bundle');
+const profile=mkdtempSync(join(tmpdir(),'feiyue-thread-ui-'));
+electron.app.setPath('userData',profile);
+electron.app.commandLine.appendSwitch('disable-gpu');
+const out=resolve(root,'output/conversation-thread-qa');
+mkdirSync(out,{recursive:true});
+const mode=process.argv.includes('--organize')?'organize':process.argv.includes('--real')?'real':process.argv.includes('--dark')?'dark':'light';
+async function wait(read,timeout=10000){
+  const end=Date.now()+timeout;
+  while(Date.now()<end){const value=await read();if(value)return value;await delay(60);}
+  throw Error('隔离窗口等待结果超时');
+}
+let worker,queue,host,transcription,pet;
+
+async function testReal(){
+  const logs=[];
+  const gpu=process.argv.includes('--gpu');
+  const modelPath=resolve(desktopModelPath(electron.app,root),'..',gpu?'Qwen3.5-4B-Q4_K_M.gguf':'Qwen3.5-2B-Q4_K_M.gguf');
+  worker=createLocalModel({utilityProcess:electron.utilityProcess,modelPath,device:gpu?'gpu':'cpu',log:event=>logs.push(event),loadTimeout:25000});
+  await worker.start();
+  assert.equal(worker.snapshot().state,'ready');
+  const snapshot=worker.snapshot();
+  const exact=Array.from({length:220},(_,i)=>'项'+(i+1)).join(' ');
+  const schema={type:'object',properties:{text:{const:exact}},required:['text'],additionalProperties:false};
+  const skill={name:'diary-writing',version:'budget-fixture',stage:'reviewAction',instruction:'按格式原样输出完整的行动摘录。',schema};
+  const baseline=await worker.analyze(exact,{hint:'personalityMemory',skillInstruction:skill,signal:AbortSignal.timeout(115000)});
+  assert.ok(baseline.error,'旧路由的 420 token 上限应截断该结构化回执');
+  const deliberate=await worker.analyze(exact,{hint:'personalityMemory',skillInstruction:{...skill,boundedOutput:true,maxTokens:64},
+    signal:AbortSignal.timeout(115000)});
+  assert.equal(deliberate.error,'LOCAL_AI_OUTPUT_BUDGET');
+  const recovered=await worker.analyze(exact,{hint:'personalityMemory',skillInstruction:{...skill,boundedOutput:true,maxTokens:2200},
+    signal:AbortSignal.timeout(115000)});
+  assert.equal(recovered.text,exact);
+  const summaries=logs.filter(item=>item.ai_phase==='reviewAction').map(({error,duration_ms,input_tokens,output_tokens,output_limit})=>({
+    error,duration_ms,input_tokens,output_tokens,output_limit}));
+  assert.equal(summaries.at(-1).output_limit,snapshot.gpuLayers>0?2048:1024);
+  const contextFailure=await worker.analyze('甲乙丙丁戊己庚辛壬癸'.repeat(5000),{
+    hint:'personalityMemory',skillInstruction:{...skill,boundedOutput:true,maxTokens:1024},signal:AbortSignal.timeout(10000)});
+  assert.equal(contextFailure.error,'LOCAL_AI_CONTEXT_BUDGET');
+  console.log(JSON.stringify({backend:snapshot.backend,gpuLayers:snapshot.gpuLayers,baseline:baseline.error,summaries,context:contextFailure.error}));
+}
+
+async function testRealOrganization(){
+  const logs=[],calls=[];
+  const modelPath=resolve(desktopModelPath(electron.app,root),'..','Qwen3.5-4B-Q4_K_M.gguf');
+  worker=createLocalModel({utilityProcess:electron.utilityProcess,modelPath,device:'gpu',log:event=>logs.push(event),loadTimeout:25000});
+  await worker.start();
+  assert.equal(worker.snapshot().state,'ready');
+  queue=createAiWorkflowModel({file:join(profile,'ai-requests.sqlite'),safeStorage:electron.safeStorage,model:{
+    async memory(text,instruction,schema,signal,skill){
+      calls.push(skill.stage);
+      if(text.includes('隔离截断标记'))throw Object.assign(Error('LOCAL_AI_OUTPUT_BUDGET'),{code:'LOCAL_AI_OUTPUT_BUDGET'});
+      const result=await worker.analyze(text,{hint:'personalityMemory',signal,skillInstruction:{...skill,instruction,schema}});
+      if(result.error)throw Object.assign(Error(result.error),{code:result.error});
+      return result;
+    },async close(){},
+  }});
+  transcription=createConversationTranscription({profile,safeStorage:electron.safeStorage,model:queue});
+  const at=Date.now();
+  const batch=(id,texts)=>({id,thread:id,first:1,last:texts.length,at,history:[],
+    turns:texts.map((text,index)=>({id:id+'-'+index,text,who:'你',at:at+index}))});
+  const long=batch('long',['隔离环境的虚构背景，用来核对上限。'.repeat(75),'昨天我跑了三公里。']);
+  const failing=batch('budget',['隔离截断标记']);
+  const following=batch('following',['明天提醒我给田中回信。']);
+  for(const item of [long,failing,following])transcription.fromThread(item);
+  await wait(()=>[long,failing,following].every(item=>['failed','ready','empty'].includes(transcription.detail(item.id).state)),170000);
+  const results=[long,failing,following].map(({id})=>transcription.detail(id));
+  const info=logs.filter(event=>event.output_limit).map(({ai_phase,duration_ms,input_tokens,output_tokens,output_limit,error})=>
+    ({ai_phase,duration_ms,input_tokens,output_tokens,output_limit,error}));
+  console.log(JSON.stringify({backend:worker.snapshot().backend,calls,results:results.map(({state,count,claims})=>({state,count,
+    workers:[...new Set(claims.map(claim=>claim.worker))]})),info}));
+  assert.equal(results[1].state,'failed');
+  assert.ok(results[2].result?.rows.some(row=>row.type==='reminders.create'));
+  assert.ok(results[0].result?.rows.some(row=>row.type==='hu-shi.exercise.create'));
+  assert.ok(results[0].steps.filter(step=>step.id.includes('organize')).length>=2);
+}
+
+async function testWindows(){
+  electron.nativeTheme.themeSource=mode;
+  pet=new electron.BrowserWindow({x:-2400,y:100,width:180,height:280,show:false});
+  const delayed=Promise.withResolvers();
+  const calls=[],notices=[];
+  const model={async memory(text,_instruction,_schema,_signal,options){
+    const input=JSON.parse(text);calls.push({stage:options.stage,input});
+    if(options.stage==='对话回复'){
+      const lines=input.最新发言.map(item=>item.原话);
+      if(lines.includes('A 的第一句'))return delayed.promise;
+      return {reply:'绯月回应：'+lines.join('｜'),next:'回应'};
+    }
+    if(options.stage==='classify')return {candidates:[],notes:[]};
+    return {actions:[],requests:[],signals:[],recentFactIds:[]};
+  },async close(){}};
+  queue=createAiWorkflowModel({model,file:join(profile,'ai-requests.sqlite'),safeStorage:electron.safeStorage});
+  transcription=createConversationTranscription({profile,safeStorage:electron.safeStorage,model:queue,notify:item=>notices.push(item)});
+  const question={id:'audit-fixture',title:'下次一起听雨？',next:'下次一起听雨？',reason:'昨晚听见雨声',created_at:new Date().toISOString(),
+    citation:{label:'手记对话摘录',reference:'第 3 篇 · 悬念 2',excerpt:'「下次想和你一起听雨。」'},
+    talk:[{who:'绯月',text:'下次一起听雨？',at:new Date().toISOString()}]};
+  const proactive=[];
+  host=attachScreenQuestion(electron,{win:pet,profile,bundle,root,localModel:queue,transcription,visible:false,
+    client:{async askStandalone(){return {state:'error'};},forget(){}},
+    threadOptions:{questions:()=>[question],answerQuestion:async(line,messages,options)=>{
+      proactive.push({line:line.id,messages,options});return {reply:'好呀，那到时候一起听。我先收起手记啦。',next:'结束'};
+    }},
+  });
+  const execute=(panel,code)=>panel.webContents.executeJavaScript(code).catch(error=>{
+    throw Error('隔离页面脚本失败：'+code,{cause:error});
+  });
+  const bubble=code=>execute(host.panel,code);
+  const review=code=>execute(host.details,code);
+  await host.openReview();
+  await wait(()=>review("document.querySelector('#questionCount').textContent==='1'"));
+  await review("document.querySelector('details[data-thread]').open=true");
+  await wait(()=>review("document.querySelector('.thread-talk')?.textContent.includes('绯月')"));
+  assert.equal(await review("document.querySelectorAll('.thread-message[data-who=你]').length"),0);
+  assert.equal(proactive.length,0);
+  assert.equal(transcription.list().length,0);
+  await review("[...document.querySelectorAll('.thread-actions button')].find(b=>b.textContent==='继续聊天').click()");
+  await wait(()=>host.panel&&bubble("document.querySelector('#answer').textContent.includes('一起听雨')"));
+  await bubble("document.querySelector('#question').value='好啊';document.querySelector('#questionForm').requestSubmit()");
+  await wait(()=>bubble("!document.querySelector('#finishThread').hidden && document.querySelector('#questionForm').hidden"));
+  assert.equal(proactive.length,1);
+  assert.equal(proactive[0].messages.length,1);
+  assert.equal(proactive[0].messages[0].text,'好啊');
+  await wait(()=>!host.panel,8000);
+  await host.open();
+  const a=await bubble('window.screenQuestion.state().then(value=>value.threadId)');
+  await bubble("document.querySelector('#question').value='A 的第一句';document.querySelector('#questionForm').requestSubmit()");
+  await wait(()=>calls.find(item=>item.input?.最新发言?.some(row=>row.原话==='A 的第一句')));
+  await bubble("document.querySelector('#question').value='未发送草稿';document.querySelector('#withScreen').checked=true;window.screenQuestion.idleClose()");
+  await wait(()=>!host.panel);
+  await host.open();
+  assert.equal(await bubble('window.screenQuestion.state().then(value=>value.threadId)'),a);
+  assert.deepEqual(await bubble("[document.querySelector('#question').value,document.querySelector('#withScreen').checked]"),['',false]);
+  await bubble("document.querySelector('#newThread').click()");
+  await wait(()=>host.panel&&bubble('window.screenQuestion?.state().then(v=>v.threadId)').then(id=>id&&id!==a).catch(()=>false));
+  const b=await bubble('window.screenQuestion.state().then(value=>value.threadId)');
+  assert.notEqual(a,b);
+  await bubble("document.querySelector('#question').value='B 的独立话题';document.querySelector('#questionForm').requestSubmit()");
+  delayed.resolve({reply:'A 的迟到回复',next:'回应'});
+  await wait(()=>bubble("document.querySelector('#answer').textContent.includes('B 的独立话题')"));
+  assert.ok(!(await bubble("document.querySelector('#answer').textContent")).includes('A 的迟到回复'));
+  await host.openReview();
+  await review("document.querySelector('[data-category=active]').click()");
+  await wait(()=>review("document.querySelector('#activeCount').textContent==='2'"));
+  await review("Array.from(document.querySelectorAll('[data-thread]')).find(node=>node.dataset.thread==="+JSON.stringify(a)+").open=true");
+  await wait(()=>review("document.querySelector('.thread-talk')?.textContent.includes('A 的迟到回复')"));
+  await review("[...document.querySelectorAll('.thread-actions button')].find(b=>b.textContent==='简单回复').click()");
+  await review("document.querySelector('.thread-note textarea').value='留在 A 的便签';document.querySelector('.thread-note').requestSubmit()");
+  await wait(()=>calls.find(item=>item.input?.最新发言?.some(row=>row.原话==='留在 A 的便签')));
+  assert.ok(!(await bubble("document.querySelector('#answer').textContent")).includes('留在 A 的便签'));
+  await wait(()=>transcription.list().some(item=>item.state==='empty'));
+  await review("document.querySelector('[data-category=history]').click()");
+  await wait(()=>review("document.querySelector('#day').value==="+JSON.stringify(tokyoDate())+"&&document.querySelectorAll('[data-thread]').length===3"));
+  host.details.setSize(360,540);
+  host.details.showInactive();
+  await wait(()=>review("[...document.querySelectorAll('[data-thread]')].every(node=>Number(getComputedStyle(node).opacity)>.98)"));
+  const widths=await review('[document.documentElement.scrollWidth,innerWidth]');
+  assert.deepEqual(widths,[360,360]);
+  writeFileSync(join(out,'threads-'+mode+'.png'),(await host.details.webContents.capturePage()).toPNG());
+  console.log('通过 '+mode+'，JST 三页签、主动首问、结束收窗、草稿清空、切线与迟到回复、静默便签、气泡展开时后台整理、360px 布局。');
+}
+
+try{
+  await electron.app.whenReady();
+  if(mode==='real')await testReal();else if(mode==='organize')await testRealOrganization();else await testWindows();
+  host?.close();pet?.destroy();await transcription?.close();await queue?.close();await worker?.close();
+  try{rmSync(profile,{recursive:true,force:true});}catch{}
+  electron.app.exit(0);
+}catch(error){
+  console.error(error);
+  host?.close();pet?.destroy();await transcription?.close();await queue?.close();await worker?.close();
+  electron.app.exit(1);
+}

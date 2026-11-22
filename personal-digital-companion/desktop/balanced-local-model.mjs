@@ -70,32 +70,60 @@ function workChoices(gpu,residentMiB,primaryResident,tier){
 
 export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=readGpuLoad,create=createLocalModel,localFirst=false}){
   let current,chosen,initializing,warmController,exiting,busy=false,closed=false,suspended=false,failedText='',failures=0,lastUsed,lastWork;
+  let preheated,idleTimer;
   function release(){
+    clearTimeout(idleTimer);
     const worker=current;
     current=chosen=undefined;
-    lastWork=undefined;
+    lastWork=preheated=undefined;
     if(worker)exiting=worker.close();
     return exiting;
   }
+  function releaseWhenIdle(){
+    clearTimeout(idleTimer);
+    if(!current||initializing||busy||workSession)return;
+    idleTimer=setTimeout(()=>{
+      if(!busy&&!workSession&&!initializing)void release();
+    },5*60_000).unref();
+  }
   let memoryTurn;
-  async function prepare(signal,{correcting=false,fixedAggressive=false,primaryChat=false,workTier,refinement=false}={}){
+  async function prepare(signal,{correcting=false,fixedAggressive=false,primaryChat=false,workTier,refinement=false,aiTier,gpuOnly=false,gpuSample}={}){
     if(!current)await untilAbort(exiting,signal);
+    if(aiTier&&chosen?.size===aiTier&&current?.snapshot().state==='ready'&&(aiTier!=='9'||chosen.device==='gpu'))return true;
     if(refinement&&current?.snapshot().state==='ready'&&
         (chosen?.size==='2'||chosen?.size==='4'&&chosen.device==='gpu'))return true;
-    const gpu=await untilAbort(readGpu(),signal);
+    const route=workTier==='main'?'main':fixedAggressive?'direct':primaryChat&&!correcting?'auto':undefined;
+    const ready=current?.snapshot();
+    if(route&&preheated===route&&ready?.state==='ready'&&ready.gpuLayers>0){
+      if(!gpuOnly)preheated=undefined;
+      return true;
+    }
+    let gpu=gpuSample===undefined?await untilAbort(readGpu(),signal):gpuSample;
+    if(gpuOnly&&gpu)gpu={...gpu,utilization:0};
     const resident=chosen?.device==='gpu'?current?.snapshot().vramMiB??0:0;
     const primaryResident=chosen?.file===primaryChatFile && chosen.device==='gpu' && current?.snapshot().state==='ready';
-    const choices=refinement?[
+    let choices=aiTier?[
+      ...(gpu&&gpu.utilization<65&&gpu.freeMiB+resident>=minFreeMiB[aiTier]?[{size:aiTier,device:'gpu'}]:[]),
+      ...(aiTier==='9'?[]:[{size:aiTier,device:'cpu'}])
+    ]:refinement?[
       ...(gpu&&gpu.utilization<50&&gpu.freeMiB+resident>=minFreeMiB['4']?[{size:'4',device:'gpu'}]:[]),
       ...(gpu&&gpu.utilization<50&&gpu.freeMiB+resident>=minFreeMiB['2']?[{size:'2',device:'gpu'}]:[]),
       {size:'2',device:'cpu'}
     ]:workTier?workChoices(gpu,resident,primaryResident,workTier)
       :fixedAggressive?aggressiveChoices(gpu,resident,primaryResident)
         :modelChoices(gpu,correcting,resident,primaryChat,primaryResident);
+    if(gpuOnly){
+      choices=choices.filter(choice=>choice.device==='gpu');
+      // 已驻留的同路线 GPU 模型在驱动读数暂不可用时也可以复用。
+      if(!gpu&&primaryResident)choices=[chosen];
+    }
+    if(!choices.length)return false;
     for(const choice of choices){
       signal?.throwIfAborted();
       if(closed)return false;
-      if(current && chosen.size===choice.size && chosen.device===choice.device && chosen.file===choice.file && current.snapshot().state==='ready')return true;
+      const stateBefore=current?.snapshot();
+      if(stateBefore?.state==='ready' && chosen.size===choice.size && chosen.device===choice.device && chosen.file===choice.file &&
+        (choice.device==='cpu'||stateBefore.gpuLayers>0))return true;
       await untilAbort(release(),signal);
       signal?.throwIfAborted();
       if(closed)return false;
@@ -123,16 +151,30 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     const lease=Promise.withResolvers();
     workSession={id,done:lease.promise};
     try{return await run((text,options)=>runWork(text,{...options,session:id,signal}));}
-    finally{workSession=null;lease.resolve();}
+    finally{workSession=null;releaseWhenIdle();lease.resolve();}
   }
   function start(){
     if(closed || suspended || busy || workSession || current?.snapshot().state==='ready')return initializing;
     if(!initializing){
       warmController=new AbortController();
       initializing=prepare(warmController.signal,localFirst?{workTier:'main'}:{primaryChat:true})
-        .catch(()=>false).finally(()=>{initializing=undefined;warmController=undefined;});
+        .catch(()=>false).finally(()=>{initializing=undefined;warmController=undefined;releaseWhenIdle();});
     }
     return initializing;
+  }
+  async function preheatConversation(route,signal){
+    if(memoryTurn){memoryTurn.controller.abort();await untilAbort(memoryTurn.done,signal);}
+    if(closed||suspended||busy||workSession)return {error:'对话模型正在使用或暂停，请稍后重试。'};
+    busy=true;
+    try{
+      await untilAbort(initializing,signal);
+      const options=route==='direct'?{fixedAggressive:true}:route==='main'?{workTier:'main'}:{primaryChat:true};
+      const ready=await prepare(signal,{...options,gpuOnly:true});
+      if(!ready)return {error:'GPU 加载失败，请检查显存后重试。'};
+      const state=current.snapshot();
+      preheated=route;
+      return {ready:true,size:chosen.size,backend:state.backend};
+    }finally{busy=false;releaseWhenIdle();}
   }
   async function analyze(text,options={}){
     if(workSession)await waitForWorkSession(options.signal);
@@ -188,6 +230,7 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
       return result;
     }finally{
       busy=false;
+      releaseWhenIdle();
     }
   }
   async function memory(text,instruction,schema,signal,skill){
@@ -200,16 +243,19 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     memoryTurn={controller,done:done.promise};busy=true;
     try{
       await untilAbort(initializing,signal);
-      if(!await prepare(signal,{fixedAggressive:!refinement,refinement}))
-        throw Error(refinement?'本机修订模型未就绪':'本机 Aggressive 9B 未就绪');
+      const gpuSample=skill?.backgroundBudget?await untilAbort(readGpu(),signal):undefined;
+      if(gpuSample?.utilization>=70)throw Object.assign(Error('显卡正在使用，本机整理稍后继续'),{code:'LOCAL_AI_GPU_DEFERRED'});
+      if(!await prepare(signal,{fixedAggressive:!refinement,refinement,aiTier:skill?.aiTier,gpuSample}))
+        throw Object.assign(Error(skill?.aiTier?'本机 '+skill.aiTier+'B 未达到当前阶段的装载条件':
+          refinement?'本机修订模型未就绪':'本机 Aggressive 9B 未就绪'),skill?.aiTier?{code:'LOCAL_AI_TIER_WAIT'}:{});
       worker=current;
       const result=await worker.analyze(text,{hint:'personalityMemory',signal,skillInstruction:{...skill,instruction,schema}});
       signal.throwIfAborted();
-      if(result.error)throw Error(result.error);
+      if(result.error)throw Object.assign(Error(result.error),{code:result.error});
       return result;
     }finally{
-      if(signal.aborted&&(!refinement||worker?.snapshot().state!=='ready'))await release();
-      busy=false;memoryTurn=null;done.resolve();
+      if(signal.aborted&&(!(refinement||skill?.aiTier)||worker?.snapshot().state!=='ready'))await release();
+      busy=false;memoryTurn=null;releaseWhenIdle();done.resolve();
     }
   }
   async function work(text,options){
@@ -234,6 +280,7 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     }finally{
       if(signal?.aborted){warmController?.abort();await release();}
       busy=false;
+      releaseWhenIdle();
     }
   }
   async function suspend(){
@@ -245,7 +292,7 @@ export function createBalancedLocalModel({utilityProcess,modelPath,log,readGpu=r
     await release();
     return true;
   }
-  return {start,analyze,memory,work,withWorkSession,isBusy:()=>Boolean(busy||workSession||suspended||closed),suspend,resume(){suspended=false;},
+  return {start,preheatConversation,analyze,memory,work,withWorkSession,isBusy:()=>Boolean(busy||workSession||suspended||closed),suspend,resume(){suspended=false;},
     close(){closed=true;memoryTurn?.controller.abort();warmController?.abort();return release();},
     snapshot:()=>current?.snapshot()??(closed?{state:'stopped'}:{...lastUsed,state:'idle'})};
 }

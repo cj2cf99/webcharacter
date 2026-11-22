@@ -254,7 +254,13 @@ async function start() {
         timing.decode_ms=Math.round(performance.now()-first);
       }
       if(!outputGrammar)return output.trim();
-      const value = outputGrammar.parse(output);
+      let value;
+      try{value=outputGrammar.parse(output);}
+      catch(error){
+        if(timing)throw Object.assign(Error('本机结构化输出未完整结束'),{
+          code:timing.output_tokens>=maxTokens-1?'LOCAL_AI_OUTPUT_BUDGET':'LOCAL_AI_RESULT_INVALID',cause:error});
+        throw error;
+      }
 
       if (Object.hasOwn(value,'kind') && !kinds.has(value.kind)) throw Object.assign(Error(),{code:'LOCAL_AI_RESULT_INVALID'});
       return value;
@@ -351,18 +357,25 @@ async function start() {
           const instructions=[responseInstruction(mode,{direct}),data.skillInstruction?.response].filter(Boolean).join('\n');
           const reply=await pass(text,signal,instructions,previous,null,mode==='speech'||mode==='judgment'?256:512);
           result=reply?{kind:'chat',reply}:{error:'LOCAL_AI_RESULT_INVALID'};
-        }else if(hint==='interactionWork'||hint==='personalityMemory'&&data.skillInstruction?.name==='memory-refinement'){
-          const {instruction,schema,maxTokens=512}=data.skillInstruction;
+        }else if(hint==='interactionWork'||hint==='personalityMemory'&&
+            (data.skillInstruction?.aiTier||data.skillInstruction?.boundedOutput||data.skillInstruction?.name==='memory-refinement')){
+          const {instruction,schema,maxTokens:requested=512,boundedOutput}=data.skillInstruction;
+          const maximum=model.gpuLayers>0?2048:1024;
+          const maxTokens=boundedOutput?Math.max(64,Math.min(requested,maximum)):requested;
           const setup=performance.now();
-          const inputTokens=model.tokenize(text).length+model.tokenize(instruction).length;
+          const inputTokens=model.tokenize(text).length+model.tokenize([instruction,active?.calendar].filter(Boolean).join('\n')).length;
           const required=inputTokens+maxTokens+256;
-          if(required>16384)
-            throw Object.assign(Error('本轮交互资料超出本地上下文'),{code:'LOCAL_AI_CONTEXT_BUDGET'});
-          const workGrammar=await engine.createGrammarForJsonSchema(schema);
-          const workContext=required>contextSize?await model.createContext({contextSize:Math.ceil(required/1024)*1024,threads}):context;
-          const timing=data.skillInstruction.name==='memory-refinement'?
-            {input_tokens:inputTokens,output_tokens:0,setup_ms:Math.round(performance.now()-setup)}:undefined;
-          try{result=await pass(text,signal,instruction,undefined,workGrammar,maxTokens,workContext,timing);}
+          const timing=boundedOutput||data.skillInstruction.name==='memory-refinement'?
+            {input_tokens:inputTokens,output_tokens:0,output_limit:maxTokens,setup_ms:0}:undefined;
+          let workContext=context;
+          try{
+            if(required>16384||boundedOutput&&required>8192)
+              throw Object.assign(Error('本轮交互资料超出本地上下文'),{code:'LOCAL_AI_CONTEXT_BUDGET'});
+            const workGrammar=await engine.createGrammarForJsonSchema(schema);
+            if(required>contextSize)workContext=await model.createContext({contextSize:Math.ceil(required/1024)*1024,threads});
+            if(timing)timing.setup_ms=Math.round(performance.now()-setup);
+            result=await pass(text,signal,instruction,undefined,workGrammar,maxTokens,workContext,timing);
+          }
           finally{
             if(workContext!==context)await workContext.dispose();
             if(timing)send({type:'refinement-timing',id,timing});
@@ -414,11 +427,11 @@ async function start() {
 
       } catch (error) {
         result = {error:signal.aborted?'LOCAL_AI_TIMEOUT':hint==='interactionWork'&&error instanceof SyntaxError?'LOCAL_AI_RESULT_INVALID':
-          ['LOCAL_AI_RESULT_INVALID','LOCAL_AI_CONTEXT_BUDGET'].includes(error?.code)?error.code:'LOCAL_AI_INFERENCE_FAILED'};
+          ['LOCAL_AI_RESULT_INVALID','LOCAL_AI_CONTEXT_BUDGET','LOCAL_AI_OUTPUT_BUDGET'].includes(error?.code)?error.code:'LOCAL_AI_INFERENCE_FAILED'};
       } finally {
         active = null;
       }
-      if (!controller.signal.aborted || data.skillInstruction?.name==='memory-refinement'){
+      if (!controller.signal.aborted || data.skillInstruction?.aiTier || data.skillInstruction?.name==='memory-refinement'){
         send({type:'result',id,result});
       }
     })();

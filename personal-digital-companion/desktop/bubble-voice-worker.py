@@ -18,22 +18,8 @@ sys.stdout = sys.stderr
 engine = None
 
 
-def recognize(audio):
+def load_recognizer():
     global engine
-    import numpy as np
-
-    with wave.open(io.BytesIO(base64.b64decode(audio, validate=True)), 'rb') as wav:
-        if (wav.getnchannels(), wav.getsampwidth(), wav.getframerate()) != (1, 2, 16000):
-            raise ValueError('需要 16 kHz 单声道 PCM WAV。')
-        count = wav.getnframes()
-        if not 1600 <= count <= 8 * 16000:
-            raise ValueError('录音段长度无效。')
-        frames = wav.readframes(count)
-        if len(frames) != 2 * count:
-            raise ValueError('录音段数据不完整。')
-    samples = np.frombuffer(frames, dtype='<i2').astype(np.float32) / 32768
-    if np.max(np.abs(samples)) < .003:
-        return {'text': ''}
     if engine is None:
         import _distutils_hack
 
@@ -50,7 +36,25 @@ def recognize(audio):
             raise ValueError('本机 Paraformer 或其标点模型文件缺失。')
         engine = AutoModel(**{key: str(path) for key, path in paths.items()}, device='cpu', ncpu=4,
                            disable_update=True, disable_pbar=True, trust_remote_code=False)
-    result = engine.generate(input=samples, cache={})
+    return engine
+
+
+def recognize(audio):
+    import numpy as np
+
+    with wave.open(io.BytesIO(base64.b64decode(audio, validate=True)), 'rb') as wav:
+        if (wav.getnchannels(), wav.getsampwidth(), wav.getframerate()) != (1, 2, 16000):
+            raise ValueError('需要 16 kHz 单声道 PCM WAV。')
+        count = wav.getnframes()
+        if not 1600 <= count <= 8 * 16000:
+            raise ValueError('录音段长度无效。')
+        frames = wav.readframes(count)
+        if len(frames) != 2 * count:
+            raise ValueError('录音段数据不完整。')
+    samples = np.frombuffer(frames, dtype='<i2').astype(np.float32) / 32768
+    if np.max(np.abs(samples)) < .003:
+        return {'text': ''}
+    result = load_recognizer().generate(input=samples, cache={})
     return {'text': result[0].get('text', '').strip() if result else ''}
 
 
@@ -110,7 +114,11 @@ def synthesize(text):
 for line in sys.stdin:
     request = json.loads(line)
     try:
-        result = recognize(request['audio']) if mode == 'asr' else synthesize(request['text'])
+        if mode == 'asr' and request.get('preheat') is True:
+            load_recognizer()
+            result = {'ready': True}
+        else:
+            result = recognize(request['audio']) if mode == 'asr' else synthesize(request['text'])
     except (ValueError, wave.Error, EOFError) as error:
         result = {'error': str(error)}
     except Exception:

@@ -1,0 +1,241 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {mkdtempSync,mkdirSync,readFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join,relative,resolve} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
+import {createAiWorkflowModel} from '../../desktop/ai-workflow-model.mjs';
+import {createNewsEditor} from '../../desktop/news-editor.mjs';
+import {createPersonalityDiary} from '../../desktop/personality-diary.mjs';
+import {readDiarySources} from '../../desktop/diary-sources.mjs';
+import {createServerTaskCommand} from '../../desktop/server-task-command.mjs';
+import {personalityMemory} from '../assistant/personality-memory.mjs';
+import {openTestDatabase} from './sqlite-d1.mjs';
+
+const signal=()=>AbortSignal.timeout(5000);
+const textSchema={type:'object',properties:{text:{type:'string'}},required:['text'],additionalProperties:false};
+const review=(schema,decision='accept',extra={})=>({decision,reason:decision==='accept'?'':'需保留原话',
+  ...(schema.required.includes('field')?{field:'',replacement:''}:{}),...extra});
+const isReviewer=schema=>schema.required?.includes('decision')&&!schema.required.includes('part');
+const day='2026-11-20',at=Date.parse(day+'T12:00:00+09:00');
+const migration=readFileSync(new URL('../migrations/016-personality-memory.sql',import.meta.url),'utf8');
+function fixture(t){
+  const root=resolve(tmpdir()),profile=mkdtempSync(join(root,'feiyue-workflow-'));
+  const teardown=[];
+  t.after(async()=>{
+    for(const close of teardown.reverse())await close();
+    if(/^feiyue-workflow-[a-z0-9]+$/iu.test(relative(root,resolve(profile))))
+      rmSync(profile,{recursive:true,force:true,maxRetries:3});
+  });
+  return {profile,file:join(profile,'ai-requests.sqlite'),after:close=>teardown.push(close)};
+}
+function model(options={}){
+  return {memory:async value=>({text:value}),analyze:async()=>({reply:'问答结果'}),close:async()=>{},...options};
+}
+async function eventually(check){
+  const deadline=Date.now()+2000;
+  while(!check()){
+    if(Date.now()>deadline)throw Error('等待本地状态超时');
+    await delay(5);
+  }
+}
+
+test('19 条延后等待，20 条唤醒，独立请求不按正文归并',async t=>{
+  const {file,after}=fixture(t),called=[];
+  const ai=createAiWorkflowModel({file,model:model({async memory(text){
+    called.push(text);
+    return {text};
+  }})});
+  after(()=>ai.close());
+  const send=()=>ai.memory('同一份材料','整理',textSchema,signal(),{aiDeferred:true});
+  const batch=Array.from({length:19},send);
+  await eventually(()=>ai.aiSnapshot().queued===19);
+  assert.equal(called.length,0);
+  batch.push(send());
+  assert.equal((await Promise.all(batch)).length,20);
+  assert.equal(called.length,20);
+  const sparse=send();
+  await eventually(()=>ai.aiSnapshot().queued===1);
+  ai.aiPulse();
+  assert.deepEqual(await sparse,{text:'同一份材料'});
+});
+
+test('40 个后台池位、SQLite 写锁和积压都允许 6 级问答取得下一个模型槽',async t=>{
+  const {file,after}=fixture(t),entered=Promise.withResolvers(),release=Promise.withResolvers(),order=[];
+  const ai=createAiWorkflowModel({file,model:model({
+    async memory(text){
+      order.push(text);
+      if(text==='已开始'){entered.resolve();await release.promise;}
+      return {text};
+    },
+    async analyze(){order.push('前台');return {reply:'问答结果'};}
+  })});
+  const locked=new DatabaseSync(file);
+  after(async()=>{
+    release.resolve();
+    if(locked.isTransaction)locked.exec('ROLLBACK');
+    locked.close();
+    await ai.close();
+  });
+  const submit=(value,aiPriority)=>ai.memory(value,'整理',textSchema,signal(),{aiPriority});
+  const first=submit('已开始',1);
+  await entered.promise;
+  const low=Array.from({length:42},(_,i)=>submit('本地 '+i,1));
+  await eventually(()=>ai.aiSnapshot().queued===40);
+  const high=submit('REST 合成请求',5);
+  locked.exec('BEGIN IMMEDIATE');
+  const front=ai.analyze('测试当前问答',{hint:'direct',signal:signal()});
+  release.resolve();
+  assert.deepEqual(await front,{reply:'问答结果'});
+  assert.deepEqual(order,['已开始','前台']);
+  locked.exec('ROLLBACK');
+  await Promise.all([first,high,...low]);
+  assert.deepEqual(order.slice(0,3),['已开始','前台','REST 合成请求']);
+  assert.deepEqual(order.slice(3),Array.from({length:42},(_,i)=>'本地 '+i));
+  assert.equal(ai.aiSnapshot().queued,0);
+});
+
+test('2B 审核可现场改字，难例走完整五步，4B 只判定',async t=>{
+  const {file,after}=fixture(t),tiers=[];
+  const ai=createAiWorkflowModel({file,model:model({async memory(input,_instruction,schema,_signal,skill){
+    tiers.push(skill.aiTier);
+    if(!isReviewer(schema))return {text:skill.aiTier==='9'?'经核对':'初稿'};
+    if(input.includes('好修'))return review(schema,'edit',{field:'text',replacement:'修正后'});
+    return review(schema,skill.aiTier==='4'?'accept':'revise');
+  }})});
+  after(()=>ai.close());
+  const ask=text=>ai.memory(text,'整理',textSchema,signal(),{aiReview:true});
+  assert.deepEqual(await ask('好修'),{text:'修正后'});
+  assert.deepEqual(tiers,['2','2']);
+  tiers.length=0;
+  assert.deepEqual(await ask('需要查明'),{text:'经核对'});
+  assert.deepEqual(tiers,['2','2','9','9','4']);
+});
+
+test('2B 漏掉指定事实时走补正，程序拒绝审核补丁删掉同一事实',async t=>{
+  const {file,after}=fixture(t),tiers=[];
+  const ai=createAiWorkflowModel({file,model:model({async memory(_text,_instruction,schema,_signal,skill){
+    tiers.push(skill.aiTier);
+    if(!isReviewer(schema))return {text:skill.aiTier==='2'?'回程还没买。':'星期六已买去程，回程还没买。'};
+    return skill.aiTier==='9'?review(schema,'edit',{field:'text',replacement:'回程还没买。'}):review(schema);
+  }})});
+  after(()=>ai.close());
+  const result=await ai.memory('周六已买去程，回程还没买。','去重',textSchema,signal(),
+    {aiReview:true,aiKeep:{text:['周六']}});
+  assert.deepEqual(tiers,['2','9','9','4']);
+  assert.match(result.text,/星期六已买去程/);
+});
+
+test('日记的独立资料请求同时开始，合并结果保持资料顺序',async()=>{
+  const calls=[],release=Promise.withResolvers();
+  const gathered=readDiarySources(async path=>{
+    calls.push(path);
+    await release.promise;
+    if(path.includes('kind=journal'))return {records:[{id:'journal',at:new Date(at).toISOString(),title:'手记'}]};
+    if(path.includes('kind=deploy'))return {records:[{id:'deploy',at:new Date(at).toISOString(),project:'项目'}]};
+    return {records:[{id:'p',spendDate:day,amount:100}],complete:true};
+  },day,signal());
+  try{await eventually(()=>calls.length===3);}
+  finally{release.resolve();}
+  assert.deepEqual((await gathered).items.map(row=>row.label),['你的日记','花园部署','当日消费']);
+});
+
+test('9B 资源延后后重启接着当前阶段，业务落盘后才清理结果',async t=>{
+  const {file,after}=fixture(t),calls=[];
+  const request=(ai)=>ai.memory('原话','修订',textSchema,signal(),{aiCheckpoint:'business-record/draft',aiReview:true});
+  const first=createAiWorkflowModel({file,model:model({async memory(_text,_instruction,schema,_signal,skill){
+    calls.push(skill.aiTier);
+    if(skill.aiTier==='9')throw Object.assign(Error('显存忙'),{code:'LOCAL_AI_TIER_WAIT'});
+    return isReviewer(schema)?review(schema,'revise'):{text:'初稿'};
+  }})});
+  try{await assert.rejects(request(first),{code:'LOCAL_AI_TIER_WAIT'});}
+  finally{await first.close();}
+  assert.deepEqual(calls,['2','2','9']);
+  calls.length=0;
+  const second=createAiWorkflowModel({file,model:model({async memory(_text,_instruction,schema,_signal,skill){
+    calls.push(skill.aiTier);return isReviewer(schema)?review(schema):{text:'核对后'};
+  }})});
+  after(()=>second.close());
+  assert.deepEqual(await request(second),{text:'核对后'});
+  assert.deepEqual(await request(second),{text:'核对后'});
+  assert.deepEqual(calls,['9','9']);
+  second.aiAck('business-record/draft');
+  const db=new DatabaseSync(file,{readOnly:true});
+  try{await eventually(()=>db.prepare('SELECT count(*) AS n FROM ai_requests').get().n===0);}
+  finally{db.close();}
+});
+
+test('本地整理、服务器文本校对、本地评价、多阶段日记和旧唠叨共享单个模型时隙',async t=>{
+  const {profile,file,after}=fixture(t),seen=[],active={count:0};
+  const {DB,sqlite,close}=openTestDatabase();
+  sqlite.exec(migration);
+  function api(owner,path,options={}){
+    const key=path.slice('/api/memory/'.length);
+    if(key.startsWith('sources?'))return Response.json({records:[]});
+    if(key.startsWith('expenses?'))return Response.json({records:[],complete:true});
+    return personalityMemory(new Request('https://fixture.test'+path,options),{DB},owner);
+  }
+  const ai=createAiWorkflowModel({file,model:model({
+    async memory(text,_prompt,schema,_signal,skill){
+      assert.equal(++active.count,1);
+      try{
+        await delay(3);
+        if(isReviewer(schema)){seen.push(skill.name+'校对');return review(schema);}
+        seen.push(skill.name+':'+(skill.stage??''));
+        if(skill.name==='server-pc-task')return {type:'pc.echo',params:{value:'已核对的示例文本'}};
+        if(skill.name==='news-summary')return {summary:'本地资料显示，事项仍在按计划推进。相关团队已整理出下一步的清单和交接材料，当前公开内容只说明准备进度和已有事实。'};
+        if(skill.name==='memory-refinement'){
+          if(skill.stage==='plan')return {organize:'删去重复评价',additions:'',format:''};
+          if(skill.stage==='review')return {decision:'accept',reason:'保留了核对事实',part:''};
+          const part=JSON.parse(text).part;
+          return {text:part.text.replace('重复。重复。','确认已核对。'),note:'我合并了重复评价'};
+        }
+        const values={text:schema.required.includes('review')?text:'我记下了这件事。',review:'我读后核实了原意。',
+          mood:'平静',summary:'今日手记',tags:'',comment:'我想以后再看看进展。',thread:''};
+        return Object.fromEntries(schema.required.map(key=>[key,values[key]??'']));
+      }finally{active.count--;}
+    }
+  })});
+  const stores=[];
+  function store(owner,turns=[],tasks=[]){
+    const local=join(profile,owner);
+    mkdirSync(local);
+    const diary=createPersonalityDiary({profile:local,model:ai,now:()=>at,weather:()=>[],
+      memory:{archiveDays:()=>[day],read:d=>d===day?turns:[],readTasks:d=>d===day?tasks:[]},
+      request:(path,options)=>api(owner,path,options)});
+    stores.push(diary);
+    return diary;
+  }
+  after(async()=>{await ai.close();for(const diary of stores)diary.close();close();});
+  const today=store('diary',[{id:'talk',at,question:'今天把资料送到了。',text:'我记下了。'}]);
+  const stats=store('evaluation',[],[{at,task_id:'example',title:'检查资料',action:'已完成',detail:'已收到原件。'}]);
+  const nags=store('nag');
+  await api('nag','/api/memory/nags',{method:'POST',body:JSON.stringify({
+    id:'closed',revision:1,source:'diary',source_id:day+'.1/1',created_at:new Date(at).toISOString(),
+    title:'核对记录',reason:'核对',status:'回合结束',mood:'平静',talk:[{who:'你',text:'已完成。',at:new Date(at).toISOString()}],
+    afterEvaluation:'我已核对。重复。重复。'})});
+  await nags.refine(signal()); // 首轮轮询没有日记，下一轮检查已结束唠叨。
+  const news=createNewsEditor(ai);
+  let prompts=0;
+  const command=createServerTaskCommand({profile,localModel:ai,tasks:{identity:{device_id:'local-fixture'},
+    supportsTask:()=>true,async weatherRequest(path,{method}){
+      assert.equal(path,'/api/tasklist');assert.equal(method,'GET');
+      return Response.json({tasklist:[{executor:'pc',type:'pc.echo',name:'回显',parameter_spec:{value:{type:'string',required:true}}}]});
+    }},dialog:{async showMessageBox(options){
+      assert.match(options.detail,/已核对的示例文本/);prompts++;return {response:0};
+    }}});
+  const [summary,server,evaluation,diary,nag]=await Promise.all([
+    news({nodes:[{at,title:'资料整理',evidence:'事项按计划准备，团队已整理下一步的清单和交接材料。'}]},signal()),
+    command('服务器任务：回显需要整理的示例内容',signal()),
+    stats.run('task-review',signal()),today.run('diary',signal()),nags.refine(signal())
+  ]);
+  assert.match(summary,/事项仍在按计划推进/);
+  assert.match(server,/取消/);assert.equal(prompts,1);
+  assert.match(evaluation,/补写 1 条执行评价/);
+  assert.match(diary,/已同步/);
+  assert.match(nag,/已修订唠叨/);
+  assert(seen.some(x=>x.endsWith(':narrate')));
+  assert(seen.some(x=>x.endsWith(':summary')||x.endsWith(':header')));
+  assert(seen.some(x=>x.startsWith('memory-refinement:review')));
+});

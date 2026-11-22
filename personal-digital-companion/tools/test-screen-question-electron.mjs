@@ -13,10 +13,33 @@ const root=resolve(import.meta.dirname,'..'),profile=mkdtempSync(join(tmpdir(),'
 mkdirSync(output,{recursive:true});electron.app.setPath('userData',profile);
 electron.app.commandLine.appendSwitch('disable-gpu');
 let host,pet;
-const wait=async predicate=>{for(let i=0;i<100;i++){if(await predicate())return;await new Promise(resolve=>setTimeout(resolve,30));}throw new Error('UI等待超时');};
+const wait=async(predicate,attempts=100)=>{for(let i=0;i<attempts;i++){if(await predicate())return;await new Promise(resolve=>setTimeout(resolve,30));}throw new Error('UI等待超时');};
 async function run(){try{
   await electron.app.whenReady();
   pet=new electron.BrowserWindow({x:600,y:600,width:240,height:360,show:false,webPreferences:{offscreen:true}});
+  if(process.argv.includes('--preheat')){
+    const pending=Promise.withResolvers(),routes=[];
+    let voiceCalls=0;
+    host=attachScreenQuestion(electron,{win:pet,profile,bundle:resolve(root,'output/desktop-bundle'),root,visible:false,
+      voice:{enabled:true,preheat:()=>++voiceCalls===1?pending.promise:{ready:true},stopSpeaking(){}},
+      interactionWork:()=>assert.fail('预热不应送出对话'),
+      localModel:{async preheatConversation(route){routes.push(route);return route==='direct'?{error:'GPU 显存不足'}:{ready:true,size:'4'};}}});
+    await host.open();
+    const bubble=code=>host.panel.webContents.executeJavaScript(code);
+    await wait(()=>bubble("!document.querySelector('#warmModels').hidden"));
+    const bounds=host.panel.getBounds();
+    host.panel.setBounds({...bounds,width:315});
+    assert(await bubble("document.querySelector('#warmModels').getBoundingClientRect().right < document.querySelector('#send').getBoundingClientRect().left && document.querySelector('#send').getBoundingClientRect().right <= innerWidth"));
+    await bubble("document.querySelector('#question').value='我的草稿';document.querySelector('#warmModels').click()");
+    assert(await bubble("document.querySelector('#warmModels').disabled && document.querySelector('#send').disabled && document.querySelector('#warmModels').getAttribute('aria-busy')==='true'"));
+    pending.resolve({ready:true});
+    await wait(()=>bubble("document.querySelector('#warmStatus').textContent.includes('4B')"));
+    assert.equal(await bubble("document.querySelector('#question').value"),'我的草稿');
+    await bubble("document.querySelector('#directChat').click();document.querySelector('#warmModels').click()");
+    await wait(()=>bubble("document.querySelector('#warmStatus').textContent.includes('听写预热完成 · GPU 显存不足')"));
+    assert.deepEqual(routes,['main','direct']);assert.equal(voiceCalls,2);
+    console.log('PASS：问绯月预热按钮、窄屏布局、草稿保留、直连切换和部分失败提示。');return;
+  }
   if(process.argv.includes('--topic-recovery')){
     const init=()=>createTopicMemory({profile,memory:{root:profile,archiveDays:async()=>[]}});
     let topics=init();
@@ -38,6 +61,7 @@ async function run(){try{
   }
   if(process.argv.includes('--diary-audit')){
     let pending=true;
+    const audio=Promise.withResolvers();
     const actions=[],question='正式发布是哪一天？';
     const item={id:'audit-ui',title:question,status:'等待回应'};
     const bubble=code=>host.panel.webContents.executeJavaScript(code);
@@ -46,7 +70,12 @@ async function run(){try{
       const showing=host.showNag({id:item.id,audit:true,signal:new AbortController().signal,prompt:question,
         visible(){actions.push('shown');},
         leave(reason){actions.push(reason);if(reason==='refuse')pending=false;host.notifyPending();},
-        async reply(text){actions.push(text);return {text:'哪天收到确认？'};}
+        async reply(text){
+          actions.push(text);
+          if(text==='任务抢占')return {text:'已保存，可以稍后继续。',done:true};
+          if(text==='已经说明完毕'){pending=false;host.notifyPending();return {text:'记下了。',done:true,finished:true};}
+          return {text:'哪天收到确认？'};
+        }
       });
       // 真实气泡在离屏渲染器中运行，只模拟它已可见的回执。
       host.panel.isVisible=()=>true;
@@ -54,6 +83,7 @@ async function run(){try{
       return '已打开质问';
     }
     host=attachScreenQuestion(electron,{win:pet,profile,bundle:resolve(root,'output/desktop-bundle'),root,visible:false,
+      voice:{enabled:true,render:()=>audio.promise,stopSpeaking(){}},
       auditPending:()=>pending?[item]:[],resumeAudit:display});
     await display();
     await wait(()=>bubble("!document.querySelector('#auditActions').hidden && document.querySelector('#answer').textContent.includes('正式发布')"));
@@ -84,7 +114,34 @@ async function run(){try{
     await wait(()=>!host.panel);
     await wait(()=>details("!document.querySelector('#turns button')"));
     assert.deepEqual(actions,['shown','later','shown','周五下午。','refuse']);
-    console.log('PASS 真实气泡与待确认页的稍后、继续、文字回答、追问、拒绝和清除。');return;
+    pending=true;await display();
+    const respond=text=>bubble("document.querySelector('#question').value="+JSON.stringify(text)+";document.querySelector('#questionForm').requestSubmit()");
+    await respond('任务抢占');
+    await wait(()=>bubble("document.querySelector('#answer').textContent.includes('稍后继续')"));
+    assert(await bubble("!document.querySelector('#questionForm').hidden"));
+    assert(pending);
+    host.hide();await display();
+    await respond('已经说明完毕');
+    await wait(()=>bubble("document.querySelector('#answer').textContent==='记下了。' && document.querySelector('#questionForm').hidden"));
+    await bubble("document.querySelector('#speakReply').click()");
+    await wait(()=>bubble("document.querySelector('#speakStatus').textContent.includes('生成朗读')"));
+    await new Promise(resolve=>setTimeout(resolve,5200));
+    assert(host.panel,'收尾回复仍在朗读时不关闭');
+    const wav=Buffer.alloc(44+1600);
+    wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);
+    wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(8000,24);wav.writeUInt32LE(16000,28);
+    wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(1600,40);
+    audio.resolve({wav:new Uint8Array(wav)});
+    await wait(()=>!host.panel,240);
+    assert(!pending);
+    pending=true;await display();
+    await respond('已经说明完毕');
+    await wait(()=>bubble("document.querySelector('#questionForm').hidden"));
+    const finishedPanel=host.panel;
+    await host.open();
+    assert(finishedPanel.isDestroyed());
+    await wait(()=>bubble("!document.querySelector('#questionForm').hidden"));
+    console.log('PASS 真实气泡与待确认页的稍后、继续、文字回答、追问、拒绝和清除，收笔等朗读结束后主动关闭。');return;
   }
   let captures=0,calls=0,romeAttempts=0,mode='answer',release;
   const image=electron.nativeImage.createFromBitmap(Buffer.alloc(64*64*4,255),{width:64,height:64});
