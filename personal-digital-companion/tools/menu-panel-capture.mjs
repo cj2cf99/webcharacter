@@ -71,8 +71,10 @@ async function main(){
   const taskEvents=Array.from({length:12},(_,i)=>({at:now-i*900_000,task_id:'job'+(i%5),title:titles[i%5],action:['提交','执行中','完成'][i%3],detail:i%2?'绯月已在本机完成':''}));
   const history=attachConversationDetails(runtime,{...common,visible:true,history:{read:async()=>turns},readTasks:async()=>taskEvents,
     auditPending:()=>[{id:'1',kind:'手记质问',status:'等待回应',title:'那天临时调整了计划，后来顺利吗？'},
-      {id:'2',kind:'悬念',status:'意外中断',title:'后来找到那本一直在找的书了吗？'},
+      {id:'2',kind:'悬念',status:'意外中断',title:'后来找到那本一直在找的书了吗？',
+        citation:{reference:today+' · 第 1 篇 · 悬念 2',label:'对话原文摘录',excerpt:'你说：找了一早上，还是没找到那本上周借来的书。',canExpand:true}},
       {id:'3',kind:'消费记录',status:'等待回应',title:'这笔预算调整会影响之后的安排吗？'}],
+    readQuestionCitation:id=>id==='2'?{body:'你说：找了一早上，还是没找到那本上周借来的书。\n绯月当时回复：上次读完可能放在客厅了。'}:undefined,
     checks:{notices:(...a)=>checkStore.notices(...a),markRead:id=>checkStore.markRead(id),
       read:(_d,page)=>({nextAt:now+8*60_000,first:false,running:false,pending:true,page:page??0,pages:2,
         events:Array.from({length:12},(_,i)=>({at:now-i*600_000,due:now-i*600_000,project:['到期事项','天气','任务轮询'][i%3],status:i%4?'已检查':'未执行',detail:i%4?'没有新事项':'绯月忙 · 连续第 2 次'}))})},
@@ -89,6 +91,15 @@ async function main(){
     }
     for(const view of ['chat','tasks','checks','notices','pending','log']){
       await history.open(null,view);history.panel.setSize(430,560);await wait(500);await shot('review-'+view,history.panel);
+      if(view==='pending'){
+        const js=code=>history.panel.webContents.executeJavaScript(code);
+        if(!await js("document.querySelector('.question-quote')?.textContent.includes('找了一早上') && !document.querySelector('.question-citation').open"))
+          throw Error('悬念卡片缺少引文或默认展开');
+        await js("document.querySelector('.question-citation summary').click()");
+        for(let i=0;i<60&&!await js("document.querySelector('.question-citation').innerText.includes('客厅')");i++)await wait(50);
+        if(!await js("document.querySelector('.question-citation').innerText.includes('客厅')"))throw Error('展开来源未加载正文');
+        await shot('review-pending-source',history.panel);
+      }
     }
     const box=boxes.showMessageBox({type:'question',title:'恢复本机任务终端 ID',message:'采用所选终端 ID 并重启绯月？',detail:'pc-2026-1121',buttons:['取消','恢复并重启'],defaultId:1});
     for(let i=0;i<60&&!boxes.panels[0]?.isVisible?.();i++)await wait(50);

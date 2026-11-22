@@ -49,8 +49,13 @@ export function createMemoryArchive(root=memoryRoot){
   async function read(day){
     const dir=join(folder(day),'对话');
     const names=await optional(readdir(dir))??[];
-    const rows=await Promise.all(names.filter(name=>name.endsWith('.json')).map(async name=>JSON.parse(await readFile(join(dir,name),'utf8'))));
-    return rows.sort((a,b)=>b.at-a.at);
+    const rows=await Promise.all(names.filter(name=>name.endsWith('.json')).map(async name=>{
+      try{
+        const row=JSON.parse(await readFile(join(dir,name),'utf8'));
+        return row&&typeof row.id==='string'&&Number.isFinite(row.at)?row:null;
+      }catch(error){if(error instanceof SyntaxError||error.code==='ENOENT')return null;throw error;}
+    }));
+    return rows.filter(Boolean).sort((a,b)=>b.at-a.at);
   }
   async function storeImage(turn,image){
     const ref=imageRef(turn),base=folder(ref.day),bytes=image.toPNG();

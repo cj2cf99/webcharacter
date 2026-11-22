@@ -1251,3 +1251,355 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 **实装结果。** 2026-11-22 21:32:41 JST，Windows 正式绯月完成安装和受控重启，版本 `51578f12bb0d`。旧 PID 17588 正常退出，新 PID 19120 经原安装入口启动。已核对 REST、实际资料目录、快捷方式、登录项以及 8 项文件摘要。任务库和转录库完整性检查通过，原 3 个转录作业保留，检查时运行中的转录为 0。轮询配置一致，已有本机批次仍为 19 条。使用实际安装文件在隔离 Electron 复验原地修改、正文与东京提醒时间保存、关窗重开、确认后冻结以及按修改值登记，结果通过。未编辑真实用户作业，真实使用效果待用户验收。
 
 备份位于 G:/selftool/WebCharacter/work/feiyue-transcript-edit-release/install-backup-20261122-213228，含 8 项旧文件和经完整性核对的加密 conversation-transcription.sqlite 副本。机器回执在 G:/selftool/WebCharacter/work/feiyue-transcript-edit-release/install-receipt.json。按用户明确授权执行安装、不登记花园。云端发布、Git 提交和远端推送均未执行。
+
+
+## 2026-11-22 JST · Windows 绯月多线会话与动态整理预算
+
+**需求和验收。** 以 `REQUIREMENTS.md` 的 C、T 组及用户关于本地整理 token 不足阻塞任务、按实际错误隔离模拟、接受动态调整的补充为依据。问绯月支持继续原线、新建和切换，迟到回复只进入对应线；记录窗口保留待聊、进行和 JST 历史入口。不把草稿或旧上下文重复入队。用本机 tokenizer 估算整理输入及输出，对可拆长输入先拆批，对首次动态预算截断按原步骤让到队尾并用完整预算复试。硬上限和同一步最多三次的边界继续生效。超限批次能查到原因，后续批次继续。转录、核对与编辑在本机完成，待确认结果仍通过原入口由用户确认后登记。
+
+**环境、来源和比较。** 目标为 Windows 正式绯月 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`。版本基线为最近一次实装 `51578f12bb0d`，正式树 Git `39fd098e40ebf7c2c82dd5a6f9944ae98055566e`。用户启动后核对旧 PID 768，2026-11-22 23:21:45 JST 开始服务，REST v4 与同一进程、资料目录及快捷方式、登录入口匹配。来源为 WebCharacter 的 `personal-digital-companion`，三方比较起点 `0aa2a6443daf4553955435960ff91ff99c10d55c`、已推送检查点 `86cc16dd4922d5623a62b23c73d4905b91e217c9` 和随后工作区动态预算。以实际安装文件计算旧、新 SHA-256；候选和前像见 `G:/selftool/WebCharacter/work/feiyue-threads-release-20261122/` 下的 `candidate/`、`before/`，组装脚本 `prepare.mjs`、人工解冲突 `resolved/`、精确比较 `windows-files.json`。该清单包含 40 个路径，SHA-256 `49023239b9adb37c79e539fb00b169feda64c35c2c884341042a3fadcca2448b`，候选标识 `49023239b9ad`。只安装清单所列文件，候选目录内的测试支撑、模型联接与测试资料无安装差异。
+
+**变更与前后行为。** 路径以 `desktop/` 为前缀，同名运行副本位于 `output/desktop-bundle/`。
+
+| 范围 | 涉及文件 | 前后行为 |
+| --- | --- | --- |
+| 对话与记录 | `conversation-{details,history,thread-reference,thread-replies,threads,ui}.mjs`、`conversation-preload.cjs`、`conversation.css`、`conversation.html`、`screen-question-{client,host,ui}.mjs`、`screen-question-preload.cjs`、`screen-question.css`、`screen-question.html` | 从单气泡和日期回顾扩展到多线继续、引用、切线、静默便签及三页签。按线隔离后到回复，关窗复用已有挂起会话。 |
+| 转录和提交边界 | `conversation-transcription.mjs`、`task-inbox-ui.mjs` | 新发言触发待整理批，记录已完成步骤和失败回执。编辑、用户确认和原登记回执沿用。保留明确登记模式的原文处理。 |
+| 本机模型和宿主 | `ai-request-queue.mjs`、`ai-workflow-model.mjs`、`balanced-local-model.mjs`、`local-model-process.mjs`、`local-model.mjs`、`local-output-budget.mjs`、`server-task-command.mjs`、`shell.mjs` | 固定额度改为按材料实际 token 预算，模型按已装载层数使用 CPU 1,024／GPU 2,048 的上限，保留前台优先、阶段续办及云端候补边界。 |
+| 行动评价和巡检 | `diary-audit.mjs`、`diary-sources.mjs`、`memory-archive.mjs`、`personality-diary.mjs`、`personality-nags.mjs`、`poll-scheduler.mjs`、`reminder-checks.mjs`、`task-traffic-log.mjs` | 预算故障的部分素材与未受影响素材分开推进，沿用现有评价入口；任务日志巡检默认一小时，只计实际异常，预检拆分留诊断记录。独立的手记和唠叨修订功能与新闻编辑不在清单。 |
+| 运行副本 | `conversation-ui.mjs`、`conversation.css`、`conversation.html`、`screen-question-ui.mjs`、`screen-question.css`、`screen-question.html`、`task-inbox-ui.mjs` | 七个页面和资源副本与桌面源码对应，安装后由正式窗口加载。 |
+
+**数据、配置及兼容。** 云端迁移、云端服务发布、Access、生产业务数据回填、REST 契约、令牌、快捷方式、登录项、模型和依赖影响均无。首次启动在既有资料目录按需增加 `conversations.sqlite` 的线、发言、整理及超期表，`ai-requests.sqlite` 的队列和阶段快照，手记库故障记录表及提醒库巡检游标和 `inspection` 轮询。原转录库已具有 `summary` 列，复用其加密载荷、原编号和用户确认边界。原会话历史保留，无全量历史回放或云端补写。隔离旧登记用最近开发种子中的时分兼容模板重现前一版本验证环境，候选安装不灌入该种子。
+
+**验证过程。** 开发区执行 `node tools/build-desktop.mjs`、`node tools/test-desktop-shell.mjs` 和 `node --test "agent/tests/*.test.mjs"`，报告 433 通过、3 可选项跳过、0 失败。固定和动态的 4B Vulkan 整理均得到 2 项运动候选、1 条后续提醒，同一个注入故障保留待查。五次有效调用的上下文从 3,072–4,096 降至 2,048，累计耗时 16.704→15.394 秒，单次样本未测显存峰值。正式基线候选通过入口模块加载。隔离模拟首次以安装树内旧 SQL 初始化 Worker，18:45 受旧模板拒绝。对比前次正式发布的隔离测试，确认其使用来源项目已支持时分的种子，改回该夹具，恢复三方合并漏掉的显式登记原文处理，并按 C16 修正新多线入口，保持登记模式、合并两条原文且仅生成待确认草稿。候选通过 `test-desktop-shell.mjs`、月印标题栏隔离测试、`check-candidate.mjs --dark` 和 `--light`，并通过 `test-conversation-transcription-electron.mjs --mock` 和 `--mock --registration --dark`，覆盖待确认改时分、重开保留、确认冻结和单链提交，全部使用临时资料。候选真实推理首测未返回模型就绪，核实为合并后的就绪日志引用了丢失的变量。已恢复开发区通过测试的模型生命周期、取消处理和平衡模型调度接线，复核保留原有五项记忆轮询并排除单独的修订任务。
+
+候选真实模型复测执行 Electron `tools/run-electron-check.mjs check-candidate.mjs --real --adaptive-retry` 及 `tools/run-electron-check.mjs check-candidate.mjs --organize`。2B CPU 对 1,763 token 返回预检拆分，用时 3 ms、零生成；另一次实际截断于动态 384 token，完整额度 1,024 内重试生成 510 token。4B Vulkan 两个工作者得到原长批 2 项、注入故障待查、后续批 1 项，五次有效调用均使用 2,048 的上下文。
+
+
+**审核重点及剩余。** 对照 `docs/reviews/FEIYUE_CONVERSATION_THREADS_IMPLEMENTATION_REVIEW_2026-11-22.md` 和 `docs/reviews/FEIYUE_ADAPTIVE_TRANSCRIPTION_BUDGET_REVIEW_2026-11-22.md`。重点核查长句和换行、同线来源、预算让行和三次上限、持久阶段复用、等待状态与单一登记链，以及已实装的待确认编辑、语音预热和原 REST 队列。开发区动态预算自审修正后连续两轮无新问题。安装候选另复核两遍：一查多线登记原文和确认边界，重跑浅深、普通和显式提交；二查模型预算、失败后续行、正式文件摘要和已有应用入口。独立第三方审核未执行。跨旧自主任务的一小时陈旧领取接管、所有旧云端调用合用一个串行入口仍未完成。旧截图模拟回执超时在开发基线复现。未用真实私人长对话作回放，长期语义质量、模型收尾措辞及显存峰值待观察。线上真实模板字段未另行访问，保留上一正式版相同的协议和写入链。
+
+**发布、后检和恢复。** 安装确认后重新核对实际进程、资料目录、在途任务、旧文件与候选摘要。待模型、对话、转录及登记在途工作收尾，走正常退出，备份全部受影响的旧文件和现存 `conversations.sqlite`、`conversation-transcription.sqlite`、`personality-memory.sqlite`、`reminder-checks.sqlite`、`ai-requests.sqlite`，SQLite 备份做 `quick_check`。逐项原子替换，从原入口受控重启。复核新 PID、REST、资料、快捷方式、登录项、40 项摘要、已有批次和转录作业、原轮询配置及预期巡检项，并用实装文件和临时资料重跑会话及既有编辑。失败时正常退出，核对并恢复旧文件或撤回本次新增文件，重新走原入口；保留数据库备份，避免覆盖重启期间产生的资料。用户实际桌面数据效果待上线后验收。
+
+**Git、确认和花园。** Windows 正式安装及受控重启在本记录就绪后待明确确认。开发检查点已推送，动态预算及发布留痕还未提交和推送。用户已明确本次需要登记。使用正式 v4 `infoguide` 所列方式运行 `npm.cmd run db:sync-schema`，只读同步新增 0 项，随后读取实际线上花园目录。基线修订 145，唯一归属「网页角色组件」#16 →「绯月（桌面精灵）」#61，当前 24.0，最后发布 #74。计划只追加本次部署和该功能明细，保留归属及历史。成功预计按花园模型升为 25.0；失败按实际情况登记「发布中」，保留成功版本。项目归属、种子、独立改善、独立缺陷及关系无需更新。发布结果明确后复查现值，生成精确 SQL 和前后值清单，经用户另行确认后先提交 SQL，再向新实例提交一个批次。正式安装、花园 SQL 提交、生产写入和入队当前均未执行。发布后补记版本、时间、实测、Git、批次状态及最终回执。
+
+用户明确回复「确认安装并重启」，批准候选 49023239b9ad 的 Windows 正式安装和受控重启。
+
+**实装结果。** 2026-11-22 23:45:20 JST 完成正式安装及受控重启，版本 49023239b9ad。旧进程 768 正常退出，新进程 33352 从原入口启动。回读本机 REST v4、资料目录、快捷方式、登录项和全部 40 项文件摘要。已存在的受影响 SQLite 安装前备份并通过完整性检查，重启后五个相关数据库均通过检查。对话线、AI 快照和任务巡检表已初始化，原轮询配置保留，巡检为 60 分钟。花园批次 19 → 19、转录作业 3 → 3。
+
+使用实装文件及隔离资料复验多线切换、迟到回复归属、静默便签、JST 历史和显式登记合并原文，结果通过。用本机模拟 Worker 复验待确认正文和时分编辑、确认后冻结、按修改内容以单一登记链提交，结果通过。正式用户历史和真实业务写入未作为测试输入。控件实际使用效果待用户验收，本次无云端服务部署。
+
+备份在 G:/selftool/WebCharacter/work/feiyue-threads-release-20261122/install-backup-20261122-234459，机器回执在同级的 install-receipt.json。来源仓库的已安装清单为 docs/reviews/FEIYUE_WINDOWS_THREADS_RELEASE_49023239b9ad.json，内容摘要与本次版本一致。
+
+
+**实装推理后检。** 实装模块在隔离资料中再次使用 2B CPU 模型。1,763 token 预检 3 ms、生成 0 token。另一输入在 384 token 实际截断，完整额度重试生成 510 token，仍在 1,024 上限内。
+
+**花园待确认。** 新正式实例的 REST v4 已核对，按接口指引只读同步结构，新增 0 项。线上归属网页角色组件 #16 → 绯月（桌面精灵）#61，最近部署 #74，现有版本 24.0，修订 145。精确 SQL 和清单演算仅新增部署 #75 及明细 #153，版本 24.0 → 25.0，记录实装结果和时间。批次 `feiyue-threads-budget-20261122`，审核摘要 `7599c46b74174c05cd3bc2e77efee171cd365e3f919bf53dc015b3742386b34a`。该清单待用户确认，SQL 尚未提交，REST 尚未入队，生产未写入。
+
+
+**花园确认及入队。** 用户回复「确认，按这份清单登记到花园，完成后核对回执。」确认当前清单。正式绯月的 PID 33352、安装文件摘要和 REST v4 已核对。执行 npm.cmd run db:sync-schema，新增 0 项。以修订 145 重新制单，摘要与 SQL 字节和原清单一致。主项目 npm.cmd test 844 项通过，npm.cmd run check 的 Wrangler dry-run 通过。先提交精确 SQL 94dd90b42133d84d1de77a4d0253dba39942929b，再通过本机 REST 于 2026-11-22 23:53:21 JST 提交批次 feiyue-threads-budget-20261122 一次，入队回执显示顺位 1。审批摘要为 7599c46b74174c05cd3bc2e77efee171cd365e3f919bf53dc015b3742386b34a。提交时状态 queued，终态以随后回读为准。
+
+**花园终态回执。** 批次 feiyue-threads-budget-20261122 于 2026-11-22 23:53:45 JST 完成，状态 done，1/1 verified。于 2026-11-22 23:54:08 JST 独立回读生产，网页角色组件 #16 → 绯月（桌面精灵）#61，部署 #75 及明细 #153 所有字段与确认清单一致。花园版本 24.0 → 25.0，修订 145 → 146，本次发布标记仅 1 条。已核对 SQL 提交 94dd90b42133d84d1de77a4d0253dba39942929b 和用户确认摘要 7599c46b74174c05cd3bc2e77efee171cd365e3f919bf53dc015b3742386b34a。
+
+**花园回执已取回。** 2026-11-22 23:54:38 JST 通过原批次的 REST 签收并回读确认。完整执行回执位于主项目 database/changes/feiyue-threads-budget-20261122/execution-receipt.json。
+
+
+## 2026-11-23 JST · Windows 绯月情绪补评与巡检归并
+
+**需求及验收。** 用户要求「已经又报错了，检查并优化行为」，并追加「准备安装和重启，装好后重点复验那两条待评事件，看看巡检还会不会重复报错」。目标为原两条事件沿既有正式队列完成，保留各自评价回执。巡检同一失败只计一次，正常取消和可恢复的拆批留诊断，独立失败继续提醒。实装后重点回读工作事件 #26、收益事件 #27 和自动巡检结果，另用实装代码只读回放首轮 1,272 条日志验证归并。
+
+**环境、来源及比较。** Windows 正式安装根 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，当前版本 `49023239b9ad`。预检正式 PID 33352、REST v4、进程启动时间 2026-11-22 23:45:08 JST、原资料目录及回环监听。来源为 WebCharacter 的 `personal-digital-companion`，Git 基线 `4d9363ffee01a97551953cfcf523f4b3258f0ec2` 加本轮开发差异。四项安装文件与 Git 基线正文逐项相同，精确比较取正式版原文件与候选文件的 SHA-256。候选 `46c2e0ac0916`，完整清单摘要 `46c2e0ac09167f3289620c4b15806f075daed1bf8a85d91a35bf8f2eafc033f8`。组装脚本、旧文件、候选及逐项摘要位于 `G:/selftool/WebCharacter/work/feiyue-local-error-20261123` 的 `prepare-release.mjs`、`before/`、`candidate/` 和 `windows-files.json`。
+
+| 文件 | 前后行为 |
+| --- | --- |
+| `desktop/emotion-service.mjs` | 原 15 秒共享时限导致待评。现继续用 Aggressive 9B，单次 45 秒和 384 token，首次超时延后 30 秒重试一次。后续材料和前台可先运行。已保存评价与专题偏好写入使用各自回执。 |
+| `desktop/ai-request-queue.mjs` | 原数字 `23`、`20` 分别记录为 `TimeoutError`、`AbortError`。前台抢占保留取消状态，过期取消快照沿用 24 小时清理。 |
+| `desktop/local-model-process.mjs` | 固定模型入口保留 420 token 额度和 2,048 上下文。日志增加实测 token 数，区分输出截断、上下文不足和其它错误。已部署的动态会话整理沿用原策略。 |
+| `desktop/task-traffic-log.mjs` | 同秒、同手记技能、同代码的旧模型和任务失败回执一对一归并，独立失败继续出现。尾段重试及正常让行不重复提醒。 |
+
+**资料、配置及兼容。** 云端部署、业务迁移、历史回填、模型、依赖、快捷方式、配置、REST 及界面影响均无。复用已有 SQLite 表及原轮询游标，取消快照沿用已有状态字段。回读 `emotions.sqlite`、`ai-requests.sqlite`、`reminder-checks.sqlite` 通过 `quick_check`。基线事件 #26、#27 均为 pending，提醒 #15，巡检游标为 2026-11-22 23:46:08 JST，巡检已启用、间隔 60 分钟。备份原三库和代码，评估和巡检仍在本机运行。
+
+**实际验证。** `node tools/build-desktop.mjs`、`node tools/test-desktop-shell.mjs` 和 `node --test "agent/tests/*.test.mjs"` 通过，后者 436 通过、3 跳过。候选四项 `node --check` 通过。安装准备阶段重跑队列、情绪和会话专项 40 项全过。正式同一窗口只读回放 1,272 条，由 31 条报告归并为 16 次失败，`LOCAL_AI_INFERENCE_FAILED` 30 条归并为 15 次。隔离 Aggressive 9B CPU 对照复现旧 15.008 秒超时，新预算 27.813 秒完成，输入 693、生成 78 token。隔离 Electron `test-conversation-threads-electron.mjs --real --gpu` 验证实际 420 截断、完整输出 1,003 token 和超长上下文错误，`--organize` 验证 2 项、故障待查及后续 1 项。新增测试覆盖正常取消、前台下个时隙、待评退避和归并。开发区复核修正后连续两轮无新问题。验证命令和实际记录见来源 `docs/reviews/FEIYUE_LOCAL_AI_INCIDENT_REVIEW_2026-11-23.md`。独立第三方审核未执行。
+
+**安装、后检及恢复。** 审核就绪并获明确确认后，复核运行实例、事件当前状态、正式批次和四项摘要，按应用正常退出流程等待在途工作。备份四个旧文件和三份 SQLite，备份逐一 `quick_check`。原子替换，按原入口启动并核对新 PID、实际资料目录、原用户配置、花园批次、巡检游标及四项摘要。使用实装日志模块只读回放原窗口。再观察正式进程自然处理 #26、#27，逐项查 `status` 和已存评价，并等下次正式巡检游标前进，核对检查时段与通知编号、旧错误是否重发。过程只提取编号、状态、计数和错误码。历史巡检通知 #15 保留。若安装或基础后检失败，正常退出新进程，恢复四项旧代码并复核旧摘要，原入口重启。SQLite 备份保留供核对，既有资料及重启期间自然落盘的数据保持连续。
+
+**待验证及授权。** 正式两条待评的结果及新一轮真实巡检待安装后核对。历史通用 `LOCAL_AI_INFERENCE_FAILED` 的逐次内部原因、单独的到期事项 HTTP 503 和长期负载数据继续保留。来源代码及发布留痕待实装后同步。本次安装和受控重启的明确确认待回复。本次花园登记意愿待回复，未生成或提交登记。安装、重启和发布后验收尚未执行。
+
+用户明确回复「确认安装并重启，这次也登记到花园」，授权候选 46c2e0ac0916 的 Windows 安装和受控重启，并确认本次登记意愿。具体花园清单另行确认。
+
+**实装结果。** 2026-11-23 00:23:54 JST 完成基础安装验收。旧 PID 33352 正常退出，新 PID 19400 从原入口启动。正式 REST v4、资料目录、四项 SHA-256、既有轮询设置及批次数核对通过。三份 SQLite 备份和实装资料均通过快速完整性检查，基线工作 #26、收益 #27 均保留为原记录，巡检游标及历史提醒 #15 保留。备份在 G:/selftool/WebCharacter/work/feiyue-local-error-20261123/install-backup-20261123-002336，机器回执在同级 install-receipt.json。
+
+**已验证的巡检行为。** 用正式实装模块只读回放旧窗口，1,272 条中归并为 16 次独立失败。将原正式巡检游标与实际归档作为只读输入，在隔离 SQLite 中连续执行两次实装巡检，依次扫描 58 条和 0 条，两轮新增通知均为 0。正式进程的首次自动巡检因后台占用顺延。现有轮询设置未改动，自动巡检和正式两条补评仍需分别回读。
+
+**正式补评回读。** 2026-11-23 00:35:57 JST，PID 19400 的原工作事件 #26、收益事件 #27 均为 done，均已保存 Aggressive 9B 评价。启动后的前两次尝试由于手记核对占用而按 AbortError 取消，原事件在后台时隙释放后自然完成。审核时新巡检仍待常规轮询，历史通知仍只有 #15。实装模块的两轮隔离巡检已通过。后续调度和交互时机修正属于新的开发范围。
+
+**待确认的花园清单。** 结构只读同步新增 0 项。生产回读为网页角色组件 #16 → 绯月（桌面精灵）#61，当前版本 25.0，最新部署 #75，修订 149。本次精确演算只新增部署 #76 和明细 #154，版本 25.0 → 26.0，修订 149 → 150。批次 feiyue-local-ai-incident-20261123，审核摘要 427fb3fc169d5183315fd103f855b6d8ae24faf3d8f6e5ba95ace6af7b3fb5ca。已获安装授权及登记意愿，具体清单待用户确认。未提交 SQL 或写入花园。
+
+**正式自然巡检及 Git 同步。** 上次安装的四项摘要在后续本机 REST v5 重启后逐项复核一致。正式实例 PID 35136 于 2026-11-23 00:45:53 JST 自动完成巡检 #853，扫描自原游标起的 117 条日志，未发现失败，历史通知仍为 #15，无新增。正式补评 #26、#27 仍有已存评价，三库完整性检查均通过。只读验收回执为 `G:/selftool/WebCharacter/work/feiyue-local-error-20261123/live-retest.json`。已安装修复的来源提交 `7d7d6d38b3ccd56dddec302fb6b53efc10691899` 已推送并核对 `origin/codex/workspace-checkpoint-20261120`。新增调度及被动操作不打断修正仍在开发工作区。
+
+**花园登记、回读与签收。** 原确认清单的部署 #76 和明细 #154 已由另一次发布占用。2026-11-23 JST 重新同步花园结构，新增 0 项，以生产修订 151 只读演算。用户确认更新后的编号 #77／#155、花园版本 26.1 → 27.1、修订 151 → 152，发布归属、发布说明和实际时间沿用原清单。审核摘要 `d4835b4193076868140ec9781b676c278ef1b09acd0260d10934506f1bc98a29`。主项目先提交 SQL `526f0524378b22e079c71b0f52db81e20d1250ad`，再由正式 REST v5 提交原编号一次。批次 `feiyue-local-ai-incident-20261123` 于 01:01:28 JST 完成，状态 done，1/1 verified。独立回读确认部署、明细、实际时间、归属、版本和唯一发布标记，当前修订 152。于 01:02:21 JST 签收并回读 acknowledged。主项目 844 项通过，Wrangler dry-run 通过。完整回执保存于 `G:/cloudflare/myapp/database/changes/feiyue-local-ai-incident-20261123/execution-receipt.json`，清单、SQL 与回执三文件已同步至主项目远端独立分支 `codex/garden-feiyue-local-ai-incident-20261123`，远端提交 `b2279a44e852e85cbb3adef42228ab70ffc83b86`。未部署线上 Worker。
+
+## 2026-11-23 JST · Windows 绯月自主动作与手记分批
+
+**需求与验收。** 用户要求普通点击、拖拽、看新闻不打断自主动作，只有实际提交问答或指令时才抢占，并要求按实际资料量模拟十分钟内无进度现象，减少单次投入。用户明确由本人复验正式界面。验收时先看桌宠出现「闲时 · 核对手记」和已保存步数，依次轻点桌宠、拖一下、打开已有新闻简报并停留，观察在途批次继续。之后核对步数累计、最多两次新推理一批、下一批从原进度续做及十分钟共享时限。可以在批次进行时送出一条明确问答，验证保存步骤后让行。原始需求、设计依据及两轮无新增问题的复核见来源 `REQUIREMENTS.md` 和 `docs/reviews/FEIYUE_IDLE_SCHEDULING_REVIEW_2026-11-23.md`。
+
+**发布目标和比较范围。** Windows 正式桌宠应用 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，应用参数为 `desktop`，复用既有 `output/desktop-profile`，正式 REST v5。前像 Git `39fd098e40ebf7c2c82dd5a6f9944ae98055566e` 加实际已安装文件。来源 `G:/selftool/WebCharacter/personal-digital-companion` Git `16c6608bdda84b1235498874289dba488dfd9263` 加本次六文件差异。`G:/selftool/WebCharacter/work/feiyue-idle-release/prepare.mjs` 将来源基线对齐实际前像，逐项断言其余内容相同。正式 shell 中已发布的 v5 提醒登记段原样保留。尚未安装的修订手记与唠叨轮询及其它并行开发未纳入。候选清单 `windows-files.json` SHA-256 `f011f0687aec301ee69876599c898197c965ff75317e9644fc3a6105eebeb4c9`，候选号 `f011f0687aec`，同目录保存六项前后文件与隔离验收记录。
+
+**逐项行为及差异。**
+
+| 文件 | 本次候选行为 |
+|---|---|
+| `desktop/shell.mjs` | 移除把普通窗口切焦当作用户问答的中断路径，转发手记整理进度。手记核对与情绪评价共享原有询问池，撤去整轮独占。原锁屏、休眠、明确任务接管和退出路径保留。 |
+| `desktop/screen-question-host.mjs` | 将前台抢占移到有效提交，打开窗口、空输入、预热和读完备好的新闻期间原任务继续。 |
+| `desktop/dictation-host.mjs` | 打字或语音草稿校正走原模型队列，校正入口不再无条件取消后台处理。 |
+| `desktop/diary-audit.mjs` | 保留近七日范围、原分段和步骤快照。每批最多两次新推理，保存一项即更新阶段和累计步数。 |
+| `desktop/personality-nags.mjs` | 原样传递分批待续回执和保存步数，避免把仍待续的任务误判为整轮完成。 |
+| `desktop/poll-scheduler.mjs` | 读日志巡检独立到期。手记下批按原 15 秒复查节奏重新取件，复用已有持久化冷却和原十分钟共享预算。 |
+
+**数据、配置及兼容性。** 数据库结构迁移、历史回填、线上 Worker、令牌、模型、依赖或配置修改均无。复用既有 SQLite 的手记步骤、轮询等待和游标。退出前有步骤时仍按原资料状态恢复。备份正式代码及 `personality-memory.sqlite`、`reminder-checks.sqlite`、`local-batches.sqlite`，备份只供核对及应急，回退默认只还原模块，保留运行中自然保存的数据。
+
+**实际检测及未完成项。** 来源 `node tools/build-desktop.mjs` 和 `node --test "agent/tests/*.test.mjs"` 通过（442 通过、3 跳过）。`node work/feiyue-idle-release/prepare.mjs` 对正式前像和六个候选做摘要与 `node --check`。安装脚本经 PowerShell 语法检查。`node work/feiyue-idle-release/check-candidate.mjs` 在正式基线的隔离副本运行 53 项，全部通过，含分批进度、重启续做、模型让行、日志巡检以及 v5 花园和提醒的兼容用例。早期隔离验证夹具缺生成工具、执行环境又限制本机端口，已补齐夹具并在随机本机端口重跑。`node work/feiyue-local-error-20261123/simulate-audit-workload.mjs` 用现场 13 篇的长度和真实推理耗时模拟，旧版 10 分钟保存 22 步且无进度回调，新逻辑首两批各 2 步、累计 4 步，模拟约 53 秒和 58 秒。模拟时长不作为实际耗时承诺。正式候选未安装，真实点击、拖拽、新闻、实时进度及整轮耗时待用户复验。独立第三方审核未执行。
+
+**安装、恢复及发布后验证。** 获明确许可后对照正式路径、进程、快捷方式、登录项和文件摘要，等待运行中的正式任务、花园或提醒登记和转录完成。备份并正常退出，核对三库并原子替换六项文件，从原入口启动。核对新 PID、回环 REST v5、原轮询、既有批次与提醒、代码摘要及手记步数元数据。发生替换或验收失败时正常退出候选，从已核对的备份还原文件并用原入口运行旧版。后台活动前景冲突、步骤累计、读新闻后是否继续及最终体验由用户验收。安装后的程序回执、实际时间、Git 状态随后补记。
+
+**授权情况。** 用户已要求准备安装和重启，并明确正式交互复验由本人进行。执行新版安装及重启待本次明确许可。新版花园登记意愿待确认。上次实装的批次 `feiyue-local-ai-incident-20261123` 是单独的已完成登记。
+
+**安装授权。** 用户明确确认安装并重启 Windows 候选 `f011f0687aec`，确认新版也登记到花园，具体 SQL 清单待按实际结果准备并确认。用户将自行复验点击、拖拽、看新闻和闲置整理分批续做。
+
+**实装结果。** 2026-11-23 01:12:09 JST，Windows 正式版 f011f0687aec 已受控重启。旧 PID 18548 正常退出，新 PID 3096 使用同一应用和资料目录，六项正式摘要、REST v5、原轮询和本机正式队列核对通过。三份 SQLite 备份及正式资料完整性通过。核对手记续做锚点一致，安装前已保存 60 步，启动回读 60 步。回执位于 G:/selftool/WebCharacter/work/feiyue-idle-release/install-receipt.json，同级目录留存备份。正式交互与分批体验待用户复验。首次启动的只读轮询检查遇到 SQLite 短时占用，已正常回退。只读检测增加等待，保留同一候选，第二次启动后检通过。正式交互未代操作。
+
+**新版花园待确认。** 线上结构同步新增 0 项。正式归属为网页角色组件 #16 → 绯月（桌面精灵）#61。以修订 152 演算本次发布成功记录 #78 和明细 #156，花园版本 27.1 → 28.0，修订 152 → 153，记录实际安装时刻 2026-11-23 01:12:09 JST。工作区草案 `G:/selftool/WebCharacter/work/feiyue-idle-release/garden-draft/registration.json`。批次 `feiyue-idle-scheduling-20261123`，审核摘要 `c84e8751cc3d34d9f9a27540ae34afd20f03c75361afdad47dd7d54a45e35357`。用户确认按此清单登记，拟先提交 SQL 后通过正式绯月 REST v5 执行并独立回读。
+
+**新版花园回执。** 正式绯月 REST 执行单批次 feiyue-idle-scheduling-20261123，先提交 SQL f9a4db2fe2daa9008436521f60b33af65be6946d。01:15:49 JST 完成，唯一一步已核对。独立回读部署 #78、明细 #156、版本 27.1 → 28.0、修订 153，发布标记唯一。01:16:24 JST 签收并回读。完整回执 G:/cloudflare/myapp/database/changes/feiyue-idle-scheduling-20261123/execution-receipt.json。主项目 844 项测试和 Wrangler dry-run 通过。三项留痕已同步至独立远端分支 codex/garden-feiyue-idle-scheduling-20261123，核对提交 8e4c236174360e56cba690934d78322bbd3f4bb4。
+
+**来源 Git 同步。** 调度修改、测试、实际六项清单和验收记录已提交至 6dc09a3c38ba9f14c76527ea28cb8db02a8da33d，已推送并回读 origin/codex/workspace-checkpoint-20261120。当前实装清单为 f011f0687aec。
+
+## 2026-11-23 JST · Windows 绯月补行动评价截断与巡检归并
+
+**需求及验收。** 用户要求修正实际 Bug 并尽量降低报错频率，明确错误不得屏蔽，随后要求两轮自审与合规检查，再要求部署。以正式版 01:13:08 至 01:37:40 JST 的输出截断为复现窗口。验收包括在隔离资料复现三条原失败样本并使候选完成生成与审核，设备忙时减少无效请求，单条失败保留待查且剩余材料继续，前台请求仍能优先，历史待续能恢复。巡检保留原始日志及真实错误，准确关联同一次推理发出的两份回执。原始需求和复核见 `REQUIREMENTS.md` 与 `docs/reviews/FEIYUE_LOCAL_AI_INCIDENT_REVIEW_2026-11-23.md`。
+
+**发布目标及差异范围。** Windows 正式本机绯月，实际根目录 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`。应用由原 Electron 启动 `desktop`，使用原 `output/desktop-profile`，回环 REST v5。安装前核对 PID 8908 启动于 2026-11-23 01:46:27 JST，当前正式天气发布 `b8cc72a294b1` 计入基线。正式树 Git 参考 `39fd098e40ebf7c2c82dd5a6f9944ae98055566e`。开发来源为 `G:/selftool/WebCharacter/personal-digital-companion`，基线 `90f672b73e02894122955289f7837578edcb8cea`。`work/feiyue-review-output-release/prepare.mjs` 用实际前像逐文件比较。四文件的实际前像与来源 Git 基线正文一致。`personality-diary.mjs` 只合入 `review` 与 `reviewMaterials` 两个方法，候选保留正式版其它方法的前像。天气、待安装 Skill、记忆修订等并行工作不在此次五文件范围。候选 `2165f39c88c7`，清单 SHA-256 `2165f39c88c73e60ab46286a8eaa07612c34e240e23385b1bc1800cb4b69bae5`，前后像和机器记录在 `G:/selftool/WebCharacter/work/feiyue-review-output-release`。
+
+| 文件 | 前后行为 |
+|---|---|
+| `desktop/ai-workflow-model.mjs` | 原 2B 截断后在同一阶重复。候选限制草稿输出，校验短评及审核改写，2B 截断切换至现有 9B 补正，审核截断按原模型分级升级；保留旧草稿与最终失败可追踪状态。 |
+| `desktop/personality-diary.mjs` | 并发待领由最多 20 条收敛至每批 4 条。整批显卡忙保留余项；最终拒绝或上限耗尽留待查，继续其它材料。持久步骤和主动重试复用现有数据。 |
+| `desktop/ai-request-queue.mjs` | 将已有尝试编号传给运行时并写入询问池回执。 |
+| `desktop/local-model.mjs` | 本地模型回执记录同一尝试编号，以便与询问池关联。 |
+| `desktop/task-traffic-log.mjs` | 新日志按推理编号归并，短时跨游标仍只算一次；对已证实的旧同秒双回执兼容归并，保留单边错误、每次真实截断、原始诊断日志与已有检测规则。 |
+
+**数据、配置和兼容性。** 新依赖、数据库迁移、数据回填、外部服务、Worker、云端配置、接口协议、令牌或模型权重变更均无。复用原队列、原模型设备上限、前台优先和既有资料路径。正常启动仍由 REST v5 提供回环服务。已有待补评及巡检资料留存。诊断新增内部的尝试标识，不包含正文或凭据。
+
+**实际验证。** 两轮自审已查出并修正审核改写校验、单条拒绝影响整批、短草稿限额误拦审核正文的问题。隔离源码基线仅叠加本次修正，`node tools/build-desktop.mjs` 通过。真实模型退出后执行 `node --test "agent/tests/*.test.mjs"`，445 项通过、3 项跳过、0 失败。以三条现场截断快照和同一正式 2B 权重在隔离环境对照，旧版三条均截断，最终修正后三条均完成生成与审核，草稿实际输出 71、82、106 token。`node work/feiyue-idle-release/replay-recent-errors.mjs` 在 462 条窗口中保留 66 次真实截断与 3 次资源等待，132 条原始截断回执仍可回读。`node work/feiyue-review-output-release/prepare.mjs` 核对五文件前后摘要及 `node --check`。`node work/feiyue-review-output-release/check-candidate.mjs` 在实际安装前像叠加五文件后 11 项专项通过。PowerShell 安装脚本语法检查通过。正式运行、长期报错频率及独立第三方审核尚未执行。
+
+**安装、后检及恢复。** 获本次明确许可后执行 `work/feiyue-review-output-release/install.ps1 -Install`。验证审核记录、五项摘要、正式进程、回环入口、登录项与快捷方式。等待正式任务、花园、提醒和转录等在途业务完成后，用原入口正常退出。校验五项代码备份及四个 SQLite 备份（人格记忆、轮询、正式登记、AI 请求）。原子替换后从原入口启动，核对新进程、既有路径、REST v5、五项摘要、三类本机队列和原轮询配置。安装后用正式已装文件作只读日志回放及隔离候选验证，可观察自动补评的保存/待续情况。安装或启动失败时正常退出候选，仅恢复有核验摘要的旧文件，再从原入口启动，保留所有自然新增资料。发布后补记真实进程、时间、复验、备份和 Git 状态。
+
+**确认状态。** 用户已要求部署，当前等待对候选 `2165f39c88c7` 的本机安装和受控重启明确确认。花园登记意愿须按本次发布单独确认。若登记，按装好后的实际结果与生产花园基线另行准备具体清单，获确认后先提交精确 SQL，再由正式本机 REST 发一批并回读。当前安装、重启、SQL 写入及 Git 推送均待执行。
+
+**安装授权。** 用户明确同意安装并重启 Windows 候选 2165f39c88c7。用户确认本次登记意愿，具体清单待实际结果后确认。
+
+**实装结果。** 2026-11-23 02:10:20 JST。2165f39c88c7 已完成本机安装和受控重启，旧 PID 8908 正常退出，新 PID 14388 使用原入口和资料目录。五项摘要和四份本机数据库完整性核对通过，原轮询和正式队列保留。实装模块只读回放旧窗口，462 条扫描中保留 66 次真实截断及 3 次模型装载等待。实际长期开机报错频率待后续观察。机器回执和备份在 G:/selftool/WebCharacter/work/feiyue-review-output-release。
+
+**花园清单。** 线上结构同步新增 0 项，修订 154。本次归属网页角色组件 #16 → 绯月（桌面精灵）#61，新增发布成功记录 #80 和明细 #158，版本 29.0 → 30.0，修订 154 → 155。批次 feiyue-action-review-budget-20261123，摘要 9150c15b6115f714c62e9971984f4b7353782da6fb31e2918f2d030e69a4636c，具体内容已送用户确认。此时尚未提交 SQL 或写入生产花园。
+
+**来源 Git 同步。** 已安装修复和实际清单的来源提交 86e56ec5ba31ae78ccc76cdef1e9b5f709edcf20 已推送，并回读 origin/codex/workspace-checkpoint-20261120 核对一致。
+
+**花园登记与回执。** 用户明确确认原清单。绯月正式 REST v5 校验原批次不存在，复核生产修订 154 及结构无新增，先提交精确 SQL b56753f0653680e7367e0bb7275f8f306018a719 后仅提交一次。批次 feiyue-action-review-budget-20261123 于 2026-11-23 02:21:27 JST 完成，状态 done，1/1 verified。独立线上回读确认「网页角色组件 #16 → 绯月（桌面精灵）#61」、部署 #80 和明细 #158、版本 29.0 → 30.0、修订 155，发布标记唯一。2026-11-23 02:21:32 JST 签收并回读。完整回执 G:/cloudflare/myapp/database/changes/feiyue-action-review-budget-20261123/execution-receipt.json。主项目 844 项测试通过，Wrangler dry-run 通过。清单、SQL 和回执三项已推送至 codex/garden-feiyue-action-review-budget-20261123，远端提交 104bd7123de0a27f17ede5546887678f8b3582c9 已核对。
+
+## 2026-11-23 JST · Windows 绯月手记首问与待确认
+
+**用户要求及验收。** 用户指出关心不必写成问句，要求先检查原题还缺什么、后文有无回答，确认仍缺才结合出处自然发问，避免词语重合判断。依原 11 个真实模型场景、三个补测及自审新增的重复出处和长句场景，核对实际入队和气泡。验收包含关心、已答及明确否定不入队，未决事项只问原题同一项，重复引用后仍检查补答，长句选出可读来由，界面分开展示原话和问句。已按用户要求写入项目「对话、摘要与待确认的开发注意事项」并在 WebCharacter 总开发指南建立索引。
+
+**目标、基线与差异范围。** 仅发布 Windows 本机绯月。实际待发布项目 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，旧实例 PID 14388，JST 2026-11-23 02:10:19.240 启动，实际运行 `desktop`，资料 `output/desktop-profile`，回环 REST v5。已核对监听进程、桌面快捷方式和 HKCU 登录入口；旧安装版本 `2165f39c88c7` 的五个文件摘要与实际一致。正式目录 Git 参考 `39fd098e40ebf7c2c82dd5a6f9944ae98055566e`。来源项目 `G:/selftool/WebCharacter/personal-digital-companion` 在其 Git `ac7a2b37c6f5485325b235e9cdb60eb457ae27b3` 上的定向改动。以实际旧文件为前像三方比较，`personality-diary.mjs` 保留实装的行动评价修正，`screen-question-host.mjs` 仅合入 `threadView`，未带其他对话路由工作。候选 `1a04985f6789`，清单 SHA-256 `1a04985f6789173fc980290c41b2d8c4c34ae7ad52d93e05886d98cb844d09f0`，8 个源码文件另同步 2 份正式入口读取的资源。源码固定为首次实模候选清单 577c66c3b36d 的实际合成结果，后续工作区续答与知识卡片改动均排除。清单、候选及十项前像在 `G:/selftool/WebCharacter/work/feiyue-diary-opening-release-20261123`。
+
+| 文件 | 改动与前后行为 |
+| --- | --- |
+| `desktop/pending-questions.mjs`、`desktop/diary-audit.mjs` | 保留原句尾标点。历史问号与无问号变体仍去重，无追问占位不入队。 |
+| `desktop/emotion-initiative.mjs` | 按核实意图区分待确认和普通关心，不再用问号决定队列。 |
+| `desktop/personality-diary.mjs`、`desktop/personality-nags.mjs` | 已绑定原话和可定位后文参与原题核对，已答或无依据止于核对。原话重复不丢后答，长句分成可选短段。只依据有效缺项生成自然问话，引用按编号从已读原文取得。撰写不附带无依据的开口动作，开口理由用已核对结果。 |
+| `desktop/screen-question-host.mjs`、`desktop/screen-question-ui.mjs`、`desktop/screen-question.css` | 首次气泡把原话和问句分别显示，历史发言与原来源入口保持原样。 |
+| `output/desktop-bundle/screen-question-ui.mjs`、`output/desktop-bundle/screen-question.css` | 同步与对应源码相同的字节。这是实际运行读取的镜像。最初隔离验证定位了只更新源码会导致正式入口引用空白的问题，最终包锁定镜像前后摘要。 |
+
+**数据库、数据和配置。** 无业务 SQL、迁移或回填。保留现有悬念、手记、待确认、本机资料、技能、模型、队列、端口和凭据。无 Cloudflare Worker 部署。花园为获确认后的一次发布元数据登记，按现行规则免整库加密快照。Windows 安装前留存十文件前像，安全退出后针对现有 `personality-memory.sqlite`、`conversations.sqlite`、`reminder-checks.sqlite`、`local-batches.sqlite`、`ai-requests.sqlite` 作本机 SQLite 级备份与完整性检查。不以备份覆盖自然新增资料。
+
+**验证。** 从实装前像组装隔离副本。实际 Electron 运行 `tools/run-electron-check.mjs output/initiative-real-model-recheck.mjs --verify` 完整回放 17/17，复验实际队列、原文及气泡问句。`test-conversation-threads-electron.mjs` 浅色和 `--dark`、`test-panel-titlebar-electron.mjs` 七个面板通过，测试前后十项摘要一致。隔离测试以候选桌面搭配开发仓目前使用的模拟 Worker 夹具，执行 `node --test agent/tests/personality-memory.test.mjs agent/tests/diary-audit.test.mjs agent/tests/emotion-initiative.test.mjs agent/tests/autonomous-idle.test.mjs`，70/70。配合打包目录里早期的测试副本曾出现缺少夹具和旧接口校验差异，未用其替代模拟服务或安装云端代码。来源自审已通过四轮并最后两轮连续无问题，真实模型独立复查 6/6，桌面构建及界面通过。工作区全量 458/459，已知范围外的新闻摘要夹具缺 `reports`，不影响本次候选。开发注意事项见 `docs/DEVELOPMENT.md`，自审见 `docs/reviews/FEIYUE_DIARY_SELF_AUDIT_2026-11-23.md`，候选日志在上述工作目录。正式装好后的实际入口和长期自然轮询尚未验证。独立第三方 AI 审核未执行。
+
+**部署步骤、风险与恢复。** 用户明确确认上述候选后，重新核对正式 PID、启动时刻、十项前像和当前在途业务。待原正式任务、对话、转录、花园及提醒允许正常退出后，使用 `work/feiyue-diary-opening-release-20261123/install.ps1 -Install` 执行保留正式入口的受控重启。校验实际进程、回环端口、各文件摘要、原轮询和待处理状态，按正式已装文件核对气泡与真实模型行为。若更新/启动失败，正常退出候选并恢复同次已核验的前像，再从旧入口启动。现有待确认和历史发言不批量改写，现场自然发生的资料保留。发布后记录实际版本、时间、后检和 Git 提交/普通推送/远端核对，档案排除无关开发改动。
+
+**花园与授权。** 用户已要求部署并表达登记意愿。本次候选的正式安装与受控重启尚待明确确认。已按说明「结构同步新增 0 项」，线上只读基线修订 155，网页角色组件 #16 → 绯月（桌面精灵）#61 当前 30.0。模型预演成功时新增部署 #81 与明细 #159，预计 30.0 → 31.0、修订 155 → 156，批次预留 `feiyue-diary-opening-20261123`。项目与功能基本资料、种子、独立改善及缺陷、关系、平台、链接、数据源、既有发布无需更新。这里只是预案。安装完成后按真实结果与最新基线给出完整清单，经明确确认，先提交最终 SQL，再从新实例 `/infoguide` 核对身份、走本机 REST 一次登记、独立回读与签收。若失败，另以实情准备「发布中」，不生成成功版本。实际安装、登记及本次 Git 同步均未执行。
+
+**实际安装与后检。** 用户明确确认安装本次候选。2026-11-23 03:03:50.761 JST 正式安装 `1a04985f6789`，PID 从 14388 切换到 2356，新实例于 03:03:49.047 JST 启动。正式进程、REST 监听、桌面快捷方式、登录启动项和十项文件摘要均复核。正常退出后完成十项文件及五个 SQLite 本机备份。重启后五个库的完整性检查、待确认、原轮询、提醒和队列回读一致。正式版日常交互和长期自然轮询待用户复验。来源 Git 基线再移植安装差异时保留开发版已有的记忆细化及刷新路径，隔离重跑四个专项测试文件 70/70；实际安装的十项摘要单独保存在 `docs/reviews/FEIYUE_WINDOWS_DIARY_OPENING_RELEASE_1a04985f6789.json`。
+
+**花园实登。** 用户在看到实际结果和完整清单后明确选择「确认按清单登记」。SQL 与清单先提交到花园仓 Git `9a90af4a852daac17a0d17d9af853b1cf45d243b`，确认摘要 `e329cd09bb58d90ac7378f9d9433de3810a4d78e37239e3f5827d9400ab5b222`。重启后的正式 v5 REST 接收唯一批次 `feiyue-diary-opening-20261123`。2026-11-23 03:09:43.455 JST 完成，独立线上只读复核全部实际值一致。部署 #81，明细 #159，项目 #16，功能 #61，版本 30.0 → 31.0，花园修订 156。项目及功能基本资料、种子、独立改善与缺陷、关系、平台、链接、数据源和旧部署未列入本次写入。无 Cloudflare 主站代码部署。
+
+**签收与 Git 留痕。** 03:12:50.600 JST 已从正式 REST 签收，花园仓独立回读和签收回执提交为 `05ac7acdd197085e4cb03acefd68941c71e9e206`。花园 SQL 与回执按本机登记流程留在 Cloudflare 仓本地 `main`，该分支还有其他待同步提交。WebCharacter 源码同步结果随后补记。
+
+**WebCharacter 源码同步。** 发布提交 `5a60b2cb6a9d5eeaee7d58e3ef4326baafe27bf9` 已普通推送到 `origin/codex/workspace-checkpoint-20261120` 并从远端复核。
+
+## 2026-11-23 JST · Windows 绯月外置总纲、Skill 热更新及能力目录
+
+### 需求与验收
+
+用户要求总纲作为目录，默认定位功能 Skill，允许用外部模板调整命令链、条件和提示，并经只读接口描述技能、用途、调用方式及例子。本轮明确要求先用真实本地模型跑转录，发布模板后验证下一项实际执行新步骤，再交用户确认是否安装。原话和初版依据见来源项目 REQUIREMENTS.md 的「外置总纲及功能 Skill」。
+
+验收用同一候选、同一真实模型和同一条虚构对话先后完成两项转录。两项之间只发布流程模板。日志对应各自版本，新任务实际多执行复核，两项均停在待确认。目录返回实际版本、步骤和示例。花园和提醒接口须通过隔离复测。正式安装须另获明确许可。
+
+### 目标、基线与差异
+
+- 目标为 Windows 正式应用 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion，沿用原启动入口及其 output/desktop-profile。正式版本 f011f0687aec，REST v5，PID 3096 于 2026-11-23 01:12:08.929 JST 启动，回环监听、命令行、桌面快捷方式、登录项及资料路径已比对。正式 Git 基线 39fd098e40ebf7c2c82dd5a6f9944ae98055566e 加已安装的补丁。正式资料尚无外置总纲 active.json。
+- 来源为 G:/selftool/WebCharacter/personal-digital-companion，Git 90f672b73e02894122955289f7837578edcb8cea 加本轮技能差异。先比对前次六个正式补丁摘要，再按当前正式前像逐文件核对 13 项候选的 SHA-256 和内容差异。仅叠加本次技能变更，工作区并行的天气、新闻、记忆修订和主动交流改动未纳入。
+- 候选 b1a5364422e2，清单 SHA-256 b1a5364422e2b67a1ebd502a4cba53dde1b1ba6cb98692450ca50a1e9f8430fd。比较材料在 G:/selftool/WebCharacter/work/feiyue-skill-release 的 windows-files.json、before/、candidate/、formal-base.json 和组装脚本。三项新增的前像为 null。QA 副本排除正式资料，模型和 Node 依赖链接到现有运行资产。
+
+| 文件 | 发布前后的行为 |
+| --- | --- |
+| skills/catalog.py、skills/skill_updates.py、skills/feiyue-interaction/capabilities.json | 原随附 Skill 继续提供初始版本。新增外置总纲、草稿、发布快照、切换和损坏回退。目录只展示当前安装具备的技能。 |
+| desktop/interaction-skills.mjs、desktop/shell.mjs、desktop/screen-question-host.mjs | 桌宠向技能目录传递本实例的实际资料目录。普通问答新增「查看技能目录」，与 REST 使用同一来源。原正式工作队列和闲时调度保留。 |
+| desktop/conversation-transcription.mjs | 开工固定同一版流程和提示，可追加条件复核。疑点进入待确认备注，业务校验和确认仍由程序处理。 |
+| desktop/image-tasks.mjs、workflows/comfyui/image_chain.py | 图像编排可取外置文字提示，执行端继续绑定实际 ComfyUI 工作流版本和节点。 |
+| desktop/local-rest.mjs | 指南升级为 v6，新增原本机令牌鉴权的只读 GET /v1/skills。原花园和提醒继续使用既有路由。 |
+| docs/LOCAL_GARDEN_API.md、docs/SKILL_HOT_UPDATE.md、skills/README.md | 追加调用和维护说明，提供命名新增、步骤模板、切换及回退示例。 |
+
+### 数据、配置及兼容性
+
+数据库结构、现有数据回填、Worker、云端接口、业务 SQL、新依赖、新密钥和端口变更均为无。转录作业在原加密负载内保留工作中的 Skill 快照，旧负载经原入口继续读取。初装不建立测试模板，默认使用随附版本。运行发布命令时才在原资料目录建立外置技能目录，原令牌和启动配置沿用。测试模板、SQLite、令牌、新模型和夹具均不进安装包。QA 使用与上次正式 v5 验证相同口径、支持东京时分的离线种子。
+
+### 实际检测及未完成项
+
+- 运行 node work/feiyue-skill-release/prepare.mjs、revise-candidate.mjs、check-formal-base.ps1。正式实例、原启动方式、13 项 SHA-256 及候选 JavaScript 语法通过。初版候选遇到尚未安装的记忆修订 Skill 时，目录返回 503。现按安装内容过滤，最终候选列出 22 项。前三项提醒/转录时分断言因隔离种子版本早于线上已支持的时分目录而失败，修正 QA 夹具后通过。
+- 候选执行 node --test --test-reporter=spec agent/tests/skill-hot-update.test.mjs agent/tests/local-rest-garden.test.mjs agent/tests/local-rest-reminders.test.mjs tools/test-conversation-transcription.mjs，共 32 项通过，含原花园和提醒接口、鉴权、热更新、回退和重开后续用原版。
+- 在候选上以 Electron 巡检入口运行 work/feiyue-skill-release/real-model.mjs。使用同一进程、实装共用权重 Qwen3.5-4B-Q4_K_M、Vulkan 33 层，同一虚构用户发言「明天提醒我给田中回信」，输入时间固定为 2026-11-23 10:00 JST。1.0 完成整理、拟稿，整项 11.48 秒。2026-11-23 01:49:07.515 JST 仅更新 workflow.json 并发布 1.1，随后目录展示三步。下一项完成整理、拟稿和复核，整项 12.59 秒，其中复核 1.13 秒。两项均生成 2026-11-24 的「给田中回信」提醒并停在 ready，实际登记为零。复核返回「缺少东京日期和行动」，对照实际草稿两项都已存在。这是模型误报，仅显示在复核备注，未改变字段或确认资格。作业、阶段时长、版本、实际字段和模型回执在同目录 real-model-receipt.json，SHA-256 为 1c1765efad7395fae7ae914263cceabb8aaa95423eadee714b5a7032fcdf8294。
+- 在候选实际运行图像工具 describe --profile，发布提示后采用新的编排内容，执行版本和 ComfyUI 工作流版本未变化。未调用实际图像后端。
+- 随附提示下的两次真实筛查出现限制。带时分的「明天上午九点提醒我给田中回信」只进摘要，未生成请求项，结果为空。日期样例的默认拟稿一次返回 LOCAL_AI_RESULT_INVALID。此次对照使用隔离外置模板的简短提示，两项共用同一份提示，只改变复核步骤。正式默认提示的广泛识别质量、长期运行、真实私人材料、正式窗口交互和第三方独立审核尚未验证。
+
+### 风险、安装与恢复
+
+第三方审核重点为目录与安装内容一致、同一作业保持原版、确认/业务校验和工具权限、两个模型提取限制，以及候选范围和恢复路径。
+
+1. 获本次明确许可后复核本记录、正式前像和候选 SHA-256。等待正式队列和转录的在途工作收尾，用应用自身退出流程停止旧进程。
+2. 备份及校验 10 个旧文件，记录三个新增目标原本不存在。正常退出后备份相关转录与队列库并检查 SQLite 完整性。按清单原子替换或新增文件，从原入口启动。
+3. 核对新 PID、原启动方式、资料目录及 13 项摘要。读取目标实例的 v6 /infoguide，鉴权读取 /v1/skills，并只读核对原队列。用正式安装代码与隔离资料复验，正式资料交用户操作验收。
+4. 安装、启动或验收失败时正常停止新进程，恢复原文件，对三个新增目标核对本次摘要后逐项移除，按原入口启动并检查 v5。保留资料和备份，不直接覆盖重启后新增的用户记录。发布后补记实际结果、时间、回执、Git 提交及远端核验，Git 同步只纳入本次范围。
+
+### 确认状态
+
+正式安装及受控重启待用户明确许可。花园登记意愿待另行确认。如同意，核对线上实际归属和已有记录，提供具体清单，按真实发布结果和用户确认内容提交 SQL，再经新实例本机 REST 执行一次登记及回读。目前未安装、未写入正式业务或花园、未提交 SQL、未推送 Git。
+
+## 2026-11-23 JST · Windows 绯月 Skill 三轮自审及合规复核
+
+用户本轮要求三轮自审及合规检查。Windows 绯月外置总纲发布条目的候选、正式运行基线和确认状态以本追加记录为准。原候选 b1a5364422e2 的真实模型结果保留作为运行文件的验证证据。
+
+1. 需求与范围。总纲、版本绑定、外置流程、回退、真实转录及只读能力目录与用户原始需求一致。发现手册过度概括，将可配置命令链明确为现行普通对话线，旧式会话作业仍走原整理流程。并行的天气发布把正式基线变为 b8cc72a294b1。回读确认 REST v5、PID 8908、2026-11-23 01:46:27.008 JST 启动。原启动入口及资料目录一致。天气五项文件与本次 13 项无交集，已将五项正式前像同步到隔离验证副本。
+2. 实现与复测。候选 32 项回归通过。另行验证无效步骤拒绝发布、前版继续生效、损坏总纲回退及目录只读约束。对随机回环端口确认 401、403、POST 404、授权 GET 200、正式能力数 22 和响应不含提示正文。候选运行文件摘要均与原真实模型对照一致，沿用证据，本轮未重跑真实推理。保留上文的默认提取漏项、拟稿错误和复核误报。
+3. 发布与合规。以新候选 089792ecb6ec 为准，完整清单 SHA-256 089792ecb6ecb2c3fc5dbebc64ed588103ec081ea6a469a9964624bcc8e16208。13 项正式前像、候选及隔离副本摘要、JavaScript/Python 语法检查通过。正式 Git 仍为 39fd098e40ebf7c2c82dd5a6f9944ae98055566e 加此前正式补丁，独立天气更新已计入安装基线。清单及前后像仍在 G:/selftool/WebCharacter/work/feiyue-skill-release。最终只读实例回执为 formal-base-final-review.json，回归记录为 self-review-regression.log，探针为 self-review-check.json。数据库迁移、数据回填、Worker 变更、新端口和新凭据均无。未访问 Access 页面或生产业务资料。第三方独立审核未执行。
+
+安装、受控重启和花园登记仍待用户分别确认。原候选的审核内容继续保留供追溯。此次自审未安装或重启，未提交 SQL、登记花园或推送 Git。
+
+## 2026-11-23 JST · 绯月 Skill 最终候选自审通过
+
+用户要求继续自审，按最新规则跑完五轮，第四、第五轮连续无新问题和无遗留，已停止。逐轮记录位于来源项目 docs/reviews/SKILL_RELEASE_SELF_AUDIT_2026-11-23.md。正式安装待授权，第三方独立审核未执行。
+
+本追加记录更新前一 Skill 候选和正式基线。目标及资料目录不变。正式已另行安装补评更新 2165f39c88c7，REST v5，进程 14388 启动于 2026-11-23 02:10:19.240 JST。正式 Git 参考仍为 39fd098e40ebf7c2c82dd5a6f9944ae98055566e，加此前安装更新。利用两份冻结清单确认补评五项与 Skill 包无交集，已复制这五个正式模块至隔离副本，正式前像和旧启动入口均回读一致。来源工作区以之前记录的 90f672b 基线及本轮 ac7a2b37c6f5485325b235e9cdb60eb457ae27b3 上的两项变更和验证为准。
+
+最终候选 837023461fac，清单 SHA-256 837023461fac86cce8be524d74ffc164b5085163271184d51d6e15a434786168。相对 089792ecb6ec，desktop/conversation-transcription.mjs 补齐带时分的原话提取、仅在全部事项都能确定时的格式错误恢复，以及复核区分字段缺项和内容遗漏。desktop/reminder-command.mjs 将已有时分解析函数导出，复用原解析规则。原 13 项加这一文件合计 14 项，原 3 项新增不变，旧文件由 10 项变成 11 项。新旧摘要、前像和候选文件见 G:/selftool/WebCharacter/work/feiyue-skill-release/windows-files.json、before/、candidate/。测试文件只用于隔离候选。未引入其他并行功能、数据库迁移、回填、Worker、更改端口、凭据、模型或依赖。
+
+实测 work/feiyue-skill-release/real-model.mjs --timed，最终候选同进程真实 Vulkan Qwen3.5-4B-Q4_K_M。沿用随附阶段提示，同一条虚构原话「明天上午九点提醒我给田中回信」，1.0 整理拟稿 10.49 秒，1.1 整理拟稿与复核 13.43 秒。两项均交回 2026-11-24 09:00 JST 待确认提醒，无登记。最终复核返回空 issues。手工注入拟稿 LOCAL_AI_RESULT_INVALID 验证恢复，注入完整字段的缺项误报及内容遗漏，验证备注过滤和保留。真实回执 real-timed-model-receipt.json 的 SHA-256 为 34e4da2b8fac6c2d6bc3a060475c69e40ee3b9172f9b4dd6fb41d3af39ecf484。
+
+候选 33 项回归、来源提醒解析 3 项、Electron 七面板标题栏检查、独立本机权限探针、JS/Python 语法及全部正式前像摘要通过。命令和指标见五轮报告，另见 final-timed-audit-regression.log、timed-final-review-check.json、formal-base-timed-review.json。旧审核中的这三个验收遗留已针对原样例或故障注入复核修正。正式安装的用户验收留待安装后。
+
+安装与恢复步骤沿用前文，执行范围替换为最终候选的 14 项。备份并核对 11 项已有代码和涉及库，同时确认三个新增目标原先不存在。获明确许可后受控停止、按最终摘要替换、按原入口启动并核对 v6 和队列，失败则按本次前像恢复。只测试了隔离候选，正式应用未安装、未重启，未推送 Git，未提交或登记花园。部署与花园登记意愿仍待单独确认。
+
+## 2026-11-23 JST · 绯月 Skill 正式部署准备
+
+用户指令为「准备部署」。本条更新前述 Skill 自审通过记录的候选、实际基线与执行准备。发布目标仍为 Windows 正式绯月 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion，沿用原启动入口、原 output/desktop-profile、回环地址 127.0.0.1:8765 和原令牌。
+
+预检发现另行部署的手记首问更新 1a04985f6789 已生效。正式 PID 2356，REST v5，原快捷方式、登录项、回环监听和资料目录一致。用手记包已装十项摘要和实际安装回执核对。Skill 待发布的 14 项只有 desktop/screen-question-host.mjs 前像变化。对照旧前像、正式文件及冻结 Skill 版本逐段合并，保留正式手记首问的 openingSource 和既有气泡样式。Skill 相关三处改动仅为导入技能目录方法、把目录问句识别为已有入口、以及从同一只读目录返回答案。其余 13 项候选与之前通过五轮自审的版本逐字一致。半自动合并脚本为 work/feiyue-skill-release/rebase-diary-opening.mjs。既有 Git 来源及正式参考仍按前述记录，正式业务资料不进入隔离副本。
+
+当前候选 9f30f8978053。完整清单 SHA-256 9f30f89780536c2754a6d40f2854706dffc0c8c37561134df102f9e8fa8879f6。新前像 a703e608758ef663aedfc9afa1c980c0a1230dcac07df51aa801cfe36d4d3f4b，新宿主 ae6a139ea88156c7f0027b415abd24b29ab09e5bb8adadba2a502621c47782f9。范围仍为 11 项替换、3 项新增。无数据库迁移、回填、新凭据、新端口、模型或依赖变更，无 Worker 发布。旧有真实模型回执直接覆盖未变的转录、Skill 加载和模板热更新链。本轮未另重跑模型。改动的问答宿主用独立入口和界面测试复核。
+
+- 隔离候选执行 node --test --test-reporter=spec agent/tests/skill-hot-update.test.mjs agent/tests/skill-directory-question.test.mjs agent/tests/local-rest-garden.test.mjs agent/tests/local-rest-reminders.test.mjs tools/test-conversation-transcription.mjs，34 项通过。新增的问答入口断言检查能显示默认两步流程且不调用模型或业务登记。日志为 prepare-deployment-regression.log。
+- 在隔离 Electron 运行 tools/run-electron-check.mjs tools/test-conversation-threads-electron.mjs。浅色用例通过，包括手记来源、首问、关闭、新旧回复、后台整理及 360px 气泡。采用已按实装摘要核对的手记资源，使用合成会话。
+- work/feiyue-skill-release/install.ps1 -Mode Preflight 只读通过。14 项摘要、三项新增路径、原正式进程和启动入口已核对。对话转录、花园和提醒批次、桌面任务、轮询、AI 请求五个 SQLite 完整性通过，检查时无在途桌面任务、花园批次、提醒或转录。结果在 install-preflight.json。最初预检因发现问答宿主新前像而停止，重组后复跑通过。
+- 同一脚本的 -Mode Rehearse 在隔离副本通过安装中断回退和全量回退，包含新文件移除及 11 项既有文件恢复核验。执行 node work/feiyue-skill-release/rehearse-db-backup.cjs，五个合成库的备份和 SQLite 完整性、前后状态一致性通过。生产资料备份待授权并正常退出后执行。
+
+正式指令为 work/feiyue-skill-release/install.ps1 -Mode Install。脚本会核对本条审核和最终摘要、等在途工作收齐、保留旧代码和五库备份，通过应用自己的正常退出流程停止旧进程，原子安装后按原入口启动。后检核对新进程、原入口、v6 /infoguide、技能目录无令牌 401 和认证读取、原花园与提醒路由及五库完整性。失败时正常停止候选，恢复已核验的旧文件，逐项移除本次新增并重新启动 v5。备份保留原资料，回退默认不覆盖用户数据库。受控重启与正式后检尚未执行，用户目视体验待确认。
+
+本次明确安装授权与花园登记意愿仍待分别确认。第三方独立审核未执行。未安装、重启或推送 Git，未进行本次花园结构同步、制单或写入。其他发布的授权及登记意愿不沿用。
+
+### 绯月 Skill 正式实装结果
+
+用户明确确认安装 9f30f8978053 并受控重启，且同意本次发布登记到花园。具体花园登记清单另行确认。
+
+2026-11-23 03:17:00 JST，候选 9f30f8978053 安装及后检完成。原 PID 2356 正常退出，新 PID 23656 在 03:16:59.671 JST 从原应用入口、原资料目录启动。14 项文件摘要、原快捷方式、登录项和回环 REST v6 通过。未认证访问技能目录返回 401，认证读取 22 项，随附对话转录为 1.7、默认整理和拟稿两步。原花园和提醒路由在册。对话转录 8 条、花园批次 27 条、REST 提醒 1 条及轮询配置保持，相关五个 SQLite 库和安装备份均通过检查。旧代码和库备份位于 G:/selftool/WebCharacter/work/feiyue-skill-release/install-backup-20261123-031650，机器回执为同目录上级 install-receipt.json。正式安装使用 install.ps1 -Mode Install。正式个人资料未写入试验数据，桌宠目视交互待用户验收。
+
+本次不涉及 Worker、数据库结构迁移、回填、新凭据或端口。Git 同步和花园登记分别留痕。花园生产未写入，SQL 未提交，待当前线上基线制单及用户具体清单确认。
+
+
+#### Git 同步与花园登记草案
+
+在独立工作树基于远端 0394246 组装发布源码，先纳入已实装 REST v5 的提醒兼容依赖，再合并冻结的 14 文件变更，保留基线已提交的其他开发内容。精确暂存 29 项，`git diff --cached --check` 通过。运行 `node --test --test-reporter=spec agent/tests/skill-hot-update.test.mjs agent/tests/skill-directory-question.test.mjs agent/tests/local-rest-garden.test.mjs agent/tests/local-rest-reminders.test.mjs agent/tests/registration-flow.test.mjs tools/test-conversation-transcription.mjs`，51 项通过、0 项失败。发布源码提交 `e817e393651a2d72cf549d71ea144a98763e0e6f` 已推送至 `origin/codex/workspace-checkpoint-20261120`，回读与本地一致。
+
+花园已完成只读结构同步，新增结构对象 0 个。线上修订 156，确认归属「网页角色组件」#16 →「绯月（桌面精灵）」#61，已核对当前版本 31.0 和上次发布 #81。草案 `feiyue-skill-hot-update-20261123` 新增发布 #82 和明细 #160，状态为发布成功，时间为 2026-11-23 03:17:00 JST，推出版本 32.0。审核摘要 `f102031f64319f041d1482a6a2870b5df84e79a1499ea85565ccb7dce78c8c31`。具体清单待用户确认，SQL 尚未提交，花园生产尚未写入。
+
+
+#### 花园实际登记与独立回读
+
+用户在完整清单后回复「登记」。精确清单和 SQL 的本地 Git 提交为 `1d5bc034e23eef52e4eb5ad520aa1566d11e4d2f`，确认摘要 `f102031f64319f041d1482a6a2870b5df84e79a1499ea85565ccb7dce78c8c31`。正式绯月 REST v6 于 2026-11-23 03:31:26.516 JST 接收批次 `feiyue-skill-hot-update-20261123`，2026-11-23 03:31:52.572 JST 整批完成。独立线上读取确认项目 #16、功能 #61、发布 #82、明细 #160 的关联和实际字段全部相符，发布成功标记唯一，版本 31.0 → 32.0，发布历史 31 → 32，花园修订 156 → 157。 本批仅写发布元数据，适用本项目整库快照豁免。
+
+
+#### 花园签收与 Git 同步
+
+2026-11-23 03:33:23.722 JST 正式绯月已签收原批次。花园本地回执及总账提交 `390a3e8c97482f113ad48822e367b7970506c1d2`。从花园远端主分支基线只导出本次 SQL、清单、回执和总账新增条目，推送至 `refs/heads/codex/feiyue-skill-hot-update-20261123` 并回读一致，远端提交 `77ace90ecc285cfd72fbe0edf64ddefb673f2368`。桌宠界面待用户复验。
+
+## 2026-11-23 JST · Windows 绯月主动质问续答
+
+**需求与验收。** 用户要求绯月回应刚说的话，避免原样复述开场，用实际事件隔离复验生成和保存，完成自审后要求「安装，登记」。验收直接续答、归档重复回复触发改写、连续复述保留待答和原发言组，以及重开念叨与对话线两库读回。范围和四轮自审见 [续答自审](docs/reviews/FEIYUE_NAG_REPLY_REVIEW_2026-11-23.md)，第 3、4 轮无新问题。
+
+**目标与基线。** 只更新当前 Windows 正式绯月，根目录 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`。正式安装版 `9f30f8978053`，REST v6，PID 23656，JST 03:16:59 启动，原 `output/desktop-profile`。来源开发仓库 WebCharacter 子项目，参考 Git `03942463b3de924c380ae45a0c29a30bfbbee1c6` 与已自审的续答专项差异。从正式安装前像逐段移入修复，保留手记首问及更新后的外置 Skill 宿主。候选 `4f12e1d6d84e`，清单 SHA-256 `4f12e1d6d84ea5d711d3837eb3c4baccab6be43943f41167b7b7608a34aeb40f`，逐文件前后摘要和测试位于 `G:/selftool/WebCharacter/work/feiyue-nag-reply-release-20261123`。
+
+**文件与行为。**
+
+- `desktop/personality-nags.mjs` 的续答输入单列最新发言，去掉已经存在于同线历史中的旧问副本。改用现有 4B 档位单次生成，每次预算 25 秒。保存前拒绝复述旧问或整句用户原话，只重写一次。仍复述则保留原发言及待重试状态。旧气泡迁入对话线时只保存一次消息关联；重复的追问字段不会变成新的待办。
+- `desktop/personality-diary.mjs` 为基础质问续答限定直接对话口吻、人称与最多 150 字的正文，避免存档截断句尾。既有数据库接口、用户原文、状态和回执格式继续使用。
+
+**兼容性。** 数据库结构迁移、历史回填、新配置、模型文件变更、凭据变更、依赖变更、REST 版本变化和 Worker 发布均无。只发布已自审的两项运行文件。并行中的记录复审、知识库、新闻和其它工作区修改在范围外。
+
+**实际验证。** 用 `node prepare.mjs` 固定两项前后像，实际运行两个文件的 `node --check`。对隔离正式基线与候选执行同一组 24 项 Node 测试，基线 19 通过、候选 21 通过；续答新增两项由失败变为通过，图像确定性和两项旧问答宿主夹具在两边同样失败，已比较名称和栈。通过 `node replay.mjs` 对实际归档做两次本机 4B CPU 回放。直答 14.2 秒、注入正式旧重复结果后的改写 8.3 秒，各存一轮，完整正文、原发言编号和预览回读一致，正式原记录只读比对一致。开发版此前 83 项专项通过。正式交互和长期冷启动行为待本次安装后核对，独立第三方审核未执行。审核关注前后台复用、旧气泡重试和同线历史边界。
+
+**安装、验证和恢复。** `pwsh -NoProfile -File ./install.ps1 -Mode Rehearse` 在隔离目录验证两项替换、第一项替换后中断回退和全部替换后的回退。安装前复核正式应用入口、进程、回环 REST、资料目录、两项前像及在途工作。正式工作收尾后正常退出桌宠，备份两项旧文件和七个相关 SQLite，再原子替换两文件并从原应用入口启动。核对新 PID、启动时间、两项候选摘要、REST v6、轮询、队列和七库完整性，正式历史不写测试记录。异常时正常退出新进程，从已校验的前像还原并重启旧版，保留备份和实际回执。源码和发布记录仅同步本次范围，回读远端提交。
+
+**确认与花园。** 用户已明确表达安装意愿和本次登记意愿。候选 `4f12e1d6d84e` 的受控安装待本次确认。正式 REST 指定的花园结构同步新增 0 项；已授权只读核对「网页角色组件 #16 → 绯月（桌面精灵）#61」版本 32.0、修订 157、末条部署 #82／明细 #160，本次批次标记无记录。基线不变且安装成功时预计新发布 #83／明细 #161，功能版本 32.0 → 33.0，修订 157 → 158。具体时间、结果和最终清单以实装为准，另获用户确认后先提交名为 `feiyue-nag-reply-20261123` 的精确 SQL，再通过新实例的本机 REST 登记一次并独立回读签收。当前没有执行安装或登记写入。
+
+**安装授权与结果。** 用户明确确认安装并重启该候选。2026-11-23 04:03:20 JST，正式绯月 4f12e1d6d84e 完成安装及后检，PID 23656 → 11844。沿用原应用与资料路径，REST v6、两项文件摘要、七个 SQLite 库、技能目录、提醒及原轮询核对通过。质问 17 → 17 条，发言 53 → 53 条。安装后再次以正式文件摘要匹配的候选回放实际对话，直接生成与强制改写均通过，两库回读一致。安装回执和代码、数据库备份见本次候选目录。正式界面待用户复验。
+
+**花园决策。** 展示安装后的精确清单后，用户选择「暂不登记」。批次草案 feiyue-nag-reply-20261123 仍留在本机，花园线上及登记 SQL Git 均无本次写入。
+
+**主动质问续答源码同步。** 发布源码提交 f23b2e56055323b35216a83420eaeff89d20f1b7 已推送至 WebCharacter codex/workspace-checkpoint-20261120，并独立回读确认。导出该提交的项目源码复跑两项续答专项，均通过。用户选择暂缓花园登记，未提交花园 SQL。
+
+## 2026-11-23 JST · Windows 正式绯月情绪复盘候选 c2da3c2ccbf0
+
+**用户需求与验收。** 用户确认情绪复盘按事件类型组织询问、任务日志默认分段并折叠原始 JSON，要求用截图里的外置 Skill 与技能目录发布登记工作记录验证可保留原欲求，随后要求更新正式版。验收核对模型原始 keep、空引文、同一欲求编号与三语满足条件、无奖励，以及从任务日志按需展开原始快照。此次用户明确选择「本次不登记」。
+
+**目标与基线。** 只更新本机 Windows 绯月，正式目录 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion。原实例 REST v6，PID 11844 于 2026-11-23 04:03:19.596 JST 启动。正式安装基线 4f12e1d6d84e，对应已同步来源提交 f23b2e56055323b35216a83420eaeff89d20f1b7。此次来源为 G:/selftool/WebCharacter/personal-digital-companion 的工作区，开发 Git 基线 03942463b3de924c380ae45a0c29a30bfbbee1c6。实际安装文件和工作区另有其他变更，安装以现有文件逐项合入。
+
+**精确比较与文件。** 以下命令均在 G:/selftool/WebCharacter/work/feiyue-emotion-release-20261123 下运行。windows-files.json 的 SHA-256 为 c2da3c2ccbf0a8b0f9e008f8fe905cfbd0b413a26eb101703dae5545f6d18246。每项列出完整前后 SHA-256，before 与 candidate 两目录分别保存原件与待装文件，使用 `git diff --no-index before candidate` 查看实际差异。开发仓副本在 personal-digital-companion/docs/reviews/FEIYUE_WINDOWS_EMOTION_REPLAY_c2da3c2ccbf0.json。本次 13 项，9 项替换、4 项新增。
+
+- desktop/emotion-service.mjs 及新增 desktop/emotion-prompt.mjs 将原扁平 JSON 输入改为事件证据、事前欲求、表达参考和历史。交流保留双方原话，工作等事件取事实标题。状态决定引文是否可填；保留旧欲求时新欲求字段为空。沿用原状态库和既有奖励结算。
+- desktop/conversation-ui.mjs、desktop/conversation.css、desktop/source-updates.mjs 及 output/desktop-bundle 下的 conversation-ui.mjs、conversation.css、emotion-prompt.mjs，使新旧快照打开后按段阅读，并可展开完整原始 JSON。正式文件移植仅取本次日志段落、样式与页面模块接线。
+- skills/emotion-appraisal 下更新 source/SKILL.md、source/local-ai.json、latest.json，新增 versions/emotion-appraisal-v2-3/SKILL.md 及 local-ai.json。正式随附版 1.6 升到已验证的 2.3，旧历史版本保留。
+
+**数据与配置。** 数据库迁移、回填、云端部署、端口、凭据、外部依赖及花园数据库写入均无。已有情绪事件与快照仍可读取。试验使用临时个人资料，受控重启前等待在途工作，原个人资料与入口沿用。
+
+**实际检查。** `python -B prepare.py` 完成候选组装。候选目录运行 `node --test qa/agent/tests/emotion-core.test.mjs qa/agent/tests/emotion-initiative.test.mjs`，28/28 通过；开发工作区三组相关回归此前 42/42 通过。进入 qa，用现有 Electron 执行 `tools/run-electron-check.mjs tools/test-emotion-work-replay-electron.mjs`，本机 Aggressive 9B CPU 在 28.222 秒返回 keep 和空引文，数据库保留同一欲求及条件，档位 −4、奖励维持 0；直接写明三语听写已解决打字慢的标题返回 satisfied、逐字证据，奖励维持 3，未原样重建旧欲求。日志深浅色、360 像素窄窗、原始 JSON 完整回读通过。使用开发版隔离 Electron 核对旧日志和标题栏的回归也已通过。`./install.ps1 -Mode Rehearse` 在隔离目录通过安装中断和全量回退两种检查。
+
+**风险与审核重点。** 请核对新模块在正式页面资源、技能源文件和固定版本中的一致性，以及 keep 的空引文和同一欲求回读。正向对照中模型的内心话仍用了期待语气，状态判断和结算正确；两条固定样例不覆盖所有自然语言。CPU 在开发迭代中出现过单次 45 秒超时，沿用原补评机制。本次未跑候选全仓回归，正式界面及真实新事件尚待安装后验证。
+
+**安装、恢复与确认。** 先以 `./install.ps1 -Mode Preflight` 核对正式进程、回环监听、入口、文件前像和资料状态。用户明确确认本候选后才执行 `./install.ps1 -Mode Install`。等待在途任务，备份被替换文件、正常退出、备份含 emotions.sqlite 的八个本机库，再逐项原子安装并经原入口重启。验证新 PID、原资料目录、REST v6、启用的情绪技能 2.3、13 项文件摘要及 SQLite 完整性与关键业务计数。失败时正常退出新实例、按清单恢复旧件、移除本次新增文件，以原入口重启；保留用户数据及备份。安装成功后补记实装版本时间、后检与相关 Git 提交、普通推送及远端回读。当前为部署准备，本候选安装与重启待用户明确许可，独立第三方审核未执行。
+
+候选 c2da3c2ccbf0 正式安装前预检已完成。install.ps1 -Mode Preflight 核对原 PID 11844、REST v6、快捷方式、登录启动入口及 13 项前像通过，八个资料库 quick_check 均为 ok，检查时无在途桌面任务、提醒、花园或转录。用户选定本次跳过花园，结构同步命令被自动审批拒绝，未执行，花园无写入。
+
+### 情绪复盘 c2da3c2ccbf0 正式安装回执
+
+用户确认安装。本机于 2026-11-23 04:21:53 JST 完成 13 项文件安装，原 PID 11844 正常退出，新 PID 26996 于 04:21:52 JST 从原入口及资料目录启动。已核对 13 项 SHA-256、八个 SQLite 库安装前后完整性及原轮询配置。正式 REST v6 返回随附情绪技能 2.3，匿名读取技能目录为 401。代码及本机资料备份保存在发布工作目录的 install-backup-20261123-042142。
+
+使用实际安装路径的模型、服务及页面，以临时测试资料运行 installed-replay.mjs。截图样例在 CPU 上用时 26.021 秒，回执为 keep、空引文，SQLite 中同一欲求及满足条件保留，档位 −4、奖励维持 0。验收标题对照返回 satisfied、原文引证、维持 3 次，未重建同一欲求。正向对照的内心话仍带期待语气。任务日志分段、原始 JSON 折叠及展开回读、深浅色和窄窗通过；正式个人资料的日常使用体验待用户复验。本次无迁移，按用户决定跳过花园登记。
+
+本次正式安装的发布源码、技能、测试及审核记录已从独立工作树普通推送到 origin/codex/workspace-checkpoint-20261120，远端回读提交 827d0a476d9c91085fc981790070c8806fab4d2b 与发布源码一致。该发布工作树三组专项测试 41/41 通过。

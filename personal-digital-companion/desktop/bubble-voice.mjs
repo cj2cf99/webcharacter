@@ -15,9 +15,10 @@ export function installBubbleMicrophonePolicy(session, allowed) {
 }
 
 function speechWorker({ python, script, runtime, reference, cache, mode, device = 'auto' }) {
-  let child, pending, exited;
+  let child, pending, exited, idleTimer;
 
   function close(message = '语音操作已结束。') {
+    clearTimeout(idleTimer);
     const process = child;
     child = undefined;
     process?.kill();
@@ -51,12 +52,15 @@ function speechWorker({ python, script, runtime, reference, cache, mode, device 
     if (pending) return { error: '上一段语音正在处理。' };
     try { child ??= start(); }
     catch { return { error: '语音工作目录或运行环境未就绪。' }; }
+    const worker = child;
+    clearTimeout(idleTimer);
     return new Promise(resolveResult => {
       const id = crypto.randomUUID();
       const timeout = setTimeout(() => close('本机语音处理超时，请重试。'), 150_000);
       pending = { id, finish(result) {
         clearTimeout(timeout);
         pending = undefined;
+        if (mode === 'asr' && child === worker) idleTimer = setTimeout(() => close(), 5 * 60_000).unref();
         resolveResult(result);
       } };
       child.stdin.write(JSON.stringify({ id, ...payload }) + '\n');
@@ -75,11 +79,20 @@ export function createBubbleVoice({ root, profile, ttsDevice = 'auto' }) {
   const enabled = process.platform === 'win32' && existsSync(python) && existsSync(script);
   const asr = speechWorker({ python, script, runtime, reference, cache, mode: 'asr' });
   const tts = speechWorker({ python, script, runtime, reference, cache, mode: 'tts', device: ttsDevice });
+  let preheating;
   return {
     enabled,
+    preheat() {
+      if (!enabled) return { error: '本机听写环境未就绪。' };
+      return preheating ??= asr.run({ preheat: true }).finally(() => { preheating = undefined; });
+    },
     async transcribe(wav) {
       if (!enabled) return { error: '本机 GPT-SoVITS 运行环境未就绪。' };
       if (!(wav instanceof Uint8Array) || wav.byteLength < 3244 || wav.byteLength > 256044) return { error: '录音段格式无效。' };
+      if (preheating) {
+        const warmed = await preheating;
+        if (!warmed.ready) return { error: warmed.error };
+      }
       const result = await asr.run({ audio: Buffer.from(wav).toString('base64') });
       return result.error ? { error: result.error } : { text: result.text };
     },

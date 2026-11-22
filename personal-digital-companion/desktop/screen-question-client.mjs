@@ -201,5 +201,10 @@ export async function createScreenQuestionClient({profile,screen,desktopCapturer
     }catch(error){const value=controller.signal.aborted?cancelled():error?.state==='error'?error:failure('CAPTURE_FAILED','获取屏幕失败，请检查截图权限');emit(value);return value;}
     finally{signal?.removeEventListener('abort',externalAbort);if(active===controller)active=null;}
   }
-  return {askText:(question,options)=>run(question,options),captureAndAsk:(question,options)=>run(question,options,false,true),retryLast:options=>run(null,options,true),forget(){last=null;active?.abort();}};
+  function askStandalone(text,{signal=AbortSignal.timeout(90000)}={}){
+    if(configurationError)return configurationError;
+    return call(request,{endpoint:'/api/assistant/message',question:text,grounded:true,
+      body:JSON.stringify({messages:[{role:'user',content:text}]})},signal,{});
+  }
+  return {askStandalone,askText:(question,options)=>run(question,options),captureAndAsk:(question,options)=>run(question,options,false,true),retryLast:options=>run(null,options,true),forget(){last=null;active?.abort();}};
 }

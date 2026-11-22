@@ -11,7 +11,8 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
   let child, loading, finishLoad, request, loadTimer, exited;
   const write = (stage, start, error, skill, timing) => {
     void log?.({direction:'local',route:'本地 AI',stage,model:modelName,duration_ms:Math.round(performance.now()-start),error,
-      ...timing,...(skill?.name==='memory-refinement'&&skill.stage?{refinement_phase:skill.stage}:{}),
+      ...(skill?.aiAttemptId?{ai_attempt_id:skill.aiAttemptId}:{}),
+      ...timing,...(skill?.stage?{ai_phase:skill.stage}:{}),...(skill?.name==='memory-refinement'&&skill.stage?{refinement_phase:skill.stage}:{}),
       ...(skill?.name&&skill.version?{skill:skill.name,skill_version:skill.version}:{})});
   };
 
@@ -89,7 +90,7 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
     else result = await new Promise(resolve => {
       const id = crypto.randomUUID();
       const worker = child;
-      const retainAfterCancel = skillInstruction?.name === 'memory-refinement';
+      const retainAfterCancel = skillInstruction?.name === 'memory-refinement' || Boolean(skillInstruction?.aiTier);
       let cancelTimer;
       const finish = value => {
         if (request?.id !== id) return;

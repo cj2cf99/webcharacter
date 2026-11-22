@@ -1,4 +1,4 @@
-import {appendFile, mkdir, open, rename, stat} from 'node:fs/promises';
+import {appendFile, mkdir, open, readFile, rename, stat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tokyoDay} from './conversation-history.mjs';
 import {refusalExcerpt} from '../agent/host/refusal-response.mjs';
@@ -6,6 +6,8 @@ import {refusalExcerpt} from '../agent/host/refusal-response.mjs';
 const timestamp = new Intl.DateTimeFormat('sv-SE', {timeZone: 'Asia/Tokyo', dateStyle: 'short', timeStyle: 'medium'});
 const id = value => typeof value === 'string' && /^[a-z0-9_-]{1,128}$/i.test(value) ? value : undefined;
 const word = value => typeof value === 'string' && /^[a-z0-9_./@:-]{1,128}$/i.test(value) ? value : undefined;
+const recoveryCodes=new Set(['LOCAL_AI_BATCH_BUDGET','LOCAL_AI_ADAPTIVE_OUTPUT_BUDGET','LOCAL_AI_GPU_DEFERRED','AbortError']);
+const diaryFailures=new Map([['写日记','diary-writing'],['补行动评价','diary-writing'],['手记质问','diary-audit'],['核对手记','diary-audit']]);
 const peek = value => {
   if(typeof value!=='string')return null;
   try { return JSON.parse(value); } catch { return null; }
@@ -72,6 +74,53 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
     await pending;
     return readStoredPage(cursor,day);
   }
+  async function inspectRecent(from,to,signal){
+    await pending;
+    const lookback=from-5000;
+    const days=[...new Set([tokyoDay(lookback),tokyoDay(from),tokyoDay(to)])];
+    const files=memory?days.flatMap(day=>['任务通信.jsonl','历史通信.jsonl'].map(name=>join(memory.folder(day),'日志',name))):[previous,file];
+    const counts=new Map(),paired=new Map(),attempts=new Map();
+    let scanned=0,completed=0,failed=0;
+    function report(code,total=1){
+      failed+=total;counts.set(code,(counts.get(code)??0)+total);
+    }
+    for(const path of files){
+      signal.throwIfAborted();
+      const log=await readFile(path,{encoding:'utf8',signal}).catch(error=>{if(error.code!=='ENOENT')throw error;return '';});
+      for(const line of log.split('\n')){
+        const row=peek(line);
+        if(!row||row.route==='分析专家巡检')continue;
+        const at=Date.parse(row.time);
+        if(!Number.isFinite(at)||at<lookback||at>=to)continue;
+        if(at>=from){
+          scanned++;
+          if(row.category==='绯月自主行动'&&row.stage==='完成')completed++;
+        }
+        const code=word(row.error??row.code??String(row.result??'').match(/\bLOCAL_AI_[A-Z_]+\b/u)?.[0]);
+        if(recoveryCodes.has(code)||row.stage==='取消'||row.skill==='emotion-appraisal'&&['AI 询问池','本地 AI'].includes(row.route))continue;
+        if(!code&&row.stage!=='失败')continue;
+        const modelRoute=row.route==='本地 AI'||row.route==='AI 询问池';
+        if(modelRoute&&code&&id(row.ai_attempt_id)){
+          const key=JSON.stringify([row.ai_attempt_id,code]);
+          if(!attempts.has(key)||attempts.get(key).at>at)attempts.set(key,{at,code});
+          continue;
+        }
+        if(at<from)continue;
+        const legacyModelReceipt=row.route==='本地 AI'||row.route==='AI 询问池'&&code==='LOCAL_AI_OUTPUT_BUDGET';
+        const diaryModel=legacyModelReceipt&&['diary-writing','diary-audit'].includes(row.skill);
+        const skill=diaryModel?row.skill:row.category==='绯月自主行动'&&['失败','查询失败'].includes(row.stage)?diaryFailures.get(row.route):undefined;
+        if(skill&&code){
+          // 旧手记回执没有共享编号，按同秒各层的记录数保留独立失败。
+          const key=JSON.stringify([at,skill,code]),group=paired.get(key)??{code,model:0,queue:0,task:0};
+          group[row.route==='本地 AI'?'model':row.route==='AI 询问池'?'queue':'task']++;
+          paired.set(key,group);
+        }else report(code??'自主任务失败');
+      }
+    }
+    for(const {at,code} of attempts.values())if(at>=from)report(code);
+    for(const {code,model,queue,task} of paired.values())report(code,Math.max(model,queue,task));
+    return {scanned,completed,failed,top:[...counts].sort((a,b)=>b[1]-a[1]).slice(0,5)};
+  }
   // 恢复前读同一东京日的日志；在写入队列内核对，不能再等待队列自身。
   async function hasReceipt(row){
     let cursor=null;
@@ -126,7 +175,7 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
   }
   return {
     get file(){return memory?join(memory.folder(tokyoDay(clock())),'日志','任务通信.jsonl'):file;},
-    write, readPage, flush: () => pending, failed: () => failed,
+    write, readPage, inspectRecent, flush: () => pending, failed: () => failed,
     wrap(request) {
       return async (path, options = {}) => {
         // The query can hold filters and headers carry credentials. Record identifiers and statuses only.

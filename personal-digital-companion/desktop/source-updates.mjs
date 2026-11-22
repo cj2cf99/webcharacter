@@ -17,7 +17,7 @@ export const pages = {
   'reminder-review.html':['feiyue-surface.css','reminder-review.css','reminder-review-ui.mjs'],
   'task-inbox.html':['feiyue-surface.css','task-inbox.css','task-inbox-ui.mjs'],
   'sound-settings.html':['feiyue-surface.css','sound-settings.css','sound-settings.mjs','sound.mjs'],
-  'conversation.html':['feiyue-surface.css','conversation-ui.mjs','conversation.css'],
+  'conversation.html':['feiyue-surface.css','conversation-ui.mjs','emotion-prompt.mjs','conversation.css'],
   'private-chat.html':['feiyue-surface.css','private-chat.css','private-chat-ui.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
   'screen-question.html':['feiyue-surface.css','screen-question.css','question-attachment.mjs','screen-question-ui.mjs',
     'bubble-voice-ui.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs','bubble-voice-segments.mjs'],

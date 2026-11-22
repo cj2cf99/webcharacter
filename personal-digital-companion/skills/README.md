@@ -1,5 +1,7 @@
 # 绯月本地技能目录
 
+在支持外置 Skill 的桌面版中，可从默认总纲发布新的子 Skill 版本并即时切换。总纲的用途、调用方式和范例也供本机 `GET /v1/skills` 查询。[外置更新与新增方法](../docs/SKILL_HOT_UPDATE.md)
+
 总体入口是 `feiyue-interaction`，图像编排入口是 `image-task-chain`。代码和父 skill 使用稳定标识查找子 skill。例如，问答选择登记后加载 `record-submission`，图像任务再按操作使用 `comfy-image-workflows` 的图。桌面规则决定可执行的动作，模型只在该动作范围内理解输入。
 
 新增登记参照绯月已经使用的[图像编排指令](image-task-chain/source/SKILL.md)和[工作流执行指令](comfy-image-workflows/source/SKILL.md)。正文写给本地 AI，说明它收到什么、应提取什么、输出给谁、何时需要追问，以及以哪种回执报告完成。父技能的 `children.json` 以用途对应稳定标识，例如附件识读的 registration 指向 record-submission。编辑 source 后由解析器生成带版本的快照。

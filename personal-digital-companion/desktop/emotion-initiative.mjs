@@ -131,7 +131,7 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,que
       const allowedProposal=structuredClone(proposal);
       allowedProposal.properties.entries.items.properties.source={enum:facts.map(f=>f.i)};
       const p=await analyze({focus:previousFocus,desire:observation.desire,week:observation.week,
-        series:inclinations,facts:facts.map(({i,title})=>({i,title})),forced:forced?.row.want},skill.localAi.propose+' 绯月天生持续喜欢哲学。已有具体想法先顾它；没有头绪时，先尝试对材料提出一个哲学角度，没兴趣仍可选择等待。',allowedProposal);
+        series:inclinations,facts:facts.map(({i,title})=>({i,title})),forced:forced?.row.want},skill.localAi.propose+' 具体需要他核实或回答的事选 clarify。表达关心、感受或见闻选 share，想陪伴选 company。绯月天生持续喜欢哲学。已有具体想法先顾它；没有头绪时，先尝试对材料提出一个哲学角度，没兴趣仍可选择等待。',allowedProposal);
       signal.throwIfAborted();
       audit.proposal=p;
       if(!Array.isArray(p.entries)||p.entries.length>5||typeof p.act!=='boolean')throw Error('候选输出不完整');
@@ -169,7 +169,7 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,que
       if(action==='web')input.publicLookup={topic:fact.publicTerm,choices:initiativeSearchLabels};
       const allowedDecision=structuredClone(decision);allowedDecision.properties.action={enum:actions};
       const lookupGuide=action==='web'?' 按用途选来源：普通人对某事的看法用 x，媒体社论用 editorial，视觉参考用 images，事实与背景资料用 web。只查给定公开主题。':'';
-      const clarificationGuide=queueClarification?' 想请他核实事实时，message 写成只有一个问号的具体问题；分享只表达自己的见闻或感受。':'';
+      const clarificationGuide=' 要核实时，message 写明具体想请他确认的一件事。分享、关心和陪伴用平常说话的语气，按语意写句尾。';
       const d=await analyze(input,loop.localAi.nextStep+' '+skill.localAi.decide+' 具体行动优先。情绪影响表达，现实条件不具备才等待。ask/speak 的 message 是一句实际要说的话，整理写有出处的摘记。'+lookupGuide+clarificationGuide,allowedDecision);
       signal.throwIfAborted();audit.decision=d;audit.decisionInput=input;
       if(!actions.includes(d.action)||!text(d.conclusion,180)||!text(d.next,180)||typeof d.message!=='string'||d.message.length>180)throw Error('决定缺少依据或超出可用动作');
@@ -190,7 +190,7 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,que
       };
       if(d.action==='ask')return {roundId:id,source:fact.ask,message:d.message,evaluation:d.conclusion,finish};
       if(d.action==='speak'){
-        if(queueClarification&&!fact.share&&(chosen.type==='clarify'||!queueConversation&&/[？?]\s*$/u.test(d.message))){
+        if(queueClarification&&!fact.share&&chosen.type==='clarify'){
           const queued=queueClarification({ref:fact.ref,title:d.message,roundId:id});
           const detail=queued?'已加入待确认':'这项确认已登记或留待下轮';
           await finish(queued,detail,{queuedQuestion:true});

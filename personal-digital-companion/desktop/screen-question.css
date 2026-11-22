@@ -86,6 +86,7 @@ button { cursor: pointer; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+#asked[data-source=true] { white-space: pre-wrap; overflow-wrap: anywhere; }
 .response { display: flex; align-items: baseline; gap: 7px; }
 #answer { min-width: 0; margin: 0; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap;
   display: block; }
@@ -160,7 +161,7 @@ footer { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
 .capture input { width: 12px; height: 12px; margin: 0; accent-color: var(--rose); }
 #mode { field-sizing: content; min-width: 0; max-width: 100%; }
 #hint { margin-left: auto; color: var(--fy-muted); font-size: 10px; white-space: nowrap; }
-#recordVoice {
+#recordVoice, #warmModels {
   flex: none;
   width: 27px;
   height: 27px;
@@ -170,8 +171,11 @@ footer { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
   color: var(--fy-muted);
   background: transparent;
 }
-#recordVoice:hover, #recordVoice[aria-pressed=true] { color: var(--rose); background: var(--soft); border-color: var(--rose); }
+#recordVoice:hover, #recordVoice[aria-pressed=true], #warmModels:hover { color: var(--rose); background: var(--soft); border-color: var(--rose); }
 #recordVoice[data-recording=true] { animation: pulse .9s ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: no-preference) {
+  #warmModels[aria-busy=true] { animation: pulse .9s ease-in-out infinite alternate; }
+}
 #send {
   flex: none;
   white-space: nowrap;
@@ -198,6 +202,8 @@ button:disabled, select:disabled { cursor: default; opacity: .55; }
   .bubble header.fy-titlebar { gap: 2px; }
   #hint { position: absolute; clip-path: inset(50%); }
   #recordVoice, #recordVoice[hidden] + #send { margin-left: auto; }
+  #warmModels { margin-left: auto; }
+  #warmModels:not([hidden]) ~ :is(#recordVoice, #send) { margin-left: 0; }
 }
 @media (max-width: 285px) {
   footer { flex-wrap: wrap; }
@@ -207,3 +213,7 @@ button:disabled, select:disabled { cursor: default; opacity: .55; }
 #reply[data-nag=true] { overflow-y:auto; }
 #reply[data-nag=true] #answer { display:block; overflow:visible; max-height:none; white-space:pre-wrap; }
 #nagContext { max-width: 100%; max-height: 110px; object-fit: contain; border-radius: var(--fy-radius); margin-top: 5px; }
+#threadActions,#cloudForm{font-size:12px;padding:2px 7px}
+#threadActions button,#cloudForm button{margin:2px 4px 2px 0}
+#cloudForm textarea{box-sizing:border-box;width:100%;resize:vertical;margin:4px 0}
+#cloudPreview{max-height:110px;overflow:auto;overflow-wrap:anywhere;white-space:pre-wrap}

@@ -6,6 +6,17 @@
 
 调用端从实际安装目录的 `output/desktop-profile/local-api.token` 读取令牌，放入 `Authorization: Bearer <token>`。保留该目录原有用户权限，勿复制令牌到草案、日志或 Git。执行数据在同目录的 `local-batches.sqlite`。测试使用独立资料目录和随机端口。桌宠退出时停止受理，已经持久入队的任务随原资料恢复。
 
+## 查询技能目录
+
+v6 的只读 `GET /v1/skills` 使用同一本机令牌，返回总纲 ID `router`、技能数组 `skills` 和回退提示 `warnings`。每项含 `id`、`name`、`does`、`call`、`examples`、`version` 和 `source`。外置版本写作 `名称@版本`，`source` 为 `external`。对话转录另有 `workflow`，含 `entry`、`steps` 和 `exit`。
+
+```powershell
+$feiyueSkillHeaders = @{ Authorization = 'Bearer ' + (Get-Content -Raw -LiteralPath (Join-Path $verifiedFeiyueProfile 'local-api.token')).Trim() }
+Invoke-RestMethod 'http://127.0.0.1:8765/v1/skills' -Headers $feiyueSkillHeaders
+```
+
+`$verifiedFeiyueProfile` 为已核对的实例资料目录。调用方可读取条目的 `call` 和 `examples`，再按相应入口操作。例如，转录从结束后的对话交给本机整理，并在任务管理查看结果。目录读取不会调模型、入队或执行任务。401 表示需要有效令牌，403 表示来源不符合原有本机限制，503 表示总纲暂不可读取。[更新及新增方法](SKILL_HOT_UPDATE.md)
+
 ## 准备清单和展示给用户
 
 v3 的首次调用可以直接 GET 监听地址，也可以 GET `/infoguide`。两处返回相同 JSON。先核实正式安装实例，按 `firstUse.sequence` 顺序执行。每个 `firstUse.commands` 条目提供可执行程序、工作目录和独立的参数数组，路径取自当前实例。占位符由调用方填入实际数据。
@@ -93,6 +104,26 @@ $pending = (Invoke-RestMethod "$base/v1/batches?unacknowledged=1" -Headers $head
 # 逐个核对 state=done 的 steps、finished、reviewHash，把回执写入纪要后：
 Invoke-RestMethod "$base/v1/batches/$batchId/ack" -Method Post -Headers $headers
 ```
+
+## v5：本机 REST 创建一次性提醒
+
+用户要求「在rest把这个功能也放开」，以便在桌面窗口无法操作时，由绯月按指定时间登记一条提醒并保留可复制的提示词。客户端直接提供标题、时间和正文。绯月沿用正式工作队列和既有提醒业务链路。调用前核对 `/infoguide` 的实例和版本，并使用同一本机令牌、JSON 请求体及回环地址。
+
+```json
+{
+  "id": "follow-up-example-20261207",
+  "title": "复盘既有同步任务",
+  "deadline": "2026-12-07T09:30+09:00",
+  "content": "请核对最近两轮运行的日志和快照，并比较等待与重试。"
+}
+```
+
+- `POST /v1/reminders` 新建时返回 202 和 `{existing:false, reminder}`。编号沿用小写字母、数字、下划线和短横线，最多 80 位。标题不能为空且最多 300 字符，正文可省略，保留换行，JSON 请求体上限为 8192 字节。使用 `YYYY-MM-DDTHH:mm+09:00` 指定东京时分。新提醒日期不得早于东京今天。登记按次创建，等级沿用现有默认值「中」。
+- 同编号、同内容重交返回 200 及该次登记回执。JSON 键顺序、标题首尾空白不影响匹配。同编号内容不同返回 409。队列满时新编号返回 429，稍后按原编号重交。
+- `GET /v1/reminders/:id` 取回 `queued`、`running`、`blocked` 或 `done` 状态、东京截止时间及进度。`done` 附既有提醒表的 `recordId`，表明取得实际登记回执。查询及重复提交均只回显标题和时间等状态。任务完成后清理本机队列中的正文副本。
+- 请求超时或应用重启后先查原编号。查询返回 404 时，按原编号和原内容重交。暂停时 `POST /v1/reminders/:id/retry` 恢复原提交，无需再次提供正文。登记已经成功时，恢复调用返回原回执。无法从云端确认时保留待核对状态。
+
+本机 SQLite 在首次启动时建立独立的提醒请求表。花园表、原路由和旧批次回执沿用原有格式。两类任务共享 20 个名额及执行顺序。既有云端提醒模板、业务表、主站代码和提醒检查频率保持。正式工作队列及提醒业务的设计依据见 [正式工作队列](FORMAL_WORK_QUEUE.md) 和 [登记链路](RECORDING_CHAIN_RELEASE_DESIGN.md)。
 
 ## 正式安装验收后的全局说明条款
 

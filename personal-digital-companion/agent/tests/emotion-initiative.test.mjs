@@ -6,9 +6,48 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createDesirePool} from '../../desktop/desire-pool.mjs';
 import {createEmotionStore} from '../../desktop/emotion-core.mjs';
+import {createEmotionService} from '../../desktop/emotion-service.mjs';
 import {createInitiative} from '../../desktop/emotion-initiative.mjs';
 import {createTopicMemory} from '../../desktop/topic-memory.mjs';
 import {searchInitiative} from '../../desktop/public-search.mjs';
+
+test('情绪评价超时只延后重试一次，之后的材料先完成，正常让行保留原事件',async()=>{
+  const profile=await mkdtemp(join(tmpdir(),'feiyue-emotion-timeout-'));
+  let now=Date.parse('2026-11-23T00:00:00+09:00');
+  const calls=[],logs=[];
+  const valid={delta:0,status:'keep',quote:'',positive:'平静',negative:'担心',line:'我记下了。',want:'',condition:'',curiosity:''};
+  const service=createEmotionService({profile,now:()=>now,log:row=>logs.push(row),
+    skill:async()=>({skill:'emotion-appraisal',version:'fixture',localAi:{assessment:'评价',assess:'核对'}}),
+    topics:{preferences:()=>[],async remember(){throw new DOMException('专题写入失败','TimeoutError');}},
+    diary:{emotionalHistory:()=>({pages:[],nags:[]})},model:{async memory(input,_prompt,_schema,signal,options){
+      const text=/^用户原话：(.*)$/mu.exec(input)[1];
+      calls.push(text);
+      assert.equal(options.aiBudget,45000);
+      assert.equal(options.backgroundBudget,true);
+      assert.equal(options.maxTokens,384);
+      if(text==='慢材料')throw new DOMException('评价超时','TimeoutError');
+      if(text==='先让行'&&calls.filter(call=>call==='先让行').length===1){
+        service.interrupt();signal.throwIfAborted();
+      }
+      return text==='正常材料'?{...valid,curiosity:'正常材料'}:valid;
+    }}});
+  try{
+    for(const [id,text] of ['慢材料','正常材料'].entries())service.accept({key:'fixture/'+id,kind:'chat',at:now,user:text});
+    await service.drain();await service.drain();
+    assert.deepEqual(calls,['慢材料','正常材料']);
+    assert.equal(logs.filter(row=>row.error).length,0);
+    assert.ok(logs.some(row=>row.stage==='情绪评价已保存，该专题偏好未写入'));
+    now+=30001;
+    await service.drain();await service.drain();
+    assert.deepEqual(calls,['慢材料','正常材料','慢材料']);
+    assert.equal(logs.filter(row=>row.error==='TimeoutError').length,1);
+    service.accept({key:'fixture/yield',kind:'chat',at:now,user:'先让行'});
+    await service.drain();await service.drain();
+    assert.deepEqual(calls.slice(-2),['先让行','先让行']);
+    assert.equal(logs.filter(row=>row.error).length,1);
+    assert.equal(service.store.pending().key,'fixture/0');
+  }finally{await service.close();await rm(profile,{recursive:true,force:true});}
+});
 
 test('分系列达标才指定，同系清空、异系五件清三件；重复提交保留相同结果',()=>{
   const db=new DatabaseSync(':memory:');
@@ -79,10 +118,28 @@ test('主动分享分支想要用户回答时，只登记一个本机确认事�
       speak:()=>assert.fail('要回答的问题不直接弹出'),queueClarification:item=>{questions.push(item);return true;},
       model:{memory:async(_i,_p,schema)=>schema.properties.entries?
         {act:true,entries:[{source:0,type:'clarify',sin:1,want:'想弄清行程',condition:'听到解释'}]}:
-        {action:'speak',conclusion:'想核实临时调整',message:'今天为什么提前出门呢？',next:'等他有空解释'}}});
+        {action:'speak',conclusion:'想核实临时调整',message:'有空跟我说说今天提前出门的原因。',next:'等他有空解释'}}});
     assert.match((await runner.choose([],new AbortController().signal,()=>true)).detail,/加入待确认/);
     assert.equal(questions.length,1);assert.equal(questions[0].ref,'chat/book');
+    assert.equal(questions[0].title,'有空跟我说说今天提前出门的原因。');
     assert.equal(store.pool.recent().status,'done');assert.equal(store.pool.feedback(),undefined);
+  }finally{store.close();await rm(root,{recursive:true,force:true});}
+});
+test('分享关心时按交流意图派发，句末问号也不产生待确认',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'feiyue-initiative-care-')),at=Date.now();
+  const store=createEmotionStore(root,{now:()=>at});
+  const message='这阵子辛苦了，今晚对自己好一点，好不好？';
+  const spoken=[];
+  try{
+    store.accept({key:'chat/work',kind:'chat',user:'最近在加班。',at});
+    const runner=createInitiative({root,now:()=>at,emotion:{store,expression:()=>({word:'关心'})},load:async()=>({localAi:{}}),
+      queueClarification:()=>assert.fail('关心的话不应登记为待确认'),
+      speak:async(_id,text)=>{spoken.push(text);return true;},
+      model:{memory:async(_i,_p,schema)=>schema.properties.entries?
+        {act:true,entries:[{source:0,type:'share',sin:1,want:'表达关心',condition:'让他知道我关心他'}]}:
+        {action:'speak',conclusion:'想让他放松一点',message,next:'以后再关心他的近况'}}});
+    await runner.choose([],new AbortController().signal,()=>true);
+    assert.deepEqual(spoken,[message]);
   }finally{store.close();await rm(root,{recursive:true,force:true});}
 });
 test('私人话题问句进入专聊，具体事实核实沿用待确认',async()=>{
@@ -142,7 +199,7 @@ test('较早达标但没有可用动作的系列让出本轮，保留待执行�
   }finally{store.close();await rm(root,{recursive:true,force:true});}
 });
 test('公开查询写入前失败可在下轮重试，只传公开词且有结果才登记',async()=>{
-  const root=await mkdtemp(join(tmpdir(),'feiyue-web-retry-'));let at=Date.now(),attempts=0,writes=0;
+  const root=await mkdtemp(join(tmpdir(),'feiyue-web-retry-'));let at=Date.parse('2026-11-22T08:00:00Z'),attempts=0,writes=0;
   const store=createEmotionStore(root,{now:()=>at,roll:()=>3}),signal=new AbortController().signal;
   try{
     store.accept({key:'chat/bird',at,kind:'chat',user:'我在家附近看到了翠鸟',publicTerm:'翠鸟习性'});

@@ -73,7 +73,7 @@ export async function correctDictation(text, { model, signal, session }) {
   return { text: results.join('\n'), corrected };
 }
 
-export function attachDictation(electron, { root, bundle, voice, model, privateModel, onForeground = () => {} }) {
+export function attachDictation(electron, { root, bundle, voice, model, privateModel }) {
   const { ipcMain, session } = electron;
   const local = session.defaultSession;
   if (!local.registerPreloadScript) return { close() {} };
@@ -110,7 +110,6 @@ export function attachDictation(electron, { root, bundle, voice, model, privateM
     'dictation:correct': (event,text) => {
       if (active?.owner!==event.sender || !active.mic || typeof text!=='string' || text.length>12_000) return { corrected:false };
       active.mic=false;
-      onForeground();
       return correctDictation(text,{ model:privateModel?.(event.sender)??model, signal:active.controller.signal,session:active });
     },
     'dictation:end': (event,cancel) => { if(active?.owner===event.sender)end(cancel); },
