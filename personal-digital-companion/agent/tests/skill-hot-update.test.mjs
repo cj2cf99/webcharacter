@@ -68,7 +68,7 @@ test('总纲目录接口经鉴权读取调用范例，正在运行时可发布�
   assert.equal((await fetch(path)).status,401);
   assert.equal((await fetch(path,{headers:{...headers,Origin:'http://localhost'}})).status,403);
   const guide=await (await fetch(api.address+'/infoguide')).json();
-  assert.equal(guide.version,6);
+  assert.equal(guide.version,7);
   assert.ok(guide.routes.some(item=>item.path==='/v1/skills'&&item.method==='GET'&&item.auth));
   const catalogResponse=await fetch(path,{headers});
   assert.equal(catalogResponse.status,200);

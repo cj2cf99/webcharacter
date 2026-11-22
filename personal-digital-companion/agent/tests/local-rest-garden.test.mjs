@@ -79,6 +79,7 @@ test('按实际花园模型制单并逐步执行全部登记类型，复核外�
   const events=[],pool=createLocalTaskPool({file:':memory:',garden,record:event=>events.push(event)});
   try{
     db.exec(readFileSync(join(gardenRepo,'migrations/0021_garden.sql'),'utf8'));
+    db.exec(readFileSync(join(gardenRepo,'migrations/0034_garden_release_tenths.sql'),'utf8'));
     const steps=[
       ['projects',{name:'甲项目'}],['projects',{name:'乙项目'}],
       ['relations',{project_a:1,project_b:2,type:'rel'}],
@@ -95,9 +96,9 @@ test('按实际花园模型制单并逐步执行全部登记类型，复核外�
     assert.equal(garden.read('SELECT count(*) n FROM garden_project')[0].n,0);
     pool.submit(plan,sha,hash(canonical(plan)));await pool.tick();
     const receipt=pool.get(plan.id);assert.equal(receipt.state,'done',receipt.error);
-    assert.deepEqual(receipt.steps.map(s=>s.revision),steps.map((_,i)=>i+1));
+    assert.deepEqual(receipt.steps.map(s=>s.revision),steps.map((_,i)=>plan.revision+i+1));
     assert.deepEqual(garden.read('PRAGMA foreign_key_check'),[]);
-    assert.deepEqual(garden.read('SELECT * FROM garden_deploy_item ORDER BY id').map(r=>[r.project_id,r.flower_id,r.note,r.version_after]),[[1,1,'甲的更新','1.0'],[2,2,'乙的更新','1.0']]);
+    assert.deepEqual(garden.read('SELECT * FROM garden_deploy_item ORDER BY id').map(r=>[r.project_id,r.flower_id,r.note,r.version_after]),[[1,1,'甲的更新','0.1'],[2,2,'乙的更新','0.1']]);
     assert.deepEqual(garden.read('SELECT flower_id FROM garden_data_source_flower').map(r=>r.flower_id),[2]);
     assert.equal(garden.read('SELECT flower_id FROM garden_seed')[0].flower_id,2);
     assert.equal(events.length,1);
@@ -177,7 +178,7 @@ test('HTTP 确认、鉴权、固定 Git 清单、整批回读与一次复盘',as
   f.cleanup.push(async()=>{await api.close();await pool.close();});
   const headers={authorization:'Bearer '+readFileSync(join(f.dir,'local-api.token'),'utf8'),'content-type':'application/json'};
   const post=v=>fetch(api.address+'/v1/batches',{method:'POST',headers,body:JSON.stringify(v)});
-  const guide=await (await fetch(api.address+'/infoguide')).json();assert.equal(guide.baseURL,api.address);assert.equal(guide.routes.length,12);assert.equal(guide.version,6);
+  const guide=await (await fetch(api.address+'/infoguide')).json();assert.equal(guide.baseURL,api.address);assert.equal(guide.routes.length,14);assert.equal(guide.version,7);
   assert.deepEqual(await (await fetch(api.address)).json(),guide);
   assert.equal((await fetch(api.address+'/v1/batches')).status,401);
   assert.equal((await fetch(api.address+'/v1/batches',{headers:{...headers,Origin:'https://other.invalid'}})).status,403);
@@ -298,6 +299,7 @@ test('制单复用花园真实模型，桌宠归属及部署明细版本可核�
   const db=new DatabaseSync(':memory:');
   try{
     db.exec(readFileSync(join(gardenRepo,'migrations/0021_garden.sql'),'utf8'));
+    db.exec(readFileSync(join(gardenRepo,'migrations/0034_garden_release_tenths.sql'),'utf8'));
     const {configs}=await import(pathToFileURL(join(gardenRepo,'src/features/garden/model.mjs')));
     for(const [resource,[,fields]] of Object.entries(configs))
       assert.deepEqual(inputFields[resource],resource==='sources'?[...fields,'flower_ids']:fields);
@@ -314,7 +316,7 @@ test('制单复用花园真实模型，桌宠归属及部署明细版本可核�
     await assert.rejects(preparePlan({...request,steps:[{...request.steps[0],data:{...request.steps[0].data,version:'9.0'}}]},source),/不支持的登记字段/);
     assert.equal(plan.steps[0].scope.flowers[0].id,61);
     const item=plan.steps[0].changes.find(c=>c.table==='deploy_item').after;
-    assert.equal(item.version_after,'1.0');assert.equal(item.version_before,'0.0');assert.equal(item.note,request.steps[0].data.items[0].note);
+    assert.equal(item.version_after,'0.1');assert.equal(item.version_before,'0.0');assert.equal(item.note,request.steps[0].data.items[0].note);
     assert.equal(source.read('SELECT count(*) n FROM garden_deploy')[0].n,0);
     await assert.rejects(preparePlan({...request,release:'failed'},source),/失败发布/);
     db.exec("UPDATE garden_flower SET name='其他功能'");await assert.rejects(preparePlan(request,source),/既有绯月功能/);
@@ -372,4 +374,63 @@ test('批次真正开工时才让闲时工作暂停；空队列与等待本机�
   assert.equal(starts,0,'本机任务执行中，批次等待且不打断');assert.equal(pool.get(f.plan.id).state,'queued');
   taskRunning=false;
   assert.equal((await settled(pool,f.plan.id)).state,'done');assert.equal(starts,1);
+});
+
+test('两份草案并行，重启后统一取号；遗失回执的首批在第二批完成后重试不再加版本',async t=>{
+  const dir=mkdtempSync(join(tmpdir(),'garden-parallel-'));
+  const db=new DatabaseSync(':memory:');
+  for(const file of ['0021_garden.sql','0034_garden_release_tenths.sql']){
+    db.exec(readFileSync(join(gardenRepo,'migrations',file),'utf8'));
+  }
+  db.exec("INSERT INTO garden_project(id,name,created_at) VALUES(1,'项目','2026-01-01');INSERT INTO garden_flower(id,project_id,name,type,created_at) VALUES(1,1,'功能','service','2026-01-01')");
+  let writes=0;
+  const garden={read:sql=>db.prepare(sql).all(),write(sql){
+    db.exec('BEGIN');try{db.exec(sql);db.exec('COMMIT');}catch(error){db.exec('ROLLBACK');throw error;}
+    if(++writes===1)throw Error('模拟写入后回执丢失');
+  }};
+  const plans=new Map();
+  const options={file:join(dir,'queue.db'),garden,record:async()=>{}};
+  let pool,api;
+  async function open(){
+    pool=createLocalTaskPool(options);
+    api=await openLocalREST({pool,profile:dir,listenPort:0,load:async input=>plans.get(input.id)});
+  }
+  await open();
+  t.after(async()=>{await api.close();await pool.close();db.close();rmSync(dir,{recursive:true,force:true});});
+  const token=readFileSync(join(dir,'local-api.token'),'utf8').trim();
+  async function post(path,body){
+    const r=await fetch(api.address+path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    return {status:r.status,...await r.json()};
+  }
+  const model=join(gardenRepo,'src/features/garden/store.mjs');
+  const catalog=await inspectTargets(garden,model);
+  const drafts=['release-a','release-b'].map(id=>({id,kind:'garden',title:id,release:'succeeded',result:'已发布',noChanges:[],baseline:catalog.baseline,
+    steps:[{resource:'deploy',label:'登记',data:{deployed_at:'2026-11-23T00:00:00Z',items:[{flower_id:1,note:'[发布成功:'+id+']'}]}}]}));
+  const turn=(draft,fields={})=>post('/v1/registration-turns/'+draft.id,{draftHash:hash(canonical(draft)),...fields});
+  const [a,b]=drafts;
+  assert.equal((await turn(a)).state,'ready');
+  assert.equal((await turn(b)).state,'waiting');
+  assert.equal(writes,0);
+  await api.close();await pool.close();await open();
+  assert.equal((await turn(b)).position,2);
+  async function submit(draft){
+    const plan=await preparePlan(draft,garden,model,catalog);plans.set(draft.id,plan);
+    const reviewHash=hash(canonical(plan)),input={id:draft.id,commit:sha,reviewHash,userConfirmed:true};
+    assert.equal((await turn(draft,{reviewHash})).state,'ready');
+    assert.equal((await post('/v1/batches',input)).status,202);
+    await pool.tick();return input;
+  }
+  const first=await submit(a);assert.equal(pool.get(a.id).state,'blocked');
+  assert.equal((await turn(b)).state,'ready');
+  const second=await submit(b);assert.equal(pool.get(b.id).state,'done');
+  pool.retry(a.id,first.reviewHash);await pool.tick();assert.equal(pool.get(a.id).state,'done');
+  for(const input of [first,second])assert.equal((await post('/v1/batches',input)).existing,true);
+  assert.equal((await turn({...b,title:'不同内容'})).status,409);
+  const rows=garden.read('SELECT deploy_id,id,version_before,version_after FROM garden_deploy_item ORDER BY id');
+  assert.deepEqual(rows.map(Object.values),[[1,1,'0.0','0.1'],[2,2,'0.1','0.2']]);
+  assert.equal(writes,2);
+  const abandoned={...b,id:'withdraw'};
+  assert.equal((await turn(abandoned)).state,'ready');
+  await post('/v1/registration-turns/withdraw/cancel',{draftHash:hash(canonical(abandoned))});
+  assert.equal((await turn(abandoned,{poll:true})).status,409);
 });

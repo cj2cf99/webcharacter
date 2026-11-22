@@ -1851,3 +1851,23 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 Git 以远端 6562e7d 为比较基线，只纳入七项实现差异、三处测试文件和本次纪要。五组在独立 Git 工作树为 74/76，两项念叨收笔测试期望“回合结束”而得到“已解释”，在未加本次改动的 6562e7d 上分别复现；本次新增或改动覆盖均通过。花园按用户指令暂不登记，批次 feiyue-task-recovery-20261123 已释放草案取号，未提交登记。
 
 绯月 afd0964a664e 的修复与测试已提交并普通推送至 origin/codex/workspace-checkpoint-20261120。远端回读与发布提交 c3d1c97d3de9dd4a7c63a46ecd536f64f79d4171 一致。
+
+
+## 2026-11-23 JST · 绯月本机花园 REST v7 · 发布准备
+
+**目标及基线**　Windows 正式绯月本机 REST v6 → v7，监听 127.0.0.1:8765。用户要求可并行准备多个发布，登记时统一取号，重试同一发布不重复计版。正式安装目录 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion，安装基线 247f3713f3f2。核对了进程 PID 16124、启动时间 04:45 JST、实际资料目录、/infoguide、桌面快捷方式及登录启动入口。开发仓库基线 03942463b3de924c380ae45a0c29a30bfbbee1c6，本次运行文件以正式安装版逐文件比较。发布材料位于 G:/selftool/WebCharacter/work/garden-release-0034-20261123。feiyue-manifest.json 列出安装前后五个 SHA-256 对，windows-payload 只含下列五个文件，feiyue-before 保存旧文件。
+
+**改动及兼容性**　desktop/local-task-pool.mjs 持久化取号顺序和摘要，desktop/local-rest.mjs 提供排队、查询原批次和取消入口，desktop/garden-guide.mjs 同步 v7 的 infoguide，tools/prepare-garden-registration.mjs 在队首读取最新基线并生成精确 SQL。docs/LOCAL_GARDEN_API.md 仅在已安装手册中补入 v7 小节。草案可并行；新记录在队首制单，正式批次等待前一批完成或暂停；丢回执查原编号。业务历史、提醒及旧批次继续可读。端口、令牌、模型、Worker、计划任务及安装入口变更为无。
+
+**本机数据库**　已有 local-batches.sqlite 首次运行新代码时创建空表 garden_turns，主键为 (id,base)。只读核对已记录该对象原先不存在，准备时未完成花园批次为 0。无需导出整个资料目录。正式停机前再核对新表存在性和任务状态，保存目标对象的事前状态。远端 0034 属于主站发布；单独花园登记免数据库备份。
+
+**验证与恢复**　正式 Electron 的 Node 模式对四个运行文件分别执行 --check 通过。两份草案并行、重启取号、丢失首批回执后重试、旧批次、提醒及技能兼容等共 24/24 项通过。隔离命令为 node --disable-warning=ExperimentalWarning --test agent/tests/garden-first-use.test.mjs agent/tests/local-rest-garden.test.mjs agent/tests/local-rest-reminders.test.mjs agent/tests/skill-hot-update.test.mjs。初测两项提醒因安装目录附带的模拟云端种子只接受日期而失败；按既有已发布的时分格式校准 QA 种子后全部通过。该种子仅用于模拟服务，不在五文件安装清单中。重点复核同批恢复、队首持有时序及文件前后哈希。真实窗口及正式 v7 启动后验证待安装。
+
+**执行与花园草案**　获准并确认主站 0034 与新版 Worker 正常后，核实正式实例、安装版文件哈希和队列空闲，从 windows-payload 按清单受控替换五个文件，用原入口重启。核对进程、资料目录、/infoguide v7、取号路由和既有批次回读。安装异常时停用该候选，按 feiyue-before 恢复文件并由原入口启动；存在已排队请求时保留队列表和回执，按原批次续办。默认归属项目 #16 网页角色组件 → 功能 #61 绯月（桌面精灵），当前 32.0，成功登记预计 32.1。稳定批次 feiyue-garden-v7-20261123。实际结果确定后在 v7 登记时取部署和明细编号，失败按“发布中”留痕并保留版本；项目、功能、种子、改善及 Bug 均无需新增。完整清单与版本以队首回读并经用户确认的内容为准。
+
+**当前状态**　已准备；安装、受控重启、正式登记、Git 推送、用户验收及第三方独立审核待执行或确认。发布后补记实际安装版本、时间和回执。
+
+
+### 绯月花园 REST v7 正式安装回执（2026-11-23 05:12 JST）
+
+已按用户本次部署指令安装五个候选文件，正式安装文件摘要 d13cd4d22bbd。安装前重新核对活动实例与五项旧文件。正式进程 PID 17420 正常退出，经原入口启动 PID 21508。本机 REST v7、取号及取消路由、认证后的批次读取均已确认。资料中原有 28 个批次、1 条提醒仍可读，新建空队列表 garden_turns。24 项技能目录可访问。发布元数据清单单独确认。详见发布项目的 docs/releases/garden-parallel-20261123/install-receipt.json。

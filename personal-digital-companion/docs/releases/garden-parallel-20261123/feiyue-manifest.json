@@ -1,0 +1,27 @@
+[
+  {
+    "path": "desktop/garden-guide.mjs",
+    "before": "84c57a5034b87fd3ec99ccb3a24ec3c4c8e15e1e640b690d022dff278469b19d",
+    "after": "73c193226faefe6a15dad92b203873255d361f82fe58b15ad527859bcab933f5"
+  },
+  {
+    "path": "desktop/local-rest.mjs",
+    "before": "19e482eda2d91edeed576d228d87b224bde5e94fdc3be3ee82b6772df2c402a7",
+    "after": "4094a7d057399d5eff29f64a90e0e949da4a4b9a94f22a3b4bb4d903a03f75fa"
+  },
+  {
+    "path": "desktop/local-task-pool.mjs",
+    "before": "947a573d9c50a5285a28e2dbcb290f3806fbea373eefa52255e425edc0d0a510",
+    "after": "a3f66fd891351d9052f671a7038f5cad8b6c6c05fc5827e7bffa6995863c7d2b"
+  },
+  {
+    "path": "tools/prepare-garden-registration.mjs",
+    "before": "c83ee6dc686c4538d0fefca6ff567f64fa41002b6e0f1e04b8a3d6b2cfa99e7f",
+    "after": "4c739565d34f2e4198e96d438a34e2bc5a443613eba936a63d53540623219e67"
+  },
+  {
+    "path": "docs/LOCAL_GARDEN_API.md",
+    "before": "771d0bcaf031815792b4d5041aea608b8c5598fd7189412cce1705fce47e79fb",
+    "after": "06038c9daf1eaa7f1494e4f3f82a2ffe047397a91ee29c784cb20b74dc265cc1"
+  }
+]

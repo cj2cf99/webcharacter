@@ -137,3 +137,8 @@ node tools/check-project.mjs
 2026-11-23 04:57 JST，绯月正式版已安装新闻提醒修复 948648e620bb，安装后点击回归通过。[安装回执](../personal-digital-companion/RELEASE_REVIEW.md#新闻提醒正式安装回执--948648e620bb)
 
 2026-11-23 JST，绯月正式版的工作气泡独立显示在头顶。角色保持当前动画的指定尺寸，屏幕边缘由气泡避让。[桌宠固定尺寸与验证](../personal-digital-companion/docs/DEVELOPMENT.md#角色固定展示尺寸)
+
+
+### 2026-11-23 JST · 正式绯月花园登记 v7
+
+正式绯月已支持并行准备、队首统一取号与同批重试。主站 0034 已迁移。已成功发布的功能每次加 0.1。见[本机花园登记手册](../personal-digital-companion/docs/LOCAL_GARDEN_API.md)及[正式安装回执](../personal-digital-companion/docs/releases/garden-parallel-20261123/install-receipt.json)。

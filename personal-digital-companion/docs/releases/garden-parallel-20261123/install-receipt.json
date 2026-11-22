@@ -1,0 +1,13 @@
+{
+  "installedAt": "2026-11-23T05:12:23.8817014+09:00",
+  "version": "d13cd4d22bbd",
+  "oldPid": 17420,
+  "newPid": 21508,
+  "api": 7,
+  "files": 5,
+  "skills": 24,
+  "batches": 28,
+  "reminders": 1,
+  "turnsTable": true,
+  "batchRead": true
+}

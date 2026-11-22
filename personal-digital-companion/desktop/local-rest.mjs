@@ -15,6 +15,8 @@ const routes=[
   {method:'GET',path:'/infoguide',auth:false,summary:'读取本实例的调用说明',response:'此说明'},
   {method:'GET',path:'/v1/skills',summary:'从绯月总纲读取技能、可做的事、调用方式、示例及当前版本',
     response:'{ router, skills: [{id, name, does, call, examples, version, source, workflow?}], warnings }'},
+  {method:'POST',path:'/v1/registration-turns/:id',summary:'按稳定编号排队，队首且上次登记已结束时才定稿；可重复查询，确认前仅传摘要',body:{draftHash:'草案 SHA-256',reviewHash:'可选，队首制单完成后绑定最终清单',poll:'可选，仅查询原排队',continues:'续办填原清单摘要'},response:'{state: waiting|ready|submitted, position?, batch?}'},
+  {method:'POST',path:'/v1/registration-turns/:id/cancel',summary:'放弃尚未提交的草案，释放队首或退出等待',body:{draftHash:'原草案摘要',continues:'续办填原清单摘要',unsealedOnly:'制单失败时只释放未定稿位置'},response:'{state:cancelled|retained}'},
   {method:'GET',path:'/v1/batches',summary:'按新到旧查看批次，limit 为 1–100，before 为上页末项 cursor；unacknowledged=1 时只列已完成或暂停、尚未取回回执的批次',response:'{ batches: Batch[] }'},
   {method:'GET',path:'/v1/batches/:id',summary:'查看一个批次及各步回执；未完成时附 queue',response:'Batch'},
   {method:'POST',path:'/v1/batches',summary:'提交已经用户逐项确认、已提交 Git 的花园登记包；本地待处理有名额即入队，不必等绯月空闲，满员返回 429',
@@ -30,7 +32,7 @@ const routes=[
   {method:'POST',path:'/v1/reminders/:id/retry',summary:'恢复 blocked 提醒并核对原登记，沿用原编号和正文，无需提交正文。',response:'Reminder'},
 ];
 export function infoGuide(address,repo=gardenRepo){
-  return {version:6,baseURL:address,firstUse:firstUse(repo),auth:'除本说明外均使用 Authorization: Bearer <token>；从已独立核实的 instance.profile 下读取 '+tokenFile+'，勿打印或提交令牌。',
+  return {version:7,baseURL:address,firstUse:firstUse(repo,address),auth:'除本说明外均使用 Authorization: Bearer <token>；从已独立核实的 instance.profile 下读取 '+tokenFile+'，勿打印或提交令牌。',
     contentType:'application/json',routes:routes.map(r=>({auth:true,...r})),
     skillDirectory:{method:'GET',path:'/v1/skills',auth:true,usage:'技能描述和调用示例来自总纲。workflow 的 entry、steps、exit 表示当前对话转录流程。按每项 call 说明通过相应入口调用。'},
     prepare:'依次执行 firstUse.commands 中的 sync、inspect、prepare，使用对应 cwd 与 args。制单只在调用侧生成 registration.json、逐步 SQL 和 reviewHash。先向用户展示归属、前后值、版本、实际结果和无需更新项，取得明确确认；内容改变须重新展示。',
@@ -101,6 +103,14 @@ export async function openLocalREST({profile,pool,listenPort=port,repo=gardenRep
         return reply(200,directory);
       }
       const id=parts[3];
+      if(parts[2]==='registration-turns'){
+        const {draftHash,reviewHash,poll,continues,unsealedOnly}=await bodyOf(req);
+        if(typeof draftHash!=='string'||!(/^[a-f0-9]{64}$/).test(draftHash)||
+          (reviewHash!==undefined&&(typeof reviewHash!=='string'||!(/^[a-f0-9]{64}$/).test(reviewHash))))fail(400,'需要有效草案或清单摘要');
+        if(continues!==undefined&&(typeof continues!=='string'||!(/^[a-f0-9]{64}$/).test(continues)))fail(400,'续办摘要无效');
+        const turn=parts[4]==='cancel'?pool.cancelTurn(id,draftHash,continues,unsealedOnly===true):pool.claimTurn(id,draftHash,reviewHash,poll===true,continues);
+        return reply(turn.state==='waiting'?202:200,turn);
+      }
       if(parts[2]==='reminders'){
         if(!id){
           const result=pool.submitReminder(reminderInput(await bodyOf(req)));

@@ -24,6 +24,7 @@ test('独立调用方仅凭地址与更新描述完成定位、预览、确认�
     INSERT INTO garden_flower(id,project_id,name,type,created_at) VALUES(5,17,'绯月（桌面精灵）','service','2026-01-01'),(93,88,'绯月（桌面精灵）','service','2026-01-01');
     INSERT INTO garden_deploy VALUES(7,'2026-01-02T00:00:00Z');
     INSERT INTO garden_deploy_item VALUES(6,7,88,93,'绯月（桌面精灵）','先前部署','0.0','1.0');`);
+  db.exec(readFileSync(join(gardenRepo,'migrations/0034_garden_release_tenths.sql'),'utf8'));
   const model='src/features/garden';
   mkdirSync(join(repo,model),{recursive:true});
   for(const file of ['store.mjs','model.mjs'])cpSync(join(gardenRepo,model,file),join(repo,model,file));
@@ -56,7 +57,7 @@ test('独立调用方仅凭地址与更新描述完成定位、预览、确认�
   assert.ok(plan.steps.every(s=>s.scope.projects[0].id===88&&s.scope.flowers[0].id===93));
   assert.ok(plan.steps.flatMap(s=>s.changes).every(c=>c.before===null));
   const detail=plan.steps[1].changes[1].after;
-  assert.equal(detail.version_before,'1.1');assert.match(detail.version_after,/^2\./);
+  assert.equal(detail.version_before,'1.0');assert.equal(detail.version_after,'1.1');
   assert.equal(plan.result,intent.result);
   const result=await run('confirmed',receipt.reviewHash);
   assert.equal(writes,2);assert.equal(result.steps.length,2);
