@@ -1,5 +1,5 @@
-// 独立发送给浏览器的模块源码，保留正则和换行转义，避免依赖 Worker 打包器的作用域。
-export const memoryScript=String.raw`
+// 作为同源模块资源返回，保持 CSP 下无内联脚本。
+export function memoryReader(){
   const el=id=>document.getElementById(id);
   const node=(tag,text,cls)=>{
     const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;
@@ -18,84 +18,27 @@ export const memoryScript=String.raw`
   function failed(container,error,retry){
     container.replaceChildren(node('p',error.message||'读取失败。','empty'),button('重试',retry));
   }
-  function showOriginal(p,text,r,kind,id){
-    const re=/〔附件原文 ([a-f0-9]{32})〕/gu;
-    let pos=0;
-    p.textContent='';
-    for(const match of text.matchAll(re)){
-      p.append(text.slice(pos,match.index));pos=match.index+match[0].length;
-      const index=r.automaticTxt?.ids?.indexOf(match[1])??-1;
-      if(index>=0){
-        const link=node('a','查看原文 '+(index+1)+' · 本条记录.txt');
-        link.href=base+kind+'/'+encodeURIComponent(id)+'/original';link.target='_blank';link.rel='noopener';p.append(link);
-      }
-    }
-    p.append(text.slice(pos));return p;
-  }
-  function showTxtFiles(container,r,kind,id){
-    if(!r.txtFiles?.length)return;
-    const list=node('ul',null,'txt-files');list.setAttribute('aria-label','已附加的 TXT 文件');
-    for(const file of r.txtFiles){
-      const item=node('li'),link=node('a',file.name);
-      link.href=base+kind+'/'+encodeURIComponent(id)+'/txt?file='+encodeURIComponent(file.id);
-      link.target='_blank';link.rel='noopener';item.append(link);list.append(item);
-    }
-    container.append(list);
-  }
   function renderDiary(container,r,focus){
     container.append(node('h2',r.day+' · 第 '+r.part+' 篇'),node('p',r.summary),node('div',[r.mood,r.weather,...r.tags.map(t=>'@#'+t)].join('　'),'badges'));
-    const sections=new Map();
-    for(const paragraph of r.body.split(/\n\s*\n/)){
-      const lines=paragraph.split('\n').filter(Boolean);
-      const label=/^【(你的日记|花园部署|当日消费)】$/.exec(lines[0])?.[1];
-      let parent=container;
-      if(label){
-        lines.shift();
-        if(!lines.some(line=>line.trim()))continue;
-        parent=sections.get(label);
-        if(!parent){parent=node('section');parent.append(node('h3',label));sections.set(label,parent);container.append(parent);}
-      }
-      for(const line of lines)parent.append(showOriginal(node('p',null,line.startsWith('绯月私语：')?'thought':'exchange'),line,r,'diaries',r.day+'.'+r.part));
-    }
+    for(const line of r.body.split('\n').filter(Boolean))container.append(node('p',line,line.startsWith('绯月私语：')?'thought':'exchange'));
     for(const thread of r.threads){
       const block=node('section',null,'open-thread'+(thread.no===focus?' thread-focus':''));
       block.append(node('b','悬念 '+thread.no+' · '+(thread.resolved?'已解':'未解')+(thread.asked?' · 已问':'')),node('p',thread.text));
       container.append(block);
       if(thread.no===focus)requestAnimationFrame(()=>block.scrollIntoView({block:'nearest'}));
     }
-    showTxtFiles(container,r,'diaries',r.day+'.'+r.part);
-  }
-  const sourceName=s=>({curiosity:'此刻所想',audit:'手记质问',diary:'悬念',paylog:'消费',nag:'唠叨追问'})[s]??s;
-  function renderNag(container,r,id,linkOrigin=true){
-    container.append(node('h2',r.title),node('p',[r.status,r.reason,r.stats].filter(Boolean).join('\n')));
-    if(linkOrigin&&r.source!=='curiosity')container.append(button(r.source==='audit'?'查看主篇 →':'查看原记录 →',()=>origin(r)));
-    if(r.source==='audit'){
-      container.append(node('h3','手记原文'),...r.refs.map((v,i)=>node('p',(i+1)+'. '+v.page+'　「'+v.quote+'」')),
-        node('h3','矛盾点'),...r.points.map((v,i)=>node('p',(i+1)+'. '+v)));
-    }else container.append(node('h3','开口的时候'),node('p',[r.before,r.beforeEvaluation].filter(Boolean).join(' · ')));
-    for(const line of r.talk)container.append(showOriginal(node('p',null,'exchange'),stamp(line.at)+'　'+line.who+'\n'+line.text,r,'nags',id));
-    if(r.afterEvaluation)container.append(node('h3','听完以后'),node('p',r.mood+' · '+r.afterEvaluation));
-    showTxtFiles(container,r,'nags',id);
   }
   async function origin(n){
     const token=++originToken,box=el('originBody'),dialog=el('origin');
     if(!dialog.open)dialog.showModal();
     box.replaceChildren(node('p','正在查找原记录…'));
     try{
-      if(n.source==='audit'){
-        const page=await fetchJson(base+'diaries/'+encodeURIComponent(n.source_id));
-        if(token===originToken){box.replaceChildren();renderDiary(box,page);}return;
-      }
       if(n.source==='diary'){
         const [id,sequence]=n.source_id.split('/');
         const r=await fetchJson(base+'diaries/'+encodeURIComponent(id));
         if(token!==originToken)return;
         if(!r.threads.some(t=>t.no===Number(sequence)))throw Error('原篇中找不到这个悬念序号。');
         box.replaceChildren();renderDiary(box,r,Number(sequence));return;
-      }
-      if(n.source==='nag'){
-        const id=n.source_id,r=await fetchJson(base+'nags/'+encodeURIComponent(id));
-        if(token===originToken){box.replaceChildren();renderNag(box,r,id,false);}return;
       }
       // 优先定位当时的消费日。若账目后来改期，按同一个源编号查当前快照。
       for(const sourceDay of [...new Set([n.source_day,''])]){
@@ -122,13 +65,16 @@ export const memoryScript=String.raw`
   }
   async function read(id,kind){
     const token=++readToken,container=el('article'),dialog=el('reader');
-    el('readerLabel').textContent=kind==='diaries'?'绯月的日记':'绯月的小唠叨';
+    el('readerLabel').textContent=kind==='diaries'?'绯月的日记':'念叨记录';
     if(!dialog.open)dialog.showModal();container.replaceChildren(node('p','正在翻页…'));
     try{
       const r=await fetchJson(base+kind+'/'+encodeURIComponent(id));
       if(token!==readToken)return;
       container.replaceChildren();if(kind==='diaries'){renderDiary(container,r);return;}
-      renderNag(container,r,id);
+      container.append(node('h2',r.title),node('p',[r.status,r.reason,r.stats].filter(Boolean).join('\n')),button('查看原记录 →',()=>origin(r)),
+        node('h3','开口的时候'),node('p',[r.before,r.beforeEvaluation].filter(Boolean).join(' · ')));
+      for(const line of r.talk)container.append(node('p',stamp(line.at)+'　'+line.who+'\n'+line.text,'exchange'));
+      if(r.afterEvaluation)container.append(node('h3','听完以后'),node('p',r.mood+' · '+r.afterEvaluation));
     }catch(error){if(token===readToken)failed(container,error,()=>read(id,kind));}
   }
   let month=localDay(new Date().toISOString()).slice(0,7),knownDays=new Set();
@@ -157,16 +103,16 @@ export const memoryScript=String.raw`
       const data=await fetchJson(base+kind+'?'+params);
       if(token!==listToken)return;
       rows.replaceChildren();total=data.total;knownDays=new Set(data.items.map(r=>diary?r.day:localDay(r.created_at)));calendar();
-      const choices=diary?[...new Set([filter,...data.items.flatMap(r=>r.tags)].filter(Boolean))]:['paylog','diary','audit','nag','curiosity'];
-      el('filter').replaceChildren(new Option(diary?'全部标签':'全部来源',''),...choices.map(v=>new Option(diary?v:sourceName(v),v)));
+      const choices=diary?[...new Set([filter,...data.items.flatMap(r=>r.tags)].filter(Boolean))]:['paylog','diary'];
+      el('filter').replaceChildren(new Option(diary?'全部标签':'全部来源',''),...choices.map(v=>new Option(diary?v:v==='paylog'?'消费':'悬念',v)));
       el('filter').value=filter;
-      el('archiveSummary').textContent=diary?'日记':'小唠叨';
-      el('listCaption').textContent=(day?day+' · ':'')+total+(diary?' 篇日记':' 条小唠叨');
+      el('archiveSummary').textContent=diary?'日记档案':'念叨档案';
+      el('listCaption').textContent=(day?day+' · ':'')+total+(diary?' 篇日记':' 条念叨');
       for(const r of data.items){
         const date=diary?r.day:localDay(r.created_at),id=diary?r.day+'.'+r.part:r.id;
         const entry=node('a',null,'entry');entry.href='#'+(diary?'diary':'nag');entry.onclick=e=>{e.preventDefault();read(id,kind);};
         const stampNode=node('span',null,'stamp');stampNode.append(node('b',date.slice(-2)),node('small',date.slice(5,7)+' 月'));
-        const content=node('span');content.append(node('strong',diary?r.summary:r.title),node('span',diary?[date,'第 '+r.part+' 篇',r.mood,r.weather].join(' · '):[stamp(r.created_at),sourceName(r.source),r.status,r.mood].join(' · '),'meta'),node('span',diary?r.tags.map(t=>'@#'+t).join(' '):r.reason,'synopsis'));
+        const content=node('span');content.append(node('strong',diary?r.summary:r.title),node('span',diary?[date,'第 '+r.part+' 篇',r.mood,r.weather].join(' · '):[stamp(r.created_at),r.source==='diary'?'悬念':'消费',r.status,r.mood].join(' · '),'meta'),node('span',diary?r.tags.map(t=>'@#'+t).join(' '):r.reason,'synopsis'));
         entry.append(stampNode,content,node('span','›','chevron'));rows.append(entry);
       }
       if(!total)rows.append(node('p','没有找到相符的记录。','empty'));
@@ -175,8 +121,7 @@ export const memoryScript=String.raw`
     }catch(error){if(token===listToken)failed(rows,error,list);}
   }
   for(const b of document.querySelectorAll('[data-dismiss]'))b.onclick=()=>b.closest('dialog').close();
-  el('origin').onclose=()=>{if(!el('origin').open)++originToken;};
-  el('reader').onclose=()=>{if(!el('reader').open)++readToken;};
+  el('origin').onclose=()=>++originToken;el('reader').onclose=()=>++readToken;
   function changeDate(value){day=value;if(day)month=day.slice(0,7);el('mobileDate').value=day;page=0;list();}
   el('mobileDate').onchange=e=>changeDate(e.target.value);
   el('clearDate').onclick=()=>changeDate('');
@@ -185,4 +130,4 @@ export const memoryScript=String.raw`
   el('prev').onclick=()=>{if(page>0){page--;list();}};el('next').onclick=()=>{if((page+1)*20<total){page++;list();}};
   window.addEventListener('hashchange',()=>{filter='';el('search').value='';changeDate('');});
   list();
-`;
+}

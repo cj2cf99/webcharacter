@@ -3,13 +3,43 @@ import {execFile} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
 import {conversationRoute,registrationTypes} from './conversation-routing.mjs';
+import {warnLiveUpdate} from './live-files.mjs';
 import menu from './menu-layout.json' with {type:'json'};
 
 const execute=promisify(execFile);
 const catalog=fileURLToPath(new URL('../skills/catalog.py',import.meta.url));
+let skillProfile;
+export function setInteractionSkillProfile(profile){skillProfile=profile;}
+
+async function readCatalog(args){
+  const {stdout}=await execute('python',['-B',catalog,...args],{
+    windowsHide:true,encoding:'utf8',timeout:5000,maxBuffer:4*1024*1024
+  });
+  const selected=JSON.parse(stdout);
+  for(const warning of selected.warnings??[])warnLiveUpdate('绯月技能',warning);
+  return selected;
+}
+
 export async function readInteractionSkill(hint,group='hints'){
-  const {stdout}=await execute('python',['-B',catalog,hint,group],{windowsHide:true,encoding:'utf8',timeout:5000});
-  return JSON.parse(stdout);
+  return readCatalog([hint,group,...(skillProfile?['--profile',skillProfile]:[])]);
+}
+
+export function isSkillDirectoryQuestion(text){
+  return /^(?:(?:绯月|你)[，,\s]*)?(?:(?:查看|列出|显示)?(?:绯月的?)?技能(?:目录|列表)|(?:现在)?能做哪些事|(?:现在)?能做什么)[。？！?!]*$/u.test(text.trim());
+}
+
+export function readSkillDirectory(profile){
+  return readCatalog(['external','--profile',profile,'directory']);
+}
+
+export async function listInteractionSkills(profile){
+  const {skills}=await readSkillDirectory(profile);
+  const stepNames={organize:'整理',classify:'按模板拟稿',review:'按条件复核'};
+  const active=skills.filter(skill=>skill.source==='external').map(({name,version})=>name+' · '+version);
+  const transcription=skills.find(skill=>skill.id==='conversation-transcription');
+  return '已登记技能：'+skills.map(skill=>skill.name).join('、')+'。\n'+transcription.name+'：'+
+    transcription.workflow.steps.map(step=>stepNames[step.run]).join(' → ')+' → 交回待确认。'+
+    (active.length?'\n外置版本：'+active.join('、')+'。':'');
 }
 const menuPaths=new Map();
 function index(items,path=[]){

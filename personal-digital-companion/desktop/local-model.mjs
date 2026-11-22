@@ -1,7 +1,7 @@
 import {stat} from 'node:fs/promises';
 import {basename,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {chatTotalMs} from './chat-budget.mjs';
+import {chatTotalMs,memoryInferenceMs} from './chat-budget.mjs';
 
 export const LOCAL_MODEL_FILE = 'Qwen3.5-0.8B-Q4_K_M.gguf';
 const entry = fileURLToPath(new URL('./local-model-process.mjs', import.meta.url));
@@ -11,7 +11,8 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
   let child, loading, finishLoad, request, loadTimer, exited;
   const write = (stage, start, error, skill, timing) => {
     void log?.({direction:'local',route:'本地 AI',stage,model:modelName,duration_ms:Math.round(performance.now()-start),error,
-      ...timing,...(skill?.name==='memory-refinement'&&skill.stage?{refinement_phase:skill.stage}:{}),
+      ...(skill?.aiAttemptId?{ai_attempt_id:skill.aiAttemptId}:{}),
+      ...timing,...(skill?.stage?{ai_phase:skill.stage}:{}),...(skill?.name==='memory-refinement'&&skill.stage?{refinement_phase:skill.stage}:{}),
       ...(skill?.name&&skill.version?{skill:skill.name,skill_version:skill.version}:{})});
   };
 
@@ -70,7 +71,7 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
 
   async function analyze(text, {hint, previous, signal, onProgress, imageSkill,skillInstruction,replyMode,reviewLimit=3,revision} = {}) {
     const started = performance.now();
-    const budgetMs = hint==='personalityMemory'||skillInstruction?.name==='conversation-transcription'?120000:['image-plan','serverTask'].includes(hint) ? Math.max(16000,intentBudgetMs) : ['auto','direct','interactionWork'].includes(hint) ? chatTotalMs : intentBudgetMs;
+    const budgetMs = hint==='personalityMemory'||skillInstruction?.name==='conversation-transcription'?memoryInferenceMs:['image-plan','serverTask'].includes(hint) ? Math.max(16000,intentBudgetMs) : ['auto','direct','interactionWork'].includes(hint) ? chatTotalMs : intentBudgetMs;
     const deadline = AbortSignal.timeout(budgetMs);
     const wait = signal ? AbortSignal.any([signal,deadline]) : deadline;
     signal?.throwIfAborted();
@@ -89,7 +90,7 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
     else result = await new Promise(resolve => {
       const id = crypto.randomUUID();
       const worker = child;
-      const retainAfterCancel = skillInstruction?.name === 'memory-refinement';
+      const retainAfterCancel = skillInstruction?.name === 'memory-refinement' || Boolean(skillInstruction?.aiTier);
       let cancelTimer;
       const finish = value => {
         if (request?.id !== id) return;

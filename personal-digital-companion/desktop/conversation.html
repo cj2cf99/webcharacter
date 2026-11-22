@@ -1,6 +1,14 @@
 <!doctype html><html lang="zh-CN" class="fy-panel"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:"><title>绯月 · 本地复盘</title><link rel="stylesheet" href="feiyue-surface.css"><link rel="stylesheet" href="conversation.css"></head>
 <body><header class="fy-titlebar"><div class="fy-caption"><h1>本地复盘</h1></div><button id="refreshLog" class="fy-icon" type="button" title="刷新" aria-label="刷新" hidden>↻</button></header>
-<nav class="fy-bar"><div class="fy-seg" role="group" aria-label="记录类型"><button id="chat" data-icon="💬" title="对话"><span>对话</span></button><button id="tasks" data-icon="🧩" title="任务复盘"><span>任务复盘</span></button><button id="checks" data-icon="⏱" title="提醒检查"><span>提醒检查</span></button><button id="notices" data-icon="🔔" title="提醒"><span>提醒</span></button><button id="pending" data-icon="✋" title="待确认"><span>待确认</span></button><button id="log" data-icon="📜" title="任务日志"><span>任务日志</span></button></div><label class="day" title="东京日期"><input type="date" id="day" aria-label="东京日期"></label></nav>
+<nav class="fy-bar"><div class="fy-seg" role="group" aria-label="记录类型"><button id="chat" data-icon="💬" title="对话"><span>对话</span></button><button id="tasks" data-icon="🧩" title="任务复盘"><span>任务复盘</span></button><button id="checks" data-icon="⏱" title="提醒检查"><span>提醒检查</span></button><button id="notices" data-icon="🔔" title="提醒"><span>提醒</span></button><button id="pending" data-icon="✋" title="待确认业务"><span>待确认业务</span></button><button id="log" data-icon="📜" title="任务日志"><span>任务日志</span></button></div><label class="day" title="东京日期"><input type="date" id="day" aria-label="东京日期"></label></nav>
+<nav id="threadTabs" class="fy-bar" aria-label="对话分类" hidden>
+  <div class="fy-seg" role="group" aria-label="对话范围">
+    <button data-category="questions">待确认 <b id="questionCount"></b></button>
+    <button data-category="active">进行中的对话 <b id="activeCount"></b></button>
+    <button data-category="history">对话历史</button>
+  </div>
+  <button id="newThread" class="fy-icon" type="button" title="新对话" aria-label="新对话">＋</button>
+</nav>
 <main class="fy-scroll">
 <section id="schedule" hidden><span class="pulse" aria-hidden="true"></span><div><strong id="nextCheck"></strong> <span id="remaining" class="fy-chip" data-tone="accent"></span><small id="checkState"></small></div></section>
 <section id="noticeControls" hidden><div class="fy-seg" role="group" aria-label="提醒筛选"><button data-filter="unread">未读</button><button data-filter="all">全部</button><button data-filter="read">已读</button></div><button id="readAll" type="button">✓ 全部已读</button></section>

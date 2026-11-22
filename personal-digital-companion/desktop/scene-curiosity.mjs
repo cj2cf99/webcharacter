@@ -55,10 +55,11 @@ export function createSceneCuriosity({profile,memory,diary,model,vision,electron
   async function deliver(s,signal){
     if(!eligible()||closed)return {detail:'等空闲时再继续'};
     if(s.action==='ask'&&queueQuestion){
-      if(!queueQuestion(s))return {detail:'场景质问等待加入待确认'};
+      const outcome=await queueQuestion(s,signal);
+      if(!outcome)return {detail:'场景质问等待加入待确认'};
       await write(recent,{text:s.text,reply:'',at:s.at});
       await optional(unlink(pending));
-      return {detail:'场景质问已加入待确认'};
+      return {detail:outcome==='resolved'?'场景疑点已用本机知识核对':'场景质问已加入待确认'};
     }
     if(s.drawing&&!s.drawn){startDrawing(s);return {detail:'后台绘图中'};}
     if(s.drawingFailed&&!s.frames.length&&s.action==='share')s.action='quiet';

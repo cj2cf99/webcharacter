@@ -29,6 +29,19 @@ test('自动输入区分登记、询问和显式搜索，登记中的搜索文�
   assert.deepEqual(searchHint('解释截图里的问题','截图中的私密信息'),{});
 });
 
+test('X 搜帖复用公开搜索，额度用完时直接结束',async()=>{
+  for(const text of ['搜 X：京都','在 X 上搜索京都','帮我查推特帖子：京都']){
+    assert.deepEqual(conversationRoute(text),{kind:'search',query:'京都',research:'x'});
+  }
+  assert.equal(conversationRoute('搜索 Xcode').research,undefined);
+  const result=await searchPublicWeb('京都',new AbortController().signal,async ({mode})=>{
+    assert.equal(mode,'x');throw Error('TAVILY_QUOTA');
+  },{mode:'x'});
+  assert.equal(result.code,'TAVILY_QUOTA');
+  assert.equal(result.state,'error');
+  assert.equal(result.sources,undefined);
+});
+
 test('公开搜索只读固定搜索页，拒绝不明确的目标并保留实际链接',async()=>{
   const calls=[],signal=new AbortController().signal;
   const reader=async request=>{
