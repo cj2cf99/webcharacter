@@ -263,9 +263,14 @@ async function test(){
     await testUi(review,"document.querySelector('#apply').click()");
     await until(review,"document.querySelector('#report').textContent.includes('1.5 小时')");
     assert.deepEqual(submissions,[{reminderId:71,dispatchId:'d71',today,version:'plan-version',actualHours:1.5}]);
-    await until(review,"document.querySelector('[data-group=planner]')?.textContent.includes('主站已登记 1.5 小时')");
+    await until(review,"!document.querySelector('#refresh').disabled && !document.querySelector('[data-group=planner]')");
+    assert.equal(await testUi(review,"Boolean(document.querySelector('[data-group=today] li'))"),true);
     await testUi(review,"document.querySelector('#refresh').click()");
-    await until(review,"!document.querySelector('#refresh').disabled && document.querySelector('[data-group=planner]')?.textContent.includes('主站已登记 1.5 小时')");
+    await until(review,"!document.querySelector('#refresh').disabled && !document.querySelector('[data-group=planner]')");
+    items.length=0;
+    review.panel.destroy();
+    await review.open();
+    await until(review,"document.querySelector('#status').textContent==='今天没有到期事项。' && !document.querySelector('#groups section')");
     writeFileSync(join(out,'planner-hours-saved.png'),(await review.panel.webContents.capturePage()).toPNG());
     await history.open(null,'checks');
     await until(history,"document.querySelector('#nextCheck').textContent.includes('下一轮事项轮询') && document.querySelector('#turns').textContent.includes('第 2 次')");

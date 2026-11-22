@@ -35,10 +35,6 @@ function row(item) {
   info.append(node('strong', item.title),
     node('div', [deadline(item.deadline), item.plannerWork?'计划 '+item.plannerWork.plannedHours+' 小时':item.reason, item.recurrence && '循环'].filter(Boolean).join(' · '), 'meta'));
   line.append(info);
-  if(item.plannerRecord){
-    info.append(node('div','主站已登记 '+item.plannerRecord.actualHours+' 小时','meta'));
-    return line;
-  }
   if(item.plannerWork?.dispatchId||item.resolvePlannerWork){
     const field=node('label','','hours-field'), input=node('input');
     input.type='number';input.min='0';input.max='24';input.step='any';input.inputMode='decimal';
@@ -100,7 +96,6 @@ function render(data) {
   groups.replaceChildren();
   for (const [group, label] of Object.entries(labels)) {
     const items = data.items.filter(item => (item.plannerWork?.dispatchId||item.reason==='由长期计划管理'?'planner':item.group) === group);
-    if(group==='planner')items.push(...(data.recordedHours??[]));
     if (!items.length) continue;
     const section = node('section'), list = node('ul');
     section.dataset.group = group;
@@ -108,7 +103,7 @@ function render(data) {
     section.append(node('h2', label + ' ' + items.length), list);
     groups.append(section);
   }
-  status.textContent = data.items.length||data.recordedHours?.length ? '' : '今天没有到期事项。';
+  status.textContent = data.items.length ? '' : '今天没有到期事项。';
   status.className = status.textContent ? 'fy-empty' : 'fy-toast';
   renderReport(data.report);
 }

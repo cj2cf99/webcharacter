@@ -1212,3 +1212,18 @@ Windows 目标为 `G:/selftool/.release-feiyue-handbook-desktop-20261120/persona
 Git 留痕：本机独立发布分支 codex/feiyue-drag-cycle-20261122 的提交为 2eff23471f8273cebcc4183ce9b46ae415db340f。自动审批在运行 git push 前拒绝向 GitHub 的 cj2cf99/webcharacter 发送本次素材、代码与发布记录，要求该具体目的地与内容的明确外传授权。当前仅本机提交，远端未同步。
 
 Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循环动画、制作脚本及发布记录。codex/feiyue-drag-cycle-20261122 已推送，git ls-remote 回读 2eff23471f8273cebcc4183ce9b46ae415db340f，与本机发布提交一致。
+
+## 2026-11-22 JST · Windows 今日任务隐藏已登记长期计划
+
+**原始需求与验收。** 用户原话「长期计划已经登记当天投入的情况下，应该视为当天已经完成，不需要再显示了」。桌面以主站返回的东京业务日待办为准。成功登记、刷新或重开后该事项从待办及计数移除。仍有待办时正常列出，只剩已登记记录时显示「今天没有到期事项。」操作回执和主站执行详情继续提供工时。
+
+**待发布目标和基线。** Windows 正式绯月，应用目录 G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion。预检主进程 PID 21228，启动于 2026-11-22 16:28:50 JST，实际应用参数指向该安装目录的 desktop，共用开发区 Electron。安装树 Git 基线 39fd098e40ebf7c2c82dd5a6f9944ae98055566e，实际安装前像以逐文件散列为准。开发来源 WebCharacter/personal-digital-companion，Git 基线 8dcb4c81bffc3c0a93d94039f399777f26a85aa4 加已校验的 reminder-review-ui.mjs 工作区差异。使用 git diff --no-index 对比安装前像与开发源码，构建副本和候选逐文件核对。桌面快捷方式存在，当前探查未取得有效的快捷方式参数，登录启动入口尚未确认。实际切换前须核对可恢复的启动命令、资料目录和在途任务。
+
+**文件与行为。** 只替换 desktop/reminder-review-ui.mjs 和 output/desktop-bundle/reminder-review-ui.mjs。两项 SHA-256 均从 29ad1bec5e0f9bbb6a01dc6c63c2437a5711d1195953ec108c6b880c71cbf1d7 变为 3e7832ea5c0163c32e53a254f5c30a80ac153af7afdb9159eaaf99712e3aa49d。旧界面将 recordedHours 追加到计划组并参与空状态判断。新界面只渲染待办 items，沿用原操作回执。用户资料、数据库迁移、历史数据回填、配置、协议、依赖和 Worker 部署影响均无。安装候选及隔离验证入口在 G:/selftool/WebCharacter/personal-digital-companion/output/today-planner-release-20261122，候选中的其他文件只作验证支撑。来源仓库对应回归为 tools/test-panel-titlebar-electron.mjs，需求与复核见 docs/REQUIREMENT_CHANGES.md 和 docs/DEVELOPMENT.md。
+
+**实测与风险。** 在来源项目执行 node tools/build-desktop.mjs、node --test agent/tests/reminder-review.test.mjs agent/tests/reminder-review-history.test.mjs（11 项通过）、node --test 'agent/tests/*.test.mjs'（隔离回环可用时 419 通过、3 跳过）、Electron tools/run-electron-check.mjs tools/test-panel-titlebar-electron.mjs、浅深色 tools/capture-menu-panels-electron.mjs 和消息框回归，均通过。实际基线候选执行 Electron tools/run-electron-check.mjs output/today-planner-release-20261122/check-candidate.mjs，通过 0.1 小时提交、保留成功回执、其他待办、刷新和重开空状态。额外问答气泡回归出现浅色 300 像素布局断言失败及等待回复超时，问答文件无发布差异。审核请重点检查只读 items、组计数、空状态、原回执和两个运行副本同源。第三方独立审核未执行。
+
+**发布与恢复。** 用户已明确本次不用登记花园。正式安装与受控重启待本次确认。获准后复核原入口、资料目录、在途工作及两项散列，备份旧文件，等待旧进程正常退出后替换清单两项，从已核实的原入口启动。核对新 PID、应用和资料目录、两项散列与本机 REST 就绪，使用隔离资料复验实际安装文件。启动或验证失败时正常退出新进程，从备份恢复两项，核对原散列并从原入口启动。正式版实际数据效果待安装后用户确认。继补实际版本、时间、核验结果和 Git 提交及推送状态。本次尚未安装、提交或推送。
+
+用户回复「安装」，明确批准了此次安装及受控重启。
+**实装结果。** 2026-11-22 19:05:32 JST 已完成 Windows 正式安装，版本标识 3e7832ea5c01。旧 PID 21228 正常退出，新 PID 25416 从原入口启动。两份安装脚本 SHA-256 均与候选一致，回环 REST 实例、快捷方式、登录项、原资料目录已核对。原轮询设置一致，本机任务库快速完整性检查通过，历史批次前后均为 19 条。正式安装文件用临时资料执行 check-installed.mjs，通过模拟 0.1 小时登记、成功回执、其他待办、刷新和重开空状态。用户真实列表效果待用户查看。本次未登记花园，无云端部署。旧脚本备份保留在候选目录 install-backup-20261122-190521。
