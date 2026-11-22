@@ -1370,3 +1370,5 @@ Git 同步补记：用户已明确授权向 cj2cf99/webcharacter 推送拖拽循
 **新版花园待确认。** 线上结构同步新增 0 项。正式归属为网页角色组件 #16 → 绯月（桌面精灵）#61。以修订 152 演算本次发布成功记录 #78 和明细 #156，花园版本 27.1 → 28.0，修订 152 → 153，记录实际安装时刻 2026-11-23 01:12:09 JST。工作区草案 `G:/selftool/WebCharacter/work/feiyue-idle-release/garden-draft/registration.json`。批次 `feiyue-idle-scheduling-20261123`，审核摘要 `c84e8751cc3d34d9f9a27540ae34afd20f03c75361afdad47dd7d54a45e35357`。用户确认按此清单登记，拟先提交 SQL 后通过正式绯月 REST v5 执行并独立回读。
 
 **新版花园回执。** 正式绯月 REST 执行单批次 feiyue-idle-scheduling-20261123，先提交 SQL f9a4db2fe2daa9008436521f60b33af65be6946d。01:15:49 JST 完成，唯一一步已核对。独立回读部署 #78、明细 #156、版本 27.1 → 28.0、修订 153，发布标记唯一。01:16:24 JST 签收并回读。完整回执 G:/cloudflare/myapp/database/changes/feiyue-idle-scheduling-20261123/execution-receipt.json。主项目 844 项测试和 Wrangler dry-run 通过。三项留痕已同步至独立远端分支 codex/garden-feiyue-idle-scheduling-20261123，核对提交 8e4c236174360e56cba690934d78322bbd3f4bb4。
+
+**来源 Git 同步。** 调度修改、测试、实际六项清单和验收记录已提交至 6dc09a3c38ba9f14c76527ea28cb8db02a8da33d，已推送并回读 origin/codex/workspace-checkpoint-20261120。当前实装清单为 f011f0687aec。
