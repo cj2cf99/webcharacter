@@ -1,0 +1,11 @@
+{
+  "installedAt": "2026-11-23T09:59:32.8581757+09:00",
+  "version": "124b38f8de65",
+  "manifest": "124b38f8de652d042aef538d5011326a80168b02e10ef35cffb966480c4edebd",
+  "files": 2,
+  "oldPid": 15628,
+  "newPid": 27852,
+  "startedJst": "2026-11-23T09:59:32.4440000+09:00",
+  "databaseBackup": "纯代码发布，无业务库变更",
+  "userAcceptance": "待用户复验"
+}

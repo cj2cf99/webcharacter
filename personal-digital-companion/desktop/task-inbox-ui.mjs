@@ -421,4 +421,3 @@ byId('refresh').addEventListener('click',async()=>{
 for(const name of Object.keys(lists))byId(name+'-more').addEventListener('click',()=>void loadList(name,true));
 void refresh();
 api.onTranscript(id=>{select('local');void showTranscript(id).catch(error=>putNotice(error.message));});
-setInterval(()=>{if(view==='local'&&!document.hidden)void refresh();},1500);

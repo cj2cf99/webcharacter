@@ -1,0 +1,12 @@
+[
+  {
+    "path": "desktop/task-inbox-ui.mjs",
+    "before": "12b2391869e366b3a8b963681058c50732860fbc496d8fb35f8620f7ac678f36",
+    "after": "f4ec74cdaff3a4148cbbfa8c3c44cda0f36204fcd096e7d7e7206f34db4f8375"
+  },
+  {
+    "path": "output/desktop-bundle/task-inbox-ui.mjs",
+    "before": "12b2391869e366b3a8b963681058c50732860fbc496d8fb35f8620f7ac678f36",
+    "after": "f4ec74cdaff3a4148cbbfa8c3c44cda0f36204fcd096e7d7e7206f34db4f8375"
+  }
+]

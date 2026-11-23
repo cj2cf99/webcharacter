@@ -74,8 +74,10 @@ async function test(){
   const review=attachReminderReview(runtime,{...common,flow});
   const created='2026-11-20T08:37:00Z';
   let cloudReads=0,claimed=false,inspected=null,failTasks=false,legacyTasks=false;
+  let transcriptState='empty';
   const detailReads=[];
   const inbox=attachTaskInbox(runtime,{...common,flow:{
+    transcripts:()=>[{id:'sample-transcript',state:transcriptState,at:created}],
     local:()=>[{name:'整理本周计划',attempt_count:1,started_at:created},
       {name:'绯月更新登记',started_at:created,batch:{state:'running',steps:[{label:'功能改善',state:'verified'},{label:'登记版本',state:'applying'}]}},
       {name:'核对恢复现场',started_at:created,batch:{state:'running',steps:[{label:'核实目标',state:'checking'}]}}],
@@ -199,6 +201,16 @@ async function test(){
     }
     inbox.panel.setSize(550,440);
     await until(inbox,"document.querySelector('#local-items').textContent.includes('整理本周计划')");
+    await until(inbox,"document.querySelector('#transcript-items').textContent.includes('无登记候选')");
+    inbox.panel.setPosition(-6000,40);
+    inbox.panel.showInactive();
+    inbox.panel.setPosition(-6000,40);
+    await until(inbox,'!document.hidden');
+    transcriptState='done';
+    await wait(1750);
+    assert.match(await testUi(inbox,"document.querySelector('#transcript-items').textContent"),/无登记候选/);
+    await testUi(inbox,"document.querySelector('#refresh').click()");
+    await until(inbox,"document.querySelector('#transcript-items').textContent.includes('已登记')");
     assert.match(await testUi(inbox,"document.querySelector('#local-items').textContent"),/绯月更新登记.*1\/2.*功能改善 · 已核对.*登记版本 · 核对写入结果/);
     assert.match(await testUi(inbox,"document.querySelector('#local-items').textContent"),/核对恢复现场.*0\/1.*核实目标 · 核对基线/);
     assert.equal(cloudReads,0,'首屏只读取本机任务');

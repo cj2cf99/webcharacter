@@ -1,0 +1,14 @@
+--- a/desktop/task-inbox-ui.mjs
++++ b/desktop/task-inbox-ui.mjs
+@@ -421,4 +421,3 @@
+ for(const name of Object.keys(lists))byId(name+'-more').addEventListener('click',()=>void loadList(name,true));
+ void refresh();
+ api.onTranscript(id=>{select('local');void showTranscript(id).catch(error=>putNotice(error.message));});
+-setInterval(()=>{if(view==='local'&&!document.hidden)void refresh();},1500);
+--- a/output/desktop-bundle/task-inbox-ui.mjs
++++ b/output/desktop-bundle/task-inbox-ui.mjs
+@@ -421,4 +421,3 @@
+ for(const name of Object.keys(lists))byId(name+'-more').addEventListener('click',()=>void loadList(name,true));
+ void refresh();
+ api.onTranscript(id=>{select('local');void showTranscript(id).catch(error=>putNotice(error.message));});
+-setInterval(()=>{if(view==='local'&&!document.hidden)void refresh();},1500);
