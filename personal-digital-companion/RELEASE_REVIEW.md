@@ -2184,3 +2184,7 @@ Git 归档沿用发布分支 `codex/workspace-checkpoint-20261120`，留存精�
 用户于本次明确回复「部署」，授权同一审核范围内的 Worker 部署和桌宠安装。
 
 2026-11-24 00:17:00 JST，Cloudflare subscriptions-api 发布 a5de8e4d-7478-423c-8b3c-ad920425bbce，100% 流量，16 项绑定与基线一致。2026-11-24 00:17:34 JST，Windows 安装 9a049dd57887 并受控重启，PID 26860。37 项摘要、既有 8 个 SQLite 库完整性、任务和轮询状态、本机 REST v7 及技能目录通过后检。无业务库迁移。正式交互待用户复验，Access 受控线上效果待用户截图确认。花园批次 feiyue-ai-compose-20261124 待确认精确清单。
+
+### Git 发布回读
+
+桌面发布代码以 37 项原样载荷、精确差异、摘要和回执归档。WebCharacter 的 refs/heads/codex/workspace-checkpoint-20261120 已回读 6e6db631aab1cc2969a22005b1d2b937596d52ef。informationManage 的 refs/heads/codex/feiyue-ai-compose-20261124 已回读 6aa4adf8c45d2b9dcf029a05f71dc4cefb635fe8，包含已部署的 Worker 单文件兼容改动与回执。现有并行工作树改动未纳入。
