@@ -1,0 +1,26 @@
+{
+  "installedAt": "2026-11-24T00:17:34.7242055+09:00",
+  "version": "9a049dd57887",
+  "manifest": "9a049dd5788750c078048c7c84fabc94d0d47cfeaa7d500914f6dc86859994cb",
+  "files": 37,
+  "oldPid": 27696,
+  "newPid": 26860,
+  "startedJst": "2026-11-24T00:17:33.5950000+09:00",
+  "restVersion": 7,
+  "access": {
+    "skills": 24,
+    "unauthenticated": 401
+  },
+  "integrity": {
+    "emotions.sqlite": "ok",
+    "conversation-transcription.sqlite": "ok",
+    "local-batches.sqlite": "ok",
+    "tasks.sqlite": "ok",
+    "reminder-checks.sqlite": "ok",
+    "ai-requests.sqlite": "ok",
+    "personality-memory.sqlite": "ok",
+    "conversations.sqlite": "ok"
+  },
+  "existingStatePreserved": true,
+  "userAcceptance": "待用户复验"
+}

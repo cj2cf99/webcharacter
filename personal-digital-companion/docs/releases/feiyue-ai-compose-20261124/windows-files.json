@@ -1,0 +1,187 @@
+[
+  {
+    "path": "agent/assistant/memory-refinement.mjs",
+    "before": "7d336ae4697a981cad627f0c85db6bbf19a172d169082ba8b8cdb3640f0cac70",
+    "after": "6f94934eb97674c9858954ca73563520490b229b95aec3fd4d38de6b52afcdba"
+  },
+  {
+    "path": "desktop/ai-execution-round.mjs",
+    "before": "a57b022d33588d351ef602146535b55d2a55f7237dc8572cf2e6bb277affefa9",
+    "after": "767720a84c4e6e737d4e20fbbfbd6c60e448192f6234b77c01a29b064f74c96a"
+  },
+  {
+    "path": "desktop/ai-request-queue.mjs",
+    "before": "30fe13ea6d690e518f5aef5d79a9c87a9c72b40f3189029ec5996f952018c9a8",
+    "after": "e8180f4a538808140171b60ff04501d5990f5912169b7351fdd01d1fbc9f4199"
+  },
+  {
+    "path": "desktop/ai-workflow-model.mjs",
+    "before": "89522a2f0b33270549638da4a59a1dcf9da776f708e61785fc658ddb3c703994",
+    "after": "ad57d03a043611474617696cfb8b75b287efa4a40e2edad03ea283c93c66bee0"
+  },
+  {
+    "path": "desktop/balanced-local-model.mjs",
+    "before": "85c4fcfc30ed140958825ef90a5ea17d0faf3ba68807908cdcda60281a7212b8",
+    "after": "f7c04570e8dd304ccd2e57d6962f9fee4d745476fd3cfbc7bc936d580873f902"
+  },
+  {
+    "path": "desktop/chat-deepseek.mjs",
+    "before": null,
+    "after": "ae5cb0c59a8af1a790f68521ad146d7fad932fd25ed83e98b9e85d1e73f162c4"
+  },
+  {
+    "path": "desktop/conversation-details.mjs",
+    "before": "5280c333852391f5a22bad9790af5b3ea84198a12fff02a2add63858e194e1cd",
+    "after": "8523d11ddbb3361c78cbfe703cde12e4507e61afb7a1e42699dd58cd7581d3a9"
+  },
+  {
+    "path": "desktop/conversation-thread-replies.mjs",
+    "before": "4d682d8c376f394b329d0e6390367b44a122cca37da1cb78ee9dd5df546e6537",
+    "after": "6da92082bcef50fd95b30cdc88711410904f12ab35611789fc5c296e7b4fe968"
+  },
+  {
+    "path": "desktop/conversation-threads.mjs",
+    "before": "7caea55c226eba29532179eba7cf1451ffa74abf2791cda32855415a5d097066",
+    "after": "212729749930b9f18ff87514743fc4556a8880d23b38c8e82c0a1afd44c45f4a"
+  },
+  {
+    "path": "desktop/conversation-transcription.mjs",
+    "before": "bca89f96b719c4977fb95e8f331e6620482c0d8ef7b6083316510022c26fb21e",
+    "after": "ab967281a8b9be92ab6c4d8552fcc8348cbeb65aca91435aec708dd7ea187c85"
+  },
+  {
+    "path": "desktop/conversation-ui.mjs",
+    "before": "4a80632be030c4ba21031024c8f8060f8c11a345e0aaee897de277f464030fd4",
+    "after": "e298893ffb343e7906eea86f2d0fe43ae336b1f82ae632ecadfcbbb2655d2add"
+  },
+  {
+    "path": "desktop/deepseek-client.mjs",
+    "before": null,
+    "after": "792638af2f4cf7f275452efa4f96d4cb934787543268b4321ff5e7d5f3383a93"
+  },
+  {
+    "path": "desktop/diary-audit.mjs",
+    "before": "6733d68bd97babebff303d18276a9a5d025e6ea8ed2e3e18d86f12908843ed21",
+    "after": "9b771178767512cd81786bfc333b04db8868e798d1d1a9c369ea780e9d69fd15"
+  },
+  {
+    "path": "desktop/diary-deepseek.mjs",
+    "before": null,
+    "after": "4f18ed390439ad3784563c02829b3502a078b31aad27c82bf8fabd4c974e9e05"
+  },
+  {
+    "path": "desktop/diary-narration.mjs",
+    "before": null,
+    "after": "142d3500caa11fd9720c07bc1bb2008100a49c255fc7b9a6e359994265b38011"
+  },
+  {
+    "path": "desktop/emotion-initiative.mjs",
+    "before": "277e79ddee88d2ed8b9f2561adb268992168367ba93485db0618f8d2de9ac400",
+    "after": "c7ca243b3cfb8547edcdbbfb91b64230ec11cdeefb1e3df171795ca371a33947"
+  },
+  {
+    "path": "desktop/emotion-service.mjs",
+    "before": "9c53553f7ceda3782efd7aa0c2a713a4394857c7130b6dc286e93407c82060d3",
+    "after": "091d56837d6eafe9e00afe5786a3a63592f5ade3d31dd485d80029e8d2a76a99"
+  },
+  {
+    "path": "desktop/interaction-work.mjs",
+    "before": "1c5676c5c27a91c001b22b10fb3e8637f83c603a88c9f50a698233b5f96b0f49",
+    "after": "2998f331dfe0f17ee61693e53d384da3768c716f681b5d918fc58f22d9648c24"
+  },
+  {
+    "path": "desktop/knowledge-runtime.mjs",
+    "before": "1618f61d74665a2399523a1ca1430f495290da2687a1c4bd447937f5ac3d3e5d",
+    "after": "da0033f7c6042d7d3b26f5542e18f4baa73dcdb4795ad1af88d31f063f1175e8"
+  },
+  {
+    "path": "desktop/local-model-process.mjs",
+    "before": "bfb9961125fdfc6fa99283025c3675828578026945f5a41964c6743a6b3653ff",
+    "after": "3fa905f43816ba0b9758ed3b463a0c0b00476ab7b58c883e9e3bef02a9c09387"
+  },
+  {
+    "path": "desktop/local-model.mjs",
+    "before": "3faff09c10195346343df2a12159a3ee9e4b42217392a50e1669b9550a6b7ab7",
+    "after": "2bbca9b13e1a8eb9d9d823647ceed33f9b6a20118cf947426e21065df75ec4e3"
+  },
+  {
+    "path": "desktop/local-vision.mjs",
+    "before": "d4f5743d851a5ff0516f78773c53a4f54b5829b6bf0cab542c59cbd98f3ae3cd",
+    "after": "b20df658d95586b2211c52fcc88e482f1804e0e5dd1a49962aacadb5788d69ab"
+  },
+  {
+    "path": "desktop/memory-archive.mjs",
+    "before": "22acad4d09381f3116cc716976eee6f67735f337dcc40483809f7da71e3fe7e0",
+    "after": "875927f03788186fe199c8bec576ca8289f69c16ff52d652b7447bffe7cb8042"
+  },
+  {
+    "path": "desktop/memory-refinement.mjs",
+    "before": "742b88239096d6188aabdfc7efaa3d7dfc6985bb74201d245edf5d4e10ec220a",
+    "after": "ee24c37c2ef203f7125d79e7abdf99b2e5176495a3af36b2c06042d71db22610"
+  },
+  {
+    "path": "desktop/news-editor.mjs",
+    "before": "50471fa4aa7b9e1124a33475b62ca11f6475b9d2b8d5def8e3aba8b486f605b3",
+    "after": "a25a08ae920024ecfd1ff7d3589ef4b0f25fdf710e614a9fc27f8eb3c8676b82"
+  },
+  {
+    "path": "desktop/news-panel-host.mjs",
+    "before": "e6037edd252e234030c8d274bb17bbfbcdde89d700ac5566a05f1c59ca3fc0d8",
+    "after": "bff83301a019ce6a37a01a00b088922f0f79071b6ecd988a7f24e15565eae93e"
+  },
+  {
+    "path": "desktop/personality-diary.mjs",
+    "before": "8713fddb0d4f6128082d5e18bccf480ed3526b3722111f7c2bf5206b73707a26",
+    "after": "b2e834bada748cbfd977226fd3941011ac5a2399e0941be9d9b7fb42aa797682"
+  },
+  {
+    "path": "desktop/personality-nags.mjs",
+    "before": "c3f81fe0599bb8a5dc0979814b19dd8629b83b7559ff4005e12a553c20855a44",
+    "after": "54ea809b74e1f4e6e28ea98908ff3a6cbf81589609f3aac9c21d0c8815c5ddbb"
+  },
+  {
+    "path": "desktop/public-search.mjs",
+    "before": "befaef27608ca46bcde35a062fbf30447e740a3aa088b0416aba79dc10cfc2a7",
+    "after": "d862174b13da1f7f92a8afc5bc6dd5295b66548027109843ef8d7b3b0abd37e4"
+  },
+  {
+    "path": "desktop/screen-question-host.mjs",
+    "before": "807430bc080bb222ba030b31445bc063cbbc8e501f0f8d74a7cf197c8950e633",
+    "after": "f1623f3d67bfe9981027120d4d3ff36851b7f257b3f43404b1c0020de823d2d4"
+  },
+  {
+    "path": "desktop/server-task-command.mjs",
+    "before": "08f27f5b1894634af98a5ca4910c92e1cefbfdd87c4fdb2573d0c2854ea9abd3",
+    "after": "93ff297a41d275081dc834a9e2cd64b97cb09286252cbb65c6d39ccfbe98ebf6"
+  },
+  {
+    "path": "desktop/shell.mjs",
+    "before": "667c080037106b3fc1e20b72c867ade1502530d0f3e4044bf0d81659205866a7",
+    "after": "ab85871029a82b0fafa6e1ced2fbc15c436a901fae7ab0244872a24ed680db40"
+  },
+  {
+    "path": "desktop/study-host.mjs",
+    "before": "2f37ed509b480d9142e1af0f66d330507be800a7cbd84fd5ed86fe0ddd56a900",
+    "after": "e00b55ee30e4d7f038516efad70588735ab52cf38a5a60ef0682d6aef3e4eae9"
+  },
+  {
+    "path": "desktop/task-lifecycle.mjs",
+    "before": "08f3a709b6de524fe33d1911fd87a8aa1e75b3768e01e54c0edb2e069a28973e",
+    "after": "222b265038d25e0df82e272aa1dec1a9e82f2f1bc71366ffc7817892d2b25a0e"
+  },
+  {
+    "path": "desktop/task-traffic-log.mjs",
+    "before": "d0c19e06d2cfb61771e5ad7f3104085a0e53bfc36031f185b3512a1e5a8a5270",
+    "after": "d5c98e48e4a6db3d804b6b4f02936ac87e5795e37c61b1046ded85b3acfb5109"
+  },
+  {
+    "path": "desktop/transcription-deepseek.mjs",
+    "before": null,
+    "after": "643807f9fa7fbf0f3d5b95f9b2b2f04209915bc1a5301d67287789b3dda068f9"
+  },
+  {
+    "path": "output/desktop-bundle/conversation-ui.mjs",
+    "before": "4a80632be030c4ba21031024c8f8060f8c11a345e0aaee897de277f464030fd4",
+    "after": "e298893ffb343e7906eea86f2d0fe43ae336b1f82ae632ecadfcbbb2655d2add"
+  }
+]

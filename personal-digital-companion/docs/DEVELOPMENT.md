@@ -1398,3 +1398,7 @@ Git 归档沿用发布分支 `codex/workspace-checkpoint-20261120`，留存精�
 ### 绯月随机移动开关
 
 2026-11-23 10:02 JST，Windows 正式版已安装并重启。在托盘或角色右键菜单打开「桌宠动作 → 随机移动」。按用户要求跳过花园登记和重复功能测试。[安装回执](releases/random-movement-6f73e8b80764/installed-entry.md)
+
+## 绯月本机 AI 精简与 DeepSeek 兜底
+
+2026-11-24 JST 已发布桌面 9a049dd57887 及对应 subscriptions-api。发布候选、恢复依据、实际回执和待验证项见 [发布归档](releases/feiyue-ai-compose-20261124/release-entry.md)。
