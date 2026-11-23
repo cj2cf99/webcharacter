@@ -1,0 +1,171 @@
+diff --git a/before/desktop/menu-layout.json b/candidate/desktop/menu-layout.json
+index d4051ae..9a68dd6 100644
+--- a/before/desktop/menu-layout.json
++++ b/candidate/desktop/menu-layout.json
+@@ -27,6 +27,7 @@
+     {"action":"work","icon":"💼"},
+     {"action":"move","label":"移动到","icon":"🖥"},
+     {"action":"home","label":"回到右下角","icon":"↘"},
++    {"action":"randomMovement","label":"随机移动","icon":"👣"},
+     "-",
+     {"action":"attachment","icon":"🪟","items":[
+       {"action":"climbLeft","label":"左侧电梯上行","icon":"⬆"},
+diff --git a/before/desktop/settings-host.mjs b/candidate/desktop/settings-host.mjs
+index c18696e..1c18cca 100644
+--- a/before/desktop/settings-host.mjs
++++ b/candidate/desktop/settings-host.mjs
+@@ -3,7 +3,7 @@ import {SettingsStore} from './settings-store.mjs';
+ import {watchFileChanges,warnLiveUpdate} from './live-files.mjs';
+ import {resolve} from 'node:path';
+ import {pathToFileURL} from 'node:url';
+-export function attachSettings(electron,{win,profile,bundle,root,legacySound,onDisplayChange}){
++export function attachSettings(electron,{win,profile,bundle,root,legacySound,onPositionSettingsChange}){
+  const {ipcMain,dialog}=electron;const store=new SettingsStore(profile,bundle,legacySound);let panel=null,lastRuntime=null;
+  const versions=new Map();let revision=0;
+  function snapshot(){
+@@ -16,11 +16,18 @@ export function attachSettings(electron,{win,profile,bundle,root,legacySound,onD
+  function mediaChanged(paths){revision++;for(const file of paths)versions.set(pathToFileURL(file).href,revision);notify('media',true);}
+  const trusted=e=>[win,panel].some(w=>w&&!w.isDestroyed()&&e.sender===w.webContents&&e.senderFrame===w.webContents.mainFrame);
+  const notify=(kind,external=false)=>{const value={...snapshot(),kind,external};win.webContents.send('pc:changed',value);panel?.webContents.send('pc:changed',value);};
+- const reload=()=>{const kind=store.reload();if(kind){onDisplayChange?.(store.data.config.confineToScreen);notify(kind,true);}};
++ const reload=()=>{const kind=store.reload();if(kind){onPositionSettingsChange?.(store.data.config);notify(kind,true);}};
++ function save(config,domain){
++   reload();
++   const result=store.save(config,domain);
++   if(domain==='display'||domain==='movement')onPositionSettingsChange?.(result.config);
++   notify(domain);
++   return result;
++ }
+  const stopWatching=watchFileChanges(store.file,reload);
+  const handlers={
+   'pc:get':snapshot,
+-  'pc:save':(_e,{config,domain})=>{reload();const result=store.save(config,domain);if(domain==='display')onDisplayChange?.(result.config.confineToScreen);notify(domain);return result;},
++  'pc:save':(_e,{config,domain})=>save(config,domain),
+   'pc:import':async(_e,kind)=>{if(!['audio','video'].includes(kind))throw Error('资源类型无效');const result=await dialog.showOpenDialog(panel,{properties:['openFile'],filters:[{name:kind==='video'?'WebM动画':'语音',extensions:kind==='video'?['webm']:['wav','mp3','ogg','m4a','flac']}]});if(result.canceled)return null;const value=store.importFile(result.filePaths[0],kind);notify('resources');return value;},
+   'pc:rename':(_e,{id,name})=>{const value=store.rename(id,name);notify('resources');return value;},
+   'pc:runtime':()=>lastRuntime
+@@ -47,5 +54,5 @@ export function attachSettings(electron,{win,profile,bundle,root,legacySound,onD
+    });
+  }
+  function close(){stopWatching();for(const name of Object.keys(handlers))ipcMain.removeHandler(name);ipcMain.removeListener('pc:runtime',runtime);panel?.destroy();}
+- return {open,close,store,mediaChanged,get panel(){return panel}};
++ return {open,close,store,save,mediaChanged,get panel(){return panel}};
+ }
+diff --git a/before/desktop/settings-store.mjs b/candidate/desktop/settings-store.mjs
+index 2d67c72..2aa39a9 100644
+--- a/before/desktop/settings-store.mjs
++++ b/candidate/desktop/settings-store.mjs
+@@ -6,6 +6,7 @@ import {isDeepStrictEqual} from 'node:util';
+ import {SOUND_NODES,normalizeSound} from './sound.mjs';
+ import {WINDOW_NODES} from './window-nodes.mjs';
+ const ordinaryStates=['idle','special','hover','click','work','drag','walk'];
++const defaultRandomMovement=true;
+ export const STATE_IDS=[...ordinaryStates,...Object.keys(WINDOW_NODES)];
+ export const PHASES=['single','enter','loop','exit'];
+ const mapping={idle:'idle',special:'idle-special',hoverIn:'hover',hoverLoop:'hover-loop',hoverOut:'hover-exit',click:'click',workIn:'work-enter',workLoop:'work-loop',workOut:'work-exit',dragIn:'drag-enter',dragLoop:'drag-loop',dragOut:'drag-exit'};
+@@ -22,7 +23,7 @@ export function defaults(old){
+     states[id]={mode:node.mode,force:true,play:node.play,slots:{...node.slots},
+       sound:Object.fromEntries(PHASES.map(phase=>[phase,{on:false,volume:100,voice:'',delay:0}]))};
+   }
+-  return {version:1,target:'pc',idleSpecialDelaySeconds:60,confineToScreen:false,master:{enabled:sound.enabled,volume:sound.volume},states};
++  return {version:1,target:'pc',idleSpecialDelaySeconds:60,confineToScreen:false,randomMovement:defaultRandomMovement,master:{enabled:sound.enabled,volume:sound.volume},states};
+ }
+ export class SettingsStore{
+   constructor(profile,bundle,old){
+@@ -50,6 +51,7 @@ export class SettingsStore{
+       if(migrateIdle){saved.config.idleSpecialDelaySeconds=this.data.config.idleSpecialDelaySeconds;saved.idleTimingVersion=2;}
+       const missingScreenLock=saved.config.confineToScreen===undefined;
+       if(missingScreenLock)saved.config.confineToScreen=false;
++      if(saved.config.randomMovement===undefined)saved.config.randomMovement=defaultRandomMovement;
+       for(const id of missing)saved.config.states[id]=this.data.config.states[id];
+       this.data=saved;
+       this.validate(saved.config);
+@@ -59,6 +61,7 @@ export class SettingsStore{
+   catalog(data=this.data){return [...this.builtins,...data.custom.map(a=>({...a,url:pathToFileURL(resolve(this.profile,'media',a.file)).href}))].map(a=>({...a,name:data.names[a.id]||a.name}));}
+   reload(){
+     const next=JSON.parse(readFileSync(this.file,'utf8').replace(/^\uFEFF/,''));
++    if(next.config&&next.config.randomMovement===undefined)next.config.randomMovement=defaultRandomMovement;
+     if(isDeepStrictEqual(next,this.data))return null;
+     if(!Array.isArray(next.custom)||!next.names||typeof next.names!=='object'||Array.isArray(next.names)
+       ||Object.values(next.names).some(name=>typeof name!=='string'))throw Error('资源清单无效');
+@@ -78,7 +81,7 @@ export class SettingsStore{
+   snapshot(){return {target:'pc',config:structuredClone(this.data.config),assets:this.catalog()};}
+   validate(c,data=this.data){
+     const finite=(x,min,max)=>Number.isFinite(x)&&x>=min&&x<=max;
+-    if(c?.target!=='pc'||c.version!==1||!finite(c.idleSpecialDelaySeconds,1,3600)||typeof c.confineToScreen!=='boolean'||typeof c.master?.enabled!=='boolean'||!finite(c.master.volume,0,100))throw Error('仅支持本地 PC；设置数据无效');
++    if(c?.target!=='pc'||c.version!==1||!finite(c.idleSpecialDelaySeconds,1,3600)||typeof c.confineToScreen!=='boolean'||typeof c.randomMovement!=='boolean'||typeof c.master?.enabled!=='boolean'||!finite(c.master.volume,0,100))throw Error('仅支持本地 PC；设置数据无效');
+     const assets=this.catalog(data),has=(id,kind)=>assets.some(a=>a.id===id&&a.kind===kind);
+     for(const id of STATE_IDS){const s=c.states?.[id];if(!s||!['single','triple'].includes(s.mode)||typeof s.force!=='boolean'||!['once','loop'].includes(s.play))throw Error('状态配置无效：'+id);
+       const windowNode=WINDOW_NODES[id];
+@@ -93,6 +96,7 @@ export class SettingsStore{
+     if(domain==='animation'){c.idleSpecialDelaySeconds=input.idleSpecialDelaySeconds;for(const id of STATE_IDS){const s=input.states?.[id];if(!s)throw Error('缺少状态');Object.assign(c.states[id],{mode:s.mode,force:s.force,play:s.play,slots:s.slots});}}
+     else if(domain==='sound'){c.master=input.master;for(const id of STATE_IDS)c.states[id].sound=input.states?.[id]?.sound;}
+     else if(domain==='display'){if(typeof input.confineToScreen!=='boolean')throw Error('屏幕锁定设置无效');c.confineToScreen=input.confineToScreen;}
++    else if(domain==='movement')c.randomMovement=input.randomMovement;
+     else throw Error('设置域无效');
+     if(input.target!=='pc')throw Error('禁止写入非本地 PC 目标');this.validate(c);const next={...this.data,config:c};this.persist(next);this.data=next;return this.snapshot();
+   }
+diff --git a/before/desktop/shell.mjs b/candidate/desktop/shell.mjs
+index 2ab2e70..09d7e52 100644
+--- a/before/desktop/shell.mjs
++++ b/candidate/desktop/shell.mjs
+@@ -159,8 +159,8 @@ export async function startDesktop(electron,options={}){
+       webSecurity:true,backgroundThrottling:true,spellcheck:false,
+       additionalArguments:['--feiyue-actions',...(options.benchmark?['--feiyue-benchmark']:[])]}});
+   const thoughtOverlay=createThoughtOverlay(electron,{win,root,bundle});
+-  const pcSettings=attachSettings(electron,{win,profile,bundle,root,legacySound:sound,onDisplayChange:applyScreenLock});
+-  let confineToScreen=pcSettings.store.snapshot().config.confineToScreen;
++  const pcSettings=attachSettings(electron,{win,profile,bundle,root,legacySound:sound,onPositionSettingsChange:applyPositionSettings});
++  let {confineToScreen,randomMovement}=pcSettings.store.data.config;
+   const taskModel=taskDevice=>createBalancedLocalModel({
+     utilityProcess:electron.utilityProcess,modelPath:desktopModelPath(app,root),log:tasks.traffic?.write,localFirst:true,taskDevice
+   });
+@@ -668,7 +668,7 @@ export async function startDesktop(electron,options={}){
+         return;
+       }
+     }
+-    if(active||specialPending||runtimeState!=='idle'||now()<nextRoamAt||electron.powerMonitor.getSystemIdleTime()*1000<ROAM_DELAY)return;
++    if(!randomMovement||active||specialPending||runtimeState!=='idle'||now()<nextRoamAt||electron.powerMonitor.getSystemIdleTime()*1000<ROAM_DELAY)return;
+     postponeRoam();
+     const start=currentDisplay();
+     if(pinned())return;
+@@ -688,14 +688,27 @@ export async function startDesktop(electron,options={}){
+     win.setBounds({...displayPosition(box,display,size),...size},false);
+     updatePosture(true);
+   }
+-  function applyScreenLock(value){
+-    if(confineToScreen===value)return;
+-    confineToScreen=value;
+-    if(value&&movement&&(!movement.contain||movement.legs.some(leg=>leg.display.id!==movement.display.id))){
++  function applyPositionSettings(config){
++    const lockChanged=confineToScreen!==config.confineToScreen;
++    const roamChanged=randomMovement!==config.randomMovement;
++    if(!lockChanged&&!roamChanged)return;
++    ({confineToScreen,randomMovement}=config);
++    if(lockChanged&&confineToScreen&&movement&&(!movement.contain||movement.legs.some(leg=>leg.display.id!==movement.display.id))){
+       stopAtCurrentDisplay();
+     }
++    if(roamChanged){
++      postponeRoam();
++      if(!randomMovement&&movement?.automatic)cancelMovement(true);
++    }
+     if(tray)menu();
+   }
++  function toggleRandomMovement(){
++    try{pcSettings.save({target:'pc',randomMovement:!randomMovement},'movement');}
++    catch(error){
++      menu();
++      void messages.showMessageBox({type:'error',title:'随机移动',message:'设置未保存。',detail:error.message,buttons:['确定']}).catch(()=>{});
++    }
++  }
+   const onMovementRuntime=(event,value)=>{if(!own(event))return;
+     if(runtimeState!==value?.state){
+       if(roamInterrupts.includes(runtimeState)||roamInterrupts.includes(value?.state))resetIdle();
+@@ -972,6 +985,7 @@ export async function startDesktop(electron,options={}){
+       continuous:{...attachedCommand(()=>{if(attachment.continuous){attachment.continuous=false;menu();}else startAttachment('lie','top',true);}),type:'checkbox',checked:!!attachment?.continuous},
+       detach:{enabled:!!attachment?.active,click:()=>detachAttachment()},
+       move:{submenu:moveMenu()},
++      randomMovement:{type:'checkbox',checked:randomMovement,click:toggleRandomMovement},
+       work:{label:work?'结束工作':'开始工作',click:()=>setWork(!work)},
+       settings:{click:pcSettings.open},soundSettings:{click:pcSettings.open},
+       loginStart:process.platform==='win32'&&{id:'loginStart',type:'checkbox',click:toggleLogin},

@@ -1,0 +1,12 @@
+{
+  "version": "6f73e8b80764",
+  "baseline": "44b422e8c3e2",
+  "manifest": "6f73e8b807643e13ec55f9fb2df2980fa91307f87cfbd126c127bc7e4f43348a",
+  "installedAt": "2026-11-23T10:02:02.8466609+09:00",
+  "files": 4,
+  "oldPid": 27852,
+  "newPid": 7952,
+  "restVersion": 7,
+  "garden": "用户明确跳过",
+  "functionalRetest": "按用户要求省略"
+}
