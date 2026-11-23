@@ -1,0 +1,408 @@
+--- a/desktop/diary-audit.mjs
++++ b/desktop/diary-audit.mjs
+@@ -7,7 +7,7 @@
+ 
+ const dayMs=86400000;
+ const nextBatch=Symbol('手记核对分批继续');
+-const stageLabels={extract:'提取手记线索',compare:'比对手记',verify:'核对拟问依据'};
++const stageLabels={extract:'提取手记线索',compare:'比对手记',verify:'核实疑点'};
+ const digest=s=>createHash('sha256').update(s).digest('hex');
+ const pageKey=p=>p.day+'.'+p.part;
+ const segmenter=new Intl.Segmenter('zh',{granularity:'word'});
+@@ -63,14 +63,13 @@
+       if(key&&steps[key])return steps[key];
+       if(calls>=limit)throw nextBatch;
+       calls++;
+-      if(progress)progress({stage:stageLabels[stage]+' · 已保存 '+Object.keys(steps).length+' 步'});
++      progress?.({stage:stageLabels[stage]});
+       const prompt=skill.localAi[stage]+(stage==='compare'?' refs 的第一项必须是「主篇可选」为 true 的材料，其余可作为旁证。':'');
+       const result=await untilAbort(store.think(input,prompt,fields,signal,{name:skill.skill,version:skill.version,stage,
+         aiPriority,aiCurrentPriority,aiBudget:steps?diaryQuestionBudgetMs:45_000,boundedOutput:true,backgroundBudget:!aiPriority,maxTokens:stage==='compare'?950:460}),signal);
+       signal.throwIfAborted();
+       if(key){
+         steps[key]=result;store.saveAuditState(state);
+-        progress?.({stage:stageLabels[stage]+' · 已保存 '+Object.keys(steps).length+' 步'});
+       }
+       return result;
+     };
+@@ -260,7 +259,7 @@
+       return n?{n}:{detail:'近七天手记没有新的关键疑点'};
+     }catch(error){
+       if(signal.aborted)throw error;
+-      if(error===nextBatch)return {deferred:true,detail:'已保存 '+Object.keys(state.run.steps).length+' 步，下批从原进度继续'};
++      if(error===nextBatch)return {nextBatch:true,detail:'已保存 '+Object.keys(state.run.steps).length+' 步'};
+       throw preparationFailure(error);
+     }finally{working=false;}
+   }
+--- a/desktop/personality-nags.mjs
++++ b/desktop/personality-nags.mjs
+@@ -306,6 +306,7 @@
+         if(checked==='deferred')return {deferred:true};
+       }
+       if(result.n&&queue(result.n))return {detail:'已新增 1 个手记质问'};
++      if(result.nextBatch)return result;
+       if(!result.deferred&&pending())remind();
+       if(result.n)return {detail:'已拟出手记质问，本轮未能加入待确认'};
+       return result.deferred?result:result.detail??result;
+--- a/desktop/poll-scheduler.mjs
++++ b/desktop/poll-scheduler.mjs
+@@ -1,5 +1,8 @@
+ const memoryPolls=new Set(['diary','nag','review','diaryAudit','curiosity','refinement']);
+ const queueRetryMs=15_000;
++const diaryAuditContinuationMs=15_000;
++const diaryAuditWindowMs=5*60_000;
++const diaryAuditWindowKey='diaryAuditWindow';
+ const types=[
+   {id:'tasks',name:'任务轮询',minutes:15},
+   {id:'due',name:'到期事项',minutes:20},
+@@ -30,20 +33,23 @@
+   const legacy=db.prepare('SELECT misses,due FROM checks WHERE misses IS NOT NULL ORDER BY id DESC LIMIT 1').get();
+   const insert=db.prepare('INSERT OR IGNORE INTO local_polls VALUES(?,?,?,?,?,?)');
+   const save=db.prepare('UPDATE local_polls SET enabled=?,minutes=?,maximum=?,misses=?,queuedAt=? WHERE id=?');
++  const readTime=db.prepare('SELECT at FROM idle_poll_resume WHERE id=?');
++  const saveTime=db.prepare('INSERT OR REPLACE INTO idle_poll_resume VALUES(?,?)');
+   const jobs=new Map();
+   for(const {id,name,minutes} of types){
+     if(!handlers[id])continue;
+     const misses=id==='due'?legacy?.misses??0:0;
+     insert.run(id,Number(id!=='curiosity'),minutes,id==='news'?1:3,misses,misses>=3?legacy.due:null);
+     const row=db.prepare('SELECT * FROM local_polls WHERE id=?').get(id);
+-    const resumeAt=db.prepare('SELECT at FROM idle_poll_resume WHERE id=?').get(id)?.at??0;
++    const resumeAt=readTime.get(id)?.at??0;
+     jobs.set(id,{...row,name,enabled:Boolean(row.enabled),resumeAt,nextAt:null,timer:null,running:false,first:true});
+   }
+   let started=false,closed=false,retry=null,warmUntil=0;
++  let auditWindowStart=readTime.get(diaryAuditWindowKey)?.at??0;
+   const abort=new AbortController();
+   let aiRound;
+   function releaseRoundIfIdle(){
+-    if(aiRound&&![...jobs.values()].some(j=>memoryPolls.has(j.id)&&j.enabled&&(j.running||j.queuedAt!==null))){
++    if(aiRound&&![...jobs.values()].some(j=>memoryPolls.has(j.id)&&j.enabled&&(j.running||j.continuing||j.queuedAt!==null))){
+       aiRound.release();aiRound=null;
+     }
+   }
+@@ -71,7 +77,7 @@
+       warmUntil=frozenDeadline(warmUntil,warmUntil-60_000,at);
+       for(const j of jobs.values())if(j.resumeAt>pausedAt){
+         j.resumeAt=frozenDeadline(j.resumeAt,j.resumeSetAt,at);
+-        db.prepare('INSERT OR REPLACE INTO idle_poll_resume VALUES(?,?)').run(j.id,j.resumeAt);
++        saveTime.run(j.id,j.resumeAt);
+       }
+       pausedAt=null;
+       for(const j of jobs.values())if(j.enabled&&j.nextAt!==null)arm(j,at+j.remaining);
+@@ -85,6 +91,17 @@
+     clearTimer(j.timer);j.nextAt=at;j.remaining=Math.max(0,at-now());
+     if(pausedAt!==null){j.timer=null;return;}
+     j.timer=setTimer(()=>tick(j,at),Math.max(0,at-now()));j.timer?.unref?.();
++  }
++  function armAudit(j,at,delay){
++    j.resumeSetAt=at;
++    j.resumeAt=at+delay;
++    saveTime.run(j.id,j.resumeAt);
++    arm(j,j.resumeAt);
++  }
++  function clearAuditWindow(){
++    if(!auditWindowStart)return;
++    db.prepare('DELETE FROM idle_poll_resume WHERE id=?').run(diaryAuditWindowKey);
++    auditWindowStart=0;
+   }
+   function drain(){
+     if(pausedAt!==null)return false;
+@@ -126,11 +143,26 @@
+   }
+   async function execute(j,due){
+     if(closed||!j.enabled||j.running)return;
+-    if(j.resumeAt>now())return;
++    const at=now();
++    if(j.resumeAt>at)return;
++    if(j.id==='diaryAudit'){
++      const nextWindow=auditWindowStart+j.minutes*60_000;
++      if(auditWindowStart&&at>=auditWindowStart+diaryAuditWindowMs&&at<nextWindow){
++        j.continuing=false;j.queuedAt=null;j.misses=0;persist(j);
++        armAudit(j,at,nextWindow-at);
++        clearRetryIfEmpty();releaseRoundIfIdle();changed();
++        return;
++      }
++      if(!auditWindowStart||at>=nextWindow){
++        auditWindowStart=at;
++        saveTime.run(diaryAuditWindowKey,at);
++      }
++    }
+     j.first=false;j.running=true;
+-    const at=now(),id=add(j.name,'检查中',j.queuedAt!==null?'执行本地等待任务':'开始轮询',at,due);
++    j.continuing=false;
++    const id=add(j.name,'检查中',j.queuedAt!==null?'执行本地等待任务':'开始轮询',at,due);
+     changed();
+-    let status='已检查',detail,blocked=false,idleStarted=false;
++    let status='已检查',detail,blocked=false,idleStarted=false,continueAudit=false;
+     const idle=memoryPolls.has(j.id);
+     if(idle)aiRound??=beginAiRound?.();
+     const goal=goals[j.id];
+@@ -139,10 +171,12 @@
+       const signal=idle&&aiRound?AbortSignal.any([abort.signal,aiRound.signal]):abort.signal;
+       const result=await handlers[j.id](signal,action?.step,goal);
+       blocked=result?.deferred===true&&!result.roundPaused;
++      continueAudit=j.id==='diaryAudit'&&result?.nextBatch===true;
++      if(continueAudit)status='本批完成';
+       if(result?.roundPaused)status='已暂停';
+       idleStarted=result?.started===true;
+       detail=result?.detail??(typeof result==='string'?result:undefined);
+-      if(!closed&&j.enabled&&!signal.aborted&&!blocked&&['nag','diary','diaryAudit','news'].includes(j.id)){
++      if(!closed&&j.enabled&&!signal.aborted&&!blocked&&!continueAudit&&['nag','diary','diaryAudit','news'].includes(j.id)){
+         const anchor=lastRun(j.id);
+         const next=result?.nextAt??(anchor&&anchor+j.minutes*60000);
+         if(next>now())arm(j,next);
+@@ -151,35 +185,43 @@
+     if(closed)return;
+     const finishedAt=now();
+     if(idle&&(aiRound?.paused||status==='已暂停')){
+-      status='已暂停';blocked=false;
++      status='已暂停';blocked=false;continueAudit=false;
+       detail??='本轮 4B 执行预算已到，待下一轮继续';
+-      if(j.enabled)arm(j,finishedAt+j.minutes*60_000);
+-      for(const pending of queue()){
+-        if(!memoryPolls.has(pending.id)||pending.running)continue;
++      if(j.enabled){
++        const delay=j.minutes*60_000;
++        if(j.id==='diaryAudit')armAudit(j,finishedAt,delay);
++        else arm(j,finishedAt+delay);
++      }
++      for(const pending of jobs.values()){
++        if(!pending.enabled||!memoryPolls.has(pending.id)||pending.running||(!pending.continuing&&pending.queuedAt===null))continue;
++        const wasContinuing=pending.continuing;
++        pending.continuing=false;
+         pending.queuedAt=null;pending.misses=0;persist(pending);
+-        if(pending.nextAt===null||(pausedAt===null?pending.nextAt<=finishedAt:pending.remaining===0))arm(pending,finishedAt+pending.minutes*60_000);
++        if(wasContinuing)armAudit(pending,finishedAt,pending.minutes*60_000);
++        else if(pending.nextAt===null||(pausedAt===null?pending.nextAt<=finishedAt:pending.remaining===0))
++          arm(pending,finishedAt+pending.minutes*60_000);
+       }
+     }
+     if(blocked)detail??=idleStarted?'等待下次轮询':'执行前被本地任务占用';
+     if(typeof detail!=='string'||!detail.trim())detail='本轮未提供结果回执';
++    const windowEnded=continueAudit&&finishedAt+diaryAuditContinuationMs>=auditWindowStart+diaryAuditWindowMs;
++    if(continueAudit&&j.enabled)detail+=windowEnded?'，下个轮询周期继续':'，下批从原进度继续';
+     const outcome=blocked?(idleStarted?'已暂停':'推延'):status;
+     action?.finish(outcome,detail,finishedAt);
+     j.running=false;
+-    if(idle&&(!blocked||idleStarted)){
++    if(idle&&!continueAudit&&(!blocked||idleStarted)){
+       onIdleResult?.({id:j.id,status:outcome,detail,durationMs:Math.max(0,finishedAt-at)});
+     }
+     if(blocked&&j.enabled){
+-      if(j.id==='diaryAudit'&&idleStarted){
+-        j.resumeSetAt=finishedAt;
+-        j.resumeAt=finishedAt+queueRetryMs;
+-        j.queuedAt??=due;
+-        db.prepare('INSERT OR REPLACE INTO idle_poll_resume VALUES(?,?)').run(j.id,j.resumeAt);
+-        db.prepare('UPDATE checks SET status=?,detail=? WHERE id=?').run(outcome,detail,id);
+-        persist(j);changed();retryLater();
+-      }else postpone(j,due,id);
++      postpone(j,due,id);
+       releaseRoundIfIdle();
+       return;
+     }
++    if(continueAudit&&j.enabled){
++      j.continuing=!windowEnded;
++      const delay=windowEnded?Math.max(diaryAuditContinuationMs,auditWindowStart+j.minutes*60_000-finishedAt):diaryAuditContinuationMs;
++      armAudit(j,finishedAt,delay);
++    }else if(j.id==='diaryAudit')clearAuditWindow();
+     db.prepare('UPDATE checks SET status=?,detail=? WHERE id=?').run(blocked?'未执行':status,detail,id);
+     j.queuedAt=null;j.misses=0;persist(j);
+     clearRetryIfEmpty();
+@@ -222,7 +264,7 @@
+         !Number.isInteger(maximum)||maximum<0||maximum>100)throw Error('间隔须为 10–300 分钟，最大推延须为 0–100 次，均为整数。');
+     const enabledBefore=j.enabled,minutesBefore=j.minutes;
+     Object.assign(j,{enabled:input.enabled,minutes:input.minutes,maximum});
+-    if(!j.enabled){clearTimer(j.timer);j.timer=null;j.nextAt=null;j.queuedAt=null;j.misses=0;}
++    if(!j.enabled){clearTimer(j.timer);j.timer=null;j.nextAt=null;j.queuedAt=null;j.misses=0;j.continuing=false;}
+     else if(j.misses>0&&j.misses>=j.maximum&&j.queuedAt===null)j.queuedAt=now();
+     persist(j);
+     if(started&&j.enabled&&(!enabledBefore||minutesBefore!==j.minutes)){
+--- a/desktop/reminder-checks.mjs
++++ b/desktop/reminder-checks.mjs
+@@ -22,6 +22,7 @@
+ 
+ // 复盘窗口多数只看最新几条：检查记录和提醒每页 8 条，由新到旧。
+ const PAGE=8;
++const diaryWorkProjects=['手记质问','修订手记与唠叨'];
+ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,log,inspectRecent,notifyNews,compileNews,newsEditorial,onIdleResult,beginAiRound,changed=()=>{},now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout}){
+   const db=new DatabaseSync(join(profile,'reminder-checks.sqlite'));
+   db.exec(`CREATE TABLE IF NOT EXISTS checks(
+@@ -70,8 +71,19 @@
+       if(id==='inspection')return lastInspection.get()?.through;
+       return id==='news'?news?.last():lastRun?.(id);
+     },weatherLastAt:()=>{const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value).lastCheck;}});
++  const reminderQueue=()=>scheduler.readQueue().filter(row=>!diaryWorkProjects.includes(row.name));
++  const reminderHistory='FROM checks WHERE day=? AND project NOT IN (?,?)';
+   return {
+     start:scheduler.start,enqueue:scheduler.enqueue,polls:scheduler.snapshot,configure:scheduler.configure,setExecutionBusy:scheduler.setExecutionBusy,
++    diaryWork(){
++      return scheduler.snapshot().flatMap(({id,name,enabled,running,queuedAt,nextAt})=>{
++        if(!enabled||!diaryWorkProjects.includes(name))return [];
++        if(running)return [{name,state:'执行中'}];
++        if(queuedAt!==null)return [{name,state:'等待空闲'}];
++        const job=scheduler.get(id);
++        return id==='diaryAudit'&&job.resumeAt===job.nextAt&&nextAt>now()?[{name,state:'等待续跑',at:nextAt}]:[];
++      });
++    },
+     latestNews:()=>news?.latest()??{state:'answer',text:'当前未启用新闻关注。'},
+     newsEdition:()=>news?.edition()??{at:null,items:[]},
+     newsFeed:()=>news?.feed()??{at:now(),from:now(),pendingArchive:0,items:[]},
+@@ -79,7 +91,7 @@
+     newsEditorialHistory:id=>news?.editorialHistory(id)??[],
+     newsArchive,
+     saveNewsChinese:(...args)=>news?.saveChinese(...args),
+-    get pending(){return scheduler.pending;},
++    get pending(){return reminderQueue().length>0;},
+     get unread(){return db.prepare('SELECT count(*) AS n FROM notices WHERE seen=0').get().n;},
+     weatherDiary(day){
+       const start=Date.parse(day+'T00:00:00+09:00');
+@@ -131,13 +143,15 @@
+     },
+     read(day,page=0){
+       if(!/^\d{4}-\d\d-\d\d$/.test(day))throw Error('东京日期无效');
+-      const total=db.prepare('SELECT count(*) AS n FROM checks WHERE day=?').get(day).n;
++      const total=db.prepare('SELECT count(*) AS n '+reminderHistory).get(day,...diaryWorkProjects).n;
+       const pages=Math.max(1,Math.ceil(total/PAGE));
+       page=Math.min(pages-1,Math.max(0,Number.isSafeInteger(page)?page:0));
+-      const events=db.prepare('SELECT at,due,project,status,detail FROM checks WHERE day=? ORDER BY id DESC LIMIT ? OFFSET ?').all(day,PAGE,page*PAGE);
++      const events=db.prepare('SELECT at,due,project,status,detail '+reminderHistory+' ORDER BY id DESC LIMIT ? OFFSET ?')
++        .all(day,...diaryWorkProjects,PAGE,page*PAGE);
+       const due=scheduler.get('due');
++      const queue=reminderQueue();
+       return {paused:scheduler.paused,nextAt:due?.nextAt,nextWeatherAt:scheduler.get('weather')?.nextAt,nextTaskAt:scheduler.get('tasks')?.nextAt,
+-        first:due?.first,running:due?.running,pending:scheduler.pending,queue:scheduler.readQueue(),events,page,pages};
++        first:due?.first,running:due?.running,pending:queue.length>0,queue,events,page,pages};
+     },
+     close(){
+       closed=true;scheduler.close();audit?.close();db.close();
+--- a/desktop/conversation-details.mjs
++++ b/desktop/conversation-details.mjs
+@@ -49,7 +49,8 @@
+         shownAiSteps=new Set(page.lines.flatMap(line=>{
+           try{const id=JSON.parse(line).ai_step_id;return id?[id]:[];}catch{return [];}
+         }));
+-        return {day,view,dated:Boolean(memory),...page};
++        const diaryWork=!cursor&&day===tokyoDay(Date.now())?checks?.diaryWork?.():undefined;
++        return {day,view,dated:Boolean(memory),...page,diaryWork};
+       }
+       catch{return {day,view,lines:[],next:null,warning:'日志已轮转或暂时无法读取，请刷新日志。'};}
+     }
+--- a/desktop/conversation-ui.mjs
++++ b/desktop/conversation-ui.mjs
+@@ -195,9 +195,10 @@
+     !data.paused&&data.nextTaskAt?'下次任务轮询 '+clock.format(data.nextTaskAt)+' JST':'',
+     queue.join(' / ')].filter(Boolean).join(' · ');
+   list.replaceChildren(...data.events.map((event,i)=>{
+-    const tone=statusTone(event.status),row=stagger(card('section',tone),i);
++    const state=event.status==='待执行'?'当时已推迟':event.status;
++    const tone=event.status==='待执行'?'warn':statusTone(state),row=stagger(card('section',tone),i);
+     const timing=clock.format(event.at)+(event.at-event.due>=1000?' · 原定 '+clock.format(event.due):'');
+-    row.append(head(event.project,chip(event.status,tone),element('time',timing)));
++    row.append(head(event.project,chip(state,tone),element('time',timing)));
+     if(event.detail)row.append(element('p',event.detail,'fy-meta fy-clamp'));
+     return row;
+   }));
+@@ -458,7 +459,8 @@
+   if(!data||typeof data!=='object'){row.append(element('p',line,'fy-clamp'));return row;}
+   if(data.category==='绯月自主行动'){
+     const time=clock.format(new Date(data.started_at));
+-    row.append(head(data.category+' · '+data.route,chip(data.stage,'accent'),element('time',time+(data.stage==='未执行'?' JST 调度检查':' JST 开始'))),
++    const stage=data.route==='手记质问'&&data.stage==='已暂停'&&/^已保存 \d+ 步，下批从原进度继续$/u.test(data.result)?'本批完成':data.stage;
++    row.append(head(data.category+' · '+data.route,chip(stage,'accent'),element('time',time+(stage==='未执行'?' JST 调度检查':' JST 开始'))),
+       element('p',data.goal));
+     if(data.stage!=='开始'){
+       const elapsed=Number.isFinite(data.duration_ms)?(data.duration_ms/1000).toFixed(1)+' 秒':'耗时未知';
+@@ -573,6 +575,13 @@
+     if(view==='notices'){renderNotices(data);return;}
+     if(view==='log'){
+       list.replaceChildren(...data.lines.map((line,i)=>stagger(logRow(line),i)));
++      if(data.diaryWork?.length){
++        const current=card('section','accent');
++        current.append(head('当前自主行动'));
++        for(const {name,state,at} of data.diaryWork)
++          current.append(element('p',[name,state,at&&clock.format(at)+' JST'].filter(Boolean).join(' · '),'fy-meta'));
++        list.prepend(current);
++      }
+       if(data.next)logCursors[logIndex+1]=data.next;
+       setPager(logIndex,0,Boolean(data.next));
+       status.textContent=data.warning??(data.failed?'最近一次日志写入失败。':list.childElementCount?'':'还没有任务收发日志。');
+--- a/desktop/shell.mjs
++++ b/desktop/shell.mjs
+@@ -201,7 +201,7 @@
+       lastContext=context;win.webContents.send('desktop:idle-context',context);
+     }
+   }
+-  let diary,nags,curiosity,scenePanel,backgroundJob,backgroundController,backgroundKind;
++  let diary,nags,curiosity,scenePanel,backgroundJob,backgroundController,backgroundKind,auditBubbleStage;
+   const memoryTitles={curiosity:'此刻所想',diary:'写日记',review:'补行动评价',nag:'准备念叨',diaryAudit:'核对手记',
+     refinement:'修订手记与唠叨','task-review':'补写执行评价'};
+   const memoryPolls=['diary','diaryAudit','nag','review','curiosity','refinement'];
+@@ -222,6 +222,10 @@
+     const pausesEmotion=kind!=='diaryAudit';
+     function progress(detail){
+       if(manual&&kind==='nag')return;
++      if(kind==='diaryAudit'&&detail.stage){
++        if(auditBubbleStage===detail.stage)return;
++        auditBubbleStage=detail.stage;
++      }
+       memoryThought={title,...detail};syncActivity();
+     }
+     const work=async()=>{
+@@ -265,7 +269,7 @@
+       }finally{writing=false;}
+     };
+     backgroundKind=kind;
+-    if(goal)progress({goal:'我想'+goal});
++    if(goal&&(kind!=='diaryAudit'||!auditBubbleStage))progress({goal:kind==='diaryAudit'?'正在核对近七天手记':'我想'+goal});
+     backgroundJob=work();
+     updatePollClock();
+     try{
+@@ -336,6 +340,7 @@
+     }},
+     onIdleResult:({id,status,detail,durationMs})=>{
+       if(quitPending||cleaned)return;
++      if(id==='diaryAudit')auditBubbleStage=undefined;
+       const stage=status==='已检查'?detail:status==='查询失败'?'本轮未完成，原因见任务日志':status+' · '+detail;
+       memoryResult={title:memoryTitles[id],stage,durationMs};
+       clearTimeout(memoryResultTimer);
+--- a/output/desktop-bundle/conversation-ui.mjs
++++ b/output/desktop-bundle/conversation-ui.mjs
+@@ -195,9 +195,10 @@
+     !data.paused&&data.nextTaskAt?'下次任务轮询 '+clock.format(data.nextTaskAt)+' JST':'',
+     queue.join(' / ')].filter(Boolean).join(' · ');
+   list.replaceChildren(...data.events.map((event,i)=>{
+-    const tone=statusTone(event.status),row=stagger(card('section',tone),i);
++    const state=event.status==='待执行'?'当时已推迟':event.status;
++    const tone=event.status==='待执行'?'warn':statusTone(state),row=stagger(card('section',tone),i);
+     const timing=clock.format(event.at)+(event.at-event.due>=1000?' · 原定 '+clock.format(event.due):'');
+-    row.append(head(event.project,chip(event.status,tone),element('time',timing)));
++    row.append(head(event.project,chip(state,tone),element('time',timing)));
+     if(event.detail)row.append(element('p',event.detail,'fy-meta fy-clamp'));
+     return row;
+   }));
+@@ -458,7 +459,8 @@
+   if(!data||typeof data!=='object'){row.append(element('p',line,'fy-clamp'));return row;}
+   if(data.category==='绯月自主行动'){
+     const time=clock.format(new Date(data.started_at));
+-    row.append(head(data.category+' · '+data.route,chip(data.stage,'accent'),element('time',time+(data.stage==='未执行'?' JST 调度检查':' JST 开始'))),
++    const stage=data.route==='手记质问'&&data.stage==='已暂停'&&/^已保存 \d+ 步，下批从原进度继续$/u.test(data.result)?'本批完成':data.stage;
++    row.append(head(data.category+' · '+data.route,chip(stage,'accent'),element('time',time+(stage==='未执行'?' JST 调度检查':' JST 开始'))),
+       element('p',data.goal));
+     if(data.stage!=='开始'){
+       const elapsed=Number.isFinite(data.duration_ms)?(data.duration_ms/1000).toFixed(1)+' 秒':'耗时未知';
+@@ -573,6 +575,13 @@
+     if(view==='notices'){renderNotices(data);return;}
+     if(view==='log'){
+       list.replaceChildren(...data.lines.map((line,i)=>stagger(logRow(line),i)));
++      if(data.diaryWork?.length){
++        const current=card('section','accent');
++        current.append(head('当前自主行动'));
++        for(const {name,state,at} of data.diaryWork)
++          current.append(element('p',[name,state,at&&clock.format(at)+' JST'].filter(Boolean).join(' · '),'fy-meta'));
++        list.prepend(current);
++      }
+       if(data.next)logCursors[logIndex+1]=data.next;
+       setPager(logIndex,0,Boolean(data.next));
+       status.textContent=data.warning??(data.failed?'最近一次日志写入失败。':list.childElementCount?'':'还没有任务收发日志。');

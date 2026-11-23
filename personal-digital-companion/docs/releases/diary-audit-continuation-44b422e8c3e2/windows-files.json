@@ -1,0 +1,44 @@
+{
+  "items": [
+    {
+      "path": "desktop/diary-audit.mjs",
+      "before": "0ac1bb6fd3a95f028d9b19d9a205a4cfe8d64e4150428135419e7f16fa7437af",
+      "after": "6733d68bd97babebff303d18276a9a5d025e6ea8ed2e3e18d86f12908843ed21"
+    },
+    {
+      "path": "desktop/personality-nags.mjs",
+      "before": "df3c9a82a3008fa64b7dc9366349dac611ab9268cf08fe32dd3eabfe4f1ea55a",
+      "after": "c3f81fe0599bb8a5dc0979814b19dd8629b83b7559ff4005e12a553c20855a44"
+    },
+    {
+      "path": "desktop/poll-scheduler.mjs",
+      "before": "0402d7b54987949d183463bfca7b39bbe0a6537a344dd9140121e8c85a60d59c",
+      "after": "e32f5023c41d7e5b0d5d7bc3173cf65753bed513ba428799047978094fd53345"
+    },
+    {
+      "path": "desktop/reminder-checks.mjs",
+      "before": "d19efb964d74995ad2fd99870777b734f5d9e0e3368f1943c81af961959fff9c",
+      "after": "091113e81f0876f9c2fa6ee50faca500746daa8d661edaf6da144714cad156a1"
+    },
+    {
+      "path": "desktop/conversation-details.mjs",
+      "before": "81615878558e4da6d6b67be1caa5fae7436005cd8aa4620446bd7d5faffd9acb",
+      "after": "5280c333852391f5a22bad9790af5b3ea84198a12fff02a2add63858e194e1cd"
+    },
+    {
+      "path": "desktop/conversation-ui.mjs",
+      "before": "41b694c3fd8a1a54599e1fa995628960e96081f4160067f94c17eef36edae5ff",
+      "after": "4a80632be030c4ba21031024c8f8060f8c11a345e0aaee897de277f464030fd4"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "before": "ab4dcfcb3849030106db3e0939ee324c810a02d67eef61b0dfb8ed2c1d0bbc15",
+      "after": "8a35c8e17ca951587fb60f7dab28aff7e300aa1437fd6566143259acf75f9b23"
+    },
+    {
+      "path": "output/desktop-bundle/conversation-ui.mjs",
+      "before": "41b694c3fd8a1a54599e1fa995628960e96081f4160067f94c17eef36edae5ff",
+      "after": "4a80632be030c4ba21031024c8f8060f8c11a345e0aaee897de277f464030fd4"
+    }
+  ]
+}
