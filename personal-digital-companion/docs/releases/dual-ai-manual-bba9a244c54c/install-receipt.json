@@ -1,0 +1,93 @@
+{
+  "installedAt": "2026-11-23T09:02:26.8915946+09:00",
+  "version": "bba9a244c54c",
+  "manifest": "bba9a244c54cade535f5f20f58b6edc2990f45bc9fbce9bc54c78e5b777903b9",
+  "files": 26,
+  "oldPid": 3240,
+  "newPid": 12796,
+  "startedJst": "2026-11-23T09:02:26.0450000+09:00",
+  "backup": "G:\\selftool\\WebCharacter\\work\\feiyue-dual-ai-manual-20261123\\before",
+  "before": {
+    "activeTranscriptions": 0,
+    "activeBatches": 0,
+    "activeReminders": 0,
+    "activeTasks": 0,
+    "activeAutonomous": 0,
+    "activeInference": 0,
+    "aiColumns": [
+      "seq",
+      "id",
+      "group_id",
+      "checkpoint",
+      "priority",
+      "state",
+      "attempt",
+      "input",
+      "output"
+    ],
+    "aiIndex": false,
+    "aiSchema": [
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ai_requests_1",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ai_requests_2",
+        "sql": null
+      },
+      {
+        "type": "table",
+        "name": "ai_requests",
+        "sql": "CREATE TABLE ai_requests (\n      seq INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, group_id TEXT NOT NULL,\n      checkpoint TEXT UNIQUE, priority INTEGER NOT NULL, state TEXT NOT NULL,\n      attempt INTEGER NOT NULL DEFAULT 0, input TEXT NOT NULL, output TEXT\n    )"
+      }
+    ]
+  },
+  "after": {
+    "activeTranscriptions": 0,
+    "activeBatches": 0,
+    "activeReminders": 0,
+    "activeTasks": 0,
+    "activeAutonomous": 1,
+    "activeInference": 0,
+    "aiColumns": [
+      "seq",
+      "id",
+      "group_id",
+      "checkpoint",
+      "priority",
+      "state",
+      "attempt",
+      "input",
+      "output",
+      "execution_ms",
+      "task_key"
+    ],
+    "aiIndex": true,
+    "aiSchema": [
+      {
+        "type": "index",
+        "name": "ai_task_execution",
+        "sql": "CREATE INDEX ai_task_execution ON ai_requests(task_key)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ai_requests_1",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ai_requests_2",
+        "sql": null
+      },
+      {
+        "type": "table",
+        "name": "ai_requests",
+        "sql": "CREATE TABLE ai_requests (\n      seq INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, group_id TEXT NOT NULL,\n      checkpoint TEXT UNIQUE, priority INTEGER NOT NULL, state TEXT NOT NULL,\n      attempt INTEGER NOT NULL DEFAULT 0, input TEXT NOT NULL, output TEXT\n    , execution_ms REAL NOT NULL DEFAULT 0, task_key TEXT)"
+      }
+    ]
+  },
+  "databaseBackup": "本机 AI 询问池原表与索引定义留存，无原业务数据改写",
+  "userAcceptance": "待用户复验"
+}
