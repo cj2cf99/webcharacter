@@ -1,5 +1,7 @@
 # WebCharacter 开发指南
 
+2026-11-25 JST，绯月开发版已优化「闲时·写日记」的收尾耗时与进度体验：在草稿同步、悬念核对和入册阶段全面补充 `done/total` 计数，消除了头顶气泡无终点流动的假死感；新增悬念关键词提取与相关性粗筛排序，优先核对最高匹配事实并自动跳过完全无关事实的大模型调用。详见[手记收尾细化进度与悬念初筛加速](../personal-digital-companion/docs/DEVELOPMENT.md#手记收尾细化进度与悬念初筛加速2026-11-25-jst)。
+
 2026-11-24 JST，绯月开发版已打通本地 AGY CLI 替代本地推理模型，在启动时自动优先检测并使用 AGY CLI，显存占用归零，解决显卡不足问题。在右键菜单「设置与维护」中新增「测试 AGY CLI 推理（⚡）」测试模块，可直接执行人设对话与结构化抽取实测并查看弹窗报告。详见[本机接入 AGY CLI 替代本地推理](../personal-digital-companion/docs/DEVELOPMENT.md#本机接入-agy-cli-替代本地推理与菜单测试模块2026-11-24-jst)。
 
 2026-11-23 10:02 JST，绯月 Windows 正式版已安装「桌宠动作」中的「随机移动」开关，关闭后停止自动走动并记住选择。[安装回执](../personal-digital-companion/docs/releases/random-movement-6f73e8b80764/installed-entry.md)

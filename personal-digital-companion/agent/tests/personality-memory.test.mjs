@@ -734,3 +734,56 @@ test('记忆用本地 4B，显存不足走 CPU，前台对话抢占后重新装�
   const reply=await model.analyze('你好',{hint:'auto'});await checked;
   assert.equal(reply.reply,'我在。');assert.match(chosen[0][0],/Qwen3.5-4B-Q4_K_M/);assert.equal(chosen[0][1],'cpu');assert.match(chosen[1][0],/Qwen3.5-4B-Q4_K_M/);await model.close();
 });
+
+test('手记收尾阶段汇报细化进度数字，悬念初筛优先核对相关事实并跳过无关项',async t=>{
+  const {req}=fixture(t),profile=mkdtempSync(join(tmpdir(),'feiyue-follow-progress-'));
+  const comparedInputs=[];
+  const progressList=[];
+  const todayTurns=[];
+  const store=createPersonalityDiary({
+    profile,now:()=>start,weather:()=>[],
+    memory:{
+      read:async d=>{
+        if(d==='2026-11-17')return [{id:'t1',at:start-3*86400000,question:'咖啡豆到了吗？',text:'记住了。'}];
+        if(d===day)return todayTurns;
+        return [];
+      },
+      readTasks:async()=>[]
+    },
+    model:{
+      memory:async(text,_p,schema,_,skill)=>{
+        if(schema.required.includes('review'))return {review:'记住事情',text};
+        if(schema.required.includes('match')){
+          comparedInputs.push(JSON.parse(text));
+          return {match:text.includes('咖啡豆')?'1':'0',text:'咖啡豆已收到。',comment:'安心啦。'};
+        }
+        if(schema.required.includes('score'))return {score:'4',benefit:'共同关心'};
+        if(schema.required.includes('quote'))return {quote:''};
+        return {text:'记下事情。',summary:'咖啡',tags:'咖啡',mood:'期待',comment:'我惦记着。',thread:text.includes('咖啡豆到了吗')?'咖啡豆到了吗？':''};
+      }
+    },
+    request:(path,options)=>req(path.slice('/api/memory/'.length),options.body&&JSON.parse(options.body))
+  });
+  t.after(()=>{store.close();rmSync(profile,{recursive:true,force:true});});
+
+  const sig=new AbortController().signal;
+  await store.run('diary',sig);
+
+  todayTurns.push(
+    {id:'f1',at:start-3600000,question:'咖啡豆到了，拆开很香。',text:'收到。'},
+    {id:'f2',at:start,question:'晚上吃了火锅。',text:'很香。'}
+  );
+  await store.run('diary',sig,p=>progressList.push(p));
+
+  assert.equal(comparedInputs.length,1);
+  assert.match(comparedInputs[0].新事实,/咖啡豆/);
+  assert.doesNotMatch(comparedInputs[0].新事实,/火锅/);
+
+  const prior=(await (await req('diaries/2026-11-17.1')).json());
+  assert(prior.threads[0].resolved);
+
+  const followProgress=progressList.filter(p=>p.stage==='核对悬念');
+  assert(followProgress.length>0);
+  assert(followProgress.every(p=>Number.isInteger(p.done)&&Number.isInteger(p.total)&&p.total>0));
+  assert(progressList.some(p=>p.stage==='手记归档入册'&&p.done===1&&p.total===1));
+});

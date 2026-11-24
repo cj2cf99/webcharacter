@@ -723,10 +723,11 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     }
     return deferred;
   }
-  async function flush(signal){
+  async function flush(signal,progress){
     const drafts=rows('SELECT * FROM drafts ORDER BY rowid');
     let confirmed=0;
-    for(const r of drafts){
+    for(const [index,r] of drafts.entries()){
+      progress?.({stage:'同步手记草稿',done:index,total:drafts.length});
       const packet=JSON.parse(r.packet),{batch,resolve}=packet;
       if(packet.rankPending)continue;
       if(packet.sections&&!packet.plan){
@@ -777,6 +778,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
       });
       if(found)confirmed++;
     }
+    if(drafts.length)progress?.({stage:'同步手记草稿',done:drafts.length,total:drafts.length});
     return confirmed;
   }
   function stage(day,id,batch,resolve,sections,legacy,rankPending=false){
@@ -840,37 +842,76 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
       finish();
     });
   }
-  async function followThreads(period,facts,signal,syncDrafts,write,step){
+  function threadKeywords(text){
+    const cleaned=String(text??'').replace(/[？?！!。，,；;、“”"''（）()《》\s]/g,'');
+    if(!cleaned)return new Set();
+    const stopwords=new Set(['什么','怎么','怎样','如何','为什么','哪个','哪些','哪本','何时','哪天','哪儿','哪里','是否','有没有','吗','呢','吧','呀','啊','哦','了','的','在','是','我','你','他','她','它']);
+    const tokens=new Set();
+    for(let i=0;i<cleaned.length-1;i++){
+      const pair=cleaned.slice(i,i+2);
+      if(!stopwords.has(pair))tokens.add(pair);
+    }
+    for(const ch of cleaned){
+      if(!stopwords.has(ch)&&/[\p{Unified_Ideograph}\w]/u.test(ch))tokens.add(ch);
+    }
+    return tokens;
+  }
+  function threadFactScore(keywords,fact){
+    if(!keywords.size)return 0;
+    const target=(fact.label?fact.label+' ':'')+fact.content;
+    let score=0;
+    for(const token of keywords){
+      if(target.includes(token))score+=token.length>1?3:1;
+    }
+    return score;
+  }
+  async function followThreads(period,facts,signal,syncDrafts,write,step,progress){
     const pending=pages(period.at(-1)).filter(p=>period.includes(p.day)).flatMap(p=>p.threads.filter(t=>!t.resolved).map(t=>({...t,page:p.day+'.'+p.part,day:p.day})));
     const questions=new Set(nags().filter(n=>isPendingQuestion(n)||n.localQuestion&&answeredQuestion(n)).map(questionTarget));
-    for(const thread of pending){
+    const activeThreads=pending.filter(t=>{
+      const source=t.page+'/'+t.no;
+      return !questions.has('diary/'+source)&&!handledThread(source);
+    });
+    for(const [tIndex,thread] of activeThreads.entries()){
+      progress?.({stage:'核对悬念',done:tIndex,total:activeThreads.length});
       const source=thread.page+'/'+thread.no;
       if(questions.has('diary/'+source)||handledThread(source))continue;
+      const keywords=threadKeywords(thread.text);
+      const cleaned=String(thread.text??'').replace(/[？?！!。，,；;、“”"''（）()《》\s]/g,'');
+      const isGeneric=keywords.size===0||cleaned.length<=4||/^(?:后来|结果|然后|怎么样|怎样|办好|成了|有了|如何)/.test(cleaned);
+      const candidates=[];
       for(const fact of facts){
         if(thread.day>fact.day||thread.day===fact.day&&(!thread.at||thread.at>=fact.at))continue;
-        signal.throwIfAborted();
         const id=hash(['follow',thread.page,thread.no,fact.id].join('/'));
         if(db.prepare('SELECT 1 FROM compared WHERE id=?').get(id))continue;
         const current=pages(fact.day).filter(p=>p.day===fact.day).sort((a,b)=>b.part-a.part)[0];
         if(!current)continue;
-        if(!claimThread(source))break;
-        const compare=async()=>{
-          const reply=await write(JSON.stringify({悬念:thread.text,来源:fact.label||'本机行动',新事实:fact.content,基础情绪:current.mood}),'follow',['match','text','comment']);
-          if(reply.match==='1'&&reply.text&&reply.comment){
-            const body='接 '+thread.day+' 的悬念（第 '+thread.page.split('.')[1]+' 篇 · '+thread.no+'）：'+thread.text+'\n'+reply.text+'\n绯月私语：'+reply.comment;
-            const header=await summarize(fact.label?fact.content:body,Array.from(current.body+'\n\n'+body).length<=5000?current:null,write,fact.label);
-            stage(fact.day,id,{body,summary:header.summary,tags:tagsOf(header),mood:current.mood,weather:current.weather,threads:[]},thread);
-            await syncDrafts();
-            return '已写入后续并回读已解标记';
-          }
-          put('INSERT OR IGNORE INTO compared VALUES(?)',id);
-          return '本次事实未提供下文，保留未解状态';
-        };
-        if(step)await step('悬念跟进','用 '+fact.day+' 的事实核对悬念 '+source+'：'+thread.text,compare);
-        else await compare();
-        break;
+        const score=threadFactScore(keywords,fact);
+        candidates.push({fact,id,current,score});
       }
+      if(!candidates.length)continue;
+      candidates.sort((a,b)=>b.score-a.score||b.fact.at-a.fact.at);
+      const chosen=candidates[0];
+      if(chosen.score===0&&!isGeneric)continue;
+      signal.throwIfAborted();
+      if(!claimThread(source))continue;
+      const {fact,id,current}=chosen;
+      const compare=async()=>{
+        const reply=await write(JSON.stringify({悬念:thread.text,来源:fact.label||'本机行动',新事实:fact.content,基础情绪:current.mood}),'follow',['match','text','comment']);
+        if(reply.match==='1'&&reply.text&&reply.comment){
+          const body='接 '+thread.day+' 的悬念（第 '+thread.page.split('.')[1]+' 篇 · '+thread.no+'）：'+thread.text+'\n'+reply.text+'\n绯月私语：'+reply.comment;
+          const header=await summarize(fact.label?fact.content:body,Array.from(current.body+'\n\n'+body).length<=5000?current:null,write,fact.label);
+          stage(fact.day,id,{body,summary:header.summary,tags:tagsOf(header),mood:current.mood,weather:current.weather,threads:[]},thread);
+          await syncDrafts();
+          return '已写入后续并回读已解标记';
+        }
+        put('INSERT OR IGNORE INTO compared VALUES(?)',id);
+        return '本次事实未提供下文，保留未解状态';
+      };
+      if(step)await step('悬念跟进','用 '+fact.day+' 的事实核对悬念 '+source+'：'+thread.text,compare);
+      else await compare();
     }
+    if(activeThreads.length)progress?.({stage:'核对悬念',done:activeThreads.length,total:activeThreads.length});
   }
   async function summarize(body,prior,write,label){
     const sections=new Map(),local=[];
@@ -1030,7 +1071,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     let synced=0;
     let addedReviews=0,deferredReviews=0;
     const sourceErrors=[];
-    const syncDrafts=async()=>{synced+=await flush(signal);};
+    const syncDrafts=async()=>{synced+=await flush(signal,progress);};
     if(mode==='diary'){
       progress({stage:'核对已有手记'});
       try{
@@ -1192,7 +1233,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
       if(mode==='diary'&&!offline&&!external.errors.length&&!deferred&&!substantive&&!items.some(item=>write.discarded.has(item.id))&&!db.prepare('SELECT 1 FROM pages WHERE day=?').get(day))stage(day,'empty-'+day,{body:emptyDiaryBody,summary:emptyDiaryBody,mood:'平静',tags:[],weather:sky,threads:[]},null);
       if(mode==='diary'&&!offline)try{await syncDrafts();}catch(error){signal.throwIfAborted();offline=error;}
     }
-    progress({stage:mode==='review'?'同步本地记录':'整理手记收尾'});
+    progress({stage:mode==='review'?'同步本地记录':'整理手记收尾',done:0,total:1});
     if(mode==='review'&&write.hasPendingReviews?.()&&memory.archiveDays){
       for(const day of await memory.archiveDays()){
         if(!write.hasPendingReviews())break;
@@ -1205,10 +1246,11 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
         deferredReviews+=await reviewMaterials(day,backlog,write,signal,(_event,rated)=>{if(rated&&!rated.existing)addedReviews++;});
       }
     }
-    if(mode==='review')await flush(signal);
+    if(mode==='review')await flush(signal,progress);
     if(offline)throw offline;
     if(mode==='review')return '本轮补写 '+addedReviews+' 条行动评价。'+(deferredReviews?'另有 '+deferredReviews+' 条保留待核查。':'')+write.discardSummary();
-    await followThreads(period,facts.sort((a,b)=>b.at-a.at),signal,syncDrafts,write,step);
+    await followThreads(period,facts.sort((a,b)=>b.at-a.at),signal,syncDrafts,write,step,progress);
+    progress({stage:'手记归档入册',done:1,total:1});
     await originals.notify('diaries');
     if(sourceErrors.length)throw Error('已同步 '+synced+' 段手记，部分素材待下次补读：'+sourceErrors.join('；'));
     const result=synced?'已同步 '+synced+' 段绯月的手记。':'已核对最近七天的手记，本轮上传 0 段。'+(facts.length?'已收录的素材没有需要补写的内容。':'');
