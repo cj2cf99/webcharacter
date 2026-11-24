@@ -88,7 +88,7 @@ try {
     writeFileSync(join(out,name+'.png'),(await panel.webContents.capturePage()).toPNG());
   };
   const card=eventId=>'[data-event="'+eventId+'"] .event-toggle';
-  const columns="getComputedStyle(document.querySelector('#event-list')).gridTemplateColumns.split(' ').length";
+  const columns="getComputedStyle(document.querySelector('#key-list')).gridTemplateColumns.split(' ').length";
   await wait("document.querySelectorAll('.event').length===4");
   assert.equal(await ui(columns),2);
   assert.deepEqual(pictures,[]);
@@ -152,10 +152,10 @@ try {
   items=[row('new','端侧模型发布评测更新','11-22T10:00','大模型','维护团队更新了延迟和功耗的评测步骤。')];
   await news.poll(signal);
   host.update();
-  await wait("document.querySelector('#refresh').textContent.includes('有更新')");
+  await wait("document.querySelector('#refresh').hasAttribute('data-pending')");
   await click('#refresh');
   await wait("document.querySelectorAll('.event').length===5");
-  assert.match(await ui("document.querySelector('.event-title').textContent"),/端侧模型发布评测更新/);
+  assert.match(await ui("document.querySelector('#key-list').textContent"),/端侧模型发布评测更新/);
   host.panel.close();
   await new Promise(resolve=>setTimeout(resolve,100));
   await host.open();
@@ -163,7 +163,31 @@ try {
     if(Date.now()>deadline+5000)throw Error('重开后简报未及时读回');
     await new Promise(resolve=>setTimeout(resolve,35));
   }
-  console.log('PASS：正常新闻 IPC、七天累积、三节点四来源、现状、原文译文、附图双尺寸、桌面分栏及窄窗、归档入口、刷新和重开。');
+  const reopened=host.panel;
+  at=stamp('11-22T14:00');
+  items=Array.from({length:14},(_,i)=>row('focus-'+i,'新闻焦点 '+Math.floor(i/3),'11-22T13:00','人工智能','','媒体 '+i));
+  items.push(...Array.from({length:5},(_,i)=>row('extra-'+i,'科技简讯 '+i,'11-22T13:00','人工智能','')));
+  await news.poll(signal);
+  await reopened.webContents.executeJavaScript("document.querySelector('#refresh').click()");
+  const refreshed=await reopened.webContents.executeJavaScript(`new Promise((resolve,reject)=>{
+    const deadline=Date.now()+4000;
+    function check(){
+      if(document.querySelectorAll('#hot-list .event').length===5 &&
+        document.querySelectorAll('#key-list .event').length===5) {
+        resolve([document.querySelectorAll('#event-list .event').length,document.querySelector('#more-events').hidden]);
+      } else if(Date.now()>deadline)reject(Error('周内热点和其他重点没有各显示五条'));
+      else setTimeout(check,40);
+    }
+    check();
+  })`);
+  assert.deepEqual(refreshed,[0,false]);
+  const expanded=await reopened.webContents.executeJavaScript(`(()=>{
+    document.querySelector('#more-events').click();
+    const cards=Array.from(document.querySelectorAll('.event'));
+    return [cards.length,new Set(cards.map(card=>card.dataset.event)).size,document.querySelector('#more-events').hidden];
+  })()`);
+  assert.deepEqual(expanded,[15,15,true]);
+  console.log('PASS：新闻 IPC、周内热点与其他重点各五条、余项按需显示、跨日详情与来源、附图、宽窄布局、归档、刷新和重开。');
   process.exitCode=0;
 } catch(error) {
   console.error(error);

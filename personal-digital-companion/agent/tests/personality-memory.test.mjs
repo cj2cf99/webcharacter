@@ -92,6 +92,57 @@ function fixture(t){
   const req=(path,body,owner='me')=>/^(expenses|sources)\?/.test(path)?Response.json({records:[],complete:true}):personalityMemory(new Request('https://unit.test/api/memory/'+path,body?{method:'POST',body:JSON.stringify(body)}:{}),{DB},owner);
   return {DB,sqlite,req};
 }
+test('超过 20 条跨日归类，回读后确认来源，复审退回不挡其他段落',async t=>{
+  for(const amount of [20,21,22]){
+    const {req}=fixture(t),profile=mkdtempSync(join(tmpdir(),'feiyue-backlog-diary-'));
+    const previous='2026-11-19',calls=[];
+    let offline=amount===21;
+    const store=createPersonalityDiary({profile,now:()=>start,weather:()=>[],
+      memory:{read:()=>[],readTasks:date=>Array.from({length:date===day?10:date===previous?amount-10:0},(_,i)=>({
+        at:Date.parse(date+'T12:00:00+09:00')+i,task_id:date+'-'+i,title:date+' 的读书记录',action:'核实完成',detail:'第 '+(i+1)+' 段阅读'}))},
+      request:(url,options)=>{
+        const route=url.slice('/api/memory/'.length),body=options.body&&JSON.parse(options.body);
+        if(offline&&route==='diaries'&&body)return new Response(null,{status:503});
+        return req(route,body);
+      },model:{memory:async(data,_prompt,_format,_signal,skill)=>{
+        calls.push(skill.stage);
+        const input=JSON.parse(data.startsWith('{')?data:'null');
+        if(skill.stage==='batchClassify')return {items:input.材料.map(row=>({no:row.序号,topic:'生活与提醒',
+          text:row.序号===1?'原文没有的虚构场景':row.事实.slice(0,100)}))};
+        if(skill.stage==='reviewAction')return {text:data,review:'完成阅读'};
+        if(skill.stage==='mood')return {mood:'欣慰'};
+        if(skill.stage==='summary')return {summary:'整理阅读记录',tags:'阅读'};
+        if((skill.stage==='narrate'&&amount===20&&calls.filter(stage=>stage==='narrate').length===2)||
+          (skill.stage==='batchNarrate'&&amount===22&&calls.filter(stage=>stage==='batchNarrate').length===2))
+          throw Object.assign(Error('草稿含无来源场景'),{code:'AI_REVIEW_REJECTED'});
+        return {text:'我整理了完成记录。',comment:'想把进展记清楚。',thread:''};
+      }}});
+    const db=new DatabaseSync(join(profile,'personality-memory.sqlite'),{readOnly:true});
+    t.after(()=>{db.close();store.close();rmSync(profile,{recursive:true,force:true});});
+    const run=()=>store.run('diary',new AbortController().signal);
+    const covered=()=>db.prepare('SELECT COALESCE(sum(covered),0) AS count FROM materials').get().count;
+    if(amount===20){
+      assert.match(await run(),/1 条素材保留待核查/);
+      assert(!calls.includes('batchClassify'));assert.equal(covered(),19);
+    }else if(amount===21){
+      await assert.rejects(run,/HTTP 503/);
+      assert.equal(covered(),0);
+      assert.equal(calls.filter(stage=>stage==='batchClassify').length,3);
+      assert.equal(calls.filter(stage=>stage==='batchNarrate').length,3);
+      offline=false;await run();assert.equal(covered(),21);
+      const page=store.pages().find(entry=>entry.day===day);
+      assert.match(page.body,/积压补记 · 生活与提醒/);
+      assert.match(page.body,/2026-11-19 的读书记录/);
+      assert.match(page.body,/2026-11-20 的读书记录/);
+      assert.doesNotMatch(page.body,/原文没有的虚构场景/);
+      assert.equal(calls.filter(stage=>stage==='batchClassify').length,3);
+    }else{
+      assert.match(await run(),/8 条素材保留待核查/);
+      assert.equal(covered(),14);
+      assert.equal(calls.filter(stage=>stage==='batchNarrate').length,3);
+    }
+  }
+});
 test('并发重传只追加一次，5000 字按字符计，检索只看篇首，账户隔离',async t=>{
   const {req}=fixture(t);
   const responses=await Promise.all(Array.from({length:4},()=>req('diaries',packet)));
@@ -233,7 +284,28 @@ test('离线草稿恢复，空日记复用；跨日后续与旧篇标记；读�
   assert.equal((await (await req('diaries')).json()).total,7);
   failedDay='2026-11-19';await assert.rejects(store.run('diary',signal),/归档打不开/);
 });
-test('手记候选先复审，同篇只保留前三，后续追加和旧客户端也不能新增第四个',async t=>{
+test('手记按固定栏目保存，模型复述和伪栏目不重复入稿',async t=>{
+  const {req}=fixture(t),profile=mkdtempSync(join(tmpdir(),'feiyue-diary-paragraph-'));
+  const store=createPersonalityDiary({profile,now:()=>start,weather:()=>[],memory:{
+    read:d=>d===day?[{id:'story',at:start,question:'我走到了书店。',text:'欢迎回家。'}]:[],readTasks:()=>[]},
+    request:(url,opts)=>req(url.slice('/api/memory/'.length),opts.body&&JSON.parse(opts.body)),
+    model:{async memory(input,_prompt,schema,_,skill){
+      const values={mood:{mood:'欣慰'},reviewAction:{text:input,review:'我记住了。'},
+        narrate:{text:'你说：我走到了书店。\n我想下次一起去。\n我想下次一起去。\n当时的评价：我记住了。',comment:'绯月私语：我想下次一起去。',thread:'「」？'},
+        summary:{summary:'书店散步',tags:'书店'}};
+      if(skill.stage==='reviewSource')return {review:'已读'};
+      assert(schema.required.every(key=>Object.hasOwn(values[skill.stage],key)));
+      return values[skill.stage];
+    }}
+  });
+  t.after(()=>{store.close();rmSync(profile,{recursive:true,force:true});});
+  await store.run('diary',new AbortController().signal);
+  const page=await (await req('diaries/'+day+'.1')).json();
+  assert.equal(page.body,'你说：我走到了书店。\n绯月当时回复：欢迎回家。\n我想下次一起去。\n当时的评价：我记住了。');
+  assert.deepEqual(page.threads,[]);
+});
+
+test('逐条手记候选先复审并取前三，手记接口允许追加第四条且限制第五条',async t=>{
   const {req}=fixture(t),profile=mkdtempSync(join(tmpdir(),'feiyue-diary-ranking-'));
   const turns=['2','0','1','5','4','3'].map((score,i)=>({id:'q'+i,at:start+i,question:'素材'+score,text:'收到'}));
   const reviews=[];
@@ -279,9 +351,10 @@ test('手记候选先复审，同篇只保留前三，后续追加和旧客户�
   assert.equal(store.questionCitation({...historic,next:'你指哪一件事？'}).excerpt,'');
   assert.equal(store.questionCitation({...historic,source_id:'2026-11-10.1/1'}).canExpand,false);
   assert(!p.threads.some(q=>q.text.includes('0')));
-  assert((await req('diaries',{...packet,batch:'oldClientAttempt',threads:['第四个问题？']})).ok);
+  assert((await req('diaries',{...packet,batch:'addFourthQuestion',threads:['第四个问题？','第五个问题？']})).ok);
   p=await (await req('diaries/'+day+'.1')).json();
-  assert.equal(p.threads.length,3);
+  assert.deepEqual(p.threads.map(q=>q.no),[1,2,3,4]);
+  assert.equal(p.threads[3].text,'第四个问题？');
 });
 test('已有答案需要完整原文依据，截掉未交代限定也不能排除值得追问的问题',async()=>{
   const question='新住处找到了吗？';
@@ -319,7 +392,7 @@ test('一轮一件、两日消费与相邻周；继续同一问题、拒绝及�
     saveNag:n=>{n.revision++;local.set(n.id,structuredClone(n));},syncNags:async()=>{},
     api:async()=>({records:raw.map(([id,spendDate,amount])=>({id,spendDate,amount,category:'图书'})),complete:true}),
     think:async(d,_p,keys)=>keys.includes('question')?{question:'这笔是买什么呀？',evaluation:'惦记这笔消费',mood:'担心'}:
-      {reply:'原来如此。',next:'还有后续'+JSON.parse(d).解释+'吗？',evaluation:'听到了理由',mood:'释然'}};
+      {reply:'原来如此。',next:'还有后续'+JSON.parse(d).最新发言.at(-1).原话+'吗？',evaluation:'听到了理由',mood:'释然'}};
   store.queueQuestion=n=>{store.saveNag(n);return true;};
   function structuredCloneSafe(r){return structuredClone(r);}
   const n=createPersonalityNags({store,now:()=>at,random:()=>0,idle:()=>true,show:async s=>{session=s;s.visible();return true;}});t.after(()=>n.close());
@@ -504,6 +577,30 @@ test('只入队并提示，候选排除已问和退款，再从金额前五和�
   assert.equal(archive.at(-1).source_id,'P7');assert(archive.at(-1).stats.includes('资料不全'));assert.equal(stored,1);
   await n.close();
 });
+test('旧念叨跳过复述形成的待续项，只能续问原先未发出的具体问题',async t=>{
+  const talk=[{who:'绯月',text:'下次一起听雨好吗？'},
+    {who:'你',text:'到时候一起坐在床边听雨。'},
+    {who:'绯月',text:'「到时候一起坐在床边听雨？」'},
+    {who:'你',text:'我们再一起看书。'}];
+  const closed={source:'diary',status:'回合结束',talk};
+  const archive=[{...closed,id:'old',source_id:day+'.1/1',remaining:'到时候一起坐在床边听雨。'}];
+  const store={nags:()=>archive,pages:()=>[],syncNags:async()=>{},api:async()=>({records:[],complete:true}),
+    think:()=>assert.fail('念叨待续不得重新拟题'),
+    queueQuestion(n){archive.push(n);return true;}};
+  const engine=createPersonalityNags({store,now:()=>start,random:()=>0,idle:()=>true});
+  t.after(()=>engine.close());
+  const signal=new AbortController().signal;
+  assert.equal(await engine.poll(signal),'没有待问事项');
+  assert.equal(archive.length,1);
+  const remaining='有空告诉我你想看哪一本书就好。';
+  archive.push({...closed,id:'open',source_id:day+'.1/2',remaining});
+  assert.equal((await engine.poll(signal)).detail,'已新增 1 个待确认问题');
+  assert.equal(archive.at(-1).source_id,'open');
+  assert.equal(archive.at(-1).talk[0].text,remaining);
+  await engine.poll(signal);
+  assert.equal(archive.length,3);
+});
+
 test('等待期间留下解释但推理中断，恢复后用已存原话收尾',async()=>{
   const n={id:'test',source:'paylog',source_id:'1',status:'意外中断',revision:3,turns:1,questions:1,interruptions:1,next:'买了什么？',mood:'好奇',
     talk:[{who:'绯月',text:'买了什么？'},{who:'你',text:'一本书。'}]};
@@ -515,21 +612,23 @@ test('等待期间留下解释但推理中断，恢复后用已存原话收尾',
   await engine.resume(n.id,new AbortController().signal);assert.equal(saved.status,'已解释');assert.equal(saved.next,'');assert.equal(saved.afterEvaluation,'明白用途了。');await engine.close();
 });
 
-test('手记首问先核对原题及后文，确认缺项才生成自然问话并引用原句',async t=>{
+test('第四条悬念也先核对原题及后文，确认缺项才生成自然问话并引用原句',async t=>{
   const archive=[];
   const evidence='术语表更新已核验，原记录在哪个页面还没告诉你。';
   const target='术语表更新的原记录所在页面';
   const question='有空告诉我从哪儿能打开那份原件就好。';
   const originalTitle='原记录如何检索';
   let excerpt='',body='',later,expectedLines,check={},session,onCheck,checks=0,writes=0;
-  const store={nags:()=>archive,pages:()=>[{day,part:1,threads:[{no:1,text:originalTitle}]}],
+  const store={nags:()=>archive,pages:()=>[{day,part:1,threads:[
+    {no:1,asked:true},{no:2,resolved:true},{no:3,asked:true},{no:4,text:originalTitle}
+  ]}],
     syncNags:async()=>{},api:async()=>({records:[],complete:true}),saveNag:()=>{},
     queueQuestion(n){archive.push(n);return true;},
     questionCitation:(n,expanded)=>expanded?{quote:excerpt,body}:
-      {reference:day+' · 第 1 篇 · 悬念 1',label:'手记对话摘录',excerpt:n.localQuestionEvidence??excerpt},
+      {reference:day+' · 第 1 篇 · 悬念 4',label:'手记对话摘录',excerpt:n.localQuestionEvidence??excerpt},
     think:async(data,_prompt,fields,_signal,skill)=>{
       if(skill.stage==='diaryOpeningCheck'){
-        assert.equal(skill.aiBudget,180_000);
+        assert.equal(skill.aiBudget,undefined);
         checks++;
         const lines=(expectedLines??[excerpt]).map((原文,index)=>({行:index+1,原文}));
         assert.deepEqual(JSON.parse(data),{原题:originalTitle,出处:lines,...(later?{同篇后文:later}:{})});
@@ -537,7 +636,7 @@ test('手记首问先核对原题及后文，确认缺项才生成自然问话�
         return check;
       }
       assert.equal(skill.stage,'diaryOpeningWrite');
-      assert.equal(skill.aiBudget,180_000);
+      assert.equal(skill.aiBudget,undefined);
       writes++;
       assert.deepEqual(JSON.parse(data),{已核对的待答信息:target,相关出处:expectedLines?.at(-1)??evidence});
       assert.deepEqual(fields,['question']);
@@ -577,6 +676,7 @@ test('手记首问先核对原题及后文，确认缺项才生成自然问话�
   check={target,state:'open',answer:'',line:'3'};
   assert.equal((await engine.poll(signal)).detail,'已新增 1 个待确认问题');
   assert.equal(writes,1);
+  assert.equal(archive[0].source_id,day+'.1/4');
   assert.equal(archive[0].localQuestionEvidence,missing);
   assert.equal(archive[0].talk[0].text,question);
   assert.equal(archive[0].beforeEvaluation,'想听你补充手记里还没答复的这一项。');
@@ -584,7 +684,7 @@ test('手记首问先核对原题及后文，确认缺项才生成自然问话�
   assert(session.prompt.includes(missing+'\n'+question));
 });
 
-test('无追问占位词正常收笔，重启清理仍等待作答的同类旧记录',async()=>{
+test('无追问占位词和重提旧题正常收笔，重启清理仍等待作答的旧占位词',async()=>{
   const opening={who:'绯月',text:'什么时候回来？'};
   const answer={who:'你',text:'吃过晚饭就回来。'};
   const reply={who:'绯月',text:'好，我等你。'};
@@ -611,12 +711,13 @@ test('无追问占位词正常收笔，重启清理仍等待作答的同类旧�
   next='什么时候回来';
   await engine.resume(unresolved.id,new AbortController().signal);
   assert.equal((await session.reply('还不知道。')).finished,true);
-  assert.equal(unresolved.status,'回合结束');
-  assert.equal(unresolved.remaining,next);
+  assert.equal(unresolved.status,'已解释');
+  assert.equal(unresolved.next,'');
+  assert.equal(unresolved.remaining,undefined);
   await engine.close();
 });
 
-test('记忆锁定 Aggressive 9B，显存不足走 CPU，前台对话抢占后回到普通模型',async()=>{
+test('记忆用本地 4B，显存不足走 CPU，前台对话抢占后重新装载同一模型',async()=>{
   const started=Promise.withResolvers(),chosen=[];
   const model=createBalancedLocalModel({modelPath:'models/base.gguf',readGpu:async()=>({freeMiB:100,utilization:99}),
     create:({modelPath,device})=>{
@@ -631,5 +732,5 @@ test('记忆锁定 Aggressive 9B，显存不足走 CPU，前台对话抢占后�
   await started.promise;
   const checked=assert.rejects(waiting);
   const reply=await model.analyze('你好',{hint:'auto'});await checked;
-  assert.equal(reply.reply,'我在。');assert.match(chosen[0][0],/9B-Uncensored-HauhauCS-Aggressive/);assert.equal(chosen[0][1],'cpu');assert.match(chosen[1][0],/0.8B/);await model.close();
+  assert.equal(reply.reply,'我在。');assert.match(chosen[0][0],/Qwen3.5-4B-Q4_K_M/);assert.equal(chosen[0][1],'cpu');assert.match(chosen[1][0],/Qwen3.5-4B-Q4_K_M/);await model.close();
 });

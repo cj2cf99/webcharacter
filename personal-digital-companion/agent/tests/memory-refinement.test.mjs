@@ -89,6 +89,17 @@ test('旧记录备份只能固定一次，已结束唠叨只改评价，空日�
   assert.equal((await request(refinePath,{baseRevision:1,refineId:'empty',fields:{body:'假补写',summary:'测试'}})).status,409);
 });
 
+test('当天第一条正文替换空日记，空批次重试沿用原篇',async t=>{
+  const {api}=fixture(t);
+  const empty={...batch,batch:'empty-'+day,body:'无所事事的一天',summary:'无所事事的一天',threads:[]};
+  await api('diaries',empty);
+  const fact={...batch,body:'你说：已经装好了。'.padEnd(5000,'字')};
+  const saved=await api('diaries',fact);
+  assert.deepEqual({part:saved.part,body:saved.body,revision:saved.revision},{part:1,body:fact.body,revision:2});
+  assert.deepEqual(await api('diaries',empty),saved);
+  assert.deepEqual(await api('diaries',fact),saved);
+});
+
 test('旧服务的修订读取返回 404 时跳过，入口上线后继续原记录',async t=>{
   const profile=mkdtempSync(join(tmpdir(),'feiyue-refine-legacy-'));
   const requests=[];
@@ -360,10 +371,11 @@ test('悬念状态推进版本时复用已复核正文，按新版本提交同�
 test('修订轮询与启动时的手记核对错峰，仍沿用现有闲时调度',async t=>{
   const profile=mkdtempSync(join(tmpdir(),'fy-refinement-poll-')),timers=new Map();
   let clock=Date.parse(at),busy=false,refined=0;
+  const audit=Promise.withResolvers();
   const checks=createReminderChecks({profile,now:()=>clock,isBusy:()=>busy,
     setTimer(fn,ms){const key=Symbol();timers.set(key,{fn,at:clock+ms});return key;},clearTimer:key=>timers.delete(key),
-    handlers:{diaryAudit:async signal=>{busy=true;await new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}));
-      busy=false;return {deferred:true};},refinement:async()=>{refined++;return '已完成';}}});
+    handlers:{diaryAudit:async()=>{busy=true;checks.setExecutionBusy(true);await audit.promise;
+      busy=false;checks.setExecutionBusy(false);return '完成核对';},refinement:async()=>{refined++;return '已完成';}}});
   t.after(()=>{checks.close();rmSync(profile,{recursive:true,force:true});});
   async function advance(ms){
     clock+=ms;
@@ -371,30 +383,32 @@ test('修订轮询与启动时的手记核对错峰，仍沿用现有闲时调�
     await new Promise(resolve=>setImmediate(resolve));
   }
   checks.start();await advance(60000);assert(busy);
-  await advance(600000);assert.equal(busy,false);assert.equal(refined,0);
-  await advance(60000);assert.equal(refined,1);
+  await advance(600000);assert.equal(busy,true);assert.equal(refined,0);
+  audit.resolve();await advance(0);
+  await advance(659999);assert.equal(refined,0);
+  await advance(1);assert.equal(refined,1);
 });
 
-test('单次推理含准备只有十五秒，超时保留原任务及已完成步骤',async t=>{
+test('修订取消时保留原任务及已完成步骤，推理没有固定截止',async t=>{
   const {api}=fixture(t);
   await api('diaries',batch);
   const db=new DatabaseSync(':memory:');t.after(()=>db.close());
   let calls=0;
-  t.mock.method(AbortSignal,'timeout',ms=>{
-    assert.equal(ms,15000);
-    const deadline=new AbortController();
-    if(calls)queueMicrotask(()=>deadline.abort());
-    return deadline.signal;
-  });
+  const controller=new AbortController(),entered=Promise.withResolvers();
+  t.mock.method(AbortSignal,'timeout',()=>assert.fail('修订不应设置推理截止时间'));
   const runner=createMemoryRefinement({db,api,clean:text=>text.trim(),
     loadSkill:async name=>name==='memoryRefinement'?{skill:'memory-refinement',version:'1.0',content:'测试指引',schemas,localAi}:
       {version:'1.0',content:'现行格式'},
     model:{async memory(){
       if(++calls===1)return {organize:'理顺原有描述',additions:'',format:''};
+      entered.resolve();
       return new Promise(()=>{});
     }}
   });
-  await assert.rejects(runner.run(signal),{code:'LOCAL_AI_REFINEMENT_TIMEOUT'});
+  const stopped=assert.rejects(runner.run(controller.signal),{name:'AbortError'});
+  await entered.promise;
+  controller.abort();
+  await stopped;
   const job=JSON.parse(db.prepare('SELECT data FROM memory_refinements WHERE active=1').get().data);
   assert.equal(job.plan.organize,'理顺原有描述');
   assert.equal(job.drafts['body-1'].text,'你说：装好了。\n');

@@ -4,6 +4,7 @@ export const diaryOriginalKey='@refineOriginal';
 export const diaryReceiptKey='@refineReceipt';
 export const nagRefinementKey='_refinement';
 export const emptyDiaryBody='无所事事的一天';
+export const diaryThreadLimit=4;
 
 export function appendDiaryBody(prior,body){
   return prior===emptyDiaryBody?body:prior+'\n\n'+body;

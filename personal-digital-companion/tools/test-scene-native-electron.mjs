@@ -8,7 +8,7 @@ import {colourBounds} from '../desktop/scene-location.mjs';
 import {encodeImage} from '../desktop/screen-question-client.mjs';
 import {createBalancedLocalModel} from '../desktop/balanced-local-model.mjs';
 import {createSceneCuriosity} from '../desktop/scene-curiosity.mjs';
-import {localVision} from '../desktop/local-vision.mjs';
+import {cloudVision} from '../desktop/ai-gateway.mjs';
 import {desktopModelPath} from '../desktop/local-model.mjs';
 
 const root=resolve(import.meta.dirname,'..');
@@ -26,7 +26,7 @@ async function run(){
   for(const [got,want] of [[x,675],[y,206],[w,135],[h,216]])assert.ok(Math.abs(got-want)<12,JSON.stringify(box));
   if(process.argv.includes('--vision')){
     const crop=img.crop({x:Math.floor(x*width/1000),y:Math.floor(y*height/1000),width:Math.ceil(w*width/1000),height:Math.ceil(h*height/1000)});
-    const result=await localVision(desktopModelPath(electron.app,root))('裁剪图中是否清楚包含完整的「红色圆形」？只答是或否。',encodeImage(crop),new AbortController().signal);
+    const result=await cloudVision()('裁剪图中是否清楚包含完整的「红色圆形」？只答是或否。',encodeImage(crop),new AbortController().signal);
     console.log('合成红圆的实测外框和本机视觉核对',JSON.stringify(box),result.text??result.reason);
     assert.match(result.text??'',/^是[。.!！]?$/);
   }
@@ -38,7 +38,7 @@ async function run(){
       eligible:()=>true,context:()=>'平静，想知道颜色的名字和我们实际看到的颜色是否相同',wake:()=>{},
       electron:{screen:{getCursorScreenPoint:()=>({x:0,y:0}),getDisplayNearestPoint:()=>({id:1,size:{width,height}})},
         desktopCapturer:{getSources:async()=>[{display_id:'1',thumbnail:img}]},nativeImage:electron.nativeImage},
-      vision:localVision(desktopModelPath(electron.app,root)),show:async s=>{shown=s;return true;},
+      vision:cloudVision(),show:async s=>{shown=s;return true;},
       draw:async()=>join(root,'output/scene-qa/letter.png')});
     try{
       const answer=await instance.run(new AbortController().signal);

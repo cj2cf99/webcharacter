@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {conversationRoute} from '../../desktop/conversation-routing.mjs';
 import {searchHint} from '../assistant/search-hint.mjs';
-import {searchPublicWeb} from '../../desktop/public-search.mjs';
+import {askDeepSeek,searchPublicWeb} from '../../desktop/public-search.mjs';
 import {createConversationHistory} from '../../desktop/conversation-history.mjs';
 
 test('自动输入区分登记、询问和显式搜索，登记中的搜索文字保留在原记录',()=>{
@@ -49,6 +49,28 @@ test('公开搜索只读固定搜索页，拒绝不明确的目标并保留实�
   assert.equal(conversationRoute('打开网页 https://example.org/look 找图').images,true);
   assert.equal(conversationRoute('问 DeepSeek 如何分析公开数据').research,'deepseek');
 
+});
+
+test('DeepSeek 公开问答经共用客户端只发送明确提供的公开问题',async t=>{
+  const previous=process.env.bandao_api_key;
+  t.after(()=>{
+    if(previous===undefined)delete process.env.bandao_api_key;
+    else process.env.bandao_api_key=previous;
+  });
+  const signal=new AbortController().signal;
+  delete process.env.bandao_api_key;
+  const query='Firefox 是什么？';
+  assert.match((await askDeepSeek(query,signal,()=>assert.fail('没有密钥'))).text,/尚未配置/);
+  process.env.bandao_api_key='fixture-key';
+  assert.equal((await askDeepSeek('帮我分析我的日记内容',signal,()=>assert.fail('不应发送私有问题'))).state,'error');
+  const answer=await askDeepSeek(query,signal,async(url,options)=>{
+    assert.equal(url,'https://sub.bandaoapi.com/v1/chat/completions');
+    assert.equal(options.headers.authorization,'Bearer fixture-key');
+    assert.deepEqual(JSON.parse(options.body).messages,[{role:'user',content:query}]);
+    return Response.json({choices:[{finish_reason:'stop',message:{content:'一个浏览器。',reasoning_content:'不进入结果'}}]});
+  });
+  assert.match(answer.text,/一个浏览器/);
+  assert.doesNotMatch(answer.text,/不进入结果/);
 });
 
 test('本地记录按东京午夜跨日，同次提交写入最终回复，重开可读',async t=>{

@@ -34,7 +34,7 @@ function threadCard(row,data,shown=false){
   const tone=row.closed!==null?'muted':row.error?'danger':row.pending?'info':'accent';
   const cardNode=card('details',tone);
   const time=row.latest&&tokyoDay.format(row.latest)===data.day?briefTime.format(row.latest):'最新 '+short.format(row.latest);
-  const state=row.closed!==null?'已结束':row.rounds>100?'只读':row.error?'可重试':row.pending?'等绯月回':'等你回';
+  const state=row.closed!==null?'已结束':row.rounds>100?'只读':row.error?'可重试':row.pending?'等绯月回':row.preview?.transcriptId?'待核对':'等你回';
   const summary=element('summary','','thread-summary');
   const title=row.title||row.preview?.text?.slice(0,28)||'新对话';
   summary.append(head(title,chip(state,row.closed!==null?'ok':tone),element('time',time)));
@@ -182,22 +182,23 @@ function renderChecks(data){
   checkPage=data.page;nextAt=data.nextAt;
   schedule.hidden=false;
   const nextLabel=data.first?'等待首次检查':'下一轮事项轮询';
-  document.getElementById('nextCheck').textContent=nextAt?nextLabel+' · '+new Date(nextAt).toLocaleString('zh-CN',
+  document.getElementById('nextCheck').textContent=data.paused&&nextAt?'事项轮询计时暂停':nextAt?nextLabel+' · '+new Date(nextAt).toLocaleString('zh-CN',
     {timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'})+' JST':'事项轮询未启动';
   const counter=document.getElementById('remaining');
-  counter.textContent=remaining();
-  countdown=setInterval(()=>{if(!document.hidden)counter.textContent=remaining();},1000);
+  counter.textContent=data.paused?'':remaining();
+  if(!data.paused&&nextAt)countdown=setInterval(()=>{if(!document.hidden)counter.textContent=remaining();},1000);
   const queuedChecks=data.queue??[];
   const waiting=data.queue?queuedChecks.some(row=>!row.running):data.pending;
   const queue=queuedChecks.map(({name,running,queuedAt})=>name+' · '+(running?'执行中':'待执行')+' · '+clock.format(queuedAt)+' JST');
   document.getElementById('checkState').textContent=[data.running?'正在检查到期事项':waiting?'提醒检查任务等待空闲执行':'',
-    data.nextWeatherAt?'下次天气检查 '+clock.format(data.nextWeatherAt)+' JST':'',
-    data.nextTaskAt?'下次任务轮询 '+clock.format(data.nextTaskAt)+' JST':'',
+    !data.paused&&data.nextWeatherAt?'下次天气检查 '+clock.format(data.nextWeatherAt)+' JST':'',
+    !data.paused&&data.nextTaskAt?'下次任务轮询 '+clock.format(data.nextTaskAt)+' JST':'',
     queue.join(' / ')].filter(Boolean).join(' · ');
   list.replaceChildren(...data.events.map((event,i)=>{
-    const tone=statusTone(event.status),row=stagger(card('section',tone),i);
+    const state=event.status==='待执行'?'当时已推迟':event.status;
+    const tone=event.status==='待执行'?'warn':statusTone(state),row=stagger(card('section',tone),i);
     const timing=clock.format(event.at)+(event.at-event.due>=1000?' · 原定 '+clock.format(event.due):'');
-    row.append(head(event.project,chip(event.status,tone),element('time',timing)));
+    row.append(head(event.project,chip(state,tone),element('time',timing)));
     if(event.detail)row.append(element('p',event.detail,'fy-meta fy-clamp'));
     return row;
   }));
@@ -430,6 +431,13 @@ function showSnapshot(container,data){
   const section=(title,text)=>{
     container.append(element('strong',title),element('p',text,'snapshot-text'));
   };
+  if(data.provider==='DeepSeek'){
+    section('响应总时长',Number.isFinite(data.durationMs)?data.durationMs+' ms':'尚未收到结束回执');
+    section('请求输入',JSON.stringify(input,null,2));
+    section('响应输出',output===undefined?(data.error??'暂无响应正文'):
+      typeof output==='string'?output:JSON.stringify(output,null,2));
+    return;
+  }
   if(output?.failure)section('调用失败',output.failure.message||output.failure.code);
   else if(output?.value!==undefined){
     const value=output.value;
@@ -458,7 +466,8 @@ function logRow(line){
   if(!data||typeof data!=='object'){row.append(element('p',line,'fy-clamp'));return row;}
   if(data.category==='绯月自主行动'){
     const time=clock.format(new Date(data.started_at));
-    row.append(head(data.category+' · '+data.route,chip(data.stage,'accent'),element('time',time+(data.stage==='未执行'?' JST 调度检查':' JST 开始'))),
+    const stage=data.route==='手记质问'&&data.stage==='已暂停'&&/^已保存 \d+ 步，下批从原进度继续$/u.test(data.result)?'本批完成':data.stage;
+    row.append(head(data.category+' · '+data.route,chip(stage,'accent'),element('time',time+(stage==='未执行'?' JST 调度检查':' JST 开始'))),
       element('p',data.goal));
     if(data.stage!=='开始'){
       const elapsed=Number.isFinite(data.duration_ms)?(data.duration_ms/1000).toFixed(1)+' 秒':'耗时未知';
@@ -470,14 +479,15 @@ function logRow(line){
   }
   const {time,direction,method,route,status:code,duration_ms,local_ms,cloud_ms,error,image,...detail}=data;
   const split=Number.isFinite(local_ms)&&Number.isFinite(cloud_ms);
-  const operation=split?detail.operation:undefined;
+  const deepSeek=route==='DeepSeek';
+  const operation=split||deepSeek?detail.operation:undefined;
   if(operation)delete detail.operation;
-  const heading=[({send:'发送',receive:'回执',local:'本机操作'})[direction]??direction,method,route,operation].filter(Boolean).join(' · ');
+  const heading=[({send:deepSeek?'开始':'发送',receive:'回执',local:'本机操作'})[direction]??direction,method,route,operation].filter(Boolean).join(' · ');
   row.dataset.tone=error||code>=400?'danger':direction==='send'?'info':direction==='receive'?'ok':'accent';
   const at=time&&new Date(time);
   row.append(head(heading||'记录',(code||error)&&chip(error?'✕ '+error:String(code),row.dataset.tone),
     at&&Number.isFinite(at.getTime())?element('time',clock.format(at)):time&&element('time',String(time))));
-  const result=[Number.isFinite(duration_ms)&&(split?'总计 ':'')+duration_ms+' ms',
+  const result=[Number.isFinite(duration_ms)&&(deepSeek?'响应总时长 ':split?'总计 ':'')+duration_ms+' ms',
     split&&'本地 '+local_ms+' ms',split&&'云端 '+cloud_ms+' ms'].filter(Boolean).join(' · ');
   if(result)row.append(element('p',result,'fy-meta'));
   appendImage(row,image);
@@ -486,7 +496,7 @@ function logRow(line){
     summary.append(element('span','›','fy-caret'),document.createTextNode(' 明细'));summary.className='fy-meta';
     more.append(summary);
     if(detail.ai_step_id&&api.aiStep){
-      const label=' '+(detail.skill==='emotion-appraisal'?'情绪复盘':'AI 调用快照');
+      const label=' '+(deepSeek?'查看输入和输出':detail.skill==='emotion-appraisal'?'情绪复盘':'AI 调用快照');
       summary.lastChild.textContent=label;
       let state='idle';
       more.ontoggle=async()=>{
@@ -573,6 +583,13 @@ async function load(date,requestedView,explicit=true,cursor=null) {
     if(view==='notices'){renderNotices(data);return;}
     if(view==='log'){
       list.replaceChildren(...data.lines.map((line,i)=>stagger(logRow(line),i)));
+      if(data.diaryWork?.length){
+        const current=card('section','accent');
+        current.append(head('当前自主行动'));
+        for(const {name,state,at} of data.diaryWork)
+          current.append(element('p',[name,state,at&&clock.format(at)+' JST'].filter(Boolean).join(' · '),'fy-meta'));
+        list.prepend(current);
+      }
       if(data.next)logCursors[logIndex+1]=data.next;
       setPager(logIndex,0,Boolean(data.next));
       status.textContent=data.warning??(data.failed?'最近一次日志写入失败。':list.childElementCount?'':'还没有任务收发日志。');

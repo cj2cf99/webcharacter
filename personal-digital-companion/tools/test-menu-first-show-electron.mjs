@@ -94,6 +94,7 @@ async function run(){
   await until(()=>loads&&window.isVisible()&&!window.isMinimized()&&window.isFocused(),'首击后窗口未显示或未获得焦点');
   assert.ok(window.webContents.getURL().endsWith('/'+page));
   assert.equal(created,1);assert.equal(loads,1);
+  if(target==='settings')assert.equal(await window.webContents.executeJavaScript("document.querySelector('h1').textContent"),label);
   if(mode==='drop-first')assert.equal(shows,2,'首次显示被吞后，同一次点击应完成补显');
   if(target==='pending'){
     await until(()=>window.webContents.executeJavaScript(

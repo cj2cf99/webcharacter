@@ -1,3 +1,228 @@
+## 2026-11-25 对话整理完成提示与补行动评价批处理会话 · 绯月 Windows 正式安装版 · 已部署（从简）
+
+用户要求从简、快速部署，跳过中间环节，已于 2026-11-25 00:22 JST 部署。清单 docs/releases/batch2-20261125/desktop-manifest.json，6 个运行文件：`conversation-threads.mjs`、`conversation-transcription.mjs`、`screen-question-host.mjs`、`conversation-ui.mjs`、`agy-local-model.mjs`、`ai-workflow-model.mjs`。内容：转录完成后在对话里追加“已整理出 N 项待确认”并直达待确认卡、标签显示“待核对”；补行动评价与来源补评留本机后端、进同一个 AGY 批处理会话（每条提示忽略上方内容）。
+
+- 验证：工作区全量 561 项，558 通过、3 跳过、0 失败，桌面构建通过；新增 3 项测试通过。**未做**候选副本对基线的逐项测试对比（用户要求跳过）；已完成的只有部署前 6 个目标文件哈希等于基线的复核。
+- 部署：旧进程 PID 34420 正常退出，备份 6 个旧文件到 `output/install-backup-batch2-20261125/`，原子替换后 6/6 哈希一致，读用户变量后启动新进程 PID 14624，本机接口正常。
+- 未做：真实对话里触发一次后台整理并查看提示、补评批处理的实际表现，需用户实测。花园登记、Git 同步未做，待用户决定。
+- 恢复：用备份目录里的 6 个文件覆盖后重启。
+
+## 2026-11-25 提交队列解绑严格等待与提交前一刻占号改造 · 绯月 Windows 正式安装版 · 待确认
+
+状态：**已完成三轮自审；已于 2026-11-25 00:11 JST 成功部署并完成哈希核验；花园登记已于 2026-11-25 00:20 JST 完成（批次 feiyue-queue-simplify-20261125，Git 提交 74c95b49，D1 版本 33.6 → 33.7，revision 171 → 173）**。第三方审核：无。
+
+### 需求与验收
+- **需求背景**：用户指出正式工作与花园登记提交队列设计过于复杂、限制太多（“至少把这个罗里吧嗦的严格等待去掉，对号码的占据应该是再提交前一刻决定的，不是提前做好了恶心人”）。
+- **验收标准**：
+  1. 彻底移除 `prepare` 脚本在起草阶段的长轮询死等（`while (turn.state === 'waiting')`）与控制台阻塞输出；
+  2. 制单（`prepare`）恢复为本地纯净、瞬时快照运算，支持多方并行准备，起草阶段零阻塞、零占位；
+  3. `waitingTurn` 排队占位严格限定在已定稿（`review IS NOT NULL AND review <> ''`）批次，未定稿草案不进入排队计数、不阻断其他草案；
+  4. 排位与号码的占据收缩至提交前一刻（提供 `reviewHash` 定稿 / `submit` 入队瞬间）；
+  5. 本地 REST API 契约测试（17 项）与全流程集成测试 100% 通过；
+  6. 接口文档同步更新说明。
+
+### 目标与基线
+- **目标目录**：正式安装版 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`
+- **基线与候选版本**（共 3 项）：
+  1. `desktop/local-task-pool.mjs`
+     - 基线 SHA-256：`A3F66FD891351D9052F671A7038F5CAD8B6C6C05FC5827E7BFFA6995863C7D2B`
+     - 候选 SHA-256：`E6546F738922FB5007D86AFC3A404C8D4F5648D4D153D3390108E39337721604`
+  2. `tools/prepare-garden-registration.mjs`
+     - 基线 SHA-256：`4C739565D34F2E4198E96D438A34E2BC5A443613EBA936A63D53540623219E67`
+     - 候选 SHA-256：`565520D78B7C35D42F7B013283942F6409A0F9E7EC1171EEB8DDAE8ECAAACA48`
+  3. `docs/LOCAL_GARDEN_API.md`
+     - 基线 SHA-256：`06038C9DAF1EAA7F1494E4F3F82A2FFE047397A91EE29C784CB20B74DC265CC1`
+     - 候选 SHA-256：`5F3C08E01EF38B8CD665B92BDADAED5001A431DBA6FAB9B1D05BBF4B0F2CD802`
+
+### 文件与行为变更
+1. `desktop/local-task-pool.mjs`：
+   - 过滤条件 `waitingTurn` 增加 `review IS NOT NULL AND review<>''`，未定稿草案不进入等待计数；
+   - 修正 `claimTurn` 断言为 `invariant(prior||!poll)`，允许在提交前一刻直接单步定稿取号；
+   - `allowSubmit` 解绑强制预取号逻辑：没有正在定稿提交中的外部冲突时直接允许合法批次入队。
+2. `tools/prepare-garden-registration.mjs`：
+   - 拔除 `while(turn.state === 'waiting')` 死循环轮询与 `等待统一取号，位置 n` 阻塞输出；
+   - 移除起草阶段多余的强制封包与异常 `/cancel` 握手。
+3. `docs/LOCAL_GARDEN_API.md`：
+   - 更新“并行准备与统一取号（v7）”章节条款。
+- **配置与数据**：无配置文件或数据库修改，现有数据零侵入。
+
+### 实际验证与状态
+- 单元契约测试：`node --test personal-digital-companion/agent/tests/local-rest-garden.test.mjs`（17 项通过）；
+- 端到端工作流：`personal-digital-companion/agent/tests/garden-first-use.test.mjs` 通过；
+- Codex 三轮自审：已完成 3 轮完整五项检查，形成自审报告 `docs/reviews/SUBMISSION_QUEUE_SELF_REVIEW_2026-11-25.md`，结论为自审通过；
+- 用户确认与部署：用户已明确许可部署与花园登记；正式安装版已于 2026-11-25 00:11 JST 完成原子文件替换与哈希核验（备份位于 `output/install-backup-queue-20261125/`）。
+- **花园登记回执**：
+  - 批次编号：`feiyue-queue-simplify-20261125`
+  - Git 提交：`74c95b49c0a28102c4ced0a5a642f71ce024ad7d`（`database/changes/feiyue-queue-simplify-20261125`）
+  - 审核摘要（reviewHash）：`cbe0bc507c83ffa419d38d31081606c0005f381d224d04a9fb60d3300cd897c7`
+  - 完成时刻：2026-11-25 00:20 JST，2 步全部 verified，D1 revision 171 → 173：
+    - 改善 #84：《提交队列解绑严格等待与提交前一刻占号》（done）
+    - 部署明细 #107 / #191：绯月（桌面精灵）版本由 33.6 升级至 33.7。
+
+---
+
+## 2026-11-24 对话转录云端终审中档思考与合法空结果修复 · 绯月 Windows 正式安装版 · 已部署
+
+状态：**用户已许可，已于 2026-11-24 23:28 JST 成功部署并重启**。**花园登记已完成（批次 feiyue-transcription-deepseek-20261124，Git 提交 a2ed1d6b，D1 版本 33.5 -> 33.6，revision 171）**。第三方审核：无。
+
+### 需求与验收
+- **需求背景**：用户核查自主行动“对话内容转录”失败原因，定性为“本地判断只能解释为可能有任务，具体最终判断交给云端判断，这里单独调用中档深度思考”，要求按此逻辑方向修复并上线。
+- **验收标准**：
+  1. 云端 DeepSeek 对话转录补拟显式调用 `reasoning_effort: 'medium'`（中档深度思考）；
+  2. 本地初筛提取仅作线索，当云端中档思考终审裁定无须入库（`candidates: []`）时，转录正常结案为 `empty`，不再报错中断为 `failed`；
+  3. 若存在明确委托（`confirmedIds`）但云端仍未能生成具有原文依据的草稿，才报错提示；
+  4. 自主行动的阶段动态更新（修复界面永远残留“准备整理”的日志展示问题）；
+  5. 既有单元测试与新增空结果终审测试全部通过，无新增失败。
+
+### 目标与基线
+- **目标目录**：正式安装版 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`
+- **基线版本**：正式安装目录（当前运行版本），涉及 2 个文件：
+  - `desktop/transcription-deepseek.mjs` (SHA-256: `a6cb7bff8b1c44da8530aec8542787288af05a0566ccb14b3e070cd8040a875b`)
+  - `desktop/conversation-transcription.mjs` (SHA-256: `163227e9cbd2e0fd4bd48d264bc3ff70d912ca7350f5935ef13d3eae065497ea`)
+- **候选版本**：
+  - `desktop/transcription-deepseek.mjs` (SHA-256: `2df7b5fb4538212a7e2ddd83064c1c938277d02d6204f28e541a33e0b5d6f8dc`)
+  - `desktop/conversation-transcription.mjs` (SHA-256: `2f4aee46d620ec3c235186f088fd1ad360472605a5c5891802c6efa0fc49fe01`)
+- **清单存档**：`docs/releases/transcription-deepseek-20261124/desktop-manifest.json`
+
+### 文件与行为变更
+1. `desktop/transcription-deepseek.mjs`：调用 `requestBandao` 时注入 `reasoning_effort: 'medium'`。
+2. `desktop/conversation-transcription.mjs`：
+   - 移除 `remoteDraft` 校验回调中 `!drafted.rows.length` 的强行报错限制，保留 `!hasConfirmedDrafts(drafted)`，允许云端合法的“无任务”空候选；
+   - 联动 `worker.claim` 与 `progress(phase)`，动态同步 `claim.stage`，使界面与审计日志准确呈现真实执行阶段。
+- **配置与数据**：无配置文件或数据库修改，现有数据零侵入。
+
+### 实际验证
+- `agent/tests/conversation-threads.test.mjs` 中“转录只在首轮本地拟稿无结果时经 DeepSeek 共用接口补拟一次”通过（1.74s），覆盖思考强度与云端终审空结果正常流转至 `empty`。
+- `ai-gateway-guard.test.mjs` 与 `chat-registration-boundary.test.mjs` 6 项测试全部通过（100% pass）。
+
+### 风险与恢复
+- **风险**：中档思考耗时略增（通常 2~4 秒），后台异步转录不影响前台交互。
+- **恢复**：部署前将正式安装目录原文件备份至 `output/install-backup-transcription-20261124/`，遇异常可秒级覆盖还原。
+
+### 部署和发布后验证结果
+- **安装前复核**：两个目标文件哈希完全等于清单基线值。
+- **备份**：旧文件备份在 `output/install-backup-transcription-20261124/desktop/`。
+- **进程替换**：旧主进程 PID 13852 退出，两个文件经临时文件哈希校验后原子替换，目标文件哈希核对与候选值一致。
+- **启动验证**：注入用户环境变量后受控启动，新主进程 PID 35312，renderer 进程 PID 35056 正常运行。
+
+### 用户确认
+- 部署许可：用户已明确许可部署（回复「ok」）。
+- 花园登记指令：用户明确指示登记（回复「提交」/「轮你提交了」）。
+
+### 花园管理记录与回执
+- **批次编号**：`feiyue-transcription-deepseek-20261124`
+- **批次标题**：绯月对话转录云端终审与中档思考修复发布
+- **Git 提交**：`a2ed1d6b127d3a61979101565202c05d5e2602f5`
+- **审核摘要 (reviewHash)**：`6235662f43527771d9c5e054f18967302ae71d675335390d1e42a983b8df5494`
+- **D1 修订号**：`170` -> `171`
+- **功能变更**：项目 #16（网页角色组件）下功能 #61「绯月（桌面精灵）」部署版本 `33.5` -> `33.6`（部署记录 #106，部署明细 #190）
+- **入队与完成时间**：创建于 `2026-11-24T15:12:20.783Z`，执行完成于 `2026-11-24T15:12:47.220Z`，签收于 `2026-11-24T15:12:55.547Z`
+- **执行状态**：`state: 'done'`，步骤 `[{"label":"登记绯月对话转录云端终审发布","state":"verified","at":"2026-11-24T15:12:39.763Z","revision":171}]`，回读一致无差错。
+
+## 2026-11-24 统一 AI 网关、提示词对齐、AGY 待命与对话会话 · 绯月 Windows 正式安装版 · 已部署
+
+状态：用户许可部署（含隐私变化），**已于 2026-11-24 23:14 JST 安装并重启**。花园登记已完成（批次 feiyue-gateway-20261124，Git 提交 eb83860a）。第三方审核：无。
+
+### 需求与验收
+用户依次要求：本地 Qwen 只用 4B 且上下文 4K；对话、互动、服务器任务按文字走半岛、图片走 Gemini；生图默认 Gemini，失败 2 次回本地 ComfyUI；所有 AI 调用汇聚到统一模块；本机后端切换为 AGY CLI 并保持待命，对话类保留进程；提示词与投入数据对齐，对话带少量历史，转写不带历史，判断类不做人格模拟。验收：测试无新增失败、真实接口试跑通过、桌面壳与 Electron 冒烟通过。
+
+### 基线与差异
+- 基线：正式安装目录 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，Git 39fd098e。**该目录在上一次部署（21:20）之后被另一方改动过**（用户已确认是其放行）：`agy-cli-client.mjs`、`agy-local-model.mjs`（21:27）、`shell.mjs`（21:54，加入 AGY 接入和菜单测试项，保留了置顶抬升）、`main.mjs`（22:04），并于 22:04:38 重启绯月（PID 8672，当前运行该版本）。本次候选以这个当前状态为基线。安装版里的 AGY 文件是未加待命进程的原版，本批版本是其超集。
+- 清单：docs/releases/batch-20261124/desktop-manifest.json（含逐文件基线与候选 SHA-256，候选文件在 files/ 下）。共 24 个替换或新增、2 个删除：
+  - 新增：`ai-gateway.mjs`、`ai-schema.mjs`。
+  - 替换：`ai-workflow-model`、`balanced-local-model`、`local-model`、`local-model-process`、`interaction-work`、`shell`、`screen-question-host`、`chat-deepseek`、`diary-deepseek`、`transcription-deepseek`、`public-search`、`image-tasks`、`server-task-command`、`conversation-transcription`、`conversation-thread-replies`、`memory-refinement`、`agy-cli-client`、`agy-local-model`；技能提示词 `personal-conversation`、`diary-writing`、`memory-refinement`、`news-editorial` 的 `local-ai.json`（技能版本由目录机制在首次读取时自动递增）。
+  - 删除：`deepseek-client.mjs`、`local-vision.mjs`（已并入网关）。
+- 工作区里别人未发布的改动（personality-diary、news-editorial.mjs、news-editor、emotion-service、image-planning 等）**不在本次发布内**。
+
+### 行为变化
+1. 云端：`ai-gateway.mjs` 统一出站调用。文字走半岛 `deepseek-v4.1-flash`（低档思考，用户变量 `bandao_api_key`），视觉与生图走 Gemini（`gemini_aoxing_API_KEY`，视觉 `gemini-3.1-flash-lite` medium，生图 `gemini-3.1-flash-image`）。判断、复核、短评、私密任务留本机后端，其余单次云端；半岛偶发不返回 JSON 时自动重试一次。
+2. 本机后端：已安装 AGY CLI 时用它（预热备用进程，用完即弃，冷启动约 12 秒降到约 4 秒；对话保留同一会话进程，空闲 20 分钟或 30 轮回收），否则装配本地 4B（4K 上下文）。AGY 在 `%TEMP%/feiyue-agy` 空目录运行。
+3. 对话：问答带最近至多 4 轮；转写不带历史；判断类提示词去掉人设；交互处理改为单次，不再起草后复审。
+4. 生图：默认 Gemini，每任务最多 2 次，失败原因写入回执与任务日志，2 次失败转本地 ComfyUI；高清放大、环球之旅、未配置密钥时直接本地。
+5. 转录强制只在本机后端处理（技能 `localOnly` 策略）。
+- **隐私**：AGY 是 Google 云端的 Gemini 代理，原先“留本机”的判断、私密任务和专聊现在也会外发；对话内容经半岛和 AGY 离开本机；截图经 Gemini。用户尚未对“私密任务经 AGY 外发”作单独答复，请在本次许可中一并确认。
+- 配置：不改任何配置文件、数据库或服务器。需要用户变量 `bandao_api_key`、`gemini_aoxing_API_KEY`（已核实存在，仅检测是否存在）。受控启动时须由用户变量读入后再启动，否则云端不可用。
+
+### 实际验证
+- 隔离副本（安装当前状态复制，叠加本批文件及对应测试）：基线 `node --test agent/tests/*.test.mjs` 为 287 项，228 通过、53 失败、2 跳过；候选 354 项，313 通过、35 失败、2 跳过。**相对基线新增失败 0**，18 项基线失败在候选里转为通过；其余 35 项为安装副本既有失败，未处理。本批新增的 agy-standby、ai-gateway-guard、cloud-lane、image-gemini、prompt-rules、panel-window 等测试全部通过。
+- 安装版里没有、且测的是别人未发布功能的测试（diary-narration、ai-workflow）不进候选；registration-flow 沿用安装版原文。
+- 真实 Electron：置顶抬升与首帧面板测试通过（不透明像素 54360）；question 吞首显、question 正常、menu 正常三项首次显示用例通过。工作区另有全量 564 项 561 通过、3 跳过、0 失败，桌面构建与桌面壳检查通过。
+- 真实接口：半岛对话与手记叙述、历史连续性试跑通过；Gemini 文字、视觉、生图通过；AGY 待命后单次约 4 秒、会话三轮可记住首轮信息。
+- 未做：Gemini 失败回退本地 ComfyUI 的真实联调（用桩验证）；候选里没有重新构建桌面资源包（沿用安装版 output/desktop-bundle，本批不改页面资源）；`test-desktop-shell.mjs` 在基线和候选上都因菜单项与脚本不符失败，非本次引入。
+
+### 风险与恢复
+- 云端不可用或密钥缺失：判断类走本机后端，其余任务返回失败；本机后端 AGY 不可用时装配 4B（需 models 目录有 `Qwen3.5-4B-Q4_K_M.gguf`，未核对安装目录是否存在，已知开发目录有）。
+- AGY 额度或登录失效会使本机后端整体失败；每次调用首轮约 1.2 万输入 token。
+- 恢复：安装前备份全部被替换和删除的文件到 `output/install-backup-batch-20261124/`，还原后受控重启。
+
+### 部署与发布后验证（获准后）
+1. 复核 26 个目标文件当前哈希等于清单基线值；若已变化（对方可能再次改动），按新基线重整候选并重新请求确认。
+2. 等待正式任务收尾，正常退出（CloseMainWindow），备份，临时文件校验后原子替换，删除两个文件；读取用户变量设置密钥后受控启动。
+3. 核对新 PID、启动时间、实际加载文件哈希、本机接口与资料目录，查任务日志无新增报错；跑一次真实对话、一次判断、一次截图问答。
+4. 请用户实测：连续对话是否接得上话题、判断类功能速度、生图成功与失败回退提示。
+5. 花园登记：默认登记，部署成功后按实际数据出完整清单，由用户确认后提交（用户可明确跳过）。Git 同步：待确认分支与范围，不夹带工作区其他改动。
+
+### 实际部署结果（2026-11-24 JST）
+- 安装前复核：26 个目标文件当前哈希全部等于清单基线值，候选文件自身哈希无误；本机接口批次 20 个均为 done，无进行中工作；用户变量 `bandao_api_key`、`gemini_aoxing_API_KEY` 均存在。
+- 备份：24 个被替换或删除的文件在 `output/install-backup-batch-20261124/`（两个新增文件无旧版）。
+- 旧进程 PID 8672 经 CloseMainWindow 正常退出；两个文件删除，24 个文件经临时文件校验哈希后原子替换，替换后逐项核对 26/26 一致。
+- 读取用户变量后启动，新 PID 13852（23:14:11 起），本机接口 `/infoguide` 版本 7、资料目录不变；主窗口响应正常；启动后 3 秒内出现 AGY 待命进程（agy.exe，stream-json），说明统一网关装配、AGY 接入和模块依赖在真实运行环境加载成功。
+- 未能验证：我无法在本会话里点击桌宠做真实对话；连续对话、判断速度、截图问答、生图成功与失败回退需用户实测。启动环境里的密钥在启动前由用户变量写入进程环境，未做进程内读回。
+- 恢复方式：关闭绯月，用备份目录里的文件覆盖回去并删除两个新增文件（`ai-gateway.mjs`、`ai-schema.mjs`），再启动；注意旧版 `shell.mjs` 引用 `deepseek-client.mjs`、`local-vision.mjs`，需一并从备份还原。
+
+### 用户确认
+- 本次部署许可（含隐私变化）：已取得（用户回复「许可部署」）。
+- 花园登记：用户确认清单内容后提交，批次 `feiyue-gateway-20261124`，Git 提交 `eb83860ab6e252c15182910ac88cf42ccf60cf90`（G:/cloudflare/myapp，database/changes/feiyue-gateway-20261124），reviewHash `fce34817…554e`。2026-11-24 23:54 JST 完成，4 步均 verified：部署记录（绯月（桌面精灵）33.3→33.4）、Bug「桌宠被其他置顶窗口盖住」已修复、Bug「重启后第一次打开对话框不显示」保持未关闭待用户实测、功能改善「AI 调用统一网关与云端分流」已完成。
+- 登记过程说明：提交时队列被另一方 4 个无人运行的排队和 1 个已制单未提交的排队占住，经用户同意全部取消（只让出队位，草案内容未删）：`feiyue-task-inbox-refresh-124b38f8de65`、`feiyue-ai-compose-20261124`、`expense-mail-ai-fallback-20261124`、`feiyue-transcription-deepseek-20261124`、`feiyue-diary-audit-continuation-44b422e8c3e2`，需其各自调用方重新制单并提交。另有 23:25 另一方发布的转录改动替换了 `transcription-deepseek.mjs`、`conversation-transcription.mjs`，本条登记只描述本批 24 个文件的发布，未包含该转录发布。
+
+## 2026-11-24 桌宠置顶与首次打开对话框修复 · 绯月 Windows 正式安装版 · 已安装，本次跳过花园登记
+
+状态：用户已许可部署，**已于 2026-11-24 21:20 JST 安装并重启**。花园登记经用户决定本次跳过。第三方审核：无，仅本人自测。
+
+### 需求与验收
+- 用户原话：桌面精灵无法保持最顶端、经常被其他内容盖住；重启后第一次打开对话框经常不显示，第二次点菜单才启动。要求一次性改掉，先测试再上线。
+- 验收：桌宠显示期间持续回到最上层且隐藏后停止；首帧前显示的透明面板能画出内容；既有首击显示用例不退化。
+
+### 目标与基线
+- 目标：正式安装版 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，Git 39fd098e，运行进程 PID 20440，2026-11-24 20:42:36 JST 启动，REST http://127.0.0.1:8765 版本 7。安装文件最后写入 00:13，早于进程启动，进程加载的就是当前文件。
+- 工作区另有他人未发布改动（含本地 AGY 模型、统一云端接口改造等），**均不在本次发布内**。候选只取安装基线，叠加本次两处修改。
+
+### 文件与行为（清单 docs/releases/top-raise-20261124/desktop-manifest.json，候选文件在其 files/ 下）
+1. `desktop/shell.mjs`（基线 ab8587102 → 候选 5365d387）：新增每秒抬升定时器。显示后 `moveTop()`，隐藏停止，菜单打开时不抬，问答气泡可见时顺带抬起；与基线仅差 14 行。
+2. `desktop/panel-window.mjs`（基线 8ebed45a → 候选 2b488476）：`showPanel` 显示后抬顶；对尚未完成首帧的面板，在 ready-to-show 后和 400ms 后补显示并强制重绘，期间被主动隐藏则不补。所有面板和菜单共用。
+- 不涉及数据库、配置、密钥、Worker、花园数据结构。无需数据库备份。
+
+### 实际验证
+- 隔离副本（安装基线复制，仅替换上述两个文件及测试辅助）：`node --test agent/tests/*.test.mjs` 基线 228 通过、53 失败、2 跳过；候选 231 通过、53 失败、2 跳过。两边失败名称逐项相同，无新增失败；多出的 3 项通过为新增的面板用例。53 项为安装副本既有失败，未处理。
+- 真实 Electron：`tools/test-top-raise-electron.mjs`（新增）通过：显示期间 2.6 秒内抬顶不少于 2 次，隐藏后 1.6 秒内为 0，首帧前显示的透明面板实际画出 54360 个不透明像素。`test-menu-first-show-electron.mjs` 的 question 吞首显、question 正常、menu 正常通过。
+- settings 吞首显用例与 `test-desktop-shell.mjs` 在基线和候选上结果相同（菜单名与脚本不符，基线即失败），非本次引入。
+- 未做：真机重启后的首次点开实测、真机被其他置顶程序覆盖的实测。首次不显示的原因为根据代码和现象推断（首帧前 show 导致空白），未在 Windows 真机复现。
+
+### 风险与恢复
+- 每秒抬升有轻微开销；若与其他置顶工具争抢可能出现闪动，可恢复原文件。
+- 抬升可能压在刚打开的非置顶系统对话框上方一秒内被再次抬回的情形，影响仅限视觉层级。
+- 恢复：安装前备份两个文件（旧哈希见清单），还原后受控重启。
+
+### 部署与发布后验证（获准后）
+1. 复核两个目标文件当前哈希等于清单基线值；若已变化，按新基线重整候选，重新请求确认。
+2. 等待正式任务收尾，正常退出，备份被替换文件，原子替换，受控启动。
+3. 核对实际加载文件哈希、新 PID 与启动时间、REST 资料目录与 /infoguide，查看任务日志无新增报错。
+4. 请用户实测两项：重启后第一次点菜单；全屏视频或其他置顶窗口后桌宠是否回到最上层。
+5. 花园登记（默认登记）：发布成功后按实际结果拉取线上数据，向用户展示完整清单（归属「网页角色组件 → 绯月（桌面精灵）」、编号、前后值、版本 +0.1），取得确认后再 POST /v1/batches。本次尚未准备，也未提交。
+6. Git：待部署后将本次清单与候选文件提交到安装同步分支并核对远端；分支与范围待确认，不夹带工作区其他改动。
+
+### 实际部署结果（2026-11-24 JST）
+- 安装前复核：两个目标文件哈希等于清单基线值（shell ab8587102、panel-window 8ebed45a）；REST 批次均 done，无进行中工作（另有旧批次 feiyue-formal-queue-20261121 已 done 但未 ack，与本次无关，未动）。
+- 备份：旧文件在 `output/install-backup-20261124-topraise/desktop/`，哈希与基线一致。
+- 旧进程 PID 20440 经 CloseMainWindow 正常退出（未强杀）；两个文件经临时文件校验哈希后原子替换，安装后哈希为候选值（5365d387、2b488476）；按原命令行重新启动，新 PID 32240，启动 21:20:18，REST /infoguide 版本 7、资料目录不变。
+- 真机实测：用 Win32 把任务栏抬到桌宠之上，桌宠 z 序由 5 变 6，约 0.7 秒内恢复到任务栏之上。运行中另见一个临时窗口短暂盖住桌宠，下一个周期抬回。
+- 未能实测：重启后第一次点菜单（我无法在本会话点击桌宠界面），需用户实测；此项根因仍为推断。
+- 恢复方式：关闭绯月，用备份目录两文件覆盖后重新启动。
+
+### 用户确认
+- 本次部署许可：已取得（用户回复「许可部署」）。
+- 花园登记：用户于 2026-11-24 明确「本次跳过登记」，未运行结构同步，未提交任何花园批次。花园中本次功能版本因此保持原值，日后补登需按当时实际数据重新核对并重新确认清单。
+
 ### TXT 发布源码 Git 核验（2026-11-21 JST）
 
 已从远端逐项回读：cloudflaremyapp/main 876dccba、informationmanager/main f5bebc0b、webcharacter/main b3269f90，桌宠正式安装同步分支 19d1a8d3；日记来源 b92f7ff、随手记 main 155b17e、鱼与熊掌 main cbd9f83。主站 main 含与本机 REST 所验提交 eb1955e 逐文件相同的 SQL 和清单。主站原日常工作目录另有未提交修改及非本次分支冲突，生产源码从独立发布工作树整合。Git 核验涉及上述实际推送的版本，无强制推送。

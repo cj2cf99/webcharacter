@@ -47,9 +47,10 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
       try{
         const page=await readTraffic(cursor,day);
         shownAiSteps=new Set(page.lines.flatMap(line=>{
-          try{const id=JSON.parse(line).ai_step_id;return id?[id]:[];}catch{return [];}
+          try{const id=JSON.parse(line).ai_step_id;return typeof id==='string'?[id]:[];}catch{return [];}
         }));
-        return {day,view,dated:Boolean(memory),...page};
+        const diaryWork=!cursor&&day===tokyoDay(Date.now())?checks?.diaryWork?.():undefined;
+        return {day,view,dated:Boolean(memory),...page,diaryWork};
       }
       catch{return {day,view,lines:[],next:null,warning:'日志已轮转或暂时无法读取，请刷新日志。'};}
     }

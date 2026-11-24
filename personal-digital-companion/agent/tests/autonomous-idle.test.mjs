@@ -85,46 +85,55 @@ test('悬念质问续答不受旧的逐日处理标记影响',async t=>{
   await nags.resume('fixture',signal);assert.equal(shown,2);
 });
 
-test('排队的日记与整理共用十分钟，超时等待正式轮询；任务日志可回读目标、实际耗时和子动作',async t=>{
-  const profile=mkdtempSync(join(tmpdir(),'fy-idle-round-')),timers=new Map(),receipts=[];
-  let at=Date.parse('2026-11-21T11:00:00+09:00'),busy=false,complete,started=0,aborted=false;
-  const traffic=createTaskTrafficLog(profile,{clock:()=>at});
-  const options={profile,now:()=>at,isBusy:()=>busy,log:traffic.write,onIdleResult:result=>receipts.push(result),
+test('执行期间冻结轮询和等待队列，恢复时保留剩余间隔',async t=>{
+  const profile=mkdtempSync(join(tmpdir(),'fy-idle-round-')),timers=new Map();
+  let at=1000000,calls=0;
+  const checks=createReminderChecks({profile,now:()=>at,isBusy:()=>false,
     setTimer(fn,ms){const key=Symbol();timers.set(key,{fn,at:at+ms});return key;},clearTimer:key=>timers.delete(key),
-    handlers:{diary:async(_s,step,goal)=>{assert.match(goal,/整理未入册的素材/);busy=true;await step('悬念跟进','比对悬念 1',async()=>'尚无下文');
-      await new Promise(ok=>{complete=ok;});busy=false;return '已核对一条';},
-    review:async signal=>{started++;busy=true;await new Promise(ok=>signal.addEventListener('abort',ok,{once:true}));aborted=true;busy=false;return {deferred:true};}}};
+    handlers:{review:async()=>{calls++;return '已核对';}}});
+  t.after(()=>{checks.close();rmSync(profile,{recursive:true,force:true});});
   async function advance(ms){
     at+=ms;
     for(const [key,timer] of [...timers])if(timers.has(key)&&timer.at<=at){timers.delete(key);timer.fn();}
     await settle();
   }
-  let checks=createReminderChecks(options);
-  t.after(async()=>{checks.close();await traffic.readPage();rmSync(profile,{recursive:true,force:true});});
-  checks.start();await advance(60_000);
-  await advance(4*60_000);complete();await settle();await advance(15_000);
-  assert.equal(started,1);
-  await advance(5*60_000+45_000);assert(aborted);assert.equal(checks.pending,false);
-  const lines=(await traffic.readPage()).lines.map(JSON.parse);
-  assert(lines.every(r=>r.category==='绯月自主行动'&&r.goal&&r.started_at));
-  const pause=lines.find(r=>r.route==='补行动评价'&&r.stage==='已暂停');
-  assert.equal(pause.duration_ms,345000);assert.match(pause.result,/10 分钟/);
-  assert.deepEqual(receipts,[{id:'diary',status:'已检查',detail:'已核对一条',durationMs:240000},
-    {id:'review',status:'已暂停',detail:pause.result,durationMs:pause.duration_ms}]);
-  const child=lines.find(r=>r.route==='悬念跟进'&&r.stage==='完成');
-  assert.equal(child.result,'尚无下文');
-  assert(lines.some(r=>r.action_id===child.parent_id&&r.stage==='已检查'&&r.duration_ms===240000));
-  checks.close();checks=createReminderChecks(options);checks.start();
-  checks.enqueue('review');await advance(60_000);
-  assert.equal(started,1);assert.equal(checks.pending,false);
+  checks.start();await advance(20_000);checks.setExecutionBusy(true);
+  checks.enqueue('review');await advance(2*3600_000);
+  const review=()=>checks.polls().find(j=>j.id==='review');
+  assert.equal(calls,0);assert.equal(review().misses,0);assert.equal(review().nextAt-at,40_000);
+  checks.setExecutionBusy(false);await advance(39_999);assert.equal(calls,0);
+  await advance(1);await advance(15_000);assert.equal(calls,1);
 });
 
-test('手记占用模型时巡检照常运行，暂停的核对延后再取件',async t=>{
+test('集中处理超过二十分钟仍有可执行 AI 工作时保持本轮，清空后正常结束',async t=>{
+  const profile=mkdtempSync(join(tmpdir(),'fy-drain-round-')),timers=new Map(),release=Promise.withResolvers();
+  let at=Date.parse('2026-11-23T06:00:00+09:00'),active,leases=0;
+  const checks=createReminderChecks({profile,now:()=>at,isBusy:()=>false,
+    beginAiRound:()=>{leases++;return {signal:new AbortController().signal,release:()=>{leases--;}};},
+    setTimer(fn,ms){const id=Symbol();timers.set(id,{fn,at:at+ms});return id;},clearTimer:id=>timers.delete(id),
+    handlers:{review:async signal=>{active=signal;await release.promise;active=null;return '本轮评价已收尾';}}});
+  t.after(()=>{release.resolve();checks.close();rmSync(profile,{recursive:true,force:true});});
+  async function advance(ms){
+    at+=ms;
+    for(const [id,timer] of [...timers])if(timers.has(id)&&timer.at<=at){timers.delete(id);timer.fn();}
+    await settle();
+  }
+  checks.start();checks.enqueue('review');await advance(60_000);
+  assert.ok(active);
+  for(let i=0;i<3;i++){await advance(10*60_000);assert.equal(active.aborted,false);assert.equal(leases,1);}
+  release.resolve();await settle();assert.equal(checks.pending,false);assert.equal(leases,0);
+});
+
+test('手记分批成功单独计时，遇忙才入重试队列，进度归入自主行动',async t=>{
   const profile=mkdtempSync(join(tmpdir(),'fy-audit-yield-')),timers=new Map(),first=Promise.withResolvers();
   let at=Date.parse('2026-11-23T00:23:53+09:00'),auditCalls=0,inspections=0;
-  const checks=createReminderChecks({profile,now:()=>at,isBusy:()=>false,
+  let busy=false,leases=0;
+  const log=[],bubble=[];
+  const checks=createReminderChecks({profile,now:()=>at,isBusy:id=>id==='diaryAudit'&&busy,
     setTimer(fn,ms){const key=Symbol();timers.set(key,{fn,at:at+ms});return key;},clearTimer:key=>timers.delete(key),
-    handlers:{diaryAudit:async()=>++auditCalls===1?first.promise:'下一批已处理'},
+    handlers:{diaryAudit:async()=>++auditCalls===1?first.promise:'下一批已处理',refinement:()=>null},
+    log:row=>{log.push(row);return true;},onIdleResult:row=>bubble.push(row),
+    beginAiRound(){leases++;return {signal:new AbortController().signal,release(){leases--;}};},
     inspectRecent:async()=>{inspections++;return {scanned:4,completed:1,failed:0,top:[]};}});
   t.after(()=>{checks.close();rmSync(profile,{recursive:true,force:true});});
   async function advance(ms){
@@ -138,8 +147,90 @@ test('手记占用模型时巡检照常运行，暂停的核对延后再取件',
   assert.equal(inspections,1);
   assert.equal(checks.polls().find(j=>j.id==='diaryAudit').running,true);
   assert.ok(checks.read(tokyoDay(at)).events.some(r=>r.project==='分析专家巡检'&&r.status==='已检查'));
-  first.resolve({deferred:true,started:true,detail:'已保存 2 步，下批从原进度继续'});
+  checks.record('手记质问','已暂停','旧手记回执',at);
+  checks.record('修订手记与唠叨','待执行','旧修订回执',at);
+  first.resolve({nextBatch:true,detail:'已保存 2 步'});
   await settle();await advance(14_999);
+  const auditPoll=()=>checks.polls().find(j=>j.id==='diaryAudit');
+  assert.equal(auditCalls,1);
+  assert.equal(auditPoll().queuedAt,null);
+  assert.equal(auditPoll().nextAt,at+1);
+  assert.deepEqual(checks.diaryWork(),[{name:'手记质问',state:'等待续跑',at:at+1}]);
+  assert.equal(leases,1,'批间等候仍沿用同一轮模型预算');
+  assert.ok(log.some(r=>r.route==='手记质问'&&r.stage==='本批完成'&&r.result.includes('已保存 2 步')));
+  assert.deepEqual(bubble,[]);
+  busy=true;
+  await advance(1);
+  assert.equal(auditCalls,1);
+  assert.equal(auditPoll().queuedAt,at);
+  assert.deepEqual(checks.diaryWork(),[{name:'手记质问',state:'等待空闲'}]);
+  assert.equal(checks.pending,false);
+  const reminders=checks.read(tokyoDay(at));
+  assert.deepEqual(reminders.queue,[]);
+  assert.ok(reminders.events.every(r=>!['手记质问','修订手记与唠叨'].includes(r.project)));
+  busy=false;
+  await advance(15_000);
+  assert.equal(auditCalls,2);
+  assert.deepEqual(checks.diaryWork(),[]);
+  assert.equal(leases,0);
+  assert.deepEqual(bubble.map(r=>r.status),['已检查']);
+});
+
+test('其他自主任务用完本轮预算时，等待续跑的手记顺延，重启也沿用该时间',async t=>{
+  const profile=mkdtempSync(join(tmpdir(),'fy-audit-round-pause-')),timers=new Map();
+  const minute=60_000;
+  let at=Date.parse('2026-11-23T03:00:00+09:00'),auditCalls=0,reviewCalls=0;
+  const options={profile,now:()=>at,isBusy:()=>false,lastRun:id=>id==='review'?at:undefined,
+    setTimer(fn,ms){const key=Symbol();timers.set(key,{fn,at:at+ms});return key;},clearTimer:key=>timers.delete(key),
+    handlers:{diaryAudit(){auditCalls++;return {nextBatch:true};},review(){reviewCalls++;return {roundPaused:true};}}};
+  let checks=createReminderChecks(options);
+  t.after(()=>{checks.close();rmSync(profile,{recursive:true,force:true});});
+  async function advance(ms){
+    at+=ms;
+    for(const [key,timer] of [...timers])if(timers.has(key)&&timer.at<=at){timers.delete(key);timer.fn();}
+    await settle();
+  }
+  const auditPoll=()=>checks.polls().find(row=>row.id==='diaryAudit');
+  checks.start();await advance(minute);
+  assert.equal(auditCalls,1);
+  checks.enqueue('review');await advance(15_000);
+  assert.equal(reviewCalls,1);
+  assert.equal(auditCalls,1);
+  const resumeAt=at+60*minute;
+  assert.equal(auditPoll().nextAt,resumeAt);
+  checks.close();checks=createReminderChecks(options);checks.start();
+  assert.equal(auditPoll().nextAt,resumeAt);
+  await advance(minute);
+  assert.equal(auditCalls,1);
+});
+
+test('核对手记到五分钟收完当前小批，按已设周期续跑，重启不会提前开工',async t=>{
+  const profile=mkdtempSync(join(tmpdir(),'fy-audit-window-')),timers=new Map(),first=Promise.withResolvers();
+  const minute=60_000,log=[];
+  let at=Date.parse('2026-11-23T03:00:00+09:00'),auditCalls=0;
+  const options={profile,now:()=>at,isBusy:()=>false,
+    setTimer(fn,ms){const key=Symbol();timers.set(key,{fn,at:at+ms});return key;},clearTimer:key=>timers.delete(key),
+    log:row=>{log.push(row);return true;},
+    handlers:{diaryAudit(){return ++auditCalls===1?first.promise:'核对完成';}}};
+  let checks=createReminderChecks(options);
+  t.after(()=>{checks.close();rmSync(profile,{recursive:true,force:true});});
+  async function advance(ms){
+    at+=ms;
+    for(const [key,timer] of [...timers])if(timers.has(key)&&timer.at<=at){timers.delete(key);timer.fn();}
+    await settle();
+  }
+  const auditPoll=()=>checks.polls().find(row=>row.id==='diaryAudit');
+  checks.configure('diaryAudit',{enabled:true,minutes:10,maximum:3});
+  checks.start();await advance(minute);
+  const startedAt=at;
+  await advance(5*minute+1);
+  assert.equal(auditPoll().running,true);
+  first.resolve({nextBatch:true,detail:'已保存 2 步'});await settle();
+  assert.match(log.find(row=>row.stage==='本批完成')?.result,/下个轮询周期继续/);
+  assert.equal(auditPoll().nextAt,startedAt+10*minute);
+  assert.equal(auditPoll().queuedAt,null);
+  checks.close();checks=createReminderChecks(options);checks.start();checks.enqueue('diaryAudit');
+  await advance(startedAt+10*minute-at-1);
   assert.equal(auditCalls,1);
   await advance(1);
   assert.equal(auditCalls,2);

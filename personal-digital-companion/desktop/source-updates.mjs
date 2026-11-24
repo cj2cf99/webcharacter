@@ -6,6 +6,7 @@ import {watchChanges,warnLiveUpdate} from './live-files.mjs';
 // 构建与热加载使用同一份页面依赖。每次只更新受影响的窗口。
 export const pages = {
   'news-notice.html':['feiyue-surface.css','news-notice.css'],
+  'knowledge.html':['feiyue-surface.css','knowledge.css','knowledge-ui.mjs'],
   'study.html':['feiyue-surface.css','study.css','study-ui.mjs','pair-choice.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
   'news-panel.html':['feiyue-surface.css','news-panel.css','news-weekly.css','news-editorial.css','news-layout.mjs','news-panel-ui.mjs','news-heatmap.mjs'],
   'scene.html':['feiyue-surface.css','scene.css','scene-ui.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],

@@ -1,17 +1,17 @@
 import {stat} from 'node:fs/promises';
 import {basename,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {chatTotalMs,memoryInferenceMs} from './chat-budget.mjs';
 
-export const LOCAL_MODEL_FILE = 'Qwen3.5-0.8B-Q4_K_M.gguf';
+export const LOCAL_MODEL_FILE = 'Qwen3.5-4B-Q4_K_M.gguf';
 const entry = fileURLToPath(new URL('./local-model-process.mjs', import.meta.url));
-export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 15000,device='cpu',intentBudgetMs=6500}) {
+export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 15000,device='cpu',threads=4}) {
   const modelName=basename(modelPath).replace(/-Q4_K_M\.gguf$/i,'');
   let status = {state: 'idle'};
   let child, loading, finishLoad, request, loadTimer, exited;
   const write = (stage, start, error, skill, timing) => {
     void log?.({direction:'local',route:'本地 AI',stage,model:modelName,duration_ms:Math.round(performance.now()-start),error,
       ...(skill?.aiAttemptId?{ai_attempt_id:skill.aiAttemptId}:{}),
+      ...(skill?.aiKind?{ai_kind:skill.aiKind}:{}),
       ...timing,...(skill?.stage?{ai_phase:skill.stage}:{}),...(skill?.name==='memory-refinement'&&skill.stage?{refinement_phase:skill.stage}:{}),
       ...(skill?.name&&skill.version?{skill:skill.name,skill_version:skill.version}:{})});
   };
@@ -40,7 +40,7 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
       try {
         if (!(await stat(modelPath)).isFile()) throw Object.assign(Error(), {code:'ENOENT'});
         if (status.state !== 'loading') return;
-        const worker = utilityProcess.fork(entry,[modelPath,device],{serviceName:'Feiyue Local AI',stdio:'ignore'});
+        const worker = utilityProcess.fork(entry,[modelPath,device,String(threads)],{serviceName:'Feiyue Local AI',stdio:'ignore'});
         child = worker;
         exited=new Promise(resolve=>worker.once('exit',resolve));
         worker.on('message', value => {
@@ -69,56 +69,47 @@ export function createLocalModel({utilityProcess, modelPath, log, loadTimeout = 
     return loading;
   }
 
-  async function analyze(text, {hint, previous, signal, onProgress, imageSkill,skillInstruction,replyMode,reviewLimit=3,revision} = {}) {
+  async function analyze(text, {hint, previous, signal, onProgress, skillInstruction,replyMode} = {}) {
     const started = performance.now();
-    const budgetMs = hint==='personalityMemory'||skillInstruction?.name==='conversation-transcription'?memoryInferenceMs:['image-plan','serverTask'].includes(hint) ? Math.max(16000,intentBudgetMs) : ['auto','direct','interactionWork'].includes(hint) ? chatTotalMs : intentBudgetMs;
-    const deadline = AbortSignal.timeout(budgetMs);
-    const wait = signal ? AbortSignal.any([signal,deadline]) : deadline;
     signal?.throwIfAborted();
     onProgress?.('本地思索 · 理解输入…');
     let result,timing;
     if (status.state === 'loading') {
       await new Promise(resolve => {
-        const done = () => {wait.removeEventListener('abort',done);resolve();};
-        wait.addEventListener('abort',done,{once:true});
+        const done = () => {signal?.removeEventListener('abort',done);resolve();};
+        signal?.addEventListener('abort',done,{once:true});
         void loading.then(done);
       });
     }
-    if (wait.aborted) result = {error:'LOCAL_AI_TIMEOUT'};
-    else if (!child || status.state !== 'ready') result = {error:status.error ?? 'LOCAL_AI_NOT_READY'};
+    signal?.throwIfAborted();
+    if (!child || status.state !== 'ready') result = {error:status.error ?? 'LOCAL_AI_NOT_READY'};
     else if (request) result = {error:'LOCAL_AI_BUSY'};
     else result = await new Promise(resolve => {
       const id = crypto.randomUUID();
       const worker = child;
-      const retainAfterCancel = skillInstruction?.name === 'memory-refinement' || Boolean(skillInstruction?.aiTier);
       let cancelTimer;
       const finish = value => {
         if (request?.id !== id) return;
         clearTimeout(cancelTimer);
-        wait.removeEventListener('abort',abort);
+        signal?.removeEventListener('abort',abort);
         request = null;
         resolve(value);
       };
       const abort = () => {
-        if (retainAfterCancel) {
-          // Wait for the stopped generation to release the sequence before reusing it.
-          cancelTimer = setTimeout(() => void close(),1000);
-          cancelTimer.unref?.();
-        }
+        // Wait for the stopped generation to release the sequence before reusing it.
+        cancelTimer = setTimeout(() => void close(),1000);
+        cancelTimer.unref?.();
         try {worker.postMessage({type:'cancel',id});}
-        catch {if (retainAfterCancel) void close();}
-        if (!retainAfterCancel) finish({error:'LOCAL_AI_TIMEOUT'});
+        catch {void close();}
       };
       request = {id,finish,message(value) {
         if (value.type === 'review') onProgress?.(`本地思索 · 复核 ${value.pass}/2…`);
-        if (value.type === 'answer-review') onProgress?.(`本地思索 · 回复自审 ${value.pass}/${reviewLimit}…`);
-        if (value.type === 'answer-rewrite') onProgress?.(`本地思索 · 按反馈重写 ${value.pass}/${reviewLimit}…`);
         if (value.type === 'refinement-timing') timing=value.timing;
         if (value.type === 'result') finish(value.result);
       }};
-      wait.addEventListener('abort',abort,{once:true});
+      signal?.addEventListener('abort',abort,{once:true});
       try {
-        worker.postMessage({type:'analyze',id,text,hint,previous,imageSkill,skillInstruction,replyMode,reviewLimit,revision,remainingMs:Math.max(1, Math.floor(budgetMs-(performance.now()-started)))});
+        worker.postMessage({type:'analyze',id,text,hint,previous,skillInstruction,replyMode});
       } catch {
         finish({error:'LOCAL_AI_PROCESS_EXITED'});
       }

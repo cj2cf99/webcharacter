@@ -1,0 +1,21 @@
+{
+  "release": "transcription-deepseek-20261124",
+  "created_at": "2026-11-24T14:20:32.901Z",
+  "target_root": "G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion",
+  "files": [
+    {
+      "path": "desktop/transcription-deepseek.mjs",
+      "baseline_sha256": "a6cb7bff8b1c44da8530aec8542787288af05a0566ccb14b3e070cd8040a875b",
+      "candidate_sha256": "2df7b5fb4538212a7e2ddd83064c1c938277d02d6204f28e541a33e0b5d6f8dc",
+      "baseline_bytes": 1572,
+      "candidate_bytes": 1605
+    },
+    {
+      "path": "desktop/conversation-transcription.mjs",
+      "baseline_sha256": "163227e9cbd2e0fd4bd48d264bc3ff70d912ca7350f5935ef13d3eae065497ea",
+      "candidate_sha256": "2f4aee46d620ec3c235186f088fd1ad360472605a5c5891802c6efa0fc49fe01",
+      "baseline_bytes": 62065,
+      "candidate_bytes": 62142
+    }
+  ]
+}

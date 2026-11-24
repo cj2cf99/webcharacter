@@ -7,13 +7,18 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {DatabaseSync} from 'node:sqlite';
 import {createConversationThreads} from '../../desktop/conversation-threads.mjs';
 import {createThreadReplies} from '../../desktop/conversation-thread-replies.mjs';
+import {createPersonalityDiary} from '../../desktop/personality-diary.mjs';
+import {createPersonalityNags} from '../../desktop/personality-nags.mjs';
 import {createThreadReference} from '../../desktop/conversation-thread-reference.mjs';
 import {createConversationTranscription} from '../../desktop/conversation-transcription.mjs';
+import {generateDeepSeekDraft} from '../../desktop/transcription-deepseek.mjs';
 import {createAiWorkflowModel} from '../../desktop/ai-workflow-model.mjs';
 import {createScreenQuestionClient} from '../../desktop/screen-question-client.mjs';
 import {createMemoryArchive} from '../../desktop/memory-archive.mjs';
 import {createTaskTrafficLog} from '../../desktop/task-traffic-log.mjs';
 import {planLocalOutput} from '../../desktop/local-output-budget.mjs';
+import {tokyoDay} from '../../desktop/conversation-history.mjs';
+import {deferredNagReply,explicitRoleCorrection,nagCorrectionAfterword} from '../../desktop/nag-reply-check.mjs';
 
 const codec={encryptString:value=>Buffer.from(value),decryptString:value=>value.toString()};
 async function wait(check){
@@ -30,6 +35,63 @@ function fixture(t,now){
   });
   return {get store(){return store;},reopen(){store.close();return store=createConversationThreads(profile,codec,now);},profile,cleanup};
 }
+
+test('普通对话审核退回后只交 DeepSeek 当前发言和本线最近五轮，跳过简单及本机内容',async t=>{
+  const {store,cleanup}=fixture(t),sent=[],settings=[];
+  const line=store.create(),other=store.create(),sourced=store.create({source:{text:'本机来源'}});
+  function exchange(id,text,meta,extra){
+    store.submit(id,{text,...meta});
+    store.finish(id,store.pending(id).map(message=>message.id),'已答 '+text,false,extra);
+  }
+  for(let i=1;i<=6;i++)exchange(line.id,'历史'+i);
+  exchange(line.id,'本机直连',{mode:'direct'});
+  exchange(line.id,'知识正文',{knowledgePrivate:true},{knowledgePrivate:true});
+  exchange(line.id,'登记确认',{handled:true});
+  exchange(other.id,'另一条对话线');
+  assert.deepEqual(store.archiveTurns(tokyoDay(Date.now())).filter(turn=>turn.localOnly).map(turn=>turn.question),['本机直连']);
+  const replies=createThreadReplies({store,model:{memory(input,_rules,_schema,_signal,options){
+    const latest=JSON.parse(input).最新发言[0].原话;
+    settings.push([latest,options.aiReview]);
+    if(latest==='谢谢')return {reply:'不客气',next:'回应'};
+    throw Object.assign(Error('未通过'),{code:'AI_REVIEW_REJECTED'});
+  }},deepseekReply:async input=>{
+    sent.push(input);
+    return {state:'answer',text:'我重新理清了这件事。'};
+  },cloud:()=>assert.fail('审核退回不能走普通云端')});
+  cleanup.push(replies.close);
+  store.submit(line.id,{text:'请帮我理清这些事'});
+  await replies.run(line.id,{foreground:true});
+  assert.deepEqual(sent,[{messages:['请帮我理清这些事'],history:[2,3,4,5,6].map(i=>({用户:['历史'+i],绯月:'已答 历史'+i}))}]);
+  assert.equal(store.detail(line.id).messages.at(-1).text,'我重新理清了这件事。');
+  store.submit(line.id,{text:'谢谢'});
+  await replies.run(line.id,{foreground:true});
+  store.submit(sourced.id,{text:'解释这份材料'});
+  await replies.run(sourced.id,{foreground:true});
+  assert.equal(store.get(sourced.id).pending,1);
+  assert.equal(sent.length,1);
+  assert.deepEqual(settings,[['请帮我理清这些事',true],['谢谢',false],['解释这份材料',true]]);
+});
+
+test('DeepSeek 拒绝或超时时保留原话，失败回复不会变成历史',async t=>{
+  const {store,cleanup}=fixture(t),line=store.create();
+  let calls=0;
+  const replies=createThreadReplies({store,model:{memory(){
+    throw Object.assign(Error('审核未通过'),{code:'AI_REVIEW_REJECTED'});
+  }},deepseekReply:async({history})=>{
+    assert.deepEqual(history,[]);
+    if(++calls===1)throw Object.assign(Error('DeepSeek 超时'),{code:'DEEPSEEK_TIMEOUT'});
+    return {state:'answer',text:'整理后的结果'};
+  },cloud:()=>assert.fail('不能继续调旧云端')});
+  cleanup.push(replies.close);
+  store.submit(line.id,{text:'请概括今天的安排'});
+  await replies.run(line.id);
+  assert.equal(store.get(line.id).pending,1);
+  assert.equal(store.detail(line.id).messages.length,1);
+  await replies.run(line.id);
+  assert.equal(store.get(line.id).pending,0);
+  assert.equal(store.detail(line.id).messages.at(-1).text,'整理后的结果');
+  assert.equal(calls,2);
+});
 
 test('关窗切线的回复归原线，三条便签一次应答，失败时取到重新提交的更正',async t=>{
   const {store,cleanup}=fixture(t);
@@ -64,6 +126,142 @@ test('关窗切线的回复归原线，三条便签一次应答，失败时取�
   assert.deepEqual(context.之前发言.map(row=>row.原话),['A首句','保留 A 的结果']);
   assert.equal(store.detail(a.id).messages.filter(message=>message.id==='a3').length,1);
   assert.equal(replies.run(a.id),null);
+});
+
+test('主动质问拒绝复述，同轮仅改写一次，成功后两库可回读',async t=>{
+  const at=Date.parse('2026-11-23T03:00:00+09:00'),f=fixture(t,()=>at);
+  const opening='夫君，你刚才看着那箱积木，是不是想把它留给周末再拼？';
+  const user='我怕零件会弄丢，想先把它们分开放。';
+  const response='先分盒放好会放心些，我也想和你一起慢慢拼。';
+  const drafts=['我懂。'+opening.slice(3).replace('，',' ').replace('？','?'),response];
+  const calls=[];
+  const options={profile:f.profile,now:()=>at,model:{async memory(text,prompt,schema){
+    calls.push({input:JSON.parse(text),prompt});
+    assert.equal(schema.properties.reply.maxLength,150);
+    return {reply:drafts.shift(),evaluation:'想先收好零件',mood:'关心',next:opening.replace('，','， ')};
+  }}};
+  let diary=createPersonalityDiary(options);
+  const engine=createPersonalityNags({store:diary,now:()=>at});
+  const replies=createThreadReplies({store:f.store,activeQuestion:engine.threadAnswer});
+  f.cleanup.push(()=>diary.close(),engine.close,replies.close);
+  const line=f.store.create({id:'question-blocks',kind:'question',purpose:opening,first:[{who:'绯月',text:opening,at}]});
+  assert.ok(diary.queueQuestion({id:line.id,source:'diary',source_id:'test',title:'周末积木',localOnly:true,revision:0,
+    status:'等待回应',next:opening,questions:1,turns:1,talk:[{who:'绯月',text:opening,at:new Date(at).toISOString()}]}));
+  const message=f.store.submit(line.id,{messageId:'blocks-answer',text:user});
+  await replies.run(line.id,{foreground:true});
+  assert.deepEqual(calls.map(({input})=>Boolean(input.改写要求)),[false,true]);
+  for(const {input,prompt} of calls){
+    assert.deepEqual(input.最新发言.map(row=>row.原话),[user]);
+    assert.equal(input.旧问题,undefined);
+    assert.equal(input.同线依据?.最新发言,undefined);
+    if(input.改写要求)assert.equal(input.同线依据,undefined);
+    else{
+      assert.equal(input.同线依据.目的,undefined);
+      assert.deepEqual(input.同线依据.之前发言.map(row=>row.原话),[opening]);
+    }
+    assert.match(prompt,/先回应「最新发言」/);
+  }
+  diary.close();diary=createPersonalityDiary(options);
+  const saved=diary.nags()[0],readback=f.reopen().detail(line.id);
+  assert.deepEqual(saved.talk.map(row=>row.text),[opening,user,response]);
+  assert.equal(saved.status,'已解释');
+  assert.equal(saved.next,'');
+  assert.equal(saved.remaining,undefined);
+  assert.deepEqual(readback.messages.map(row=>row.text),[opening,user,response+'\n这件事我先记到这里啦。']);
+  assert.deepEqual(readback.messages.at(-1).covers,[message.id]);
+  assert.equal(readback.preview.text,saved.localThreadReceipts[message.id].reply);
+  assert.equal(readback.rounds,1);
+  assert.equal(readback.pending,0);
+  assert.notEqual(readback.closed,null);
+});
+
+test('旧气泡的原答只保存一次，改写超时后明确留待事后核对',async t=>{
+  const at=Date.parse('2026-11-23T03:00:00+09:00'),f=fixture(t,()=>at);
+  const opening='几点到？',user='今天堵车，最迟九点。';
+  let calls=0;
+  const diary=createPersonalityDiary({profile:f.profile,now:()=>at,model:{async memory(text){
+    assert.deepEqual(JSON.parse(text).最新发言.map(row=>row.原话),[user]);
+    if(++calls===2)throw Object.assign(Error('模型超时'),{code:'LOCAL_AI_TIMEOUT'});
+    return {reply:'知道啦。'+opening,evaluation:'九点前到',mood:'安心',next:''};
+  }}});
+  const engine=createPersonalityNags({store:diary,now:()=>at});
+  const replies=createThreadReplies({store:f.store,activeQuestion:engine.threadAnswer});
+  f.cleanup.push(diary.close,engine.close,replies.close);
+  const line=f.store.create({id:'legacy-arrival',kind:'question',first:[{who:'绯月',text:opening,at},
+    {id:'legacy-time',who:'你',text:user,at,legacyPending:true}]});
+  const time=new Date(at).toISOString();
+  assert.ok(diary.queueQuestion({id:line.id,source:'diary',source_id:'legacy',title:'到达时间',localOnly:true,revision:0,
+    status:'意外中断',next:opening,questions:1,turns:1,talk:[{who:'绯月',text:opening,at:time},{who:'你',text:user,at:time}]}));
+  await replies.run(line.id);
+  const kept=diary.nags()[0];
+  assert.equal(kept.talk[1].threadMessage,'legacy-time');
+  await replies.run(line.id);
+  assert.deepEqual(diary.nags()[0],kept);
+  assert.equal(calls,2);
+  assert.deepEqual(kept.talk.map(turn=>turn.text),[opening,user,deferredNagReply]);
+  assert.equal(kept.status,'回合结束');
+  assert.equal(kept.remaining,undefined);
+  assert.equal(f.store.detail(line.id).messages.at(-1).covers[0],'legacy-time');
+  assert.equal(f.store.get(line.id).rounds,1);
+});
+
+test('人物归属冲突由原话直接纠正，无需另一次模型复审',async t=>{
+  const at=Date.parse('2026-11-23T03:00:00+09:00'),f=fixture(t,()=>at);
+  const opening='你想怎么安排？',answer='我给你讲故事，你可以选一本书。';
+  const fixed='好呀，我听你讲故事。';
+  const stages=[];
+  const diary=createPersonalityDiary({profile:f.profile,now:()=>at,model:{async memory(text,_prompt,_schema,_signal,skill){
+    const input=JSON.parse(text);
+    stages.push(skill.stage);
+    assert.equal(input.最新发言[0].原话,answer);
+    return {reply:'我挑一本再给你讲故事。',evaluation:'有个讲故事的约定',mood:'期待',next:'“ ”？'};
+  }}});
+  const engine=createPersonalityNags({store:diary,now:()=>at});
+  const replies=createThreadReplies({store:f.store,activeQuestion:engine.threadAnswer});
+  f.cleanup.push(diary.close,engine.close,replies.close);
+  const line=f.store.create({id:'role-check',kind:'question',first:[{who:'绯月',text:opening,at}]});
+  assert.ok(diary.queueQuestion({id:line.id,source:'diary',source_id:'case',title:'讲故事',localOnly:true,revision:0,
+    status:'等待回应',next:opening,questions:1,turns:1,talk:[{who:'绯月',text:opening,at:new Date(at).toISOString()}]}));
+  f.store.submit(line.id,{messageId:'story',text:answer});
+  await replies.run(line.id,{foreground:true});
+  assert.deepEqual(stages,['reply']);
+  assert.deepEqual(diary.nags()[0].talk.map(turn=>turn.text),[opening,answer,fixed]);
+  assert.equal(f.store.detail(line.id).messages.at(-1).text,fixed+'\n这件事我先记到这里啦。');
+});
+
+test('归属明确、引文、否定和双方参与的正常回复不纠正',()=>{
+  const answer='我给你讲故事。';
+  for(const reply of ['你来讲故事，我听着。','你刚才说「我给你讲故事」，我记住了。','你说‘我给你讲故事’，我很期待。','不是我来讲故事。','我给你讲故事，你也给我讲故事。','下次换成我来讲故事好吗？','好呀。']){
+    assert.equal(explicitRoleCorrection(answer,reply),'',reply);
+  }
+  assert.equal(explicitRoleCorrection('还会记录你做过的事。','也会把你做的每一件事记下来。'),'这样也能记下我做过的事。');
+  assert.equal(explicitRoleCorrection('如果我来讲故事，你会听吗？','好呀，我来讲故事。'),'');
+  assert.equal(explicitRoleCorrection('我想把你做过的事记下来。','我也可以把你做过的事记下来。'),'');
+  const talk=[{who:'绯月',text:'几点到？'},...[1,2].flatMap(()=>[
+    {who:'你',text:'九点。'},{who:'绯月',text:'我记下九点到，到了发我个消息。'}])];
+  assert.equal(nagCorrectionAfterword({talk},String),'');
+});
+
+test('同一原答下重复使用正常确认语只生成一次',async t=>{
+  const at=Date.parse('2026-11-23T03:00:00+09:00'),f=fixture(t,()=>at);
+  const opening='几点到？',user='最迟九点。',response='我记下最迟九点到，到了发我个消息。';
+  const follow='九点是今晚吗？',time=new Date(at).toISOString();
+  const talk=[{who:'绯月',text:opening,at:time},{who:'你',text:user,at:time},
+    {who:'绯月',text:response,at:time},{who:'绯月',text:follow,at:time}];
+  let calls=0;
+  const diary=createPersonalityDiary({profile:f.profile,now:()=>at,model:{async memory(){
+    calls++;return {reply:response,evaluation:'确认时间',mood:'安心',next:''};
+  }}});
+  const engine=createPersonalityNags({store:diary,now:()=>at});
+  const replies=createThreadReplies({store:f.store,activeQuestion:engine.threadAnswer});
+  f.cleanup.push(diary.close,engine.close,replies.close);
+  const line=f.store.create({id:'same-meaning',kind:'question',first:talk.map(turn=>({...turn,at}))});
+  assert.ok(diary.queueQuestion({id:line.id,source:'diary',source_id:'same',title:'到达时间',localOnly:true,revision:0,
+    status:'等待回应',next:follow,questions:2,turns:2,talk}));
+  f.store.submit(line.id,{messageId:'repeat-time',text:user});
+  await replies.run(line.id,{foreground:true});
+  assert.equal(calls,1);
+  assert.equal(diary.nags()[0].talk.at(-1).text,response);
 });
 
 test('JST 跨日卡片显示整线最新、主动首问归绯月、50 和 100 轮边界',async t=>{
@@ -213,6 +411,125 @@ test('有界转录拆除截断分片，单批重排后后续作业仍产出',asy
   now+=61000;transcription.fromThread(batches[1]);
   assert.equal(transcription.detail(batches[1].id).state,'failed');
   assert.deepEqual(store.organizationLinks(),[b.id]);
+});
+
+test('确认登记必须交回有原话证据的请求和草稿，撤回及闲聊可为空',async t=>{
+  const {profile,store,cleanup}=fixture(t);
+  const dinner='帮我记下晚餐吃了两个饭团。';
+  const namedDinner='帮我记下吃喝：晚餐吃了两个饭团。';
+  const calls=new Map();
+  const blank={summary:'用户委托登记晚餐',actions:[],requests:[],signals:[],recentFactIds:[]};
+  const transcription=createConversationTranscription({profile,safeStorage:codec,model:{
+    async memory(raw,instruction,_schema,_signal,{stage}){
+      const input=JSON.parse(raw);
+      const turn=input.turns[0],text=turn.text;
+      calls.set(stage+text,input);
+      if(stage==='organize'){
+        if(!instruction.includes('必须写出用户要登记的具体事项')||text.includes('空归纳'))return blank;
+        assert.match(instruction,/必须写出用户要登记的具体事项/);
+        return {...blank,requests:[{id:'meal',summary:'登记晚餐',subject:'user',state:'occurred',intent:'explicit',
+          timeText:'晚餐',conditions:[],evidence:[{sourceId:turn.sourceId,quote:text.includes('错证据')?'虚构原句':text}]}]};
+      }
+      if(stage==='review')return {issues:[]};
+      if(text.includes('空拟稿'))return {candidates:[],notes:[]};
+      return {candidates:[{id:'meal-row',type:'hu-shi.food.create',matterIds:[input.organized.requests[0].id],params:{body:text},
+        fieldSources:[],conditions:[],dependsOn:[],missing:[]}],notes:[]};
+    }
+  }});
+  cleanup.push(transcription.close);
+  const samples=[
+    [[dinner],'ready'],[[dinner+'空归纳'],'ready'],[[dinner+'错证据'],'ready'],[[dinner+'空拟稿'],'failed'],
+    [[namedDinner],'ready'],[['你好呀！'],'empty'],[[dinner,'别登记这顿晚餐。'],'empty']
+  ];
+  for(const [texts,state] of samples){
+    calls.clear();
+    const line=store.create();
+    for(const text of texts)store.submit(line.id,{text,backgroundRegistration:text.startsWith('帮我'),handled:text.startsWith('帮我')});
+    const batch=store.organization(line.id);
+    transcription.fromThread(batch);
+    const result=await wait(()=>{const current=transcription.detail(batch.id);return ['ready','empty','failed'].includes(current.state)?current:null;});
+    assert.equal(result.state,state,result.error);
+    if(state==='ready'){
+      assert.equal(result.result.rows[0].type,'hu-shi.food.create');
+      assert.equal(result.result.rows[0].evidence[0].quote,texts[0]);
+      assert.equal(calls.get('organize'+texts[0]).turns[0].registrationRequested,true);
+      if(texts[0]===namedDinner){
+        assert.match(result.result.rows[0].params.body,/晚餐吃了两个饭团/);
+        assert.equal(calls.has('classify'+texts[0]),false);
+      }else assert.equal(calls.get('classify'+texts[0]).organized.requests[0].intent,'explicit');
+    }
+    if(state==='failed')assert.match(result.error,/已确认的登记/);
+    if(state==='empty')assert.equal(calls.has('classify'+texts[0]),false);
+  }
+});
+
+test('转录只在首轮本地拟稿无结果时经 DeepSeek 共用接口补拟一次',async t=>{
+  const {profile,store,cleanup}=fixture(t);
+  const seen=[];
+  const candidate=id=>({candidates:[{id:'draft',type:'diaries.create',matterIds:[id],params:{content:'今天买文具花了 780 日元。'},
+    fieldSources:[],conditions:[],dependsOn:[],missing:[]}],notes:[]});
+  const empty={summary:'本轮对话',actions:[],requests:[],signals:[],recentFactIds:[]};
+  const local=createAiWorkflowModel({file:join(profile,'ai.sqlite'),model:{async memory(raw,_instruction,_schema,_signal,skill){
+    const input=JSON.parse(raw),turn=input.turns[0];
+    assert.equal(Object.hasOwn(input,'history'),false,'转写不带历史对话');
+    seen.push('local:'+skill.stage);
+    if(skill.stage==='organize'){
+      if(turn.text.includes('归纳超时'))throw Object.assign(Error('归纳超时'),{code:'LOCAL_AI_NOT_READY'});
+      if(turn.text.includes('云端判断无任务'))return {summary:'本轮对话',actions:[],requests:[{id:'req-1',summary:'非登记指令',subject:'user',state:'planned',intent:'inferred',timeText:'',conditions:[],evidence:[{sourceId:turn.sourceId,quote:turn.text}]}],signals:[],recentFactIds:[]};
+      return empty;
+    }
+    if(turn.text.includes('本地成功'))return candidate(input.organized.requests[0].id);
+    if(turn.text.includes('本地超时'))throw Object.assign(Error('本地超时'),{code:'LOCAL_AI_TIMEOUT'});
+    if(turn.text.includes('本地忙碌'))throw Object.assign(Error('本地忙碌'),{code:'LOCAL_AI_BUSY'});
+    return {candidates:[],notes:[]};
+  },async close(){}}});
+  cleanup.push(local.close);
+  const transcription=createConversationTranscription({profile,safeStorage:codec,model:local,
+    generateRemoteDraft:(input,instruction,schema,signal)=>generateDeepSeekDraft(input,instruction,schema,signal,{
+      key:'fixture-key',fetcher:async(url,options)=>{
+        seen.push('remote:classify');
+        assert.equal(url,'https://sub.bandaoapi.com/v1/chat/completions');
+        assert.equal(options.headers.authorization,'Bearer fixture-key');
+        const payload=JSON.parse(options.body);
+        assert.equal(payload.reasoning_effort,'medium');
+        assert.equal(payload.thinking,undefined);
+        assert.deepEqual(payload.response_format,{type:'json_object'});
+        const content=JSON.parse(payload.messages[1].content);
+        assert.equal(content.history,undefined);
+        assert.equal(content.turns.length,1);
+        assert.equal(JSON.stringify(content).includes('无关旧历史'),false);
+        if(content.turns[0].text.includes('云端失败'))return new Response(null,{status:429});
+        if(content.turns[0].text.includes('云端判断无任务'))return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({candidates:[],notes:['会话控制，无须登记']})}}]});
+        const result=candidate(content.organized.requests[0].id);
+        return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(result)}}]});
+      }
+    })});
+  cleanup.push(transcription.close);
+  const cases=[
+    ['本地成功','ready',['local:organize','local:classify']],
+    ['本地空结果','ready',['local:organize','local:classify','remote:classify']],
+    ['本地超时','ready',['local:organize','local:classify','remote:classify']],
+    ['云端失败','failed',['local:organize','local:classify','remote:classify']],
+    ['旧本地直连','failed',['local:organize','local:classify']],
+    ['本地忙碌','failed',['local:organize','local:classify']],
+    ['归纳超时','failed',['local:organize']],
+    ['闲聊','empty',['local:organize']],
+    ['云端判断无任务','empty',['local:organize','local:classify','remote:classify']]
+  ];
+  for(const [label,state,expected] of cases){
+    seen.length=0;
+    const line=store.create(),at=Date.now(),confirmed=!['闲聊','云端判断无任务'].includes(label);
+    store.submit(line.id,{text:confirmed?'给我记一笔，今天买文具花了 780 日元。'+label:label==='云端判断无任务'?'结束对话吧（云端判断无任务）':'你好。',backgroundRegistration:confirmed,handled:confirmed,
+      mode:label==='旧本地直连'?'direct':'auto'});
+    const batch=store.organization(line.id);
+    batch.history=[{who:'你',text:'无关旧历史',at}];
+    transcription.fromThread(batch);
+    const result=await wait(()=>{const detail=transcription.detail(batch.id);return ['ready','failed','empty'].includes(detail.state)?detail:null;});
+    assert.equal(result.state,state,result.error);
+    assert.deepEqual(seen,expected);
+    if(label==='云端失败')assert.equal(result.needsReview,true);
+    if(state==='ready')assert.equal(result.result.rows[0].type,'diaries.create');
+  }
 });
 
 test('已经排队的当前对话提权，压过普通后台请求，同时队列负载为受保护值',async t=>{

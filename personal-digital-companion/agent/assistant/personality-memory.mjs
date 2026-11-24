@@ -1,5 +1,5 @@
 import {stageOriginal,validOriginal,readOriginal,retireOriginal} from './original-txt.mjs';
-import {canRefine,checkedRefinement,diaryOriginalKey,diaryReceiptKey,nagRefinementKey,refinementDigest,refinementFields,refinementInterval,refinementText} from './memory-refinement.mjs';
+import {appendDiaryBody,canRefine,checkedRefinement,diaryOriginalKey,diaryReceiptKey,diaryThreadLimit,emptyDiaryBody,nagRefinementKey,refinementDigest,refinementFields,refinementInterval,refinementText} from './memory-refinement.mjs';
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
 const fail=(status,message)=>json({error:{message}},status);
 const length=s=>Array.from(s).length;
@@ -28,12 +28,13 @@ async function append(db,owner,x,env){
     const last=await bind('SELECT * FROM companion_diary WHERE owner=? AND day=? ORDER BY part DESC LIMIT 1',x.day).first();
     const old=await bind('SELECT part,j.value AS digest FROM companion_diary,json_each(batches) j WHERE owner=? AND day=? AND j.key=?',x.day,x.batch).first();
     if(old)return old.digest===fingerprint?result(old.part):fail(409,'批次号已用于其他内容');
-    const empty=x.body==='无所事事的一天'&&!x.threads.length;
+    const empty=x.body===emptyDiaryBody&&!x.threads.length;
     if(empty&&last)return result(last.part);
-    const grow=last&&length(last.body)+2+length(x.body)<=5000;
+    const merged=last&&appendDiaryBody(last.body,x.body);
+    const grow=merged&&length(merged)<=5000;
     const part=grow?last.part:(last?.part??0)+1;
     const threads=grow?JSON.parse(last.threads):[];
-    for(const t of x.threads.slice(0,Math.max(0,3-threads.length))){
+    for(const t of x.threads.slice(0,Math.max(0,diaryThreadLimit-threads.length))){
       threads.push({no:threads.length+1,text:typeof t==='string'?t:t.text,resolved:false,asked:t.asked===true,
         ...(Number.isSafeInteger(t.at)?{at:t.at}:{}),...(t.priority?{priority:t.priority}:{})});
     }
@@ -51,8 +52,8 @@ async function append(db,owner,x,env){
     const batches=JSON.stringify({...history,[x.batch]:fingerprint});
     const at=new Date().toISOString();
     const fields=[x.summary,tags,x.mood,x.weather,JSON.stringify(threads),batches,at];
-    const write=grow?db.prepare('UPDATE companion_diary SET body=body||char(10)||char(10)||?,summary=?,tags=?,mood=?,weather=?,threads=?,batches=?,updated_at=?,revision=revision+1 WHERE owner=? AND day=? AND part=? AND revision=?')
-      .bind(x.body,...fields,owner,x.day,part,last.revision):
+    const write=grow?db.prepare('UPDATE companion_diary SET body=?,summary=?,tags=?,mood=?,weather=?,threads=?,batches=?,updated_at=?,revision=revision+1 WHERE owner=? AND day=? AND part=? AND revision=?')
+      .bind(merged,...fields,owner,x.day,part,last.revision):
       db.prepare('INSERT INTO companion_diary(owner,day,part,revision,body,summary,tags,mood,weather,threads,batches,updated_at) VALUES(?,?,?,1,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING')
       .bind(owner,x.day,part,x.body,...fields);
     if((await write.run()).meta.changes){

@@ -18,9 +18,9 @@ export function createLocalTaskPool({file,garden,record,onProgress=()=>{},onResu
     id TEXT PRIMARY KEY,digest TEXT NOT NULL,title TEXT NOT NULL,deadline TEXT NOT NULL,created TEXT NOT NULL,
     state TEXT NOT NULL,after_batch INTEGER NOT NULL,payload TEXT,submission_id TEXT,record_id INTEGER,error TEXT,finished TEXT
   )`);
-  // 只保存排队编号和摘要。待确认草案留在调用方。
+  // 仅已定稿（review IS NOT NULL）且尚未入队执行的批次才在提交前排队；草稿准备阶段不占号、不阻塞。
   db.exec('CREATE TABLE IF NOT EXISTS garden_turns(id TEXT NOT NULL,base TEXT NOT NULL,draft TEXT NOT NULL,review TEXT,PRIMARY KEY(id,base))');
-  const waitingTurn="NOT EXISTS (SELECT 1 FROM batches WHERE batches.id=garden_turns.id AND (garden_turns.base='' OR batches.digest<>garden_turns.base))";
+  const waitingTurn="review IS NOT NULL AND review<>'' AND NOT EXISTS (SELECT 1 FROM batches WHERE batches.id=garden_turns.id AND (garden_turns.base='' OR batches.digest<>garden_turns.base))";
   const firstTurn=db.prepare('SELECT id,base,review FROM garden_turns WHERE '+waitingTurn+' ORDER BY rowid LIMIT 1');
   const findTurn=db.prepare('SELECT * FROM garden_turns WHERE id=? AND base=?');
   const dropTurn=db.prepare('DELETE FROM garden_turns WHERE id=? AND base=?');
@@ -160,23 +160,22 @@ export function createLocalTaskPool({file,garden,record,onProgress=()=>{},onResu
       if(prior && batch?.reviewHash===prior.review)return {state:'submitted',batch};
       invariant(batch?.state==='blocked'&&batch.reviewHash===base,'续办摘要或原批状态已变化，请查询回执');
     }else if(batch)return {state:'submitted',batch};
-    invariant(prior||(!poll&&!review),'原排队已取消，请重新准备');
+    invariant(prior||!poll,'原排队已取消，请重新准备');
     db.prepare('INSERT OR IGNORE INTO garden_turns(id,base,draft) VALUES(?,?,?)').run(id,base,draft);
-    const position=db.prepare('SELECT count(*) AS n FROM garden_turns WHERE '+waitingTurn+' AND rowid<=(SELECT rowid FROM garden_turns WHERE id=? AND base=?)').get(id,base).n;
-    const activeBatch=db.prepare("SELECT id FROM batches WHERE "+RUNNABLE+" LIMIT 1").get();
-    const ready=position===1&&!activeBatch;
     if(review){
-      invariant(ready,'尚未轮到该批次取号');
       invariant(!prior?.review||prior.review===review,'该批已有最终清单，请使用原文件或先取消取号');
       db.prepare('UPDATE garden_turns SET review=? WHERE id=? AND base=?').run(review,id,base);
     }
-    return {state:ready?'ready':'waiting',position,reviewHash:prior?.review??null};
+    const position=review?db.prepare('SELECT count(*) AS n FROM garden_turns WHERE '+waitingTurn+' AND rowid<=(SELECT rowid FROM garden_turns WHERE id=? AND base=?)').get(id,base).n:1;
+    const activeBatch=db.prepare("SELECT id FROM batches WHERE "+RUNNABLE+" LIMIT 1").get();
+    const ready=(position<=1)&&(!review || !activeBatch || activeBatch.id===id);
+    return {state:ready?'ready':'waiting',position:Math.max(1,position),reviewHash:review??prior?.review??null};
   }
   function allowSubmit(plan,digest){
     const head=firstTurn.get();
     invariant(!head||(head.id===plan.id&&head.base===(plan.continues??'')),'请等待当前批次完成最终取号和登记');
-    if(head || ['succeeded','failed'].includes(plan.release)){
-      invariant(head?.id===plan.id && head.review===digest,'发布须先通过登记队列定稿，并提交已确认的同一摘要');
+    if(head){
+      invariant(head.id===plan.id && head.review===digest,'发布须先通过登记队列定稿，并提交已确认的同一摘要');
     }
   }
   function submit(plan,commit,digest){

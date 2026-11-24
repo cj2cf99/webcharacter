@@ -26,7 +26,7 @@ async function main(){
   actions.attachment={label:'窗口依附'};
   actions.move={submenu:[{label:'右下角',click:()=>clicks.push('move')}]};
   actions.loginStart={id:'loginStart',type:'checkbox',checked:false,click:item=>clicks.push('login:'+item.checked)};
-  actions.privateChat=false;actions.continueNag=false;actions.pendingCheck=false;
+  actions.privateChat=false;actions.continueNag=false;
   const menu=electron.Menu.buildFromTemplate(menuTemplate(layout,actions));
   let opened=0,closed=0;
   menu.on('menu-will-show',()=>opened++);
@@ -40,19 +40,15 @@ async function main(){
       electron.nativeTheme.themeSource=theme;
       await open();
       const labels=await js("[...document.querySelectorAll('#items > .item .label')].map(n=>n.textContent)");
-      assert.deepEqual(labels,['问绯月','提醒（3 条未读）','今日任务','三地天气','本地复盘','阅读与学习','任务','桌宠动作','设置与维护']);
+      assert.deepEqual(labels,['问绯月','提醒（3 条未读）','提醒检查 · 待执行','今日任务','三地天气','本地复盘','阅读与学习','任务','桌宠动作','设置与维护']);
       assert.equal(await js("document.querySelectorAll('.group[aria-expanded=true]').length"),0,'重开菜单时所有分组均应折叠');
-      await js("[...document.querySelectorAll('.group')].find(b=>b.textContent.includes('任务') && !b.textContent.includes('待执行')).click()");
-      const visible=await js("[...document.querySelectorAll('.item')].filter(n=>n.offsetHeight>0).map(n=>n.textContent.trim())");
-      const di=visible.findIndex(t=>t.includes('看绯月写日记')),rv=visible.findIndex(t=>t.includes('补写本机任务执行评价'));
-      assert(di>=0&&rv===di+1,'两项任务未相邻显示');
-      await js("[...document.querySelectorAll('.item')].find(b=>b.textContent.includes('看绯月写日记')&&!b.classList.contains('group')).click()");
-      await until(()=>clicks.includes('writeDiary'),'未派发日记动作');
-      await open();
       const before=page().getBounds();
       assert(before.y+before.height<=area.y+area.height&&before.x+before.width<=area.x+area.width,'菜单超出工作区');
       writeFileSync(join(out,'menu-'+theme+'.png'),(await page().webContents.capturePage()).toPNG());
-      await js("[...document.querySelectorAll('.group')].find(b=>b.textContent.includes('设置与维护')).click()");
+      await js(`document.querySelector('.group[title="任务"]').click()`);
+      const taskLabels=await js(`[...document.querySelector('.group[title="任务"]').nextElementSibling.children]
+        .filter(item=>item.offsetParent&&item.matches('.item')).map(item=>item.title)`);
+      assert.deepEqual(taskLabels.slice(0,2),['看绯月写日记','补写本机任务执行评价']);
       await until(async()=>page().getBounds().height>before.height,'展开分组后窗口未变高');
       const after=page().getBounds();
       assert(Math.abs(after.y+after.height-(before.y+before.height))<=2,'向上展开时底边应保持在原位');
@@ -61,6 +57,9 @@ async function main(){
       await js("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}))");
       await until(()=>!popup.open,'Esc 未关闭菜单');
     }
+    await open();
+    await js(`document.querySelector('#items > button[title="提醒检查 · 待执行"]').click()`);
+    await until(()=>clicks.includes('pendingCheck'),'一级提醒入口未执行待检查动作');
     await open();
     await js("[...document.querySelectorAll('.item')].find(b=>b.textContent.includes('今日任务')).click()");
     await until(()=>clicks.includes('today'),'点击未执行原菜单动作');

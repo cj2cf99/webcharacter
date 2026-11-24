@@ -210,6 +210,7 @@ function render(value){
   more.textContent=expanded?'收起':'展开全文';
   more.setAttribute('aria-expanded',String(expanded));
   byId('sources').hidden=!value.sources?.length;
+  byId('knowledge-card').hidden=!value.knowledgeCard;
   badge.textContent=value.finished?'已收尾':{idle:'对话',waiting:'处理中',answer:'回复',error:'未完成'}[value.state];
   badge.hidden=value.state==='error'&&!(typeof value.question==='string'&&value.question.trim()&&full.trim());
   if(Object.hasOwn(value,'hasPending'))updatePending(value.hasPending);
@@ -286,6 +287,7 @@ question.addEventListener('compositionstart',()=>{composing=true;resetIdle();});
 question.addEventListener('compositionend',()=>{composing=false;resetIdle();});
 retry.onclick=async()=>{const value=await invoke(()=>host.retry());if(attachment&&value?.state==='answer'){question.value='';showAttachment(null);attachmentError();}};
 for(const [id,full] of [['sources',true],['history',false]])byId(id).onclick=()=>host.details(full).catch(()=>render({state:'error',text:'对话记录窗口未能打开。'}));
+byId('knowledge-card').onclick=()=>host.openKnowledge().catch(()=>render({state:'error',text:'知识条目暂时无法打开。'}));
 byId('full').onclick=()=>{expanded=!expanded;render(lastView);resetIdle();};
 for(const action of ['later','refuse'])byId(action).onclick=()=>host.close(action);
 byId('close').onclick=()=>host.close('button');

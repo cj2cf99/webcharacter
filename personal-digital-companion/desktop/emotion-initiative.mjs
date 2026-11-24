@@ -1,6 +1,5 @@
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {chatTotalMs,memoryInferenceMs} from './chat-budget.mjs';
 import {readFile} from 'node:fs/promises';
 import {atomicFile,optional} from './memory-archive.mjs';
 import {tokyoDay} from './conversation-history.mjs';
@@ -122,12 +121,13 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,que
     try{
       await save();
       const [skill,loop]=await Promise.all([load('initiativeDecision'),load('loveAndReason')]);
-      audit.versions={initiative:skill.version,loop:loop.version,model:'Qwen3.5 Aggressive 9B'};
+      audit.versions={initiative:skill.version,loop:loop.version};
       const analyze=async(input,instruction,schema)=>{
         const phase=schema.properties.entries?'propose':'decide';
         audit[phase]={at:now(),input};await save();
         const answer=await model.memory(JSON.stringify(input),instruction,schema,signal,
-          {name:skill.skill,version:skill.version,stage:phase,aiBudget:chatTotalMs+memoryInferenceMs});
+          {name:skill.skill,version:skill.version,stage:phase});
+        audit.versions.model=model.dualTaskWorkers?'Qwen3.5-4B':model.snapshot?.().model;
         audit[phase].endedAt=now();return answer;
       };
       const allowedProposal=structuredClone(proposal);
@@ -193,9 +193,9 @@ export function createInitiative({emotion,root,speak,memory,localNags,topics,que
       if(d.action==='ask')return {roundId:id,source:fact.ask,message:d.message,evaluation:d.conclusion,finish};
       if(d.action==='speak'){
         if(queueClarification&&!fact.share&&chosen.type==='clarify'){
-          const queued=queueClarification({ref:fact.ref,title:d.message,roundId:id});
-          const detail=queued?'已加入待确认':'这项确认已登记或留待下轮';
-          await finish(queued,detail,{queuedQuestion:true});
+          const queued=await queueClarification({ref:fact.ref,title:d.message,roundId:id,context:fact.title},signal);
+          const detail=queued==='resolved'?'已用本机知识核对这项疑点':queued?'已加入待确认':'这项确认已登记或留待下轮';
+          await finish(Boolean(queued),detail,{queuedQuestion:true});
           return {detail};
         }
         if(queueConversation){

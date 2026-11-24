@@ -57,6 +57,24 @@ export function createMemoryArchive(root=memoryRoot){
     }));
     return rows.filter(Boolean).sort((a,b)=>b.at-a.at);
   }
+  async function readForDiary(day){
+    const turns=await read(day);
+    const legacy=turn=>turn.localOnly===undefined&&!turn.direct&&!turn.image&&!turn.initiative&&!turn.report;
+    if(!turns.some(legacy))return turns;
+    const logFolder=join(folder(day),'日志');
+    const logs=await Promise.all(['历史通信.jsonl','任务通信.jsonl'].map(name=>optional(readFile(join(logFolder,name),'utf8'))));
+    const operations=new Map();
+    for(const log of logs)for(const line of (log??'').split('\n')){
+      try{
+        const event=JSON.parse(line);
+        if(event?.route==='问绯月'&&event.stage==='处理结束'&&event.turn_id)
+          operations.set(event.turn_id,operations.get(event.turn_id)!==false&&event.operation==='文字问答');
+      }catch{/* 跳过旧日志中不完整的记录。 */}
+    }
+    // 旧附件与普通文字可能共用操作名，但附件都会在归档标题追加文件名。
+    return turns.map(turn=>legacy(turn)?{...turn,localOnly:operations.get(turn.id)!==true||
+      typeof turn.question!=='string'||turn.question.includes(' · ')}:turn);
+  }
   async function storeImage(turn,image){
     const ref=imageRef(turn),base=folder(ref.day),bytes=image.toPNG();
     if(!bytes.length)throw Error('原图为空');
@@ -163,7 +181,7 @@ export function createMemoryArchive(root=memoryRoot){
     writing.set(day,work);
     return work.finally(()=>{if(writing.get(day)===work)writing.delete(day);});
   }
-  return {root,folder,save,read,latest:async day=>(await read(day))[0],storeImage,thumbnail,original,archiveImageTask,readImageReport,taskImage,
+  return {root,folder,save,read,readForDiary,latest:async day=>(await read(day))[0],storeImage,thumbnail,original,archiveImageTask,readImageReport,taskImage,
     readTasks,taskHistory,archiveDays,refreshIndex,async saveTasks(day,rows,{index=true}={}){
       await atomicFile(join(folder(day),'任务','执行记录.json'),JSON.stringify(rows,null,2)+'\n');
       if(index)await refreshIndex(day);

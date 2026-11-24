@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
-import {gradeQuestion,publicQuestion,shuffled,validSelection} from './study-materials.mjs';
+import {gradeQuestion,publicQuestion,shuffled,validSelection,validStudyQuestionBase} from './study-materials.mjs';
 
 const hour=3_600_000;
 const weights=[1,3,5,7];
@@ -390,7 +390,16 @@ export function createStudyStore(profile,clock=at,safeStorage){
         if(candidate&&JSON.parse(candidate.id)[1]===script)current=candidate;
       }
       if(!current||current.active===false||current.base&&isDoubt(current.base))continue;
-      if(current.id!==old.id)changed.push(current.title??current.stem);
+      if(current.id!==old.id){
+        const changes=[];
+        if(old.type!==current.type)changes.push('题型');
+        if(old.stem!==current.stem)changes.push('题干');
+        const rows=values=>JSON.stringify((values??[]).map(({id,text})=>[id,text]).sort(([a],[b])=>a.localeCompare(b)));
+        if(rows(old.options)!==rows(current.options))changes.push('选项');
+        if(rows(old.pairs)!==rows(current.pairs))changes.push('配对');
+        if(old.answer!==current.answer||JSON.stringify([...(old.correct??[])].sort())!==JSON.stringify([...(current.correct??[])].sort()))changes.push('参考答案');
+        changed.push((current.title??current.stem)+'（'+(changes.join('、')||'材料修订')+'）');
+      }
       selected.push(current);
     }
     if(!selected.length)throw Error('原题已停用、标疑或移除，仍可回看历史作答');
@@ -403,8 +412,8 @@ export function createStudyStore(profile,clock=at,safeStorage){
   function formalRetry(id,index,accepted){
     const record=read(sql('SELECT body FROM relay WHERE id=?').get(id));
     const item=record?.session.items[index];
-    if(record?.session.status!=='completed'||!record.material||!item?.evidenceId||!item.base)throw Error('这份记录仅可回看');
-    return replayCurrent(record.material,[{id:item.evidenceId,base:item.base}],{id,index,formal:true},accepted);
+    if(record?.session.status!=='completed'||!record.material||!item?.evidenceId||!validStudyQuestionBase(item.base))throw Error('这份记录仅可回看');
+    return replayCurrent(record.material,[{...item.question,id:item.evidenceId,base:item.base}],{id,index,formal:true},accepted);
   }
   function next(id,index,kind,ref,accepted){
     const s=findSession(id);

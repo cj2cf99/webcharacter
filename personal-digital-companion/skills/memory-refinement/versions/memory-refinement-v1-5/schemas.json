@@ -1,0 +1,31 @@
+{
+  "plan": {
+    "type": "object",
+    "properties": {
+      "organize": {"type": "string", "maxLength": 75},
+      "additions": {"type": "string", "maxLength": 75},
+      "format": {"type": "string", "maxLength": 60}
+    },
+    "required": ["organize", "additions", "format"],
+    "additionalProperties": false
+  },
+  "draft": {
+    "type": "object",
+    "properties": {
+      "text": {"type": "string", "maxLength": 1500},
+      "note": {"type": "string", "maxLength": 240}
+    },
+    "required": ["text", "note"],
+    "additionalProperties": false
+  },
+  "review": {
+    "type": "object",
+    "properties": {
+      "decision": {"enum": ["accept", "revise"]},
+      "part": {"type": "string", "maxLength": 40},
+      "reason": {"type": "string", "maxLength": 80}
+    },
+    "required": ["decision", "part", "reason"],
+    "additionalProperties": false
+  }
+}

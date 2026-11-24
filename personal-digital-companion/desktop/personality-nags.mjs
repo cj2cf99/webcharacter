@@ -1,11 +1,13 @@
-import {diaryQuestionBudgetMs,untilAbort} from './chat-budget.mjs';
+import {untilAbort} from './chat-budget.mjs';
 import {createDiaryAudit} from './diary-audit.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
-import {createHash} from 'node:crypto';
-import {deferredNagReply,explicitRoleCorrection,nagReplyKey as replyKey,reusedLongReply} from './nag-reply-check.mjs';
+import {createHash,randomUUID} from 'node:crypto';
 import {tokyoDay} from './conversation-history.mjs';
 import {cleanMemory} from './personality-diary.mjs';
 import {answeredQuestion,emptyFollowUp,isPendingQuestion,pendingLimit,questionReminder,questionTarget,questionText,sameQuestion} from './pending-questions.mjs';
+import {isKnowledgeFeedback,knowledgeReply} from './knowledge-runtime.mjs';
+import {deferredNagReply,explicitRoleCorrection,nagReplyKey as replyKey,reusedLongReply} from './nag-reply-check.mjs';
+import {diaryThreadLimit} from '../agent/assistant/memory-refinement.mjs';
 
 const dayMs=86400000;
 const game=/游戏|遊戲|ゲーム|娱乐|娛樂|娯楽|gaming|entertainment/i;
@@ -14,7 +16,6 @@ const unknown=s=>!s||/未知|其他|不明|未分类|未分類|unknown|other/i.t
 const brief=(s,n)=>Array.from(cleanMemory(s)).slice(0,n).join('');
 const iso=at=>new Date(at).toISOString();
 const citationLength=150;
-const replyBudget=25000;
 const replyStatus=value=>value.deferred||value.next.trim()?'回合结束':'已解释';
 
 function repeatsQuestion(text,questions){
@@ -37,7 +38,7 @@ function diaryCitationLines(reading){
   }).map(line=>line.trim()).filter(Boolean);
 }
 
-export function createPersonalityNags({store,emotion,initiative,show,idle,canContinue=()=>true,notify=()=>{},changed=()=>{},onAnswered,questionImage,now=Date.now,random=Math.random}){
+export function createPersonalityNags({store,emotion,initiative,show,idle,canContinue=()=>true,notify=()=>{},changed=()=>{},onAnswered,questionImage,knowledge,now=Date.now,random=Math.random}){
   let active=null,syncJob=null,stopped=false,working=false;
   const lifetime=new AbortController();
   const pendingQuestions=()=>store.nags().filter(isPendingQuestion)
@@ -60,14 +61,15 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     return syncJob;
   }
   function save(n){n.localQuestion=true;store.saveNag(n);changed();if(answeredQuestion(n)&&!n.localOnly)void sync();}
-  const audit=createDiaryAudit({store,show,idle,canContinue,save,now,random});
+  const audit=createDiaryAudit({store,show,idle,canContinue,save,now,random,protectReply:privateReply,lookupReply:assessReply});
   function talk(n,who,text){n.talk.push({who,text,at:iso(now())});}
   async function think(stage,data,fields,signal,aiPriority,aiCurrentPriority,selected){
     const skill=selected??await readInteractionSkill('basicNag');signal.throwIfAborted();
     const prompt=skill.localAi?.[stage];if(!prompt)throw Error('念叨技能缺少阶段 '+stage);
     const guidance=stage==='open'?' question 写明希望他回答或核实的一件具体事，可用自然的请求语气。若只是关心、分享或事情已核实，question 填空字符串 ""。score 表示绯月现在有多想弄清：1 为稍有好奇，3 为值得关心，5 为关系、处境或安排上特别重要。':'';
     return store.think(data,prompt+guidance,fields,signal,{name:skill.skill,version:skill.version,stage,
-      aiReview:stage==='open',aiTier:stage==='reply'?'4':'2',aiBudget:stage==='reply'?replyBudget:undefined,aiPriority,aiCurrentPriority,
+      aiReview:stage==='open',aiTier:['open','reply'].includes(stage)?'4':'2',aiPriority,aiCurrentPriority,
+      ...(['classifyExpense','explained'].includes(stage)?{boundedOutput:true,maxTokens:80}:{}),
       ...(stage==='reply'?{boundedOutput:true,maxTokens:384}:{})});
   }
   const assessments=new Map();
@@ -96,7 +98,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       return [{source:'nag',source_id:n.id,title:question,reason:'念叨里还有待核实的下文',stats:'',priority:3}];
     });
     for(const p of store.pages(day(6)).filter(p=>p.day>=day(6)&&p.day<=day(0))){
-      for(const t of p.threads.slice(0,3)){
+      for(const t of p.threads.slice(0,diaryThreadLimit)){
         const id=p.day+'.'+p.part+'/'+t.no;
         if(!t.asked&&!t.resolved&&!known.has('diary/'+id))pool.push({source:'diary',source_id:id,title:t.text,reason:'日记中的未解悬念',stats:'',priority:t.priority??3});
       }
@@ -164,17 +166,17 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     signal.throwIfAborted();
     const lines=diaryCitationLines(reading);
     const data={原题:source.title,出处:lines.map((原文,index)=>({行:index+1,原文})),同篇后文:later||undefined};
-    const options={name:skill.skill,version:skill.version,boundedOutput:true,maxTokens:220,aiBudget:diaryQuestionBudgetMs};
+    const options={name:skill.skill,version:skill.version,boundedOutput:true,maxTokens:220};
     const check=await store.think(JSON.stringify(data),
       '先在 target 简短写出原题所问的一个答复项，再用原文和后文核对它。state 填 answered（已有答复）、open（材料明确说这个答复项还缺）、unrelated（材料没有涉及或无法确认）。只因材料里没有答案，就归 unrelated；不能把没提到的题当成未解。其他事项有缺口也归 unrelated。后文已有答复时填 answered。例：问资料去哪儿找，原文只说更新已验或只是关心，归 unrelated；写了资料在哪个页面归 answered；明确说资料页面还不清楚才归 open。问是否同行，已约好同行就归 answered，即使开门时间未知。answered 时 answer 写真实答复内容，否定答复也算。open 时 answer 留空，line 写说明该答复项还缺的行号整数。没有答复内容也没有原题缺项时归 unrelated。只做答案核对，别改写题目。',
-      ['target','state','answer','line'],signal,{...options,stage:'diaryOpeningCheck',citationCount:lines.length});
+      ['target','state','answer','line'],signal,{...options,stage:'diaryOpeningCheck',aiRole:'assist',citationCount:lines.length});
     signal.throwIfAborted();
     const original=lines[Number(check.line)-1];
     if(check.state!=='open'||check.answer||!check.target||!original)return;
     const evidence=original;
     const draft=await store.think(JSON.stringify({已核对的待答信息:check.target,相关出处:evidence}),
       '用绯月的口吻直接问对方这项已核对的待答信息。一句问话或自然请托即可，保留自然句尾，省略称呼。出处已经单独显示，问话无需逐字重复出处。只问指定的待答信息。',
-      ['question'],signal,{...options,stage:'diaryOpeningWrite'});
+      ['question'],signal,{...options,stage:'diaryOpeningWrite',aiRole:'main',aiReview:true});
     signal.throwIfAborted();
     const question=questionText(draft.question?.replace(/^绯月[，,:：、]\s*/u,''));
     if(question&&question.length<=64)return {question,evidence,evaluation:'想听你补充手记里还没答复的这一项。',mood:'关心'};
@@ -196,6 +198,9 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     if(n.localInitiativeRound)emotion?.feedback(n.localInitiativeRound,status);
   }
   async function appraise(n,text,signal,thread){
+    const checked=await assessReply(n,text,signal,thread);
+    if(knowledgeReply(checked)||checked?.state==='apply')
+      return {reply:checked.answer,evaluation:'已按本机知识核对',mood:n.mood||'平静',next:checked.state==='need'?checked.answer:''};
     const {最新发言:latest,目的:purpose,...history}=thread?.context??{};
     const currentQuestion=replyKey(n.next);
     const inHistory=currentQuestion&&history.之前发言?.some(turn=>turn.发言者==='绯月'&&replyKey(turn.原话)===currentQuestion);
@@ -214,19 +219,17 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       }
     }
     const skill=await readInteractionSkill('basicNag');
-    const deadline=AbortSignal.timeout(replyBudget),wait=AbortSignal.any([signal,deadline]);
     let mood=n.mood||'平静';
     for(let attempt=0;attempt<2;attempt++){
       signal.throwIfAborted();
-      if(deadline.aborted)break;
       const data=attempt?{改写要求:'上一稿复述或串场。先接住刚说的具体事实或顾虑，一句就够，不引入旧话题。',最新发言:input.最新发言}:input;
       let v;
       try{
-        v=await untilAbort(think('reply',JSON.stringify(data),['evaluation','mood','reply','next'],wait,
-          thread?.priority,thread?.currentPriority,skill),wait);
+        v=await untilAbort(think('reply',JSON.stringify(data),['evaluation','mood','reply','next'],signal,
+          thread?.priority,thread?.currentPriority,skill),signal);
       }catch(error){
         signal.throwIfAborted();
-        if(attempt&&(deadline.aborted||['LOCAL_AI_TIMEOUT','LOCAL_AI_OUTPUT_BUDGET','LOCAL_AI_TIER_WAIT'].includes(error.code)))break;
+        if(attempt&&['LOCAL_AI_TIMEOUT','LOCAL_AI_OUTPUT_BUDGET','LOCAL_AI_TIER_WAIT'].includes(error.code))break;
         throw error;
       }
       signal.throwIfAborted();
@@ -246,6 +249,26 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
         !explicitRoleCorrection(latestText,next)?next:''};
     }
     return {reply:deferredNagReply,evaluation:'已保存原话，待复核这轮回应。',mood,next:'',deferred:true};
+  }
+  async function privateReply(n,text,signal,id='reply/'+randomUUID()){
+    if(!knowledge||!isKnowledgeFeedback(text))return null;
+    const result=await knowledge.inspect({text,source:id,signal,direct:true,scope:'question',
+      learn:!n.localOnly,previous:{id:n.id+'/'+n.turns,text:n.next}});
+    return {text:knowledgeReply(result)??'请单独发送纠正的条件和做法。有需要归档的答复时请另发一条。',
+      knowledgeCard:result?.card};
+  }
+  async function assessReply(n,text,signal,thread){
+    const result=await knowledge?.inspect({text:n.next||n.title,scope:'active',signal,learn:false,priority:thread?.priority??6,
+      context:{事项:n.title,用户答复:text,现场:n.localContext,同线依据:thread?.context}});
+    if(result?.private){n.localOnly=true;save(n);}
+    return result;
+  }
+  async function prepareQuestion(source,prompt,signal,context){
+    const result=await knowledge?.inspect({text:prompt,signal,source:'question/'+source.source+'/'+source.source_id,scope:'active',
+      context:{主题:source.title,原因:source.reason,局部事实:source.localContext,依据:context},learn:!source.localOnly,priority:3});
+    if(result?.state==='apply')return 'resolved';
+    if(['unavailable','conflict'].includes(result?.state))return 'deferred';
+    return 'ask';
   }
   function remind(added=false){
     const queue=pendingQuestions(),preferred=queue[0];
@@ -275,7 +298,13 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     working=true;
     try{
       const result=await audit.prepare(signal,progress);
+      if(result.n){
+        const checked=await prepareQuestion(result.n,result.n.next??result.n.title,signal,result.n.localQuestionEvidence??result.n.refs);
+        if(checked==='resolved')return {detail:'已用本机知识核对手记疑点'};
+        if(checked==='deferred')return {deferred:true};
+      }
       if(result.n&&queue(result.n))return {detail:'已新增 1 个手记质问'};
+      if(result.nextBatch)return result;
       if(!result.deferred&&pending())remind();
       if(result.n)return {detail:'已拟出手记质问，本轮未能加入待确认'};
       return result.deferred?result:result.detail??result;
@@ -304,6 +333,9 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
           const mood=emotion?.expression().word??v.mood;
           if(!v.evaluation||!mood||!questionText(v.question))throw Error('没有取得可用的念叨问题');
           if(/^[1-5]$/u.test(v.score)&&source.source!=='diary')source.priority=Number(v.score);
+          const checked=await prepareQuestion(source,v.question,signal,v.evidence);
+          if(checked==='resolved')return {detail:'已用本机知识核对这项疑点'};
+          if(checked==='deferred')return {deferred:true};
           if(enqueue(reading?{...source,localQuestionEvidence:v.evidence}:source,{prompt:v.question,evaluation:v.evaluation,mood}))return {detail:'已新增 1 个待确认问题'};
         }
       }
@@ -361,6 +393,10 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     async function reply(input){
       const text=store.nagText?await store.nagText(n,input,session.controller.signal):cleanMemory(input);
       if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请把这次的解释控制在 3000 字以内。'};
+      session.replySource??='reply/'+randomUUID();
+      const correction=await privateReply(n,text,session.controller.signal,session.replySource);
+      session.replySource=null;
+      if(correction)return correction;
       talk(n,'你',text);save(n);
       if(n.source==='topic'){
         const result=await completeTopic(n,session.controller.signal);
@@ -405,6 +441,12 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     if(n.localThreadReceipts?.[key])return n.localThreadReceipts[key];
     if(!isPendingQuestion(n))throw Error('原质问已经收尾');
     const text=messages.filter(message=>!message.legacyPending).map(message=>message.text).join('\n');
+    const feedback=messages.find(message=>!message.legacyPending&&isKnowledgeFeedback(message.text));
+    if(feedback){
+      const correction=await privateReply(n,feedback.text,signal,'message/'+feedback.id);
+      if(correction)return {reply:correction.text+(messages.length>1?' 其余待归档答复请单独发送。':''),next:'回应',
+        extra:{knowledgePrivate:true,knowledgeCard:correction.knowledgeCard}};
+    }
     const last=n.talk.at(-1);
     if(!text&&messages[0].legacyPending&&last?.who==='你'&&last.threadMessage!==key){
       last.threadMessage=key;
@@ -421,7 +463,8 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       const outcome=await audit.threadAnswer(n,signal,priority,stillLatest,context,isOpen,currentPriority);
       if(!outcome||!isOpen())return;
       if(outcome.done&&!outcome.finished)throw Error(outcome.text);
-      return receipt({reply:outcome.text+(outcome.finished?'\n我先把手记收到这里啦。':''),next:outcome.finished?'结束':'追问'});
+      return receipt({reply:outcome.text+(outcome.finished?'\n我先把手记收到这里啦。':''),next:outcome.finished?'结束':'追问',
+        extra:outcome.knowledgePrivate?{knowledgePrivate:true}:undefined});
     }
     if(n.source==='topic'&&stillLatest()){
       await onAnswered?.(n,signal);
@@ -438,7 +481,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     const next=followUp(n,v);
     talk(n,'绯月',v.reply);n.next=questionText(v.next);
     if((!next||ended(n))&&stillLatest()){
-      const result={reply:v.deferred?v.reply:v.reply+'\n这件事我先记到这里啦。',next:'结束'};
+      const result={reply:v.deferred?v.reply:v.reply+'\n这件事我先记到这里啦。',next:'结束',extra:n.localOnly?{knowledgePrivate:true}:undefined};
       await onAnswered?.(n,signal);
       signal.throwIfAborted();
       if(!stillLatest())return isOpen()?receipt({reply:v.reply,next:'回应'}):undefined;
@@ -447,7 +490,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
       return result;
     }
     if(next)setFollowUp(n,next);
-    return receipt({reply:[v.reply,next].filter(Boolean).join('\n'),next:next?'追问':'回应'});
+    return receipt({reply:[v.reply,next].filter(Boolean).join('\n'),next:next?'追问':'回应',extra:n.localOnly?{knowledgePrivate:true}:undefined});
   }
   function threadEnd(id){
     if(active?.id===id)active.leave('later');
@@ -456,7 +499,7 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     if(!n||!isPendingQuestion(n))return;
     finish(n,'用户结束');
   }
-  return {assessPending,poll,pollAudit,resume,enqueue,remind,recoverAudit:audit.recover,pending,pendingQuestions,threadAnswer,threadEnd,flush:sync,async close(){
+  return {assessPending,prepareQuestion,poll,pollAudit,resume,enqueue,remind,recoverAudit:audit.recover,pending,pendingQuestions,threadAnswer,threadEnd,flush:sync,async close(){
     audit.close();active?.leave('interrupted');stopped=true;lifetime.abort();await syncJob;
   }};
 }

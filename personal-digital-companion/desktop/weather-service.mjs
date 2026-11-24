@@ -1,4 +1,6 @@
 import {parseJapanBulletins, parseTyphoonTracks} from './jma-typhoon.mjs';
+import {parseUpcomingPrecipitation} from './weather-brief.mjs';
+import {createHourlyWeatherRequest} from './weather-credentials.mjs';
 
 import {WEATHER_PLACES, parseCurrent, parseDailyMinimum, parseChinaAlerts, parseJapaneseAlerts} from '../agent/weather/data.mjs';
 export {WEATHER_PLACES, parseCurrent, parseDailyMinimum, parseChinaAlerts, parseJapaneseAlerts};
@@ -6,18 +8,21 @@ export {WEATHER_PLACES, parseCurrent, parseDailyMinimum, parseChinaAlerts, parse
 export const JMA_WARNING_PAGE = 'https://www.jma.go.jp/bosai/warning/#area_type=class20s&area_code=4010000';
 export const JMA_RADAR_PAGE = 'https://www.jma.go.jp/bosai/nowc/#lat:33.88/lon:130.88/zoom:10';
 
-export function createWeatherService({request, clock = Date.now, remindersEnabled = () => true,
+export function createWeatherService({request, requestHourly = createHourlyWeatherRequest(), clock = Date.now, remindersEnabled = () => true,
   onChange = () => {}, important = () => {}, seen = {}, saveSeen = () => {}}) {
-  const rows = WEATHER_PLACES.map(({id, owner, name}) => ({
-    id, owner, name, current: {state: 'idle'}, alerts: {state: 'idle'}, minimum: {state: 'idle'},
+  const rows = WEATHER_PLACES.map(({id, owner, name, timezone}) => ({
+    id, owner, name, timezone, current: {state: 'idle'}, alerts: {state: 'idle'}, minimum: {state: 'idle'},
+    hourly: {state: 'idle'},
   }));
   rows[0].japan = {tracks: {state: 'idle'}, bulletins: {state: 'idle'}};
   const lifecycle = new AbortController();
   const pending = {};
   const snapshot = () => ({rows, busy: Object.keys(pending).length > 0});
   async function query(place, part) {
-    if (!request) throw Object.assign(Error(), {code: 'WEATHER_NOT_CONFIGURED'});
-    const response = await request(`/api/weather/${place}/${part}`, {method: 'GET', signal: lifecycle.signal});
+    if (!request && part !== 'hourly') throw Object.assign(Error(), {code: 'WEATHER_NOT_CONFIGURED'});
+    const signal = lifecycle.signal;
+    const response = part === 'hourly' ? await requestHourly(place.coordinates, signal) :
+      await request(`/api/weather/${place.id}/${part}`, {method: 'GET', signal});
     const result = await response.json();
     if (!response.ok) throw Object.assign(Error(), {code: result?.error?.code});
     return result;
@@ -26,7 +31,7 @@ export function createWeatherService({request, clock = Date.now, remindersEnable
   async function refreshJapan(part, parse) {
     const previous = rows[0].japan[part];
     try {
-      const values = parse(await query('kokurakita', part), clock());
+      const values = parse(await query(WEATHER_PLACES[0], part), clock());
       if (lifecycle.signal.aborted) return;
       rows[0].japan[part] = {state: 'ready', values};
       if (part !== 'bulletins' || !remindersEnabled()) return;
@@ -45,29 +50,22 @@ export function createWeatherService({request, clock = Date.now, remindersEnable
       if (!lifecycle.signal.aborted) rows[0].japan[part] = {...previous, state: failureState(error)};
     }
   }
-  function checkMinimum(row, value) {
-    if (!value.below || lifecycle.signal.aborted || seen.minimumDates?.[row.id] === value.day) return;
-    important(row, [{title: '当地 ' + value.day.slice(5) + ' 预报最低 ' + value.temperature
-      + '°C，低于 ' + value.threshold + '°C'}], '低温提醒');
-    seen.minimumDates = {...seen.minimumDates, [row.id]: value.day};
-    saveSeen(seen);
-  }
   async function refreshRow(place, row, target) {
     const previous = row[target];
     try {
       let value;
       if (place.id === 'kokurakita' && target === 'alerts') {
-        value = parseJapaneseAlerts(await query(place.id, target));
+        value = parseJapaneseAlerts(await query(place, target));
       } else {
-        const data = await query(place.id, target);
+        const data = await query(place, target);
         if (target === 'current') value = parseCurrent(data);
         else if (target === 'minimum') value = parseDailyMinimum(data, place, clock());
+        else if (target === 'hourly') value = parseUpcomingPrecipitation(data, clock());
         else value = parseChinaAlerts(data, clock());
       }
       if (lifecycle.signal.aborted) return;
       row[target] = {state: 'ready', checked: clock(), value};
       if (!remindersEnabled()) return;
-      if (target === 'minimum') checkMinimum(row, value);
       if (target === 'alerts' && !lifecycle.signal.aborted) {
         const mostImportant = new Map();
         for (const item of value.values) {
@@ -102,7 +100,12 @@ export function createWeatherService({request, clock = Date.now, remindersEnable
   return {
     snapshot,
     whenIdle: () => Promise.all(Object.values(pending)),
-    async refreshAll() { await Promise.all([refreshCurrent(), refresh('alerts')]); return snapshot(); },
+    async refreshAll({includeHourly = false} = {}) {
+      const work = [refreshCurrent(), refresh('alerts')];
+      if (includeHourly) work.push(refresh('hourly'));
+      await Promise.all(work);
+      return snapshot();
+    },
     refreshCurrent,
     refreshAlerts: () => refresh('alerts'),
     close: () => lifecycle.abort(),

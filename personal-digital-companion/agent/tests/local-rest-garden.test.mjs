@@ -409,10 +409,10 @@ test('两份草案并行，重启后统一取号；遗失回执的首批在第�
   const turn=(draft,fields={})=>post('/v1/registration-turns/'+draft.id,{draftHash:hash(canonical(draft)),...fields});
   const [a,b]=drafts;
   assert.equal((await turn(a)).state,'ready');
-  assert.equal((await turn(b)).state,'waiting');
+  assert.equal((await turn(b)).state,'ready');
   assert.equal(writes,0);
   await api.close();await pool.close();await open();
-  assert.equal((await turn(b)).position,2);
+  assert.equal((await turn(b)).state,'ready');
   async function submit(draft){
     const plan=await preparePlan(draft,garden,model,catalog);plans.set(draft.id,plan);
     const reviewHash=hash(canonical(plan)),input={id:draft.id,commit:sha,reviewHash,userConfirmed:true};
@@ -434,3 +434,4 @@ test('两份草案并行，重启后统一取号；遗失回执的首批在第�
   await post('/v1/registration-turns/withdraw/cancel',{draftHash:hash(canonical(abandoned))});
   assert.equal((await turn(abandoned,{poll:true})).status,409);
 });
+

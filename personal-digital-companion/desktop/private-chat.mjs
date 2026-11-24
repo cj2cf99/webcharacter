@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {existsSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {splitText} from './bubble-voice-segments.mjs';
+import {knowledgeReply,knowledgeRules} from './knowledge-runtime.mjs';
 import voices from '../assets/voice/private-chat/manifest.json' with {type:'json'};
 
 export const waitingLabel='老公我在等你哦';
@@ -40,7 +41,7 @@ function repeats(reply,earlier){
 }
 
 export function createPrivateChat({profile,readGpu,idle,prepare,resume,createModel,createVoice,view,
-  change=()=>{},report=()=>{},shared=()=>{},onAccept=()=>{},canInvite=()=>true,now=Date.now,random=Math.random}){
+  change=()=>{},report=()=>{},shared=()=>{},onAccept=()=>{},knowledge,canInvite=()=>true,now=Date.now,random=Math.random}){
   const file=join(profile,'private-chat.json');
   let saved={plan:null,lastInvitedAt:null,sources:[]};
   if(existsSync(file)){
@@ -135,12 +136,16 @@ export function createPrivateChat({profile,readGpu,idle,prepare,resume,createMod
     const last=session.turns.at(-1);
     const content={topic,lastUserInput:last?.user.slice(0,700)??null,alreadySaid:earlier,input:answer,
       round:number,remaining:maxTurns-number,requiredFinish:number===maxTurns};
-    const analyze=extra=>session.model.analyze(JSON.stringify({...content,...extra}),{signal,hint:'interactionWork',
+    const check=answer&&await knowledge?.inspect({text:answer,source:'private-chat/'+session.id+'/'+number,scope:'private-chat',
+      signal,direct:true,learn:false,context:{前一轮:session.turns.at(-1)},judge:{memory:(text,instruction,schema,signal,settings)=>
+        session.model.analyze(text,{signal,hint:'interactionWork',skillInstruction:{name:'专聊知识核对',version:'1',instruction,schema,maxTokens:settings.maxTokens}})}});
+    const replyFromKnowledge=knowledgeReply(check);
+    const analyze=extra=>session.model.analyze(JSON.stringify({...content,...knowledgeRules(check),...extra}),{signal,hint:'interactionWork',
       skillInstruction:{name:'绯月专聊',version:'2',instruction,schema,maxTokens:768}});
-    let result=await analyze();
+    let result=replyFromKnowledge?{reply:replyFromKnowledge,done:false}:await analyze();
     const body=value=>typeof value?.reply==='string'?Array.from(value.reply.trim()).slice(0,maxReplyChars).join('').trimEnd():'';
-    let reply=body(result),usedTopic=topic;
-    if(repeats(reply,earlier)){
+    let reply=body(result),usedTopic=replyFromKnowledge?null:topic;
+    if(!replyFromKnowledge&&repeats(reply,earlier)){
       signal.throwIfAborted();
       result=await analyze({rewrite:'上一稿重复了聊过的内容。改用本轮话题，避免再次提出已经问过的问题。',rejectedReply:reply});
       reply=body(result);
@@ -152,7 +157,7 @@ export function createPrivateChat({profile,readGpu,idle,prepare,resume,createMod
     }
     if(!live(session))return;
     const parts=splitText(reply);
-    if(!parts.length||Array.from(reply).length<minReplyChars)throw Error('绯月没能整理好这次回复。');
+    if(!parts.length||!replyFromKnowledge&&Array.from(reply).length<minReplyChars)throw Error('绯月没能整理好这次回复。');
     await voiceReady;
     if(!live(session))return;
     const turn={id:randomUUID(),parts,topic:usedTopic,reply,taken:0,complete:number===maxTurns||(number>1&&result.done===true)};

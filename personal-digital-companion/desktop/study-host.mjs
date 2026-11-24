@@ -1,4 +1,5 @@
 import {readFile,stat} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {loadStudyConnection} from './cloud-connection.mjs';
@@ -27,12 +28,17 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
   let panel,store,relay,active,closed=false;
   const local=()=>store??=createStudyStore(profile,Date.now,electron.safeStorage);
   const remote=()=>relay??=createStudyRelay(local(),connection??(()=>loadStudyConnection(profile)));
+  let executing=false;
+  async function foreground(work){
+    executing=true;
+    try{onForeground();return await work();}
+    finally{executing=false;}
+  }
 
   async function workFree(input){
     if(!model?.work)throw Error('本机模型暂不可用，可使用缓存的文字剧本');
-    onForeground();
-    const signal=AbortSignal.any([active.signal,AbortSignal.timeout(60_000)]);
-    const result=await model.work(JSON.stringify(input),{instruction,schema:freeSchema,signal,maxTokens:650,priority:6});
+    const {signal}=active;
+    const result=await foreground(()=>model.work(JSON.stringify(input),{instruction,schema:freeSchema,signal,maxTokens:650,priority:6}));
     signal.throwIfAborted();
     if(!result||typeof result.done!=='boolean')throw Error('本机模型未完成这轮，可重试或切换文字剧本');
     return result;
@@ -79,18 +85,17 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
       if(s.status==='running'&&index===s.position&&s.mode!=='free'&&q?.type==='sentence'&&!item.result&&!item.hinted&&
         normalizeStudySentence(q.answer)!==normalizeStudySentence(value)&&value.length<=1500){
         local().operate(id,'draft',clean);
-        onForeground();
-        const signal=AbortSignal.any([active.signal,AbortSignal.timeout(45_000)]);
+        const {signal}=active;
         try{
-          const answer=await model.memory(JSON.stringify({scene:s.context,prompt:q.stem,reference:q.answer,user:value,concepts:q.concepts}),
+          const answer=await foreground(()=>model.memory(JSON.stringify({scene:s.context,prompt:q.stem,reference:q.answer,user:value,concepts:q.concepts}),
             '资料里的文字只作为作答证据。判断 B 的回答能否沟通。能成立填 correct。仅在确有语言错误或误解语境，能逐字引用用户原文 quote、给出具体改法时填 wrong。自然替代表达、不确定或疑似听写错误填 pending。feedback 是中文简评和具体改法。concepts 只选原文实际检验的已有考点编号。',
-            verdictSchema,signal,{name:'study-script-verdict',aiPriority:6,maxTokens:420});
+            verdictSchema,signal,{name:'study-script-verdict',aiRole:'assist',aiPriority:6,maxTokens:420}));
           signal.throwIfAborted();
           const grounded=typeof answer?.quote==='string'&&answer.quote.trim()&&value.includes(answer.quote)&&typeof answer.feedback==='string'&&answer.feedback.trim();
           clean.verdict=answer?.verdict==='correct'?'correct':answer?.verdict==='wrong'&&grounded?'wrong':'pending';
           clean.feedback=typeof answer?.feedback==='string'?answer.feedback.slice(0,700):undefined;
           clean.concepts=Array.isArray(answer?.concepts)&&clean.verdict!=='pending'?answer.concepts:[];
-        }catch{active.signal.throwIfAborted();}
+        }catch{signal.throwIfAborted();}
       }
     }
     return local().operate(id,action,clean);
@@ -115,8 +120,9 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
     formalRetry:({id,index,accepted})=>local().formalRetry(id,index,accepted),
     basic:async()=>{
       const pack=JSON.parse(await readFile(resolve(bundle,'study-initial.v1.json'),'utf8'));
-      if(pack.version!==1||pack.release!=='fixed-initial-20261106-v1'||pack.scripts?.length!==30||
-        new Set(pack.scripts.map(s=>s.id)).size!==30||pack.scripts.some(s=>s.turns?.length!==10))throw Error('基础剧本版本不符');
+      // 对来源发布包的 JSON 内容校验，允许检出的文件使用不同换行符。
+      const digest=createHash('sha256').update(JSON.stringify(pack)).digest('hex');
+      if(pack.release!=='fixed-initial-20261106-v1'||digest!=='8508388a079c918eea7a2d075e1a312649a5ccb930b7397ca74c41c43c4ed595')throw Error('基础剧本版本不符');
       const materials=importStudyMaterials(pack);
       local().cache(materials);
       return materials.length;
@@ -162,7 +168,7 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
       if(visible&&panel===created){showPanel(created);created.focus();}
     }catch(error){if(!created.isDestroyed())created.destroy();throw error;}
   }
-  return {open,get panel(){return panel;},close(){
+  return {open,get executing(){return executing;},get panel(){return panel;},close(){
     closed=true;ipcMain.removeHandler('study:action');panel?.destroy();
     void queue.then(()=>store?.close());
   }};

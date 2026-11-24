@@ -42,9 +42,11 @@ test('正式知序通过已有 Access 连接访问 subscriptions-api',async t=>{
   });
   assert.equal(connection.mode,'Access');
   await connection.request('/api/study/v1/banks?limit=20');
-  assert.throws(()=>connection.request('/api/language/dialogues'),/线上语言材料准备中/);
-  assert.throws(()=>connection.request('/api/language/dialogues',{method:'PUT'}),/线上语言材料准备中/);
-  assert.equal(requests.length,1);
+  await connection.request('/api/language/dialogues');
+  assert.equal(requests[1].url.pathname,'/api/companion/language/dialogues');
+  assert.throws(()=>connection.request('/api/language/dialogues',{method:'PUT'}),/该材料尚未接入/);
+  assert.throws(()=>connection.request('/api/language/private'),/该材料尚未接入/);
+  assert.equal(requests.length,2);
   const [{url,options}]=requests;
   assert.equal(url.pathname+url.search,'/api/companion/study/v1/banks?limit=20');
   assert.equal(options.headers.Origin,url.origin);
@@ -328,6 +330,12 @@ test('正式回执脱网、重开、重试原幂等号、隐藏配对答案并�
   assert.equal(s.correct,1);
   assert.equal(s.writer,false);
   assert.equal(attempts.at(-1),attempts.at(-2));
+  dto.items[0]={...dto.items[0],question_id:null,snapshot:{...dto.items[0].snapshot,id:null}};
+  s=await relay.refresh(s.id);
+  assert.equal(s.correct,1);
+  assert.equal(s.items[0].canRetry,false);
+  assert.equal(s.items[0].doubt,undefined);
+  assert.throws(()=>f.store.formalRetry(s.id,0),/仅可回看/u);
 });
 
 test('旧版重练核对启用版本、排除标疑并保留历史；未见题按已提交原题去重',t=>{
@@ -344,6 +352,7 @@ test('旧版重练核对启用版本、排除标疑并保留历史；未见题�
   assert.throws(()=>store.create(old.id,{mode:'practice',scope:'unseen'}),/没有符合/u);
   const plan=store.next(first.id,0,'wrong');
   assert.equal(plan.retryStatus,'changed');
+  assert.match(plan.changed[0],/参考答案/u);
   const retry=store.next(first.id,0,'wrong',null,plan.versions);
   assert.equal(retry.sourceTurn.id,first.id);
   assert.notEqual(retry.items[0].question.id,closed.items[0].question.id);
@@ -356,12 +365,14 @@ test('语言目录按页读取且场景与剧本使用独立游标，异常响�
   const {store}=fixture(t),calls=[];
   const relay=createStudyRelay(store,async()=>({request:async path=>{
     calls.push(path);
+    if(path.includes('/dialogues/removed'))return Response.json({error:{code:'NOT_FOUND'}},{status:404});
     if(path.includes('cursor=a'))return Response.json({version:1,items:[],cursor:'a'});
     if(path.includes('/dialogues/'))return Response.json({version:1,script:script('different-id')});
     return Response.json({version:1,items:[{id:'abc',title:'测试',revision:1}],cursor:'a'});
   }}));
   assert.equal((await relay.catalogPage('scripts')).next,'a');
   assert.equal(calls.length,1);
+  await assert.rejects(relay.download('language','removed'),/已移除/u);
   assert.equal((await relay.catalogPage('scenes')).items[0].scene,true);
   await assert.rejects(relay.catalogPage('scripts','a'),/游标/u);
   await assert.rejects(relay.download('language','abc'),/变更/u);

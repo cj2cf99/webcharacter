@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('screenQuestion',{
   },
   preheatModels:direct=>ipcRenderer.invoke('screen-qa:preheat-models',direct),
   details:full=>ipcRenderer.invoke('screen-qa:details',full),
+  openKnowledge:()=>ipcRenderer.invoke('screen-qa:knowledge'),
   pending:empty=>ipcRenderer.invoke('screen-qa:pending',empty===true),
   decide:action=>ipcRenderer.invoke('screen-qa:decision',action),
   onMode:callback=>subscribe('screen-qa:mode',callback),

@@ -17,6 +17,12 @@ function imageMime(bytes){
 }
 
 export const studyQuestionBase=(bank,identity)=>key('question',bank,identity);
+export function validStudyQuestionBase(base){
+  try{
+    const parts=JSON.parse(base);
+    return Array.isArray(parts)&&parts.length===3&&parts[0]==='question'&&parts.slice(1).every(text);
+  }catch{return false;}
+}
 export function studyQuestionId(bank,identity,type,stem,options,pairs,correct){
   return key(studyQuestionBase(bank,identity),version([type,stem,options,pairs,[...correct].sort()]));
 }

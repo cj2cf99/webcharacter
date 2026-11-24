@@ -2,12 +2,12 @@ import {createHash} from 'node:crypto';
 import {tokyoDay} from './conversation-history.mjs';
 import {cleanMemory} from './personality-diary.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
-import {diaryQuestionBudgetMs,untilAbort} from './chat-budget.mjs';
+import {untilAbort} from './chat-budget.mjs';
 import {isPendingQuestion,pendingLimit,questionTarget,questionText as question,sameQuestion} from './pending-questions.mjs';
 
 const dayMs=86400000;
 const nextBatch=Symbol('手记核对分批继续');
-const stageLabels={extract:'提取手记线索',compare:'比对手记',verify:'核对拟问依据'};
+const stageLabels={extract:'提取手记线索',compare:'比对手记',verify:'核实疑点'};
 const digest=s=>createHash('sha256').update(s).digest('hex');
 const pageKey=p=>p.day+'.'+p.part;
 const segmenter=new Intl.Segmenter('zh',{granularity:'word'});
@@ -38,7 +38,7 @@ function formatQuestion(n){
     n.questions===1?'想搞清楚的问题':'追问 '+(n.questions-1)+' / 2',n.next].join('\n');
 }
 
-export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,random=Math.random,loadSkill=()=>readInteractionSkill('diaryAudit')}){
+export function createDiaryAudit({store,show,idle,canContinue,save,protectReply,lookupReply,now=Date.now,random=Math.random,loadSkill=()=>readInteractionSkill('diaryAudit')}){
   let active=null,working=false,state;
   function stopRun(){
     if(state.run){delete state.run;store.saveAuditState(state);}
@@ -48,9 +48,10 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
     store.saveAuditState(state);
   }
   function preparationFailure(error){
+    if(error.code==='LOCAL_AI_ROUND_PAUSED')return error;
     const {pages,stage,question}=state.run?.attempt??{pages:[],stage:'同步待核查资料'};
     const failure=Error(`质询准备失败 · ${stage} · 对象：${pages.join('、')||'尚未确定'} · 质问：${question||'尚未生成'} · 原因：${error.message}`);
-    if(error.name!=='TimeoutError'&&!['TimeoutError','LOCAL_AI_TIMEOUT','LOCAL_AI_LOAD_TIMEOUT'].includes(error.code))stopRun();
+    if(error.name!=='TimeoutError'&&!['TimeoutError','LOCAL_AI_TIMEOUT','LOCAL_AI_LOAD_TIMEOUT','LOCAL_AI_OUTPUT_BUDGET','LOCAL_AI_CONTEXT_BUDGET'].includes(error.code))stopRun();
     return failure;
   }
   async function writer(signal,aiPriority,aiCurrentPriority,{limit=Infinity,progress}={}){
@@ -62,14 +63,13 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
       if(key&&steps[key])return steps[key];
       if(calls>=limit)throw nextBatch;
       calls++;
-      if(progress)progress({stage:stageLabels[stage]+' · 已保存 '+Object.keys(steps).length+' 步'});
+      progress?.({stage:stageLabels[stage]});
       const prompt=skill.localAi[stage]+(stage==='compare'?' refs 的第一项必须是「主篇可选」为 true 的材料，其余可作为旁证。':'');
       const result=await untilAbort(store.think(input,prompt,fields,signal,{name:skill.skill,version:skill.version,stage,
-        aiPriority,aiCurrentPriority,aiBudget:steps?diaryQuestionBudgetMs:45_000,boundedOutput:true,backgroundBudget:!aiPriority,maxTokens:stage==='compare'?950:460}),signal);
+        aiPriority,aiCurrentPriority,boundedOutput:true,backgroundBudget:!aiPriority,maxTokens:stage==='compare'?950:460}),signal);
       signal.throwIfAborted();
       if(key){
         steps[key]=result;store.saveAuditState(state);
-        progress?.({stage:stageLabels[stage]+' · 已保存 '+Object.keys(steps).length+' 步'});
       }
       return result;
     };
@@ -190,6 +190,14 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
     n.status=closingStatus;n.afterEvaluation=text;if(!thread)save(n);
     return {text,done:true,finished:true};
   }
+  function knowledgeOutcome(n,checked){
+    if(!checked?.private||!checked.answer)return null;
+    if(checked.state==='apply'){
+      n.status='已解释';save(n);
+      return {text:checked.answer,knowledgePrivate:true,done:true,finished:true};
+    }
+    return {text:checked.answer,knowledgePrivate:true};
+  }
   async function showQuestion(n,signal){
     const controller=new AbortController();
     const replySignal=controller.signal;
@@ -209,6 +217,11 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
         const text=store.nagText?await untilAbort(store.nagText(n,raw,replySignal),replySignal):cleanMemory(raw);
         replySignal.throwIfAborted();
         if(!text||(!store.nagText&&Array.from(text).length>3000))return {text:'请输入文字回答。',invalid:true};
+        const privateCorrection=await protectReply?.(n,text,replySignal);
+        if(privateCorrection)return privateCorrection;
+        const checked=await lookupReply?.(n,text,replySignal);
+        const assessed=knowledgeOutcome(n,checked);
+        if(assessed){if(assessed.done)active=null;return assessed;}
         line(n,'你',text);save(n);
         const result=await advance(n,await writer(replySignal),replySignal);
         if(result.done)active=null;
@@ -246,7 +259,7 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
       return n?{n}:{detail:'近七天手记没有新的关键疑点'};
     }catch(error){
       if(signal.aborted)throw error;
-      if(error===nextBatch)return {deferred:true,detail:'已保存 '+Object.keys(state.run.steps).length+' 步，下批从原进度继续'};
+      if(error===nextBatch)return {nextBatch:true,detail:'已保存 '+Object.keys(state.run.steps).length+' 步'};
       throw preparationFailure(error);
     }finally{working=false;}
   }
@@ -270,6 +283,10 @@ export function createDiaryAudit({store,show,idle,canContinue,save,now=Date.now,
   return {prepare,resume,recover:()=>Boolean(store.auditState().run),get active(){return Boolean(active);},
     detachThread:id=>{if(active?.id===id)active.leave('later');},
     async threadAnswer(n,signal,priority,stillLatest,context,isOpen,currentPriority){
+      const checked=await lookupReply?.(n,n.talk.at(-1)?.text,signal,{priority,context});
+      if(!isOpen())return;
+      const assessed=knowledgeOutcome(n,checked);
+      if(assessed)return assessed;
       return advance(n,await writer(signal,priority,currentPriority),signal,{stillLatest,context,isOpen});
     },
     close(){active?.leave('interrupted');}};

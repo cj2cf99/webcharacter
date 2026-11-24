@@ -61,7 +61,7 @@ export function createConversationThreads(profile,safeStorage,now=Date.now){
   function append(id,{id:messageId=randomUUID(),at=now(),who,text,organize=false,answered=false,...metadata}){
     const needsReply=who==='你'&&!answered;
     add.run(messageId,id,at,tokyoDay(at),who,Number(answered),Number(organize),encode({text,...metadata}));
-    update.run(at,encode({id:messageId,at,who,text:text.slice(0,240)}),Number(needsReply),id);
+    update.run(at,encode({id:messageId,at,who,text:text.slice(0,240),...(metadata.transcriptId?{transcriptId:metadata.transcriptId}:{})}),Number(needsReply),id);
     return {id:messageId,at,who,text,...metadata};
   }
   function create({id=randomUUID(),kind='ordinary',at=now(),title='',origin='',source=null,desire='',purpose=ordinaryPurpose,first=[],legacyClosed=false}={}){
@@ -82,7 +82,7 @@ export function createConversationThreads(profile,safeStorage,now=Date.now){
       return readLine(row.get(id));
     });
   }
-  function submit(id,{messageId,text,mode='auto',organize=true,handled=false,reference=false,registration=false,backgroundRegistration=false}={}){
+  function submit(id,{messageId,text,mode='auto',organize=true,handled=false,reference=false,registration=false,backgroundRegistration=false,knowledgePrivate=false}={}){
     text=typeof text==='string'?text.trim():'';
     if(!text||text.length>12000)throw Error('请输入有效的文字');
     return transaction(()=>{
@@ -104,7 +104,8 @@ export function createConversationThreads(profile,safeStorage,now=Date.now){
         Object.assign(meta,{title,origin});
         db.prepare('UPDATE conversation_lines SET payload=? WHERE id=?').run(encode(meta),id);
       }
-      const message=append(id,{id:messageId,who:'你',text,mode,organize,handled,reference,registration,backgroundRegistration});
+      const message=append(id,{id:messageId,who:'你',text,mode,organize,handled,reference,registration,backgroundRegistration,
+        ...(knowledgePrivate?{knowledgePrivate:true}:{})});
       if(endsConversation(text)){
         end.run(message.at,encode({...meta,endedBy:'你',endMessageId:message.id}),id);
       }
@@ -119,7 +120,14 @@ export function createConversationThreads(profile,safeStorage,now=Date.now){
       if(!group.every((key,index)=>pending[index]?.id===key))return null;
       if(closing&&pending.length!==group.length)return null;
       const message=append(id,{who:'绯月',text,covers:group,...extra});
-      for(const key of group)markAnswered.run(id,key);
+      for(const [index,key] of group.entries()){
+        markAnswered.run(id,key);
+        if(extra.knowledgePrivate){
+          const original=pending[index],metadata=decode(original.payload);
+          db.prepare('UPDATE conversation_messages SET organize=0,payload=? WHERE id=?')
+            .run(encode({...metadata,knowledgePrivate:true}),key);
+        }
+      }
       setRounds.run(1,group.length,id);
       if(closing)end.run(message.at,encode({...decode(saved.payload),endedBy:'绯月',endMessageId:message.id}),id);
       return message;
@@ -142,6 +150,14 @@ export function createConversationThreads(profile,safeStorage,now=Date.now){
       });
     return {rows,counts,page,pages};
   }
+  // 后台整理完成后，在对话里追加一条绯月的提示（不要求回复），带转录作业编号以便从对话直接打开待确认卡。
+  function notice(id,text,extra={}){
+    return transaction(()=>{
+      const saved=row.get(id);
+      if(!saved||saved.closed!==null||saved.rounds>100)return null;
+      return append(id,{who:'绯月',text,answered:true,...extra});
+    });
+  }
   function organization(id){
     return transaction(()=>{
       let batch=operation.get(id);
@@ -152,11 +168,11 @@ export function createConversationThreads(profile,safeStorage,now=Date.now){
         db.prepare('INSERT INTO conversation_organization VALUES(?,?,?,?,?)').run(batch.id,id,batch.first,batch.last,batch.at);
       }
       return {...batch,turns:exactMessages.all(id,batch.first,batch.last).map(readMessage),
-        history:oldMessages.all(id,batch.first).reverse().map(readMessage)};
+        history:oldMessages.all(id,batch.first).reverse().map(readMessage).filter(message=>!message.knowledgePrivate)};
     });
   }
   return {
-    create,submit,finish,list,organization,get:id=>typeof id==='string'?readLine(row.get(id)):null,
+    create,submit,finish,notice,list,organization,get:id=>typeof id==='string'?readLine(row.get(id)):null,
     latest:()=>readLine(db.prepare(`SELECT * FROM conversation_lines WHERE kind='ordinary' AND closed IS NULL AND rounds<=100
       ORDER BY preview IS NULL,latest DESC,rowid DESC LIMIT 1`).get()),
     detail(id,limit){
@@ -169,11 +185,11 @@ export function createConversationThreads(profile,safeStorage,now=Date.now){
       const original=db.prepare('SELECT * FROM conversation_messages WHERE id=? AND thread=?');
       return replies.flatMap(row=>{
         const reply=readMessage(row);
-        if(!reply.covers?.length)return [];
+        if(reply.knowledgePrivate||!reply.covers?.length)return [];
         const sources=reply.covers.map(id=>original.get(id,row.thread)).filter(Boolean).map(readMessage);
-        if(!sources.length)return [];
+        if(sources.length!==reply.covers.length||sources.some(message=>message.knowledgePrivate))return [];
         return [{id:reply.id,threadId:row.thread,at:reply.at,answeredAt:reply.at,question:sources.map(message=>message.text).join('\n'),
-          text:reply.text,state:'answer'}];
+          text:reply.text,state:'answer',...(sources.some(message=>message.mode==='direct')?{localOnly:true}:{})}];
       });
     },
     recover:()=>db.prepare('SELECT id FROM conversation_lines WHERE pending>0 AND closed IS NULL AND rounds<=100 AND failure IS NULL').all(),

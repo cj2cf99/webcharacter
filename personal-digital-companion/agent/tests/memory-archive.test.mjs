@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,rename,writeFile,stat} from 'node:fs/promises';
+import {mkdtemp,readFile,rename,writeFile,stat,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createMemoryArchive} from '../../desktop/memory-archive.mjs';
@@ -15,6 +15,30 @@ function screenClient(options){
   return createScreenQuestionClient({screen:{getCursorScreenPoint:()=>({x:0,y:0}),getDisplayNearestPoint:()=>({id:1,size:source.getSize()})},
     desktopCapturer:{getSources:async()=>[{display_id:'1',thumbnail:source}]},...options});
 }
+
+test('旧独立问答只有普通文字回执且无附件痕迹时才进入手记取材',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'feiyue-diary-origin-')),day='2026-11-19';
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const memory=createMemoryArchive(dir);
+  const traffic=createTaskTrafficLog(dir,{memory,clock:()=>turn.at});
+  const cases=[
+    ['ordinary','文字问题','文字问答',undefined,false],
+    ['screen','问题','截图问答',undefined,true],
+    ['attachment','问题 · 粘贴的图片','文字问答',undefined,true],
+    ['missing','无回执',null,undefined,true],
+    ['new-text','已有文字标记',null,false,false],
+    ['new-local','已有本机标记','文字问答',true,true]
+  ];
+  for(const [id,question,operation,localOnly] of cases){
+    await memory.save({...turn,id,question,text:'隔离合成回包',localOnly},{index:false});
+    if(operation)await traffic.write({route:'问绯月',stage:'处理结束',turn_id:id,operation});
+  }
+  await traffic.write({route:'问绯月',stage:'处理结束',turn_id:'screen',operation:'文字问答'});
+  const checked=new Map((await memory.readForDiary(day)).map(row=>[row.id,row.localOnly]));
+  for(const [id,,,,expected] of cases)assert.equal(checked.get(id),expected,id);
+  const unchanged=new Map((await memory.read(day)).map(row=>[row.id,row.localOnly]));
+  assert.equal(unchanged.get('missing'),undefined);
+});
 
 test('多步生图归档独立于作业目录，可重复补档并与普通任务同时复盘',async()=>{
   const dir=await mkdtemp(join(tmpdir(),'feiyue-report-')),memory=createMemoryArchive(join(dir,'记忆'));

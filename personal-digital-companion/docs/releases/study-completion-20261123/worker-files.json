@@ -1,0 +1,31 @@
+{
+  "base": "57453cbd5c067b99ecc94cb40555b23d35dcb6b8",
+  "production": "c56920a9-8f20-4a9b-b781-36eb854c31ff",
+  "items": [
+    {
+      "path": "src/companion/study.mjs",
+      "before": "21aa9dee5b98780d09adf93e7a2efb802655a947d755666c8ef5069939993ec2",
+      "after": "07a7cbee7409e6be2650e34c9a81a617256c024fc2b13a6b74404cb9e4ba453c"
+    },
+    {
+      "path": "src/companion/study-engine/api.mjs",
+      "before": "bf3d1070cc713938eedb679ea67a05baae3cb53be56d5d7d7e9bbb7fccaa4591",
+      "after": "97ae5372830c9d55e06213a2a7fde9a49ae2a9467c355ea4322977f8db1feb69"
+    },
+    {
+      "path": "src/companion/language-source/server/dialogue-library.mjs",
+      "before": null,
+      "after": "53b51584ab8dfa6f54a7286a916ca3bcef7670864d9c2485e28dbbe949abb479"
+    },
+    {
+      "path": "src/companion/language-source/app/src/fixed-contract.js",
+      "before": null,
+      "after": "22b15dc8b9492afa0267cf82b41fd5b1213597cb7fa8b1b6d147be31d45653ad"
+    },
+    {
+      "path": "src/companion/language-source/app/src/fixed-local-practice.js",
+      "before": null,
+      "after": "be9a49c2ca963a27df13420d803c9fd54745db403b3da15f0d4c5496d21659f6"
+    }
+  ]
+}

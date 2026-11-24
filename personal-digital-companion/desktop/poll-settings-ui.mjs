@@ -25,7 +25,7 @@ function render(rows){
       };
     }
     form.querySelector('.state').textContent=[row.running?'执行中':row.queuedAt!==null?'等待执行':'',
-      row.misses?'连续推延 '+row.misses+' 次':'',row.nextAt?'下次 '+format.format(row.nextAt)+' JST':''].filter(Boolean).join(' · ');
+      row.misses?'连续推延 '+row.misses+' 次':'',row.enabled&&row.paused?'轮询计时暂停':row.nextAt?'下次 '+format.format(row.nextAt)+' JST':''].filter(Boolean).join(' · ');
   }
   const waiting=rows.filter(row=>row.queuedAt!==null).sort((a,b)=>a.queuedAt-b.queuedAt);
   document.querySelector('#empty').hidden=waiting.length>0;

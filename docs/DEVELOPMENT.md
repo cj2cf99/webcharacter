@@ -1,10 +1,40 @@
 # WebCharacter 开发指南
 
-2026-11-23 JST，绯月 Windows 正式版 247f3713f3f2 已安装「陪我学习」。本机 A/B 对练、基础剧本和知序题库入口已验证，知序线上 Access 效果待用户截图确认。见[安装回执](../personal-digital-companion/RELEASE_REVIEW.md#实际安装回执--247f3713f3f2)。
+2026-11-24 JST，绯月开发版已打通本地 AGY CLI 替代本地推理模型，在启动时自动优先检测并使用 AGY CLI，显存占用归零，解决显卡不足问题。在右键菜单「设置与维护」中新增「测试 AGY CLI 推理（⚡）」测试模块，可直接执行人设对话与结构化抽取实测并查看弹窗报告。详见[本机接入 AGY CLI 替代本地推理](../personal-digital-companion/docs/DEVELOPMENT.md#本机接入-agy-cli-替代本地推理与菜单测试模块2026-11-24-jst)。
+
+2026-11-23 10:02 JST，绯月 Windows 正式版已安装「桌宠动作」中的「随机移动」开关，关闭后停止自动走动并记住选择。[安装回执](../personal-digital-companion/docs/releases/random-movement-6f73e8b80764/installed-entry.md)
+
+绯月开发版的补评与短手记只调用一次本机模型，复杂手记沿用 DeepSeek 成稿。普通本机推理已取消单步、单项、整轮和前台强制执行时限。见[本机短任务改造](../personal-digital-companion/docs/DEVELOPMENT.md#本机短任务与无推理时限2026-11-23-jst)。
+
+2026-11-23 JST，绯月开发版主动专聊在邀请前准备文字、首段朗读和听写，按轮推进备好的话题。Windows 托盘悬停固定显示右键菜单提示。[实测及范围](../personal-digital-companion/docs/DEVELOPMENT.md#主动专聊预热话题与托盘提示)
+
+2026-11-23 JST，绯月开发版将「提醒检查 · 待执行」指向本地复盘的「提醒检查」，展示当前队列。另统一了「动画与声音」的可见标题。[菜单复核与验证](../personal-digital-companion/docs/DEVELOPMENT.md#提醒检查菜单修正)
+
+2026-11-23 JST，绯月开发版已修正 Windows 首次打开菜单弹窗仍隐藏的问题。六个入口经角色及托盘冷启动验证，持续隐藏时的确认框回退也已检查。[桌宠首击复测](../personal-digital-companion/docs/DEVELOPMENT.md#windows-重启后菜单弹窗首击可见性)
+
+2026-11-23 JST，绯月开发版的角色与托盘右键菜单保留四个日常直达入口，其他功能默认折叠。[菜单结构与验证](../personal-digital-companion/docs/DEVELOPMENT.md#右键菜单默认收起2026-11-23-jst)
+
+2026-11-23 05:06 JST，绯月陪练补项已发布至 subscriptions-api 并安装 Windows 正式版 d035d8bc77b2。从实际安装路径复测通过。[部署与验收回执](../personal-digital-companion/docs/releases/study-completion-20261123/release-entry.md)
+
+2026-11-23 JST，绯月陪练补项冻结为订阅 API 五文件和 Windows 七文件候选，已在现行主站及隔离正式桌面基线上验证。准备阶段未发布。[候选、验收命令与回退记录](../personal-digital-companion/docs/releases/study-completion-20261123/release-entry.md)
+
+2026-11-23 04:57 JST，绯月正式版已安装新闻提醒修复 948648e620bb，安装后点击回归通过。[安装回执](../personal-digital-companion/RELEASE_REVIEW.md#新闻提醒正式安装回执--948648e620bb)
+
+2026-11-23 JST，绯月 Windows 正式版 `247f3713f3f2` 已安装「陪我学习」。从实际安装路径用独立资料验证了菜单首击、基础剧本和本地模考。受 Access 控制的知序线上效果待用户截图确认。[正式安装回执](</G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/RELEASE_REVIEW.md>)
+
+2026-11-23 JST，绯月开发版的工作气泡独立显示在头顶。角色保持当前动画的指定尺寸，屏幕边缘由气泡避让。[桌宠固定尺寸与验证](../personal-digital-companion/docs/DEVELOPMENT.md#角色固定展示尺寸)
+
+2026-11-23 JST，绯月开发版已补齐语言与题库陪练的取材、强化、跨端草稿和复盘流程，本次仅在本地验证。[实现与自审记录](../personal-digital-companion/docs/reviews/STUDY_COMPLETION_REVIEW_2026-11-23.md)
 
 2026-11-23 JST，绯月正式版 c2da3c2ccbf0 的情绪复盘按事件取证，任务日志可展开分段材料和原始 JSON。截图工作记录的本机模型回放见[桌宠开发记录](../personal-digital-companion/docs/DEVELOPMENT.md#情绪复盘的工作记录回放)。
 
+绯月桌宠的目录分工、运行流程、技能查询及热更新集中在[绯月组织结构与 Skill](../personal-digital-companion/docs/DEVELOPMENT.md#绯月组织结构与-skill)。
+
 2026-11-23 JST，新增[对话、摘要与待确认的开发注意事项](../personal-digital-companion/docs/DEVELOPMENT.md#对话摘要与待确认的开发注意事项)。涉及从记录生成提问、确认或摘要的项目，应核对具体待答事项及后来已给的信息，保留来源与正确引用，验证缺来源、重复、长文本和误改题等场景。
+
+2026-11-23 JST，绯月开发版已接入「陪我学习」，可导入材料、进行 A/B 对练和本地模考，并复习薄弱点。知序已用生产结构和只读样本完成跨端联调及三轮自审。`myapp` 和 `subscriptions-api` 已发布，网关身份绑定已生效。绯月 Windows 正式版安装和受 Access 控制的线上效果验收待办。[开发与发布回执](../personal-digital-companion/docs/reviews/LEARNING_IMPLEMENTATION_REVIEW_2026-11-23.md#worker-发布回执)
+
+2026-11-23 JST，绯月开发版从右键菜单打开「知识库」，支持双库本机查询、修正、第三次生成待确认卡和周月备份。按用户追加要求改用可独立导出的密钥，支持换机恢复。[一期开发与验证](../personal-digital-companion/docs/DEVELOPMENT.md#2026-11-23-jst--正向与负向激励库一期开发)
 
 2026-11-21 JST，[本机语音对话](http://127.0.0.1:8792/)改为持续录音、分段回填听写，取消旧的 25 秒自动停止。使用同一份 34.20 秒模拟麦克风音频验证了录音中出字、手动停止收齐尾段、两套识别和重转写。[复核记录](reviews/VOICE_STREAMING_MIC_REVIEW_2026-11-21.md)
 
@@ -134,16 +164,26 @@ node tools/check-project.mjs
 2026-11-16 用户继续要求提升观感与场景交互：增加共享风场、同姿态动态阴影/倒影、退水觅食、脚边弱水纹、蟹触须/钳动作，以及水面/花叶/鸟/蟹四类轻点反馈；暂停统一冻结所有动态。调整环境填光、粗糙度、细砂和湿润反光，模型包保持190MB，仅提取37KB鸟头颈数据。运行模块语法、test-living.mjs及实际四类输入/暂停/拖动/390布局通过，1280×900采样约44FPS。仍为局部形变与外观近似，不是完整物理求解或90%验收，无新增依赖/部署/Git同步。详见 [环境联动复核](../tropical-shallows/LIVING_REVIEW.md)。
 绯月桌面精灵的文字提醒修改及整组合并确认见[子项目开发记录](../personal-digital-companion/docs/DEVELOPMENT.md)和[使用说明](../personal-digital-companion/desktop/README.md)。本次完成桌面及两个 Worker 的本地源码接线与隔离验证。
 
-2026-11-23 04:57 JST，绯月正式版已安装新闻提醒修复 948648e620bb，安装后点击回归通过。[安装回执](../personal-digital-companion/RELEASE_REVIEW.md#新闻提醒正式安装回执--948648e620bb)
-
-2026-11-23 JST，绯月正式版的工作气泡独立显示在头顶。角色保持当前动画的指定尺寸，屏幕边缘由气泡避让。[桌宠固定尺寸与验证](../personal-digital-companion/docs/DEVELOPMENT.md#角色固定展示尺寸)
+2026-11-23 JST，花园支持并行准备与统一取号，开发版按成功发布 +0.1，重试沿用原回执。迁移、主站部署及绯月正式安装尚未执行。见[本机登记手册](../personal-digital-companion/docs/LOCAL_GARDEN_API.md)。
 
 
 ### 2026-11-23 JST · 正式绯月花园登记 v7
 
 正式绯月已支持并行准备、队首统一取号与同批重试。主站 0034 已迁移。已成功发布的功能每次加 0.1。见[本机花园登记手册](../personal-digital-companion/docs/LOCAL_GARDEN_API.md)及[正式安装回执](../personal-digital-companion/docs/releases/garden-parallel-20261123/install-receipt.json)。
 
+2026-11-23 JST，绯月开发版的本机任务使用 4B GPU 生成首稿，2B CPU 审核及返修。两个设备已在隔离 Electron 中并行实测，旧 9B 补写检查点由 CPU 接续。[任务拆分、回归与实测记录](../personal-digital-companion/docs/DEVELOPMENT.md#2026-11-23-jst--4b-gpu-首稿和-2b-cpu-审核)。
+
+同日按用户后续决定调整为 4B 起草、2B 简审、4B 定稿。空闲 CPU 可代行短判断和部分手记评级，日记和唠叨首稿固定给 GPU。旧 9B 补写断点交 4B 定稿。见[开发版实测与日志统计](../personal-digital-companion/docs/DEVELOPMENT.md#双模型三步处理的日志与验证)。
+
 
 2026-11-23 05:42:45 JST，Windows 正式绯月安装菜单候选 9c9f31935a3a，常态一级从 13 项减为 8 项。安装目录的角色与托盘右键、分组展开、Esc 及隐藏动作已用临时资料复验通过。用户确认安装并跳过花园登记。
 
+2026-11-23 JST，绯月开发版将「看绯月写日记」和「补写本机任务执行评价」排在右键菜单「任务」的前两行。桌面壳已执行两个动作，浅深色 Electron 菜单已核对顺序、默认折叠及角色与托盘入口。本次调整尚未安装到 Windows 正式版。
+
+2026-11-23 JST，开发版将「提醒检查 · 待执行」移到角色、托盘右键菜单第一层，保留有排队才出现的条件。「任务」前两项仍是写日记和补记录。提醒技能 1.3 与菜单问路同步。验证了空队列隐藏、模拟排队时一级点击和浅深色显示。首次巡检在勾选登录项后重开菜单时超时，独立复跑全部菜单断言通过。本次尚未安装到正式版。
+
 2026-11-23 06:39:56 JST，Windows 绯月安装首击弹窗修复 54fe5c562796。角色、托盘和系统回退共 13 项实装模块测试通过，菜单内容与名称沿用原安装版。发布差异及安装回执见 personal-digital-companion/docs/releases/first-popup-20261123。
+
+2026-11-23 JST，按 24 个行动评价断点的[本机三组对照](../personal-digital-companion/docs/DEVELOPMENT.md#24-个行动评价检查点的三组对照)确定成批处理默认走 4B、2B、4B。判断在 2B 上可直接返回，审核退回的 4B 返工提一级。零星积压可立即唤醒，有可执行工作时跨二十分钟持续处理。该 AI 调度改动已在开发版验证。
+
+2026-11-23 JST，绯月开发版按实际提问让位，单步超时或输出超限可以续做、拆分并保留检查点。原 24 条与历史失败材料合并，按日常预算在本机完成 132/132 项，耗时 14 分 00.6 秒。120 条行动评价中 101 条返回非空正文，另有 12 项其他任务。详见[面板让位与历史失败回放](../personal-digital-companion/docs/DEVELOPMENT.md#面板让位超限续办和历史失败回放2026-11-23-jst)。

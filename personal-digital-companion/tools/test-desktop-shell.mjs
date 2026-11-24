@@ -51,6 +51,7 @@ class Window extends EventEmitter{
     this.webContents.mainFrame={id:1};this.webContents.setWindowOpenHandler=fn=>this.open=fn;this.webContents.send=(...args)=>(this.isThought?thoughtHistory:this.sent).push(args);}
   setIgnoreMouseEvents(...args){this.ignore.push(args)}isDestroyed(){return false}isVisible(){return this.visible}
   setAlwaysOnTop(value,level){assert.ok(this.visible,'显示后恢复置顶');assert.equal(level,'pop-up-menu');this.topmost=value;}
+  isAlwaysOnTop(){return Boolean(this.topmost)}moveTop(){this.raised=(this.raised||0)+1}
   getBounds(){return this.bounds}setBounds(b){this.bounds={...b};this.boundsCalls=(this.boundsCalls||0)+1}setPosition(x,y){this.bounds={...this.bounds,x,y,width:this.bounds.width+1,height:this.bounds.height+1}}showInactive(){this.visible=true}hide(){this.visible=false}async loadFile(file){this.file=file;if(this.isThought)this.webContents.emit('did-finish-load')}
   destroy(){this.visible=false;this.emit('closed')}
 }
@@ -58,13 +59,15 @@ class Tray {constructor(){tray=this;this.events={}}setToolTip(){}setContextMenu(
 const session={defaultSession:{webRequest:{onBeforeRequest(_filter,fn){network=fn}},setPermissionRequestHandler(fn){permission=fn}}};
 const profile=mkdtempSync(join(tmpdir(),'companion-sound-'));
 const memory=createMemoryArchive(join(profile,'memory'));
-await memory.save({id:'diary-menu-test',at:Date.now(),state:'answer',question:'今天一起读了书',text:'我记住了'});
+await memory.save({id:'diary-menu-test',at:Date.now(),state:'answer',question:'今天一起读了书',text:'我记住了',localOnly:false});
 const previousDiary=createPersonalityDiary({profile,memory});
 previousDiary.mark('diary',Date.now());
 previousDiary.close();
-let modelStarts=0,modelStops=0;
-const model={start(){assert.equal(win.visible,true);modelStarts++;},close(){modelStops++;},
-  async memory(text,_instruction,schema){
+let modelStarts=0,modelStops=0,modelPulses=0;
+const modelCalls=[];
+const model={start(){assert.equal(win.visible,true);modelStarts++;},close(){modelStops++;},aiPulse(){modelPulses++;},
+  async memory(text,_instruction,schema,_signal,skill){
+    if(skill.name==='diary-writing')modelCalls.push(skill);
     if(schema.required.includes('review'))return {text,review:'记住今天读的书'};
     return {text:'今天一起读书。',comment:'下次还想一起读。',summary:'一起读书',mood:'开心',tags:'读书',thread:''};
   }};
@@ -118,7 +121,7 @@ ipcMain.emit('desktop:hit',event,false);assert.equal(win.ignore.at(-1)[0],false,
 ipcMain.emit('desktop:drag-end',event);ipcMain.emit('desktop:hit',event,false);assert.equal(win.ignore.at(-1)[0],true);
 const actionsMenu=()=>tray.menu.find(item=>item.label==='桌宠动作').submenu;
 const moveItems=()=>actionsMenu().find(item=>item.label==='移动到').submenu;
-const watchDiary=tray.menu.find(item=>item.label==='阅读与学习').submenu.find(item=>item.label==='看绯月写日记').click;
+const watchDiary=tray.menu.find(item=>item.label==='任务').submenu.find(item=>item.label==='看绯月写日记').click;
 result.hide();
 const writing=watchDiary();
 assert.equal(win.visible,true);
@@ -132,6 +135,26 @@ assert.equal(diaryDatabase.prepare("SELECT count(*) AS n FROM drafts WHERE packe
 diaryDatabase.close();
 assert.deepEqual(win.sent.filter(([name])=>name==='desktop:idle-context').slice(-2).map(([,value])=>value),['diary-review-idle','']);
 assert.match(loginErrors.pop().detail,/云端连接未配置/);
+assert.ok(modelCalls.some(call=>call.stage==='narrate'&&call.aiManual&&call.aiPriority===6));
+const supplement=tray.menu.find(item=>item.label==='任务').submenu.find(item=>item.label==='补写本机任务执行评价').click;
+const questionPanel=Object.getOwnPropertyDescriptor(result.screenQuestion,'panel');
+const executing=Object.getOwnPropertyDescriptor(result.screenQuestion,'executing');
+try{
+  // 保持同一面板打开，只切换真实执行状态，走正式菜单的空闲判断。
+  Object.defineProperty(result.screenQuestion,'panel',{configurable:true,get:()=>win});
+  Object.defineProperty(result.screenQuestion,'executing',{configurable:true,get:()=>true});
+  const before=loginErrors.length,pulses=modelPulses;
+  await supplement();
+  assert.equal(loginErrors.length,before);
+  assert.equal(modelPulses,pulses,'正式问答期间沿用空闲检查');
+  Object.defineProperty(result.screenQuestion,'executing',{configurable:true,get:()=>false});
+  await supplement();
+  assert.ok(modelPulses>pulses,'空闲后点击立即唤醒询问池');
+  assert.match(loginErrors.pop().message,/已检查.*任务素材/);
+}finally{
+  Object.defineProperty(result.screenQuestion,'panel',questionPanel);
+  Object.defineProperty(result.screenQuestion,'executing',executing);
+}
 assert.ok(thoughtHistory.some(([channel,v])=>channel==='desktop:thought'&&v?.title==='闲时 · 写日记'&&v.total===7),'手动写日记显示真实归档进度');
 const reviewTasks=tray.menu.find(item=>item.label==='任务').submenu.find(item=>item.label==='补写本机任务执行评价').click;
 const oldDay='2020-01-01',oldTime=Date.parse(oldDay+'T12:00:00+09:00');
@@ -139,6 +162,7 @@ await memory.saveTasks(oldDay,[{task_id:'old-task',at:oldTime,title:'登记',act
 await memory.save({id:'old-dialogue',at:oldTime,state:'answer',question:'聊天',text:'非任务资料'},{index:false});
 await Promise.all([reviewTasks(),reviewTasks()]);
 assert.match(loginErrors.pop().message,/补写 1 条/);
+assert.ok(modelCalls.some(call=>call.stage==='reviewAction'&&call.aiManual&&call.aiPriority===6));
 assert.ok(thoughtHistory.some(([channel,value])=>channel==='desktop:thought'&&value?.title==='闲时 · 补写执行评价'&&value.done===1&&value.total===1));
 assert.equal(result.thoughtOverlay.panel,null);
 await reviewTasks();assert.match(loginErrors.pop().message,/补写 0 条/);
@@ -157,10 +181,10 @@ ipcMain.emit('desktop:sound-change',event,{enabled:true,volume:999});ipcMain.emi
 const labels=items=>items.filter(item=>item.type!=='separator').map(item=>item.label);
 assert.deepEqual(labels(tray.menu),['问绯月','今日任务','三地天气','本地复盘','阅读与学习','任务','桌宠动作','设置与维护']);
 win.webContents.emit('context-menu');assert.equal(tray.openedMenu,tray.menu,'角色右键与托盘使用同一菜单');
-assert.deepEqual(labels(tray.menu.find(item=>item.label==='任务').submenu),['绯月任务管理','中断任务与补传','任务日志','补写本机任务执行评价']);
+assert.deepEqual(labels(tray.menu.find(item=>item.label==='任务').submenu),['看绯月写日记','补写本机任务执行评价','绯月任务管理','中断任务与补传','任务日志']);
 const settingsLabels=labels(tray.menu.find(item=>item.label==='设置与维护').submenu);
 if(process.platform==='win32'){
-  assert.deepEqual(settingsLabels,['动画与声音','轮询设定','登录 Windows 后延迟 1 分钟启动','云端连接','重启绯月','退出']);
+  assert.deepEqual(settingsLabels,['动画与声音','轮询设定','登录 Windows 后延迟 1 分钟启动','云端连接','测试 AGY CLI 推理','重启绯月','退出']);
   const item=tray.menu.getMenuItemById('loginStart');
   assert.equal(item.type,'checkbox');assert.equal(item.checked,false);assert.equal(loginWrites,0);
   item.checked=true;item.click(item);assert.equal(item.checked,true);
@@ -172,7 +196,7 @@ if(process.platform==='win32'){
   loginError=false;item.checked=false;item.click(item);assert.equal(item.checked,false);assert.equal(loginEntries.length,0);
   result.hide();app.emit('second-instance',{},['--feiyue-login']);assert.equal(win.visible,false);
   app.emit('second-instance',{},[]);assert.equal(win.visible,true);
-}else assert.deepEqual(settingsLabels,['动画与声音','轮询设定','云端连接','重启绯月','退出']);
+}else assert.deepEqual(settingsLabels,['动画与声音','轮询设定','云端连接','测试 AGY CLI 推理','重启绯月','退出']);
 ipcMain.emit('desktop:sound-preview',event,'click');assert.equal(win.sent.at(-1)[0],'desktop:sound-preview');
 const savedBounds={...win.getBounds()};
 const postureMessages=()=>win.sent.filter(m=>m[0]==='desktop:posture');
@@ -258,6 +282,7 @@ console.log('PASS：上沿拖拽保持播放和尺寸、快照不抢位置、松
 
 const crossMenu=()=>moveItems().find(m=>m.label==='其他屏幕');
 const home=()=>actionsMenu().find(m=>m.label==='回到右下角').click();
+const roamToggle=()=>actionsMenu().find(m=>m.label==='随机移动');
 const saveLock=value=>handlers.get('pc:save')(event,{config:{target:'pc',confineToScreen:value},domain:'display'});
 const centerX=()=>win.getBounds().x+win.getBounds().width/2;
 const lastWalk=()=>win.sent.filter(message=>message[0]==='desktop:move').at(-1)?.[1];
@@ -349,6 +374,33 @@ publishWindows({...snapshot,lastInputAt:clock});
 timer();assert.equal(lastWalk(),'interrupt');assert.deepEqual(win.getBounds(),manualBounds,'明确移动指令也被后续输入打断');
 console.log('PASS：单屏与混合 DPI 跨屏漫游均停在角落，覆盖实时锁定、手动换屏、空隙及拔屏回退。');
 
+home();
+ipcMain.emit('pc:runtime',event,{state:'idle',specialPending:false});
+finishSpecialAtRoamDeadline();
+assert.equal(lastWalk(),'roam');
+assert.equal(roamToggle().type,'checkbox');
+assert.equal(roamToggle().checked,true);
+const beforeDisable=win.getBounds();
+roamToggle().click();
+assert.equal(lastWalk(),'interrupt','关掉随机移动立即停止自动行走');
+assert.deepEqual(win.getBounds(),beforeDisable);
+assert.equal(roamToggle().checked,false);
+assert.equal(JSON.parse(readFileSync(join(profile,'pc-behavior-settings.json'),'utf8')).config.randomMovement,false);
+ipcMain.emit('pc:runtime',event,{state:'idle',specialPending:false});
+finishSpecialAtRoamDeadline();
+assert.equal(lastWalk(),'interrupt','关掉后仍有特殊待机，但不再随机移动');
+commands[4].click();
+assert.equal(lastWalk(),true,'关掉后仍可手动移动');
+finishWalk();
+roamToggle().click();
+assert.equal(roamToggle().checked,true);
+timer();
+assert.equal(lastWalk(),false,'恢复后先重新等待空闲');
+finishSpecialAtRoamDeadline();
+assert.equal(lastWalk(),'roam');
+finishWalk();
+console.log('PASS：随机移动勾选、即时停止、本机保存、待机及手动行走、重新开启。');
+
 displayList=[primary,left];screen.emit('display-added',{},left);home();
 const cover=(id,rect,extra={})=>({id,...rect,minimized:false,maximized:false,eligible:true,...extra});
 const onPrimary=cover('movie',primary.bounds),onLeft=cover('game',left.physicalBounds);
@@ -397,7 +449,7 @@ if(testGarden){
   const headers={Authorization:'Bearer '+readFileSync(join(profile,'local-api.token'),'utf8'),'Content-Type':'application/json'};
   const base=result.localAPIAddress;
   const guide=await (await fetch(base+'/infoguide')).json();
-  assert.equal(guide.instance.profile,profile);assert.match(guide.batch.steps,/checking/);assert.equal(guide.version,6);assert.match(guide.workStates.formal,/上限 20/);
+  assert.equal(guide.instance.profile,profile);assert.match(guide.batch.steps,/checking/);assert.equal(guide.version,7);assert.match(guide.workStates.formal,/上限 20/);
   assert.ok(guide.routes.some(r=>r.method==='POST'&&r.path==='/v1/reminders'));
   const beforeBatch=win.sent.length,beforeThought=thoughtHistory.length;
   const response=await fetch(base+'/v1/batches',{method:'POST',headers,body:JSON.stringify({id:gardenPlan.id,reviewHash:hash(canonical(gardenPlan)),commit:'1'.repeat(40),userConfirmed:true})});

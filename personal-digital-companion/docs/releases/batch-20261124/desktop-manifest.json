@@ -1,0 +1,163 @@
+{
+  "name": "batch-20261124",
+  "installRoot": "G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion",
+  "installGit": "39fd098e40ebf7c2c82dd5a6f9944ae98055566e",
+  "files": [
+    {
+      "path": "desktop/ai-gateway.mjs",
+      "baselineSha256": null,
+      "candidateSha256": "b0b04edb26418ff4afd33e24a15095ff47f7288a0de5e7b486b73d3a72a0326d",
+      "action": "add"
+    },
+    {
+      "path": "desktop/ai-schema.mjs",
+      "baselineSha256": null,
+      "candidateSha256": "99e34a1a50f40eaddb6826c693ce9a67dc37a6e653a99d512ddb23564463169b",
+      "action": "add"
+    },
+    {
+      "path": "desktop/ai-workflow-model.mjs",
+      "baselineSha256": "ad57d03a043611474617696cfb8b75b287efa4a40e2edad03ea283c93c66bee0",
+      "candidateSha256": "55ffafd83ca020fe12b5edc48d081d1c9a5889a95d651acf3cee35aec62606a4",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/balanced-local-model.mjs",
+      "baselineSha256": "f7c04570e8dd304ccd2e57d6962f9fee4d745476fd3cfbc7bc936d580873f902",
+      "candidateSha256": "ff084fd49081aaebb27cb70e6f4e254863d9ea045fc5c0971fd8e6f178d61263",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/local-model.mjs",
+      "baselineSha256": "2bbca9b13e1a8eb9d9d823647ceed33f9b6a20118cf947426e21065df75ec4e3",
+      "candidateSha256": "fa2aeab9ce6368a360b1a45d8c43ea46e6a2afeafabe297d57a07213621d3030",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/local-model-process.mjs",
+      "baselineSha256": "3fa905f43816ba0b9758ed3b463a0c0b00476ab7b58c883e9e3bef02a9c09387",
+      "candidateSha256": "c57ddcf59e604afebd3350dade25084ee371024d3671c49e1ed6c9209e784da1",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/interaction-work.mjs",
+      "baselineSha256": "2998f331dfe0f17ee61693e53d384da3768c716f681b5d918fc58f22d9648c24",
+      "candidateSha256": "482d7d76ec73cc2c4cdc93764136e1be72db858e20e8b5fda5c3f47a9e46969e",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/shell.mjs",
+      "baselineSha256": "098d9acc269fe6e53422dda1cc45f0aa39e468396bbd7bb479d8c3e13c97266d",
+      "candidateSha256": "0f3337343553f50c87dd126a13387b9a01ef6f0cf7f1250aef460a475634e446",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/screen-question-host.mjs",
+      "baselineSha256": "f1623f3d67bfe9981027120d4d3ff36851b7f257b3f43404b1c0020de823d2d4",
+      "candidateSha256": "9a54deeaabae02ebff827447abb2596b11ba2d5d97765c2d470437ccdfcb0d34",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/chat-deepseek.mjs",
+      "baselineSha256": "ae5cb0c59a8af1a790f68521ad146d7fad932fd25ed83e98b9e85d1e73f162c4",
+      "candidateSha256": "c55435964c916fc3ae749fdd09a3b8c9ecaa3033d2ae6a2bedc2b8d3fa792773",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/diary-deepseek.mjs",
+      "baselineSha256": "4f18ed390439ad3784563c02829b3502a078b31aad27c82bf8fabd4c974e9e05",
+      "candidateSha256": "cdcab92a338d78c12d750341abe48ff88d4097f8d4df66d15ed53bcfb86c4066",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/transcription-deepseek.mjs",
+      "baselineSha256": "643807f9fa7fbf0f3d5b95f9b2b2f04209915bc1a5301d67287789b3dda068f9",
+      "candidateSha256": "a6cb7bff8b1c44da8530aec8542787288af05a0566ccb14b3e070cd8040a875b",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/public-search.mjs",
+      "baselineSha256": "d862174b13da1f7f92a8afc5bc6dd5295b66548027109843ef8d7b3b0abd37e4",
+      "candidateSha256": "a70ecd8e3cdd71757859cb7cf11d0eda393f102f2d2223621cb69722950047ae",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/image-tasks.mjs",
+      "baselineSha256": "36e43ede5437eac39881355324623f0470bd18b145b95975c0ad3a70515a9c1d",
+      "candidateSha256": "18dfa0d1dcb68bf4e7f1811e94334dfad1289aab5582a824ec1fe7b90f645a72",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/server-task-command.mjs",
+      "baselineSha256": "93ff297a41d275081dc834a9e2cd64b97cb09286252cbb65c6d39ccfbe98ebf6",
+      "candidateSha256": "a0cb4a69b36c413be5356aa6884c1e1f9cf983df6a1fc95f88d81602f1430c2e",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/conversation-transcription.mjs",
+      "baselineSha256": "ab967281a8b9be92ab6c4d8552fcc8348cbeb65aca91435aec708dd7ea187c85",
+      "candidateSha256": "163227e9cbd2e0fd4bd48d264bc3ff70d912ca7350f5935ef13d3eae065497ea",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/conversation-thread-replies.mjs",
+      "baselineSha256": "6da92082bcef50fd95b30cdc88711410904f12ab35611789fc5c296e7b4fe968",
+      "candidateSha256": "e578bdcd87c78c0b9b3043a1c694168b65a0d4696f2df382690287b5ec1bb527",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/memory-refinement.mjs",
+      "baselineSha256": "ee24c37c2ef203f7125d79e7abdf99b2e5176495a3af36b2c06042d71db22610",
+      "candidateSha256": "982c529a9226182c0cfbee604f903c9169cad295ddeee8cd4b3bfe3946aaebd3",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/agy-cli-client.mjs",
+      "baselineSha256": "03abc38f22c40d99153a96c5304dd5690b2d5004ea345cfffb1868de74a56a04",
+      "candidateSha256": "65e18c6dbb62b4ba692b34285e2bfa61f3af1a2db235b357e44d7a28212a6e33",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/agy-local-model.mjs",
+      "baselineSha256": "35541b185a9ef4c488a9e24dea4a0b04d2133c250d4a111d00206f66563a8405",
+      "candidateSha256": "52379deca316d963af0d28cb5d6e94d69443e9c4908a19e0733144d866b08eea",
+      "action": "replace"
+    },
+    {
+      "path": "skills/personal-conversation/source/local-ai.json",
+      "baselineSha256": "5121238ea8d50f2eca7463a2cef880b29100d7a49d3a8ab94e4bee1571177cdb",
+      "candidateSha256": "cc53af47ee3412af69cc991212778c9374f6cfc96ae72dd44e679b4e8de8bf62",
+      "action": "replace"
+    },
+    {
+      "path": "skills/diary-writing/source/local-ai.json",
+      "baselineSha256": "bc4aab14ffe28d3263b05532d7453b5f55648f0c5c34f64b69f5ac84b8e82f75",
+      "candidateSha256": "1109de48e1a21cb13c4c2fb75c14913102d45d247928579ac0ddb7c3d9299049",
+      "action": "replace"
+    },
+    {
+      "path": "skills/memory-refinement/source/local-ai.json",
+      "baselineSha256": "3325d8004ca3c1aa5892a2683acbba43f43335a97284002b63293de280971ea3",
+      "candidateSha256": "869b9728f786f97c60f0608cebbf0899da818dd296be618136847b0f8ab64b93",
+      "action": "replace"
+    },
+    {
+      "path": "skills/news-editorial/source/local-ai.json",
+      "baselineSha256": "7bb02f3a02d825233f64f8b74afd7485f02401679d49d57fc836268c518e6a01",
+      "candidateSha256": "9e5f971d93b9b22199bb0085e305b0dd504131f54a5ab802a61171074ff40193",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/deepseek-client.mjs",
+      "baselineSha256": "792638af2f4cf7f275452efa4f96d4cb934787543268b4321ff5e7d5f3383a93",
+      "candidateSha256": null,
+      "action": "remove"
+    },
+    {
+      "path": "desktop/local-vision.mjs",
+      "baselineSha256": "b20df658d95586b2211c52fcc88e482f1804e0e5dd1a49962aacadb5788d69ab",
+      "candidateSha256": null,
+      "action": "remove"
+    }
+  ]
+}

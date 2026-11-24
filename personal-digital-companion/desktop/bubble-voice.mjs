@@ -78,9 +78,7 @@ export function createBubbleVoice({ root, profile, ttsDevice = 'auto' }) {
   const script = resolve(root, 'desktop/bubble-voice-worker.py');
   const cache = resolve(profile, ttsDevice === 'gpu' ? 'private-voice-runtime' : 'voice-runtime');
   const enabled = process.platform === 'win32' && existsSync(python) && existsSync(script);
-  const workspaceModel=join(root,'../work/sensevoice-small/model');
-  const sharedModel='G:/selftool/WebCharacter/work/sensevoice-small/model';
-  const senseVoiceModel=resolve(process.env.FEIYUE_SENSEVOICE_MODEL??(existsSync(join(workspaceModel,'model.pt'))?workspaceModel:sharedModel));
+  const senseVoiceModel = resolve(process.env.FEIYUE_SENSEVOICE_MODEL ?? join(root,'../work/sensevoice-small/model'));
   const canTranscribe=language=>enabled&&(language!=='ja'||existsSync(join(senseVoiceModel,'model.pt')));
   const asr = speechWorker({ python, script, runtime, reference, cache, mode: 'asr', senseVoiceModel, keepWarm: ttsDevice==='gpu' });
   const tts = speechWorker({ python, script, runtime, reference, cache, mode: 'tts', device: ttsDevice });

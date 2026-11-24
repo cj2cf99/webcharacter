@@ -130,15 +130,14 @@ test('转录作业按自己的提交号恢复，已完成批次重放不会重�
   assert.deepEqual(f.writes[1].body,{title:'交材料',deadline:'2099-05-12T15:00',content:'先核对发票。',level:'中'});
 });
 
-test('日记登记从气泡在本机生成并复审，云端只读模板，确认后登记一次',async t=>{
+test('日记登记从气泡由本机单次生成，云端只读模板，确认后登记一次',async t=>{
   const f=await fixture(t);
   const stages=[],logs=[];
   const interactionWork=createInteractionWork({model:{async work(input,options){
-    stages.push(options.tier);
+    stages.push('生成');
     await new Promise(resolve=>setTimeout(resolve,5));
     assert.match(input,/江边看见银杏/);
-    return options.schema.properties.selected?{selected:1,feedback:'原文完整'}:
-      {actions:[{type:'diaries.create',params:{}}],pending:[]};
+    return {actions:[{type:'diaries.create',params:{}}],pending:[]};
   }}});
   const ui=questionFixture();
   const host=attachScreenQuestion(ui.electron,{win:ui.win,root:join(import.meta.dirname,'../..'),bundle:'unused',profile:'unused',
@@ -152,7 +151,7 @@ test('日记登记从气泡在本机生成并复审，云端只读模板，确�
   assert.ok(draft.reviewId);
   assert.match(draft.fields,/标题：绯月助记/);
   assert.ok(draft.fields.includes(text));
-  assert.deepEqual(stages,['main','main']);
+  assert.deepEqual(stages,['生成']);
   assert.ok(logs.at(-1).local_ms>0);
   assert.equal(logs.at(-1).cloud_ms,0);
   assert.deepEqual(f.calls,[{path:'/api/assistant/recording-plan',method:'GET'}]);
@@ -166,7 +165,6 @@ test('日记登记从气泡在本机生成并复审，云端只读模板，确�
 test('明确的两项混合登记限制在原文的事项、顺序与东京日期',async t=>{
   const f=await fixture(t);
   const work=createInteractionWork({model:{async work(input,{schema}){
-    if(schema.properties.selected)return {selected:1,feedback:''};
     const {明确事项:actions}=JSON.parse(input).原始输入;
     assert.equal(schema.properties.actions.maxItems,2);
     return {actions,pending:[]};
@@ -186,7 +184,6 @@ test('明确的两项混合登记限制在原文的事项、顺序与东京日�
 test('只说登记日记时保留正文输入，字段里的其他指令仍只是日记内容',async t=>{
   const f=await fixture(t),ui=questionFixture(),stages=[];
   const work=createInteractionWork({model:{async work(input,{schema}){
-    if(schema.properties.selected){stages.push('复审');return {selected:1,feedback:''};}
     stages.push('生成');
     assert.equal(schema.properties.actions.maxItems,1);
     return {actions:[{type:'diaries.create',params:{}}],pending:[]};
@@ -205,18 +202,17 @@ test('只说登记日记时保留正文输入，字段里的其他指令仍只�
   const draft=ui.handlers.get('registration-review:get')(event);
   assert.ok(draft.canConfirm);
   assert.ok(draft.fields.includes(body));
-  assert.deepEqual(stages,['生成','复审']);
+  assert.deepEqual(stages,['生成']);
   assert.equal(f.writes.length,0);
   await ask('确认登记');
   assert.deepEqual(f.writes.map(w=>[w.path,w.body.content]),[['/api/diaries','帮我登记日记：'+body+'❤️']]);
 });
 
-test('混合计划中的第三条独立委托仍可由主力生成并复审',async t=>{
+test('混合计划中的第三条独立委托在数量不符时带原因重来一次',async t=>{
   const f=await fixture(t);
   const actions=[all[1],{type:'reminders.create',params:{content:'检查资料',deadline:'tomorrow'}},all[2]];
   let drafts=0;
   const work=createInteractionWork({model:{async work(input,{schema}){
-    if(schema.properties.selected)return {selected:1,feedback:''};
     assert.equal(schema.properties.actions.maxItems,undefined);
     if(++drafts===1)return {actions:actions.slice(0,2),pending:[]};
     assert.match(input,/REGISTRATION_COUNT_MISMATCH/);
@@ -229,30 +225,23 @@ test('混合计划中的第三条独立委托仍可由主力生成并复审',asy
   assert.equal(f.writes.length,0);
 });
 
-test('登记候补的最终复审暂时不可用，主动重试只复审原候选，确认后一次写入',async t=>{
+test('本机模型不可用时登记报错且不写入，恢复后重新提交只写一次',async t=>{
   const f=await fixture(t,{actions:[{type:'diaries.create',params:{}}]});
-  const ui=questionFixture(),stages=[];
+  const ui=questionFixture();
   let online=false;
-  const work=createInteractionWork({model:{async work(_input,options){
-    stages.push(options.tier);
-    return {error:'LOCAL_AI_MODEL_MISSING'};
-  }},request:async()=>{
-    stages.push('review');
-    return online?Response.json({work:{selected:1,feedback:''}}):Response.json({error:{code:'AI_COOLDOWN'}},{status:503});
-  }});
+  const work=createInteractionWork({model:{async work(){
+    return online?{actions:[{type:'diaries.create',params:{}}],pending:[]}:{error:'LOCAL_AI_MODEL_MISSING'};
+  }}});
   const host=attachScreenQuestion(ui.electron,{win:ui.win,root:join(import.meta.dirname,'../..'),bundle:'unused',profile:'unused',
     history:ui.history,registration:f.desktop(),interactionWork:work,visible:false});
   t.after(()=>host.close());await host.open();
   const event=ui.event(host.panel),ask=text=>ui.handlers.get('screen-qa:ask')(event,{text});
-  const pending=await ask('帮我登记日记：今天一起看银杏。');
-  assert.equal(pending.code,'WORK_REVIEW_PENDING');
-  assert.equal(pending.retryable,true);
+  const failed=await ask('帮我登记日记：今天一起看银杏。');
+  assert.equal(failed.code,'WORK_CANDIDATES_FAILED');
   assert.equal(f.writes.length,0);
   online=true;
-  const draft=await ui.handlers.get('screen-qa:retry')(event);
+  const draft=await ask('帮我登记日记：今天一起看银杏。');
   assert.ok(draft.reviewId,draft.text);
-  assert.deepEqual(stages,['main','upgrade','review','review']);
-  assert.equal(f.calls.filter(row=>row.method==='POST').length,1);
   assert.equal(f.writes.length,0);
   assert.match((await ask('确认登记')).text,/已登记/);
   assert.equal(f.writes.length,1);

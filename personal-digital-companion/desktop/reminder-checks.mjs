@@ -22,7 +22,8 @@ export async function checkDueItems(request,signal,onStudyComplete){
 
 // 复盘窗口多数只看最新几条：检查记录和提醒每页 8 条，由新到旧。
 const PAGE=8;
-export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,log,inspectRecent,notifyNews,compileNews,newsEditorial,onIdleResult,changed=()=>{},now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout}){
+const diaryWorkProjects=['手记质问','修订手记与唠叨'];
+export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,log,inspectRecent,notifyNews,compileNews,newsEditorial,onIdleResult,beginAiRound,changed=()=>{},now=Date.now,setTimer=setTimeout,clearTimer=clearTimeout}){
   const db=new DatabaseSync(join(profile,'reminder-checks.sqlite'));
   db.exec(`CREATE TABLE IF NOT EXISTS checks(
     id INTEGER PRIMARY KEY, day TEXT NOT NULL, at INTEGER NOT NULL, due INTEGER NOT NULL,
@@ -65,13 +66,24 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
     changed();return detail;
   };
   const scheduler=createPollScheduler({db,handlers:{due,...handlers,inspection,news:news&&(signal=>news.poll(signal,()=>scheduler.get('news').enabled)),
-    newsEditorial:news?.editorialStep&&(signal=>scheduler.get('news').enabled?news.editorialStep(signal):'新闻关注已暂停')},isBusy,changed,now,setTimer,clearTimer,add,audit,onIdleResult,
+    newsEditorial:news?.editorialStep&&(signal=>scheduler.get('news').enabled?news.editorialStep(signal):'新闻关注已暂停')},isBusy,changed,now,setTimer,clearTimer,add,audit,onIdleResult,beginAiRound,
     lastRun:id=>{
       if(id==='inspection')return lastInspection.get()?.through;
       return id==='news'?news?.last():lastRun?.(id);
     },weatherLastAt:()=>{const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value).lastCheck;}});
+  const reminderQueue=()=>scheduler.readQueue().filter(row=>!diaryWorkProjects.includes(row.name));
+  const reminderHistory='FROM checks WHERE day=? AND project NOT IN (?,?)';
   return {
-    start:scheduler.start,enqueue:scheduler.enqueue,polls:scheduler.snapshot,configure:scheduler.configure,
+    start:scheduler.start,enqueue:scheduler.enqueue,polls:scheduler.snapshot,configure:scheduler.configure,setExecutionBusy:scheduler.setExecutionBusy,
+    diaryWork(){
+      return scheduler.snapshot().flatMap(({id,name,enabled,running,queuedAt,nextAt})=>{
+        if(!enabled||!diaryWorkProjects.includes(name))return [];
+        if(running)return [{name,state:'执行中'}];
+        if(queuedAt!==null)return [{name,state:'等待空闲'}];
+        const job=scheduler.get(id);
+        return id==='diaryAudit'&&job.resumeAt===job.nextAt&&nextAt>now()?[{name,state:'等待续跑',at:nextAt}]:[];
+      });
+    },
     latestNews:()=>news?.latest()??{state:'answer',text:'当前未启用新闻关注。'},
     newsEdition:()=>news?.edition()??{at:null,items:[]},
     newsFeed:()=>news?.feed()??{at:now(),from:now(),pendingArchive:0,items:[]},
@@ -79,13 +91,27 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
     newsEditorialHistory:id=>news?.editorialHistory(id)??[],
     newsArchive,
     saveNewsChinese:(...args)=>news?.saveChinese(...args),
-    get pending(){return scheduler.pending;},
+    get pending(){return reminderQueue().length>0;},
     get unread(){return db.prepare('SELECT count(*) AS n FROM notices WHERE seen=0').get().n;},
     weatherDiary(day){
       const start=Date.parse(day+'T00:00:00+09:00');
       return db.prepare("SELECT id,at,body FROM notices WHERE at>=? AND at<? AND title<>'绯月 · 任务日志巡检' ORDER BY at,id").all(start,start+86400000);
     },
     weatherState(){const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value);},
+    weatherTemperatureHistory(place, through){
+      const date=new Intl.DateTimeFormat('sv-SE',{timeZone:place.timezone});
+      const rows=db.prepare('SELECT at,detail FROM checks WHERE project=? AND at>=? AND at<? ORDER BY at,id')
+        .all('天气 · '+place.name,through-15*86400_000,through);
+      const history={};
+      for(const {at,detail} of rows){
+        const match=/(?:^| · )(?:全天 (-?\d+(?:\.\d+)?)～(-?\d+(?:\.\d+)?)|最低 (-?\d+(?:\.\d+)?))°C(?= · |$)/.exec(detail);
+        if(!match)continue;
+        const day=date.format(at);
+        history[day]={...history[day],low:Number(match[1]??match[3])};
+        if(match[2]!==undefined)history[day].high=Number(match[2]);
+      }
+      return history;
+    },
     saveWeather(value,brief,at){
       db.exec('BEGIN');
       try{
@@ -117,13 +143,15 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
     },
     read(day,page=0){
       if(!/^\d{4}-\d\d-\d\d$/.test(day))throw Error('东京日期无效');
-      const total=db.prepare('SELECT count(*) AS n FROM checks WHERE day=?').get(day).n;
+      const total=db.prepare('SELECT count(*) AS n '+reminderHistory).get(day,...diaryWorkProjects).n;
       const pages=Math.max(1,Math.ceil(total/PAGE));
       page=Math.min(pages-1,Math.max(0,Number.isSafeInteger(page)?page:0));
-      const events=db.prepare('SELECT at,due,project,status,detail FROM checks WHERE day=? ORDER BY id DESC LIMIT ? OFFSET ?').all(day,PAGE,page*PAGE);
+      const events=db.prepare('SELECT at,due,project,status,detail '+reminderHistory+' ORDER BY id DESC LIMIT ? OFFSET ?')
+        .all(day,...diaryWorkProjects,PAGE,page*PAGE);
       const due=scheduler.get('due');
-      return {nextAt:due?.nextAt,nextWeatherAt:scheduler.get('weather')?.nextAt,nextTaskAt:scheduler.get('tasks')?.nextAt,
-        first:due?.first,running:due?.running,pending:scheduler.pending,queue:scheduler.readQueue(),events,page,pages};
+      const queue=reminderQueue();
+      return {paused:scheduler.paused,nextAt:due?.nextAt,nextWeatherAt:scheduler.get('weather')?.nextAt,nextTaskAt:scheduler.get('tasks')?.nextAt,
+        first:due?.first,running:due?.running,pending:queue.length>0,queue,events,page,pages};
     },
     close(){
       closed=true;scheduler.close();audit?.close();db.close();

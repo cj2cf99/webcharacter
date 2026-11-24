@@ -21,7 +21,18 @@ def reddit_post(url):
     return None
 
 
-def filter_posts(platform, results, start, end):
+def matches_topic(title, text, groups):
+    haystack = (title + " " + text).casefold()
+    for group in groups:
+        words = re.findall(r"[a-z0-9]+|[\u3400-\u9fff]+", group.casefold())
+        if words and words[0] in haystack and (len(words) == 1 or any(
+                (len(word) >= 3 or re.fullmatch(r"[\u3400-\u9fff]{2,}", word))
+                and word in haystack for word in words[1:])):
+            return True
+    return False
+
+
+def filter_posts(platform, results, start, end, groups):
     seen = set()
     posts = []
     for row in results:
@@ -37,11 +48,12 @@ def filter_posts(platform, results, start, end):
             stamp = datetime.fromtimestamp(created, timezone.utc)
         if stamp and not start <= stamp <= end:
             continue
+        title = str(row.get("title") or platform)[:220]
         text = str(row.get("content") or row.get("raw_content") or "").strip()[:1500]
-        if not text:
+        if not text or not matches_topic(title, text, groups):
             continue
         seen.add(match[0])
-        posts.append(dict(url=match[1], title=str(row.get("title") or platform)[:220], text=text,
+        posts.append(dict(url=match[1], title=title, text=text,
                           at=round(stamp.timestamp()*1000) if stamp else None))
     return posts
 
@@ -66,7 +78,7 @@ def search(platform, groups, cutoff, *, send=tavily_search.request, directory=No
         code = str(error)
         return dict(state="unavailable", code=code if re.fullmatch(r"[A-Z0-9_]+", code) else "SEARCH_QUOTA_UNVERIFIED", posts=[])
     domain = "x.com" if platform == "X" else "reddit.com"
-    payload = dict(query="Public posts on the same news event about " + " OR ".join(groups),
+    payload = dict(query=" OR ".join(groups),
                    topic="general", search_depth="basic", max_results=20, include_published_date=True,
                    start_date=start.date().isoformat(), end_date=(end+timedelta(days=1)).date().isoformat(),
                    include_domains=[domain], include_domains_mode="restrict", include_raw_content="text",
@@ -74,7 +86,7 @@ def search(platform, groups, cutoff, *, send=tavily_search.request, directory=No
     try:
         result = send(key, "/search", payload)
         rows = result["results"]
-        posts = filter_posts(platform, rows, start, end)
+        posts = filter_posts(platform, rows, start, end, groups)
     except (ValueError, OSError, KeyError, TypeError, OverflowError):
         return dict(state="unknown", code="SEARCH_RECEIPT_UNKNOWN", posts=[])
     credits = (result.get("usage") or {}).get("credits")

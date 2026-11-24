@@ -7,11 +7,12 @@ import {plannedNewsUpdate,supportedNewsTitle} from './news-editor.mjs';
 const run=promisify(execFile);
 const script=fileURLToPath(new URL('../workflows/comfyui/news_social.py',import.meta.url));
 const day=86400000;
+const titlePolicy=2;
 const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',dateStyle:'short'});
 const asText={type:'string'};
 const asList={type:'array',items:asText};
 const shape=properties=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
-const schemas={title:shape({title:asText}),reviewTitle:shape({reason:{type:'string',maxLength:36},accept:{enum:['yes','no']}}),
+const schemas={title:shape({title:asText}),reviewTitle:shape({accept:{enum:['yes','no']},reason:{type:'string',maxLength:36}}),
   keywords:shape({groups:{...asList,minItems:1,maxItems:3}})};
 export const newsWindSchema=refs=>shape({
   refs:{type:'array',items:{enum:refs},minItems:1,maxItems:4},
@@ -26,15 +27,20 @@ export async function lookupNewsSocial(platform,groups,to,signal) {
 }
 
 export function newsTitleEvidence(details) {
-  const selected=details.nodes.length>3?[details.nodes[0],...details.nodes.slice(-2)]:details.nodes;
-  return selected.map(node=>({date:date.format(node.at)+' JST',title:node.title,
+  return details.nodes.map(node=>({date:date.format(node.at)+' JST',title:node.title,
+    sources:node.reports.length,
     text:(node.evidence||node.reports.slice(0,3).map(report=>
       [report.chinese?.title||report.title,report.chinese?.excerpt||report.excerpt].filter(Boolean).join('。'))
-      .filter(Boolean).join('\n')).slice(0,550)}));
+      .filter(Boolean).join('\n')).slice(0,node===details.nodes.at(-1)?420:160)}));
 }
 
 export function acceptedNewsReview(review) {
-  return review.accept==='yes'&&!/与(?:材料|原文|事实)(?:不符|矛盾)|误(?:写|将|把)|偷换|编造/u.test(review.reason??'');
+  return review?.accept==='yes'&&review.reason==='';
+}
+
+export function staysOnDiscussion(summary,platformsWithPosts) {
+  return platformsWithPosts.every(platform=>new RegExp('\\b'+platform+'\\b','iu').test(summary))&&
+    !/[$＄]\s*\d|\d[\d.]*\s*(?:%|美元)|股价.{0,8}(?:跌破|触及|逼近)|(?:指数|纳指|纳斯达克).{0,12}(?:抹去|回吐|收跌|大涨)/u.test(summary);
 }
 
 export function newsTitleFeedback(latest) {
@@ -46,7 +52,13 @@ export function newsTitleFeedback(latest) {
 const phaseName={title:'拟新闻标题',reviewTitle:'核验新闻标题',summary:'汇总新闻事实',keywords:'提取社论关键词',
   X:'查 X',Reddit:'查 Reddit',wind:'合并社论风向'};
 const platforms=['X','Reddit'];
-const sampleRows=data=>platforms.flatMap(platform=>(data.samples[platform]?.posts??[]).slice(0,8).map(post=>({...post,platform})));
+const viewpoint=/\b(?:opinion|why |i think|my stocks|fears|bottleneck|are we witnessing)\b|有观点|担忧|质疑/iu;
+const sampleRows=data=>platforms.flatMap(platform=>{
+  const posts=data.samples[platform]?.posts??[];
+  const hasView=post=>viewpoint.test(post.title+' '+post.text);
+  const views=posts.filter(hasView).slice(0,2);
+  return [...views,...posts.filter(post=>!hasView(post)).slice(0,4-views.length)].map(post=>({...post,platform}));
+});
 function windEdition(data,rows,prior,opinion=null,failed=false) {
   const title=opinion?.title?.trim();
   const safeTitle=title&&!/引发|导致|造成|加剧|证实/u.test(title)?title:'社媒取样记录';
@@ -74,11 +86,13 @@ export function createNewsEditorial(db,{now,model,compile,skill=()=>readInteract
   }
   function title(id,revision) {
     const row=get.get(id,revision);
-    return row&&unpack(row).data.acceptedTitle;
+    const data=row&&unpack(row).data;
+    return data?.titlePolicy===titlePolicy?data.acceptedTitle:undefined;
   }
   function summary(id,revision) {
     const row=get.get(id,revision);
-    return row&&unpack(row).data.summary;
+    const data=row&&unpack(row).data;
+    return data?.titlePolicy===titlePolicy?data.summary:undefined;
   }
   function reconcile(kept,duplicate) {
     for(const row of byTopic.all(duplicate).map(unpack)){
@@ -101,24 +115,28 @@ export function createNewsEditorial(db,{now,model,compile,skill=()=>readInteract
       const active=new Set(Object.values(boards).flatMap(board=>[...board.hot,...board.key].filter(id=>!board.quiet.includes(id))));
       const hot=new Set(Object.values(boards).flatMap(board=>board.hot));
       const indexed=new Map(items.map(item=>[item.id,item]));
+      const queried=data=>Object.keys(data.samples??{}).length>0;
       const ongoing=members.flatMap(id=>byTopic.all(id).map(unpack)
-        .filter(row=>!['done','failed'].includes(row.phase)&&!(row.data.waitUntil>now()))
+        .filter(row=>!['done','failed'].includes(row.phase)&&!(row.data.waitUntil>now())&&
+          (queried(row.data)||row.data.titlePolicy===titlePolicy&&row.revision===indexed.get(id)?.at))
         .map(row=>({item:indexed.get(id),row})));
       const current=[...active].map(id=>indexed.get(id)).filter(Boolean);
       const pending=ongoing[0];
       const target=pending??current.filter(item=>hot.has(item.id)).concat(current.filter(item=>!hot.has(item.id)))
-        .map(item=>({item,row:get.get(item.id,item.at)})).find(({row})=>!row);
+        .map(item=>({item,row:get.get(item.id,item.at)})).find(({row})=>!row||unpack(row).data.titlePolicy!==titlePolicy);
       if(!target)return '榜单编辑与社论风向已更新';
       const {id}=target.item;
       const revision=target.row?.revision??target.item.at;
       const details=getEvent(id);
       if(!details)return '话题状态已更新';
       const existing=pending?.row;
+      const previous=!existing&&target.row?unpack(target.row).data:null;
       const selectedSkill=existing?null:await skill();
       signal.throwIfAborted();
-      const data=existing?.data??{version:selectedSkill.version,prompts:selectedSkill.localAi,evidence:newsTitleEvidence(details),
-        previousTitle:byTopic.all(id).map(unpack).find(row=>row.data.acceptedTitle)?.data.acceptedTitle??details.title,
-        social:hot.has(id),attempts:0};
+      const data=existing?.data??{version:selectedSkill.version,titlePolicy,prompts:selectedSkill.localAi,
+        main:details.title,evidence:newsTitleEvidence(details),
+        previousTitle:byTopic.all(id).map(unpack).find(row=>row.data.titlePolicy===titlePolicy&&row.data.acceptedTitle)?.data.acceptedTitle,
+        olderWind:previous?winds(previous):[],social:hot.has(id)&&!(previous&&winds(previous).length),attempts:0};
       const phase=existing?.phase??'title';
       delete data.waitUntil;
       const save=next=>{
@@ -131,15 +149,16 @@ export function createNewsEditorial(db,{now,model,compile,skill=()=>readInteract
         model?.aiAck?.(checkpoint);
       };
       const currentEvidence=data.evidence.at(-1);
-      const input=phase==='title'?{current:currentEvidence,background:data.evidence.slice(0,-1),
-        previousTitle:data.previousTitle,feedback:data.feedback}:
-        phase==='reviewTitle'?{draft:data.draft,current:currentEvidence}:
+      const timeline=data.evidence.slice(0,-1).map(({text,...row})=>row);
+      const titleInput={main:data.main??details.title,latest:currentEvidence,...(timeline.length?{timeline}:{})};
+      const input=phase==='title'?{...titleInput,previousTitle:data.previousTitle,feedback:data.feedback}:
+        phase==='reviewTitle'?{...titleInput,draft:data.draft}:
         {title:data.acceptedTitle??details.title,evidence:data.evidence};
       function infer(value,schema=schemas[phase]) {
         if(!data.prompts?.[phase])throw Error('编辑技能缺少阶段 '+phase);
         return model.memory(JSON.stringify(value),data.prompts[phase],schema,signal,
-          {name:'news-editorial',version:data.version,stage:phase,aiTier:'4',aiPriority:1,
-            maxTokens:phase==='wind'?440:phase==='reviewTitle'?384:180,aiCheckpoint:checkpoint});
+          {name:'news-editorial',version:data.version,stage:phase,aiRole:phase==='reviewTitle'||phase==='keywords'?'assist':'main',aiPriority:phase==='title'&&data.feedback?2:1,
+            maxTokens:phase==='wind'?300:phase==='reviewTitle'?110:180,aiCheckpoint:checkpoint});
       }
       save(phase);
       try {
@@ -147,7 +166,7 @@ export function createNewsEditorial(db,{now,model,compile,skill=()=>readInteract
           if(!model?.memory){persist('summary');return '标题采用原有可核验进展';}
           const draft=(await infer(input))?.title?.trim().replace(/。$/u,'');
           signal.throwIfAborted();
-          if(!supportedNewsTitle(draft,data.evidence)){
+          if(!supportedNewsTitle(draft,data.evidence,data.main)){
             data.feedback=newsTitleFeedback(currentEvidence);
             throw Error('标题缺少有效格式或数据依据');
           }
@@ -204,20 +223,44 @@ export function createNewsEditorial(db,{now,model,compile,skill=()=>readInteract
           persist(phase==='X'?'Reddit':'wind');
         } else {
           const rows=sampleRows(data);
-          const numbered=rows.map((row,i)=>({ref:String(i+1),platform:row.platform,at:row.at??'待核实',text:row.text.slice(0,220)}));
+          const numbered=rows.map((row,i)=>({ref:String(i+1),platform:row.platform,at:row.at??'待核实',
+            title:row.title.slice(0,122),text:row.text.slice(0,220)}));
           const prior=history(id)[0];
-          const opinion=rows.length&&model?.memory?await infer({title:input.title,posts:numbered,prior:prior?.summary??''},
+          const comparable=prior&&data.to-prior.to>=day&&prior.refs.some(row=>row.at)&&rows.some(row=>row.at);
+          const referenceChoices=Object.fromEntries(platforms.map(platform=>
+            [platform,numbered.filter(post=>post.platform===platform).map(post=>post.ref)]));
+          const opinion=rows.length&&model?.memory?await infer({title:input.title,referenceChoices,posts:numbered,
+            prior:comparable?prior.summary:'',feedback:data.windFeedback},
             newsWindSchema(numbered.map(row=>row.ref))):null;
           signal.throwIfAborted();
           const refs=[...new Set((Array.isArray(opinion?.refs)?opinion.refs:[]).map(ref=>Number(ref)-1))]
             .filter(index=>Number.isInteger(index)&&rows[index]);
           if(rows.length&&model?.memory&&(!opinion?.summary?.trim()||!refs.length))throw Error('风向归纳没有有效原帖引用');
+          if(opinion&&platforms.some(platform=>referenceChoices[platform].length&&!refs.some(index=>rows[index].platform===platform))){
+            data.windFeedback='至少从 referenceChoices 中每个非空平台选一个编号，分别写清两站样本关注什么。';
+            throw Error('风向缺少其中一站的原帖引用');
+          }
+          if(opinion&&!staysOnDiscussion(opinion.summary,platforms.filter(platform=>referenceChoices[platform].length))){
+            data.windFeedback='分别用 X 和 Reddit 明示各站的看点。写担忧、质疑和分歧，省去行情报价、指数组合与涨跌事实。';
+            throw Error('风向遗漏平台看点或复述了报价');
+          }
+          if(opinion&&/产品体验|服务稳定|用户生态|使用者对/u.test(opinion.summary)&&
+             !refs.some(index=>/product experience|service stability|claude users|user experience|ecosystem|产品体验|服务稳定|用户生态/iu
+               .test(rows[index].title+' '+rows[index].text))){
+            data.windFeedback='上一稿写入了所引原帖未提及的产品与体验。只写引用正文确实在讨论的内容。';
+            throw Error('风向超出引用正文');
+          }
+          if(opinion&&(!comparable||!refs.some(index=>rows[index].at)))opinion.change='';
           data.wind=windEdition(data,refs.length?refs.map(index=>rows[index]):rows,prior,opinion);
           persist('done');
         }
         return phaseName[phase]+' · '+target.item.title;
       } catch(error) {
         signal.throwIfAborted();
+        if(error.code==='LOCAL_AI_ROUND_PAUSED')throw error;
+        if(error.code==='LOCAL_AI_TASK_DISCARDED'){
+          data.failure=error.code;persist('failed');return '编辑任务执行超时，已丢弃';
+        }
         data.attempts++;
         data.failure=error.code??error.message;
         if(data.attempts>=3&&['title','reviewTitle'].includes(phase))persist('summary');

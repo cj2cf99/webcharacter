@@ -94,7 +94,7 @@ export function attachNewsPanel(electron,{root,bundle,checks,model,compile,readI
       if(!['title','excerpt'].includes(field)||!row[field])throw Error('缺少原文');
       if(row.chinese?.[field])return row.chinese[field];
       if(!needsChinese(row[field],row.lang))return row[field];
-      const signal=AbortSignal.any([controller.signal,AbortSignal.timeout(120000)]);
+      const {signal}=controller;
       const value=await translateNews(row[field],model,signal);
       signal.throwIfAborted();
       checks.saveNewsChinese(undefined,row.url,field,row[field],value);

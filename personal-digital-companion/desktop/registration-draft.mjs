@@ -46,7 +46,7 @@ function schema(tasklist,explicit,ordered){
       properties:{type:{enum:tasklist.map(item=>item.type)},question:{type:'string',maxLength:160}},required:['type','question']}}}};
 }
 
-export async function registrationDraft(text,{call,work,signal,onProgress,submittedAt,localOnly=false,diaryBody=false}){
+export async function registrationDraft(text,{call,work,signal,onProgress,submittedAt,localOnly=false,diaryBody=false,knowledge}){
   const path='/api/assistant/recording-plan';
   const [metadata,skill]=await Promise.all([call(path,undefined,signal),
     readInteractionSkill(requestsResource(text)?'resourceRegistration':'registration')]);
@@ -91,7 +91,7 @@ export async function registrationDraft(text,{call,work,signal,onProgress,submit
     [registrationInstructions,skill.localAi?.work].filter(Boolean).join('\n');
   const tasklist=templates.map(({type,description,parameter_spec})=>({type,description,fields:Object.keys(parameter_spec)}));
   return work({purpose:'登记草案',context:{text,dates:context.dates,tasklist,明确事项:explicit.length?explicit:undefined,categories:explicit.length?[]:context.categories,
-    categoriesAvailable:context.categoriesAvailable},instruction,schema:schema(templates,explicit,ordered),normalize,maxTokens:singleDiary?128:768,
-    signal,onProgress,localOnly,redraft:skill.workRedrafts,skill:{name:skill.skill,version:skill.version},cloud:(cloudSignal,feedback)=>call(path,{text,submittedAt,
+    categoriesAvailable:context.categoriesAvailable,...knowledge},instruction,schema:schema(templates,explicit,ordered),normalize,maxTokens:singleDiary?128:768,
+    signal,onProgress,localOnly,allowCloudReview:!localOnly,redraft:skill.workRedrafts,skill:{name:skill.skill,version:skill.version},cloud:localOnly?undefined:(cloudSignal,feedback)=>call(path,{text,submittedAt,
       ...(feedback?{reviewFeedback:feedback.slice(0,2000)}:{})},cloudSignal)});
 }

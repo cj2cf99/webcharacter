@@ -23,9 +23,11 @@ const q={id:'primary',bank_id:'bank',title:'颜色配对',type:'matching',status
 const script={id:'restaurant',revision:1,scene:{title:'餐厅试练',roleA:'店員',roleB:'お客さん',goal:'询问菜单并点餐'},
   plan:{background:'餐厅内客人与服务员对话'},turns:[{step:1,a:{ja:'いらっしゃいませ。ご注文はお決まりですか。'},b:{ja:'メニューを見せてください。'}},
     {step:2,a:{ja:'こちらがメニューです。'},b:{ja:'ラーメンをお願いします。'}}]};
-const paths=[join(profile,'exam.json'),join(profile,'script.json')];
+const paths=[join(profile,'exam.json'),join(profile,'script.json'),join(profile,'long.json')];
 writeFileSync(paths[0],JSON.stringify({format_version:'1.0',bank_id:'bank',source_key:'test',questions:[q]}));
 writeFileSync(paths[1],JSON.stringify(script));
+writeFileSync(paths[2],JSON.stringify({format_version:'1.0',bank_id:'long',questions:
+  Array.from({length:21},(_,i)=>({...q,id:'question-'+i,bank_id:'long'}))}));
 const dialog={showOpenDialog:async()=>({canceled:false,filePaths:[paths.shift()]})};
 async function until(fn,label,ms=12000){
   const deadline=performance.now()+ms;
@@ -53,12 +55,12 @@ async function test(){
     await until(()=>shell.win.isVisible(),'桌宠未显示');
     shell.win.webContents.emit('context-menu');
     const popup=()=>electron.BrowserWindow.getAllWindows().find(w=>w.getTitle()==='绯月菜单');
-    await until(()=>popup()?.isVisible()&&popup().webContents.executeJavaScript("[...document.querySelectorAll('#items > .item')].some(e=>e.innerText.includes('阅读与学习'))").catch(()=>false),'自绘菜单未渲染学习入口');
+    await until(()=>popup()?.isVisible(),'自绘菜单未显示');
     await popup().webContents.executeJavaScript(`document.querySelector('button[title="阅读与学习"]').click();
       const entry=document.querySelector('button[title="陪我学习"]');if(!entry.offsetParent)throw Error('陪我学习入口未展开');entry.click();`);
     await until(()=>shell.study.panel?.isVisible(),'首击学习面板未显示');
     let panel=shell.study.panel;
-    const js=script=>panel.webContents.executeJavaScript(script).catch(error=>{throw Error('隔离学习脚本 '+script.slice(0,180)+': '+error.message);});
+    const js=script=>panel.webContents.executeJavaScript(script);
     const click=label=>js(`([...document.querySelectorAll('button')].find(e=>e.textContent.trim()===${JSON.stringify(label)})??(()=>{throw Error('按钮不存在')})()).click()`);
     const text=expected=>js(`document.body.innerText.includes(${JSON.stringify(expected)}) && document.querySelector('main').getAttribute('aria-busy')==='false'`);
     const ready=(label,ms)=>until(()=>text(label),`没有出现 ${label}：`+label,ms);
@@ -128,10 +130,19 @@ async function test(){
     await js("document.querySelector('#home').click()");await ready('基础剧本');
     await click('基础剧本');await ready('已载入 30 套基础剧本');
     await click('下一页');await ready('上一页');
-    await js("document.querySelector('#home').click()");
-    await click('语言对练');
-    await click('基础剧本');await ready('已载入 30 套基础剧本');
-    console.log('PASS：隔离正式基线加载 30 套初始化剧本。');
+    await click('题库练习');await ready('继续正式场次');
+    await click('导入 JSON');await ready('已缓存 1 份材料');
+    await click('long');await ready('本地模考 · 60 分钟');
+    await click('本地模考 · 60 分钟');await ready('颜色配对');
+    await js('window.confirm=()=>true;void 0');await click('交卷');await ready('0 / 21 答对');
+    assert.equal(await js("document.querySelectorAll('[id^=study-review-]').length"),20);
+    await click('下一页');await ready('上一页');
+    assert.equal(await js("document.querySelectorAll('[id^=study-review-]').length"),1);
+    assert(await js("!!document.getElementById('study-review-20')"));
+    await click('再练原题');await ready('提交并查看解析');
+    await click('结束并复盘');await ready('返回来源作答');
+    await click('返回来源作答');await ready('0 / 21 答对');
+    assert(await js("!!document.getElementById('study-review-20')"));
     console.log('PASS：菜单首击、浅深色窄窗、考试续练、草稿恢复、逐句信心、从验证回到原答及基础剧本翻页。模型='+ (real?'本机 Qwen3.5-2B CPU':'替身'));
   }finally{await llm?.close();}
 }

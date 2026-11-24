@@ -10,6 +10,7 @@
   "-",
   {"label":"阅读与学习","icon":"📚","items":[
     {"action":"news","label":"新闻简报","icon":"📰"},
+    {"action":"knowledge","label":"知识库","icon":"🗂"},
     {"action":"study","label":"陪我学习","icon":"📚"}
   ]},
   {"label":"任务","icon":"🧩","items":[
@@ -26,6 +27,7 @@
     {"action":"work","icon":"💼"},
     {"action":"move","label":"移动到","icon":"🖥"},
     {"action":"home","label":"回到右下角","icon":"↘"},
+    {"action":"randomMovement","label":"随机移动","icon":"👣"},
     "-",
     {"action":"attachment","icon":"🪟","items":[
       {"action":"climbLeft","label":"左侧电梯上行","icon":"⬆"},
@@ -42,6 +44,7 @@
     {"action":"pollSettings","label":"轮询设定","icon":"⏲"},
     {"action":"loginStart","label":"登录 Windows 后延迟 1 分钟启动","icon":"🚀"},
     {"action":"connection","label":"云端连接","icon":"☁"},
+    {"action":"agyTest","label":"测试 AGY CLI 推理","icon":"⚡"},
     "-",
     {"action":"restart","label":"重启绯月","icon":"♻","tone":"danger"},
     {"action":"quit","label":"退出","icon":"⏻","tone":"danger"}

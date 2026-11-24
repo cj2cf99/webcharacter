@@ -8,11 +8,11 @@ import {createReminderChecks} from '../desktop/reminder-checks.mjs';
 import {tokyoDay} from '../desktop/conversation-history.mjs';
 
 const minute=60_000;
-function fixture(t){
+function fixture(t,changed){
   let time=Date.parse('2026-11-20T01:00Z');
   const timers=new Map(),log=[],busy=new Set(),actions={};
   const profile=mkdtempSync(join(tmpdir(),'feiyue-polls-'));
-  const options={profile,now:()=>time,isBusy:id=>busy.has(id),
+  const options={profile,changed,now:()=>time,isBusy:id=>busy.has(id),
     setTimer(fn,delay){const key=Symbol();timers.set(key,{fn,at:time+delay});return key;},
     clearTimer:key=>timers.delete(key),
     handlers:Object.fromEntries(['tasks','due','weather'].map(id=>[id,()=>{log.push(id);return actions[id]?.()??'完成';}]))};
@@ -56,12 +56,26 @@ test('达到阈值入队，连续忙以及重启不产生重复任务，空闲�
   await f.advance(10*minute);assert.equal(f.row('tasks').queuedAt,first);
   f.reopen();f.store.start();await f.advance(minute);
   assert.equal(f.store.polls().filter(j=>j.queuedAt!==null).length,3);
+  const readQueue=()=>f.store.read('2026-11-19').queue;
+  assert.deepEqual(readQueue().map(row=>row.name),['任务轮询','到期事项','三地天气']);
   f.set('weather',{enabled:false});assert.equal(f.row('weather').queuedAt,null);
   f.busy.clear();
   let complete;f.actions.tasks=()=>new Promise(done=>{complete=done;});
   await f.advance(15_000);await f.advance(15_000);assert.deepEqual(f.log,['tasks']);
+  assert.deepEqual(readQueue().map(({name,running})=>[name,running]),[['任务轮询',true],['到期事项',false]]);
   complete('完成');await f.advance(15_000);await f.advance(15_000);
   assert.deepEqual(f.log,['tasks','due']);assert.equal(f.store.pending,false);
+  assert.deepEqual(readQueue(),[]);
+});
+
+test('直接入队会通知提醒检查页刷新，重复入队保留原时间',t=>{
+  let updates=0;
+  const f=fixture(t,()=>updates++);
+  f.store.start();
+  f.store.enqueue('tasks');
+  f.store.enqueue('tasks');
+  assert.equal(updates,1);
+  assert.deepEqual(f.store.read(tokyoDay(f.now)).queue,[{name:'任务轮询',queuedAt:f.now,running:false}]);
 });
 
 test('最大值允许累计 100 次，降低上限可立即显示已推延的任务',async t=>{

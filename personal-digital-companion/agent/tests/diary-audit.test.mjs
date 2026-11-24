@@ -36,7 +36,7 @@ async function fixture(t,{withTaskRuntime=false}={}){
       return {reply:'我记下来了。',evaluation:'已经明白了。',mood:'释然',next:''};
     }
     assert.equal(skill.name,'diary-audit');
-    if(['extract','compare','verify'].includes(skill.stage))assert.equal(skill.aiBudget,180_000);
+    if(['extract','compare','verify'].includes(skill.stage))assert.equal(skill.aiBudget,undefined);
     const data=JSON.parse(input);f.calls.push(data);
     if(s.required.includes('a'))return {a:data.slice(0,36),b:'',c:''};
     if(s.required.includes('score')){
@@ -49,6 +49,7 @@ async function fixture(t,{withTaskRuntime=false}={}){
       f.verifyEntered?.resolve();
       await f.holdVerify;
       if(f.verifyTimeout)throw Object.assign(Error('本机推理超时'),{code:'LOCAL_AI_TIMEOUT'});
+      if(f.verifyOutputLimit)throw Object.assign(Error('本机输出超限'),{code:'LOCAL_AI_OUTPUT_BUDGET'});
       assert(data.本机线索.some(r=>r.snippet.includes('仅本地检索的材料')));
       return {keep:f.explained?'0':'1',question:'首次上线是哪天？'};
     }
@@ -92,19 +93,20 @@ async function fixture(t,{withTaskRuntime=false}={}){
   f.original=async id=>(await req('nags/'+id+'/original')).text();
   return f;
 }
-test('长手记每次最多投入两次推理，显示已保存步数并跨重启续办',async t=>{
+test('长手记每批最多投入两次推理，气泡只报告阶段，保存步数可跨重启续办',async t=>{
   const f=await fixture(t),progress=[];
   await f.diary('2026-11-20',Array.from({length:16},(_,i)=>`第${i+1}段记录了当天不同的整理动作。${'资料已经核对，余项继续准备。'.repeat(14)}`).join('\n'));
   const first=await f.poll(signal,value=>progress.push(value.stage));
-  assert.equal(first.deferred,true);
+  assert.equal(first.nextBatch,true);
+  assert.equal(first.deferred,undefined);
   assert.equal(f.calls.length,2);
   assert.match(first.detail,/已保存 2 步/);
-  assert.ok(progress.some(line=>line.includes('已保存 2 步')));
+  assert.deepEqual(progress,['提取手记线索','提取手记线索']);
   assert.equal(Object.keys(f.store.auditState().run.steps).length,2);
   const prior=[...f.calls];
   await f.restart();
   const second=await f.poll(signal,value=>progress.push(value.stage));
-  assert.equal(second.deferred,true);
+  assert.equal(second.nextBatch,true);
   assert.equal(f.calls.length,4);
   assert.match(second.detail,/已保存 4 步/);
   assert.ok(f.calls.slice(2).every(input=>!prior.includes(input)));
@@ -141,6 +143,15 @@ test('拟出问题但待确认拒绝写入时，如实反馈未加入',async t=>
   f.store.queueQuestion=()=>false;
   assert.deepEqual(await f.poll(),{detail:'已拟出手记质问，本轮未能加入待确认'});
   assert.equal(f.nags.pendingQuestions().length,0);
+});
+test('质问输出超限仍保存前序核对，跨重启只续办未完成阶段',async t=>{
+  const f=await fixture(t);
+  f.verifyOutputLimit=true;
+  await assert.rejects(f.poll(),/本机输出超限/);
+  await f.restart();
+  f.verifyOutputLimit=false;
+  assert.deepEqual(await f.poll(),{detail:'已新增 1 个手记质问'});
+  assert.equal(f.generated,1);
 });
 test('七天多篇引文、单一主对象、关键词只读本机；稍后跨重启，忙时保留回答，两轮结束',async t=>{
   const f=await fixture(t);
@@ -251,19 +262,24 @@ test('查询中断后跨重启续原轮次，已完成比较不重复，问题�
   assert.equal(n.status,'已解释');assert.equal(n.talk.at(-1).text,'周一是测试环境。');
 });
 
-test('准备超过三分钟仍可完成；十分钟由闲置调度器取消并保存续查状态',async t=>{
+test('准备超过十分钟保持运行，执行轮发出中断后保存续查状态',async t=>{
   t.mock.timers.enable({apis:['setTimeout']});
   const f=await fixture(t),hold=Promise.withResolvers(),entered=Promise.withResolvers();
   f.holdCompare=hold.promise;f.compareEntered=entered;
-  const events=[],profile=mkdtempSync(join(tmpdir(),'feiyue-audit-idle-limit-'));
+  const events=[],round=new AbortController(),profile=mkdtempSync(join(tmpdir(),'feiyue-audit-idle-limit-'));
   const checks=createReminderChecks({profile,now:()=>f.time,isBusy:()=>false,
-    log:row=>{events.push(row);return true;},handlers:{diaryAudit:active=>f.poll(active)}});
+    log:row=>{events.push(row);return true;},handlers:{diaryAudit:async active=>{
+      try{await f.poll(AbortSignal.any([active,round.signal]));}catch(error){if(!round.signal.aborted)throw error;}
+      return {roundPaused:round.signal.aborted,detail:'已保存续查状态'};
+    }}});
   t.after(()=>{checks.close();rmSync(profile,{recursive:true,force:true});});
   checks.start();f.time+=minute;t.mock.timers.tick(minute);await entered.promise;
   f.time+=4*minute;t.mock.timers.tick(4*minute);
   assert(!events.some(e=>e.route==='手记质问'&&['查询失败','已暂停'].includes(e.stage)));
   assert(!f.nags.pending());
   f.time+=6*minute;t.mock.timers.tick(6*minute);
+  assert(!events.some(e=>e.route==='手记质问'&&e.stage==='已暂停'));
+  round.abort();
   await new Promise(resolve=>setImmediate(resolve));
   assert(events.some(e=>e.route==='手记质问'&&e.stage==='已暂停'));
   assert(f.nags.recoverAudit());assert(!f.session);assert(!f.nags.pending());

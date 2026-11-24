@@ -9,6 +9,7 @@ import {createAiWorkflowModel} from '../../desktop/ai-workflow-model.mjs';
 import {createReminderChecks} from '../../desktop/reminder-checks.mjs';
 import {readInteractionSkill} from '../../desktop/interaction-skills.mjs';
 import {supportedNewsTitle} from '../../desktop/news-editor.mjs';
+import {acceptedNewsReview,newsTitleEvidence,staysOnDiscussion} from '../../desktop/news-editorial.mjs';
 
 const day=86400000;
 const time=day=>Date.parse('2026-11-'+day+'T09:00:00+09:00');
@@ -23,11 +24,11 @@ test('绯月新闻编辑沿同一话题分段执行，重启后接着查完并�
     close(){},
     async memory(text,_instruction,_schema,_signal,job){
       stages.push(job.stage);
-      const latest=JSON.parse(text).current?.title??'';
+      const latest=JSON.parse(text).latest?.title??'';
       if(job.stage==='title')return {title:latest.includes('恢复')
         ?'沿海铁路北段恢复运行，南段仍受暴雨影响'
         :'沿海铁路因暴雨停运，工作人员全面巡查受损区段'};
-      if(job.stage==='reviewTitle')return {accept:'yes',reason:'与已经报道的进展一致'};
+      if(job.stage==='reviewTitle')return {accept:'yes',reason:''};
       if(job.stage==='keywords')return {groups:['沿海铁路 暴雨','沿海铁路 恢复','沿海铁路 北段']};
       if(job.stage==='wind')return {title:'讨论聚焦铁路复运',summary:'X 关注复运时间，Reddit 关注仍未开放的区段。',change:'近期更关心恢复范围。',refs:['1','2']};
       throw Error('未登记阶段 '+job.stage);
@@ -103,6 +104,43 @@ test('关键 headline 校验保持市场范围和新闻状态',()=>{
   const disaster=[{date:'2026-11-22 JST',title:'德令哈地震救援',text:'暂未发现人员伤亡，青藏铁路受影响区段已限速恢复。'}];
   assert.equal(supportedNewsTitle('德令哈地震无人员伤亡，青藏铁路已恢复正常',disaster),false);
   assert.equal(supportedNewsTitle('德令哈地震暂未发现伤亡，受影响铁路区段限速恢复',disaster),true);
+  assert.equal(acceptedNewsReview({accept:'yes',reason:'草稿中的计划没有来源'}),false);
+  assert.equal(acceptedNewsReview({accept:'yes',reason:''}),true);
+  assert.equal(staysOnDiscussion('X 平台引用显示股价跌破 IPO 价；Reddit 在讨论融资瓶颈。',['X','Reddit']),false);
+  assert.equal(staysOnDiscussion('X 有帖子担心抛售持续，Reddit 有帖子讨论融资瓶颈。',['X','Reddit']),true);
+  const market=[{date:'2026-11-21 JST',title:'Anthropic上市次日回落',text:'美股科技板块承压。'}];
+  assert.equal(supportedNewsTitle('金银走弱，计划或受宏观数据影响',market,'美股科技板块承压，Anthropic上市次日回落'),false);
+  assert.equal(supportedNewsTitle('Anthropic上市次日回落，美股科技板块承压',market,'美股科技板块承压，Anthropic上市次日回落'),true);
+  assert.equal(supportedNewsTitle('Anthropic上市次日回落，AI最大IPO熄火',market,'美股科技板块承压，Anthropic上市次日回落'),false);
+});
+
+test('转载和综合早报只补出处，榜单编号与真正的新进展一起保留',async t=>{
+  const db=new DatabaseSync(':memory:');
+  t.after(()=>db.close());
+  let at=time(22),items=[];
+  const news=createNewsBriefing(db,()=>at,()=>{},async()=>({items,failed:[]}),
+    {editorial:{skill:()=>readInteractionSkill('newsEditorial')}});
+  const row=(id,title,publishedAt,topic='美国股市')=>({url:'https://example.org/'+id,title,topic,
+    publishedAt,source:id,excerpt:title,lang:'zh'});
+  items=[
+    row('first','Anthropic(ANT.US)登陆美股市场，开盘股价暴涨超33%',at-day*2),
+    row('market','美股科技股集体下挫，Anthropic上市未能提振交易，纳指跌5.28%，英伟达跌14%',at-day*2+2*3600000),
+    row('second','Anthropic上市次日大跌8%，英伟达再跌5%',at-day)
+  ];
+  await news.poll(signal);
+  const primary=news.feed().items.find(item=>item.title.includes('Anthropic'));
+  assert.ok(primary);
+  const oldId=primary.id;
+  const last=news.event(oldId).at;
+  items=[row('roundup','【早报】美股大跳水；Anthropic上市首秀收涨17%；黄金、白银大幅走弱',at+3600000)];
+  at+=3600001;
+  await news.poll(signal);
+  const updated=news.event(oldId);
+  assert.ok(updated);
+  assert.equal(updated.at,last);
+  assert.equal(updated.nodes.some(node=>node.title.includes('黄金')),false);
+  assert.equal(updated.reports.length,4);
+  assert.equal(newsTitleEvidence(updated).at(-1).title,'Anthropic上市次日回落');
 });
 
 test('桌面既有轮询自动推进标题，未到 RSS 周期也能续办',async t=>{
@@ -124,7 +162,7 @@ test('桌面既有轮询自动推进标题，未到 RSS 周期也能续办',asyn
     clearTimer:timer=>timers.delete(timer),
     newsEditorial:{skill:()=>readInteractionSkill('newsEditorial'),model:{async memory(_text,_rule,_schema,_signal,stage){
       stages.push(stage.stage);
-      return stage.stage==='title'?{title:'沿海铁路北段恢复运行，南段继续检查设备'}:{accept:'yes',reason:'保留恢复范围'};
+      return stage.stage==='title'?{title:'沿海铁路北段恢复运行，南段继续检查设备'}:{accept:'yes',reason:''};
     }}}});
   t.after(()=>{checks.close();rmSync(profile,{recursive:true,force:true,maxRetries:3});});
   checks.start();

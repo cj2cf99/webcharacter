@@ -9,7 +9,7 @@ import {createTaskTrafficLog} from '../desktop/task-traffic-log.mjs';
 import {createScreenQuestionClient} from '../desktop/screen-question-client.mjs';
 import {attachScreenQuestion} from '../desktop/screen-question-host.mjs';
 import {tokyoDay} from '../desktop/conversation-history.mjs';
-import {localVision} from '../desktop/local-vision.mjs';
+import {cloudVision} from '../desktop/ai-gateway.mjs';
 import {desktopModelPath} from '../desktop/local-model.mjs';
 
 const root=resolve(import.meta.dirname,'..'),profile=mkdtempSync(join(tmpdir(),'feiyue-memory-qa-'));
@@ -27,7 +27,7 @@ async function test(){
     ctx.fillStyle='black';ctx.font='54px Arial';ctx.fillText('Q7M-482',100,120);return c.toDataURL()})()`);
   const source=electron.nativeImage.createFromDataURL(png);
   const memory=createMemoryArchive(join(profile,'memory')),traffic=createTaskTrafficLog(profile,{memory});
-  const infer=localVision(desktopModelPath(electron.app,root)),real=process.argv.includes('--real');
+  const infer=cloudVision(),real=process.argv.includes('--real');
   const seen=[],uploads=[];
   const client=await createScreenQuestionClient({memory,screen:{getCursorScreenPoint:()=>({x:0,y:0}),getDisplayNearestPoint:()=>({id:7,size:source.getSize()})},
     desktopCapturer:{getSources:async()=>[{display_id:'7',thumbnail:source}]},

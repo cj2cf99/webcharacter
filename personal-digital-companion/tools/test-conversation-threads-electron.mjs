@@ -129,7 +129,7 @@ async function testWindows(){
   },async close(){}};
   queue=createAiWorkflowModel({model,file:join(profile,'ai-requests.sqlite'),safeStorage:electron.safeStorage});
   transcription=createConversationTranscription({profile,safeStorage:electron.safeStorage,model:queue,notify:item=>notices.push(item)});
-  const question={id:'audit-fixture',source:'diary',source_id:'2026-11-22.3/2',title:'下次一起听雨？',next:'下次一起听雨？',reason:'昨晚听见雨声',created_at:new Date().toISOString(),
+  const question={id:'audit-fixture',source:'diary',source_id:'2026-11-22.3/2',title:'听雨的约定',next:'下次一起听雨？',reason:'昨晚听见雨声',created_at:new Date().toISOString(),
     citation:{label:'手记对话摘录',reference:'第 3 篇 · 悬念 2',excerpt:'「下次想和你一起听雨。」'},
     talk:[{who:'绯月',text:'下次一起听雨？',at:new Date().toISOString()}]};
   const proactive=[];
@@ -146,8 +146,17 @@ async function testWindows(){
   const review=code=>execute(host.details,code);
   await host.openReview();
   await wait(()=>review("document.querySelector('#questionCount').textContent==='1'"));
+  assert.equal(await review("document.querySelector('.thread-preview').innerText"),'下次一起听雨？');
   await review("document.querySelector('details[data-thread]').open=true");
   await wait(()=>review("document.querySelector('.thread-talk')?.textContent.includes('绯月')"));
+  assert.equal(await review("getComputedStyle(document.querySelector('.thread-preview')).display"),'none');
+  assert.equal(await review("document.querySelector('.thread-message p').innerText"),'下次一起听雨？');
+  await review("document.querySelector('.thread-source').open=true");
+  assert.match(await review("document.querySelector('.thread-source p').innerText"),/「下次想和你一起听雨。」/u);
+  await review("document.querySelector('details[data-thread]').open=false");
+  assert.equal(await review("document.querySelector('.thread-preview').innerText"),'下次一起听雨？');
+  await review("document.querySelector('details[data-thread]').open=true");
+  await wait(()=>review("document.querySelector('.thread-talk')"));
   assert.equal(await review("document.querySelectorAll('.thread-message[data-who=你]').length"),0);
   assert.equal(proactive.length,0);
   assert.equal(transcription.list().length,0);

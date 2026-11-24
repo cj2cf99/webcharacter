@@ -22,7 +22,7 @@ test('情绪评价超时只延后重试一次，之后的材料先完成，正�
     diary:{emotionalHistory:()=>({pages:[],nags:[]})},model:{async memory(input,_prompt,_schema,signal,options){
       const text=/^用户原话：(.*)$/mu.exec(input)[1];
       calls.push(text);
-      assert.equal(options.aiBudget,45000);
+      assert.equal(options.aiBudget,undefined);
       assert.equal(options.backgroundBudget,true);
       assert.equal(options.maxTokens,384);
       if(text==='慢材料')throw new DOMException('评价超时','TimeoutError');
@@ -78,7 +78,7 @@ test('一次闲时名额，两次评估，从原始事实生成候选，只实�
     const calls=[],model={async memory(input,instruction,schema,signal,options){
       assert.equal(signal,controller.signal);
       assert.equal(options.stage,calls.length?'decide':'propose');
-      assert.equal(options.aiBudget,180_000);
+      assert.equal(options.aiBudget,undefined);
       calls.push(JSON.parse(input));return schema.properties.entries?{entries:[
         {source:0,sin:1,type:'clarify',want:'确认这笔费用',condition:'他告诉我用途'},
         {source:1,sin:1,type:'share',want:'分享结论',condition:'收到评价'}],act:true}:

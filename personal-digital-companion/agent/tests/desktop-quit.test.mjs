@@ -13,7 +13,7 @@ test('L02：真实shell确认前不清理，取消保留，重复合并，关闭
   class Window extends EventEmitter{
     constructor(options){super();win=this;this.options=options;this.visible=false;this.webContents=new EventEmitter();Object.assign(this.webContents,{mainFrame:{},setWindowOpenHandler(){},send(){}});}
     setIgnoreMouseEvents(){}isDestroyed(){return false;}isVisible(){return this.visible;}showInactive(){this.visible=true;}hide(){this.visible=false;}
-    setAlwaysOnTop(value){this.topmost=value;}
+    setAlwaysOnTop(value){this.topmost=value;}isAlwaysOnTop(){return Boolean(this.topmost);}moveTop(){}
     async loadFile(){}getBounds(){return this.options;}setBounds(){}
   }
   class Tray {constructor(){tray=this;}setToolTip(){}setContextMenu(menu){this.menu=menu;}on(){}destroy(){this.destroyed=true;}}

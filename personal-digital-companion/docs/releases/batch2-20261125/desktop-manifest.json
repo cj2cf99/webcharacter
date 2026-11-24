@@ -1,0 +1,42 @@
+{
+  "name": "batch2-20261125",
+  "installRoot": "G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion",
+  "files": [
+    {
+      "path": "desktop/conversation-threads.mjs",
+      "baselineSha256": "212729749930b9f18ff87514743fc4556a8880d23b38c8e82c0a1afd44c45f4a",
+      "candidateSha256": "55938f82abd83f786fb8dfb46ab1e05d13fae41b9c566f101bc8b99e9040654e",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/conversation-transcription.mjs",
+      "baselineSha256": "2f4aee46d620ec3c235186f088fd1ad360472605a5c5891802c6efa0fc49fe01",
+      "candidateSha256": "d781cdcab6614de4594b08d6f61eb645412f8a2cd1d59b8a9d80343cbf905106",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/screen-question-host.mjs",
+      "baselineSha256": "9a54deeaabae02ebff827447abb2596b11ba2d5d97765c2d470437ccdfcb0d34",
+      "candidateSha256": "1e028c802e082d7cb490f6ee4d808d82c862268ce4ee33f29f8a9af08ab7d425",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/conversation-ui.mjs",
+      "baselineSha256": "e298893ffb343e7906eea86f2d0fe43ae336b1f82ae632ecadfcbbb2655d2add",
+      "candidateSha256": "256de9582ec83df202c2ab316ad759d020175884432a8d9ac8a2adece3fc5ae4",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/agy-local-model.mjs",
+      "baselineSha256": "52379deca316d963af0d28cb5d6e94d69443e9c4908a19e0733144d866b08eea",
+      "candidateSha256": "1741bed1c77e9b28e1e48ea9d01df170f0e80f0b24bc942db5f78ca3f8ae9c7f",
+      "action": "replace"
+    },
+    {
+      "path": "desktop/ai-workflow-model.mjs",
+      "baselineSha256": "55ffafd83ca020fe12b5edc48d081d1c9a5889a95d651acf3cee35aec62606a4",
+      "candidateSha256": "2712ead7f1ac705b676a14f6ea386237f8f24e161aeb88883af52ce712afdaf3",
+      "action": "replace"
+    }
+  ]
+}

@@ -17,9 +17,9 @@ import {conversationRoute} from '../../desktop/conversation-routing.mjs';
 
 test('仅有效提交问答打断自主任务，开窗、空输入和阅读缓存新闻不打断',async t=>{
   const f=fixture();
-  let interrupts=0,news=0;
+  let interrupts=0,news=0,study=0;
   const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:'unused',
-    onForeground:()=>{interrupts++;},openNews:()=>{news++;},
+    onForeground:()=>{interrupts++;},openNews:()=>{news++;},openStudy:()=>{study++;},
     localModel:{async analyze(){return {kind:'chat',reply:'收到问题'};}}});
   t.after(()=>host.close());
   await host.open();
@@ -28,15 +28,41 @@ test('仅有效提交问答打断自主任务，开窗、空输入和阅读缓�
   assert.equal((await ask(' ')).state,'error');
   assert.equal((await ask('打开新闻简报')).state,'answer');
   assert.equal(news,1);
+  assert.equal((await ask('打开学习面板')).state,'answer');
+  assert.equal(study,1);
   assert.equal(interrupts,0);
   assert.equal((await ask('请解释这句话','direct')).state,'answer');
   assert.equal(interrupts,1);
 });
 
+test('确认窗等用户填写时释放后台，提交补充后再让位',async t=>{
+  const f=fixture(),resumed=Promise.withResolvers(),finish=Promise.withResolvers();
+  let interrupts=0;
+  const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:join(import.meta.dirname,'../..'),
+    onForeground:()=>{interrupts++;},client:{forget(){},async askText(_text,opts){
+      if(!opts.grounded)return {state:'answer',text:'请补充是哪一天。',askUser:true};
+      resumed.resolve();await finish.promise;return {state:'answer',text:'已记下日期'};
+    }}});
+  t.after(()=>host.close());await host.open();
+  await f.handlers.get('screen-qa:image-list')(f.event(host.panel));
+  const work=f.handlers.get('screen-qa:ask')(f.event(host.panel),{text:'帮我看看这项安排'});
+  for(let i=0;i<50&&!host.inquiryPanel;i++)await new Promise(r=>setImmediate(r));
+  assert.ok(host.inquiryPanel);
+  const event=f.event(host.inquiryPanel);
+  const draft=await f.handlers.get('registration-review:get')(event);
+  assert.equal(host.executing,false);
+  const submitted=f.handlers.get('registration-review:decide')(event,draft.id,{action:'send',text:'明天'});
+  await resumed.promise;
+  assert.equal(host.executing,true);assert.equal(interrupts,2);
+  finish.resolve();await submitted;await work;
+  assert.equal(host.executing,false);
+});
+
 test('直连只走本地文字对话，传递同模式上一轮，退出后恢复自动识别',async t=>{
-  const f=fixture(),calls=[];
+  const f=fixture(),calls=[],transcripts=[];
   const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:'unused',
     localModel:{async analyze(text,options){calls.push({text,...options});return {kind:'chat',reply:'这一轮的回复'};}},
+    transcription:{turn(_session,value){transcripts.push(value.text);},reply(){},seal(){}},
     client:{forget(){},askText(){assert.fail('直连不应调用云端');}}});
   t.after(()=>host.close());await host.open();
   const submit=(text,mode,extra={})=>f.handlers.get('screen-qa:ask')(f.event(host.panel),{text,mode,...extra});
@@ -49,10 +75,12 @@ test('直连只走本地文字对话，传递同模式上一轮，退出后恢�
   assert.equal(calls.at(-1).replyMode,'tool');
   assert.equal(calls.at(-1).skillInstruction.name,'tool-response');
   await submit('写一段关于这件事的评论','direct');
+  assert.deepEqual(transcripts,[]);
   assert.equal(calls.at(-1).skillInstruction.name,'diary-writing');
   assert.deepEqual(calls[1].previous,{用户:first,绯月:'这一轮的回复'});
   assert.equal((await submit('截图','direct',{withScreen:true})).state,'error');
   assert.equal((await submit('你好','auto')).state,'answer');
+  assert.deepEqual(transcripts,['你好']);
   assert.equal(calls.at(-1).hint,'auto');assert.equal(calls.at(-1).previous,undefined);
   await submit('帮我判断这件事前后有矛盾吗','auto');
   assert.equal(calls.at(-1).skillInstruction.name,'emotion-appraisal');
@@ -109,8 +137,11 @@ test('图像确定性步骤、附件角色与负面指令',()=>{
   assert.equal(attachmentRegistration('把图里的会议记成提醒'),true);
   assert.equal(attachmentRegistration('请描述这张图片'),false);
   assert.match(menuGuidance('本地复盘怎么打开'),/选择「本地复盘」/);
-  assert.match(menuGuidance('陪我学习怎么打开'),/阅读与学习 → 陪我学习/);
+  assert.match(menuGuidance('知识库怎么打开'),/阅读与学习 → 知识库/);
+  assert.match(menuGuidance('看绯月写日记在哪'),/任务 → 看绯月写日记/);
+  assert.match(menuGuidance('补写本机任务执行评价在哪'),/任务 → 补写本机任务执行评价/);
   assert.match(menuGuidance('任务日志在哪'),/任务 → 任务日志/);
+  assert.match(menuGuidance('提醒检查 · 待执行怎么打开'),/选择「提醒检查 · 待执行」/);
   assert.match(menuGuidance('要怎么才能登记日记？'),/问绯月.*帮我登记日记/);
 });
 
@@ -152,13 +183,13 @@ test('云端任务和服务器任务从问绯月按本机模板确认、创建�
   };
   const dialog={async showMessageBox(){return {response:0};}};
   const tasks=await createDesktopTasks({profile,request,dialog,handlerModule:new URL('./fixtures/thread-handlers.mjs',import.meta.url).href});
-  const analyze=async(input,{hint,skillInstruction})=>{
-    const parsed=JSON.parse(input);
-    assert.equal(hint,'serverTask');assert.equal(skillInstruction.name,'server-pc-task');
+  const work=async(input,{skill})=>{
+    const parsed=JSON.parse(input).原始输入;
+    assert.equal(skill.name,'server-pc-task');
     assert.match(parsed.指令,/春天/);assert.deepEqual(parsed.模板.map(t=>t.type),['mock.unit']);
     return {type:'mock.unit',params:{value:'春天'},deadline_at:'2024-01-01T00:00:00Z'};
   };
-  const serverTask=createServerTaskCommand({profile,tasks,localModel:{analyze},dialog});
+  const serverTask=createServerTaskCommand({profile,tasks,localModel:{work},dialog});
   const h=attachScreenQuestion(f.electron,{win:f.win,profile,history:f.history,bundle:'unused',root:'unused',serverTask});
   t.after(async()=>{h.close();await tasks.stop();db.close();await rm(profile,{recursive:true,force:true});});
   await h.open();const ask=text=>f.handlers.get('screen-qa:ask')(f.event(h.panel),{text});
@@ -224,13 +255,16 @@ test('气泡超时请求在查询中被拒绝，空闲关闭保留草稿且手�
   assert.equal(state().idleDraft,null);
 });
 test('QH02：可信主frame才可提问；采集时保留原窗，回执只发文本，关闭清理',async()=>{
-  const f=fixture();let calls=0,forgot=0,host;
+  const f=fixture(),archived=[];let calls=0,forgot=0,host;
+  f.history.save=turn=>archived.push(turn);
   const client={async captureAndAsk(q,{onState}){calls++;assert.equal(host.panel.visible,true);assert.equal(q,'问题');onState({state:'waiting',text:'正在看'});return {state:'answer',text:'答案'};},forget(){forgot++;}};
-  host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:'unused',client});
+  host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:'unused',client,
+    transcription:{turn(){assert.fail('截图问答不能进入自动转录');},seal(){}}});
   await host.open();const panel=host.panel,e=f.event(panel);
   assert.equal(panel.options.webPreferences.sandbox,true);assert.equal(panel.popup().action,'deny');
   assert.throws(()=>f.handlers.get('screen-qa:ask')({sender:panel.webContents,senderFrame:{}},'问题'),/仅问答/);
   assert.deepEqual(await f.handlers.get('screen-qa:ask')(e,{text:'问题',withScreen:true}),{state:'answer',text:'答案',question:'问题'});assert.equal(calls,1);assert.equal(panel.visible,true);
+  assert(archived.length&&archived.every(turn=>turn.localOnly===true));
   assert.deepEqual(f.win.getBounds(),{x:600,y:500,width:240,height:360});
   host.close();await Promise.resolve();assert.equal(forgot,1);assert.equal(f.handlers.size,0);assert.equal(panel.destroyed,true);assert.equal(f.win.listenerCount('move'),0);
 });
@@ -323,7 +357,7 @@ test('本地思索先于问答和任务，云端接收原文并分别记录耗�
     ['personal-conversation','conversation'],['record-submission','registration']
   ]);
   assert.match(skills[0].version,/^\d+\.\d$/u);
-  assert.ok(skills[0].review && skills[0].rewrite && skills[1].draft);
+  assert.ok(skills[0].draft && skills[0].response && !skills[0].review && !skills[0].rewrite && skills[1].draft);
 
   mode='fail';
   const q='  罗马的历史是什么？  ';

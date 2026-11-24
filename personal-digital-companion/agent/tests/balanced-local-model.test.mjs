@@ -22,45 +22,31 @@ test('转录持有同一模型，阶段之间普通推理和换档排队',async(
     await new Promise(resolve=>setImmediate(resolve));
     assert.deepEqual(calls,['归纳']);assert.equal(starts.length,1);
     resume.resolve();await job;await competing;
-    assert.deepEqual(calls,['归纳','拟稿','复核','新请求']);assert.equal(starts.length,2);
+    assert.deepEqual(calls,['归纳','拟稿','复核','新请求']);assert.equal(starts.length,1);
   }finally{resume.resolve();await model.close();}
 });
 
-test('按 GPU 双指标挑选档位，读数缺失或繁忙时用 CPU',()=>{
-  const first=(utilization,freeMiB,correcting,resident=0)=>modelChoices({utilization,freeMiB},correcting,resident)[0];
-  assert.deepEqual(first(49,2304,false),{size:'2',device:'gpu'});
-  assert.deepEqual(first(50,7000,false),{size:'0.8',device:'gpu'});
-  assert.deepEqual(first(10,6000,true,656),{size:'9',device:'gpu'});
-  const aggressive={size:'9',file:'Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf'};
-  assert.deepEqual(first(79,6656,true),{...aggressive,device:'gpu'});
-  assert.deepEqual(first(79,4000,true),{...aggressive,device:'cpu'});
-  assert.deepEqual(first(80,8000,true),{...aggressive,device:'cpu'});
-  assert.deepEqual(first(0,1200,false),{size:'0.8',device:'cpu'});
-  assert.deepEqual(modelChoices(null,true),[{...aggressive,device:'cpu'}]);
-});
-
-test('手动预热只加载 GPU，复用给下一轮并按正常策略继续推理',async()=>{
-  let gpu={utilization:98,freeMiB:4800},layers=20;
-  const starts=[];
-  const model=createBalancedLocalModel({modelPath:'models/test.gguf',readGpu:async()=>gpu,
-    create:({modelPath,device})=>({start:async()=>{starts.push({modelPath,device});},close:async()=>{},
-      snapshot:()=>({state:'ready',gpuLayers:device==='gpu'?layers:0,backend:device==='gpu'?'vulkan':'cpu'}),
-      analyze:async()=>({reply:device})})});
-  try{
-    assert.match((await model.preheatConversation('direct')).error,/GPU/);
-    assert.equal(starts.length,0);
-    assert.deepEqual(await model.preheatConversation('main'),{ready:true,size:'4',backend:'vulkan'});
-    assert.equal((await model.work('收到',{session:{}})).reply,'gpu');
-    assert.equal(starts.length,1);
-    assert.match(starts[0].modelPath,/4B/);
-    assert.equal((await model.work('下一轮',{session:{}})).reply,'cpu');
-    gpu={utilization:10,freeMiB:7100};
-    layers=0;
-    assert.match((await model.preheatConversation('direct')).error,/GPU/);
-    assert.deepEqual(starts.map(x=>x.device),['gpu','cpu','gpu']);
-    assert.match(starts[2].modelPath,/9B.*Aggressive/);
-    assert.equal(model.snapshot().state,'idle');
-  }finally{await model.close();}
+test('后台日记跳过 GPU 采样，固定分工照常推理，普通路由可在 GPU 加载失败后回退 CPU',async()=>{
+  for(const [taskDevice,expectedDevices] of [['gpu',['gpu']],['cpu',['cpu']],[undefined,['gpu','cpu']]]){
+    const devices=[];
+    let samples=0;
+    const model=createBalancedLocalModel({modelPath:'models/test.gguf',taskDevice,
+      readGpu:async()=>{samples++;return {utilization:100,freeMiB:0};},
+      create:({device})=>{
+        devices.push(device);
+        const failed=!taskDevice&&device==='gpu';
+        return {start:async()=>{},close:async()=>{},
+          snapshot:()=>({state:failed?'error':'ready',gpuLayers:device==='gpu'?20:0}),
+          analyze:async()=>({text:'已写完'})};
+      }});
+    try{
+      const result=await model.memory('日记素材','写成手记',{},new AbortController().signal,
+        {name:'diary-writing',stage:'narrate',backgroundBudget:true,aiTier:'4'});
+      assert.deepEqual(result,{text:'已写完'});
+      assert.equal(samples,0);
+      assert.deepEqual(devices,expectedDevices);
+    }finally{await model.close();}
+  }
 });
 
 test('对话模型连续空闲五分钟才释放，进行中的推理会重置计时',async t=>{
@@ -94,109 +80,6 @@ test('辨认纠正上一轮和引用纠正用语',()=>{
   }
   for(const text of ['我今天改了日记','阿岚说“你理解错了”。','不是很开心','这份表不对']){
     assert.equal(correctionTurn(text,{用户:'上一轮'}),false,text);
-  }
-});
-
-test('普通交互默认 Aggressive 9B，显存不足降档，候补用标准 9B，直连仍用 Aggressive',async()=>{
-  const aggressive='Qwen3.5-9B-Uncensored-HauhauCS-Aggressive';
-  let gpu={utilization:10,freeMiB:6656},failAggressive=false;
-  const m=createBalancedLocalModel({modelPath:'models/test.gguf',localFirst:true,readGpu:async()=>gpu,
-    create:({modelPath,device})=>{
-      const name=/Qwen3\.5-.+(?=-Q4_K_M\.gguf$)/u.exec(modelPath)[0];
-      return {start:async()=>{},close(){},snapshot:()=>({state:name===aggressive&&device==='gpu'&&failAggressive?'unavailable':'ready',gpuLayers:device==='gpu'?25:0}),
-        analyze:async()=>({reply:name+' · '+device})};
-    }});
-  const work=async(tier='main',session={})=>(await m.work('普通交互',{tier,session})).reply;
-  const direct=async()=>(await m.analyze('你好',{hint:'direct'})).reply;
-  try{
-    const first={};
-    await m.start();
-    assert.equal(await work('main',first),aggressive+' · gpu');
-    gpu={utilization:10,freeMiB:5000};
-    assert.equal(await work('main',first),aggressive+' · gpu'); // 同一轮生成和复审用同档。
-    assert.equal(await work('upgrade'),'Qwen3.5-9B · cpu');
-    assert.equal(await work(),'Qwen3.5-4B · gpu');
-    assert.equal(await direct(),aggressive+' · cpu');
-    gpu.freeMiB=2500;
-    assert.equal(await work(),'Qwen3.5-2B · gpu');
-    gpu=null;
-    assert.equal(await work(),'Qwen3.5-2B · cpu');
-    gpu={utilization:10,freeMiB:7000};
-    assert.equal(await work('upgrade'),'Qwen3.5-9B · gpu');
-    failAggressive=true;
-    assert.equal(await work(),'Qwen3.5-4B · gpu');
-    failAggressive=false;
-    assert.equal(await direct(),aggressive+' · gpu');
-  }finally{await m.close();}
-});
-
-test('换档保留上轮、等旧进程退出、加载失败降档，重复失败升级',async()=>{
-  let active=0,ready=true,fail=false;
-  const created=[];
-  const previous={用户:'我的名字是阿澄',绯月:'我记得了'};
-  const m=createBalancedLocalModel({modelPath:'models/test.gguf',readGpu:async()=>({utilization:10,freeMiB:7200}),
-    create:({modelPath,device})=>{
-      assert.equal(active++,0);
-      const size=modelPath.includes('HauhauCS-Aggressive')?'Aggressive':/Qwen3.5-([\d.]+)B/u.exec(modelPath)[1];created.push(size);
-      return {start:async()=>{},close:async()=>{await new Promise(r=>setImmediate(r));active--;},
-        snapshot:()=>({state:size==='9'&&!ready?'unavailable':'ready',gpuLayers:device==='gpu'?25:0}),
-        analyze:async(text,options)=>{assert.equal(options.previous,previous);return fail?{error:'LOCAL_AI_INFERENCE_FAILED'}:{kind:'chat',reply:size};}};
-    }});
-  const ask=s=>m.analyze(s,{hint:'auto',previous});
-  try{
-    const warm=m.start();assert.equal((await ask('你好')).reply,'Aggressive');await warm;
-    assert.equal((await ask('你理解错了')).reply,'9');await new Promise(r=>setImmediate(r));assert.equal(active,0);
-    ready=false;
-    assert.equal((await ask('你理解错了')).reply,'Aggressive');await new Promise(r=>setImmediate(r));assert.equal(active,0);
-    fail=true;await ask('同一问题');await ask('同一问题');fail=false;
-    assert.equal((await ask('同一问题')).reply,'Aggressive');
-    assert.deepEqual(created,['Aggressive','9','9','Aggressive','Aggressive','9','Aggressive']);
-    assert.equal((await ask('另一件事')).reply,'Aggressive');
-  }finally{await m.close();}
-});
-
-test('三轮未通过时转交原草稿及反馈，改进模型上限两轮，已耗尽的时间不能再用',async()=>{
-  const calls=[],revision={draft:'弄反了称呼',feedback:'纠正称呼方向'};
-  const m=createBalancedLocalModel({modelPath:'models/test.gguf',readGpu:async()=>({utilization:50,freeMiB:6500}),
-    create:()=>({start:async()=>{},close(){},snapshot:()=>({state:'ready',gpuLayers:25}),
-      async analyze(text,opts){calls.push({text,limit:opts.reviewLimit,revision:opts.revision});return {error:'LOCAL_AI_REPLY_REVIEW_REJECTED',revision};}})});
-  try{
-    const result=await m.analyze('我们该怎么称呼彼此',{hint:'auto'});
-    assert.deepEqual(result,{error:'LOCAL_CHAT_REVIEW_FAILED'});
-    assert.deepEqual(calls.map(c=>c.limit),[3,2]);
-    assert.deepEqual(calls[1].revision,revision);
-    assert.equal(calls[0].text,calls[1].text);
-    assert.deepEqual(await m.analyze('过期的问题',{hint:'auto',turnStart:performance.now()-61000}),{error:'LOCAL_CHAT_TIME_LIMIT'});
-    assert.equal(calls.length,2);
-    assert.deepEqual(await m.analyze('已花了三十五秒的问题',{hint:'auto',turnStart:performance.now()-35000}),
-      {error:'LOCAL_CHAT_REVIEW_FAILED'});
-    assert.deepEqual(calls.slice(2).map(c=>c.limit),[3,2]);
-  }finally{await m.close();}
-});
-
-test('修订按显存选 4B 或 2B GPU，显卡繁忙用 2B CPU，空闲超过一分钟仍复用模型',async context=>{
-  context.mock.timers.enable({apis:['setTimeout']});
-  for(const [gpu,device,size] of [[{utilization:32,freeMiB:5900},'gpu','4'],
-    [{utilization:32,freeMiB:3000},'gpu','2'],[{utilization:72,freeMiB:5900},'cpu','2']]){
-    const selections=[];
-    const model=createBalancedLocalModel({modelPath:'models/test.gguf',readGpu:async()=>gpu,
-      create:({modelPath,device})=>{
-        selections.push([modelPath,device]);
-        return {start:async()=>{},close(){},snapshot:()=>({state:'ready',gpuLayers:device==='gpu'?25:0}),
-          analyze:async()=>({result:'ok'})};
-      }});
-    const signal=new AbortController().signal;
-    try{
-      await model.memory('手记原稿','核对',{},signal,{name:'memory-refinement'});
-      context.mock.timers.tick(61_000);
-      await model.memory('待修段落','拟稿',{},signal,{name:'memory-refinement'});
-      assert.equal(selections.length,1);
-      assert(selections[0][0].endsWith(`Qwen3.5-${size}B-Q4_K_M.gguf`));
-      assert.equal(selections[0][1],device);
-      await model.memory('普通手记','整理',{},signal,{name:'diary-writing'});
-      assert.match(selections[1][0],/9B-Uncensored-HauhauCS-Aggressive/u);
-      assert.equal(selections[1][1],'cpu');
-    }finally{await model.close();}
   }
 });
 
@@ -244,3 +127,22 @@ test('修订取消后等模型停止，正常停止继续复用，无响应才�
     }
   }finally{await model.close();}
 });
+test('本地只用 Qwen3.5 4B：显存够用走 GPU，繁忙或缺读数走 CPU',async()=>{
+  const first=(utilization,freeMiB,resident=0)=>modelChoices({utilization,freeMiB},resident)[0];
+  assert.deepEqual(first(10,4000),{size:'4',device:'gpu'});
+  assert.deepEqual(first(80,8000),{size:'4',device:'cpu'});
+  assert.deepEqual(first(10,3000),{size:'4',device:'cpu'});
+  assert.deepEqual(first(10,3000,900),{size:'4',device:'gpu'});
+  assert.deepEqual(modelChoices(null),[{size:'4',device:'cpu'}]);
+  const loaded=[];
+  const m=createBalancedLocalModel({modelPath:'models/dir/test.gguf',readGpu:async()=>({utilization:10,freeMiB:7000}),
+    create:({modelPath,device})=>{loaded.push(modelPath);
+      return {start:async()=>{},close:async()=>{},snapshot:()=>({state:'ready',gpuLayers:device==='gpu'?25:0}),
+        analyze:async()=>({reply:device})};}});
+  try{
+    assert.equal((await m.analyze('你好',{hint:'auto'})).reply,'gpu');
+    assert.equal((await m.work('普通交互',{tier:'main',session:{}})).reply,'gpu');
+    assert.deepEqual(loaded.map(file=>file.split(/[\\/]/).pop()),['Qwen3.5-4B-Q4_K_M.gguf']);
+  }finally{await m.close();}
+});
+

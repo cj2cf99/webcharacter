@@ -1,0 +1,23 @@
+{
+  "name": "top-raise-20261124",
+  "installRoot": "G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion",
+  "installGit": "39fd098e40ebf7c2c82dd5a6f9944ae98055566e",
+  "baselineProcess": {
+    "pid": 20440,
+    "started": "2026-11-24T20:42:36+09:00"
+  },
+  "files": [
+    {
+      "path": "desktop/shell.mjs",
+      "baselineSha256": "ab85871029a82b0fafa6e1ced2fbc15c436a901fae7ab0244872a24ed680db40",
+      "candidateSha256": "5365d387e3246ecbc596ddff109498c820a0bfcb63eafef76f57c506ed437a66",
+      "bytes": 81710
+    },
+    {
+      "path": "desktop/panel-window.mjs",
+      "baselineSha256": "8ebed45aceccb34dc90eda5b0d082cb783bd9ffa63959821e1785807a934c6d1",
+      "candidateSha256": "2b488476a941f99671fb411899740da4f9d8e12603307a1ff9341d997cee9bb4",
+      "bytes": 3441
+    }
+  ]
+}

@@ -77,3 +77,22 @@ export async function loadWeatherAuth(filename) {
   const credential = await readWeatherCredential(filename);
   return credential ? qweatherAuth(credential) : null;
 }
+
+export function createHourlyWeatherRequest({loadAuth = loadWeatherAuth, fetcher = fetch} = {}) {
+  let loading;
+  return async (coordinates, signal) => {
+    loading ??= loadAuth().then(auth => {
+      if (!auth) throw new Error('尚无本机天气凭据');
+      return auth;
+    }).catch(() => {
+      loading = undefined;
+      throw Object.assign(new Error('本机天气凭据不可用'), {code: 'WEATHER_NOT_CONFIGURED'});
+    });
+    const auth = await loading;
+    const response = await fetcher(auth.origin + '/weather/v1/hourly/' + coordinates + '?hours=7&lang=zh', {
+      headers: auth.header(), redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(9000)]),
+    });
+    if (response.status === 401 || response.status === 403) loading = undefined;
+    return response;
+  };
+}

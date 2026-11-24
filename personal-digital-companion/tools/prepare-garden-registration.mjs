@@ -195,29 +195,22 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
     const [input,output]=args;
     const request=JSON.parse((await readFile(input,'utf8')).replace(/^\uFEFF/,''));
     if(structured)invariant(request.baseline,'请先 inspect，再复制目录的 baseline 对象制单');
-    const call=(structured||['succeeded','failed'].includes(request.release))?await turnClient(address,request):null;
+    const call=(structured||['succeeded','failed'].includes(request.release))?await turnClient(address,request).catch(()=>null):null;
     if(call){
-      let turn=await call();
-      if(turn.state==='waiting')console.error('等待统一取号，位置 '+turn.position+'。放弃时使用 cancel 和原请求文件。');
-      while(turn.state==='waiting'){await wait(1500);turn=await call('',undefined,true);}
-      if(turn.state==='submitted'){console.log(JSON.stringify(turn));process.exit(0);}
-      if(turn.reviewHash){
+      const turn=await call().catch(()=>null);
+      if(turn?.state==='submitted'){console.log(JSON.stringify(turn));process.exit(0);}
+      if(turn?.reviewHash){
         const file=resolve(output,'registration.json');
-        const saved=JSON.parse(await readFile(file,'utf8'));
-        invariant(hash(canonical(saved))===turn.reviewHash,'请使用上次定稿目录，或先取消原取号');
-        console.log(JSON.stringify({file,reviewHash:turn.reviewHash,id:request.id}));process.exit(0);
+        const saved=await readFile(file,'utf8').then(t=>JSON.parse(t)).catch(()=>null);
+        if(saved&&hash(canonical(saved))===turn.reviewHash){
+          console.log(JSON.stringify({file,reviewHash:turn.reviewHash,id:request.id}));process.exit(0);
+        }
       }
     }
-    try{
-      const catalog=catalogFile?JSON.parse((await readFile(catalogFile,'utf8')).replace(/^\uFEFF/,'')):null;
-      const plan=await preparePlan(request,source,modelPath,catalog);
-      const reviewHash=await writePackage(plan,resolve(output));
-      if(call){const sealed=await call('',reviewHash);invariant(sealed.state==='ready','此批次已提交，请查看原回执');}
-      if(structured)console.log(JSON.stringify({file:resolve(output,'registration.json'),reviewHash,id:plan.id}));
-      else{console.log(JSON.stringify(plan,null,2));console.log('reviewHash '+reviewHash);}
-    }catch(error){
-      if(call)await call('/cancel',undefined,false,true).catch(()=>console.error('取号状态待核对，请使用原编号查询或取消。'));
-      throw error;
-    }
+    const catalog=catalogFile?JSON.parse((await readFile(catalogFile,'utf8')).replace(/^\uFEFF/,'')):null;
+    const plan=await preparePlan(request,source,modelPath,catalog);
+    const reviewHash=await writePackage(plan,resolve(output));
+    if(structured)console.log(JSON.stringify({file:resolve(output,'registration.json'),reviewHash,id:plan.id}));
+    else{console.log(JSON.stringify(plan,null,2));console.log('reviewHash '+reviewHash);}
   }
 }

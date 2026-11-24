@@ -38,9 +38,10 @@ class SkillTests(unittest.TestCase):
                 return {"account":{"current_plan":"Researcher","plan_limit":1000,"plan_usage":0,"paygo_limit":None,"paygo_usage":0}}
             payloads.append(payload)
             if payload["include_domains"] == ["x.com"]:
-                rows = [{"url":f"https://x.com/news/status/{id}", "content":"市场下跌"} for id in (fresh, older, fresh)]
+                rows = [{"url":f"https://x.com/news/status/{id}", "content":"AI markets fell"} for id in (fresh, older, fresh)]
             else:
-                rows = [{"url":"https://www.reddit.com/r/stocks/comments/abc/a-title", "content":"市场走势"},
+                rows = [{"url":"https://www.reddit.com/r/stocks/comments/abc/a-title", "content":"AI markets discussion"},
+                        {"url":"https://www.reddit.com/r/stocks/comments/xyz/other", "content":"Foreign exchange and commodities"},
                         {"url":"https://www.reddit.com/r/stocks/", "content":"版面"}]
             return {"results": rows, "usage":{"credits":1}}
         with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {"TAVILY_API_KEY":"test-only"}):

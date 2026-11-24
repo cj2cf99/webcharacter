@@ -3,7 +3,7 @@ import {SettingsStore} from './settings-store.mjs';
 import {watchFileChanges,warnLiveUpdate} from './live-files.mjs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-export function attachSettings(electron,{win,profile,bundle,root,legacySound,onDisplayChange}){
+export function attachSettings(electron,{win,profile,bundle,root,legacySound,onPositionSettingsChange}){
  const {ipcMain,dialog}=electron;const store=new SettingsStore(profile,bundle,legacySound);let panel=null,lastRuntime=null;
  const versions=new Map();let revision=0;
  function snapshot(){
@@ -16,11 +16,18 @@ export function attachSettings(electron,{win,profile,bundle,root,legacySound,onD
  function mediaChanged(paths){revision++;for(const file of paths)versions.set(pathToFileURL(file).href,revision);notify('media',true);}
  const trusted=e=>[win,panel].some(w=>w&&!w.isDestroyed()&&e.sender===w.webContents&&e.senderFrame===w.webContents.mainFrame);
  const notify=(kind,external=false)=>{const value={...snapshot(),kind,external};win.webContents.send('pc:changed',value);panel?.webContents.send('pc:changed',value);};
- const reload=()=>{const kind=store.reload();if(kind){onDisplayChange?.(store.data.config.confineToScreen);notify(kind,true);}};
+ const reload=()=>{const kind=store.reload();if(kind){onPositionSettingsChange?.(store.data.config);notify(kind,true);}};
+ function save(config,domain){
+   reload();
+   const result=store.save(config,domain);
+   if(domain==='display'||domain==='movement')onPositionSettingsChange?.(result.config);
+   notify(domain);
+   return result;
+ }
  const stopWatching=watchFileChanges(store.file,reload);
  const handlers={
   'pc:get':snapshot,
-  'pc:save':(_e,{config,domain})=>{reload();const result=store.save(config,domain);if(domain==='display')onDisplayChange?.(result.config.confineToScreen);notify(domain);return result;},
+  'pc:save':(_e,{config,domain})=>save(config,domain),
   'pc:import':async(_e,kind)=>{if(!['audio','video'].includes(kind))throw Error('资源类型无效');const result=await dialog.showOpenDialog(panel,{properties:['openFile'],filters:[{name:kind==='video'?'WebM动画':'语音',extensions:kind==='video'?['webm']:['wav','mp3','ogg','m4a','flac']}]});if(result.canceled)return null;const value=store.importFile(result.filePaths[0],kind);notify('resources');return value;},
   'pc:rename':(_e,{id,name})=>{const value=store.rename(id,name);notify('resources');return value;},
   'pc:runtime':()=>lastRuntime
@@ -47,5 +54,5 @@ export function attachSettings(electron,{win,profile,bundle,root,legacySound,onD
    });
  }
  function close(){stopWatching();for(const name of Object.keys(handlers))ipcMain.removeHandler(name);ipcMain.removeListener('pc:runtime',runtime);panel?.destroy();}
- return {open,close,store,mediaChanged,get panel(){return panel}};
+ return {open,close,store,save,mediaChanged,get panel(){return panel}};
 }

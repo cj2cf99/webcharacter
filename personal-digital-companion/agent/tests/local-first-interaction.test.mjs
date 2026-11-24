@@ -7,84 +7,53 @@ import {attachScreenQuestion} from '../../desktop/screen-question-host.mjs';
 import {fixture as questionFixture} from './screen-question-fixture.mjs';
 import {handleAssistantMessage} from '../assistant/message.mjs';
 import {createBindingAiClient} from '../assistant/cloudflare.mjs';
+import {writeDeepSeekReply} from '../../desktop/chat-deepseek.mjs';
 
 const context={问题:'使用原文回答'};
 const instruction='写实际答复';
 const normalize=raw=>raw?.reply?{value:raw.reply,review:raw.reply}:null;
 const config={purpose:'文字问答',context,instruction,schema:answerSchema,normalize};
 
-test('主力复审拒绝后带同一反馈重做，合格时不请求候补',async()=>{
-  const stages=[];
-  const work=createInteractionWork({model:{async work(input,options){
-    const review=Boolean(options.schema.properties.selected);
-    stages.push({tier:options.tier,review,input});
-    if(review)return stages.length===2?{selected:0,feedback:'保留给出的单位'}:{selected:1,feedback:''};
-    return {reply:stages.length===1?'草稿':'合格答复'};
+
+
+test('本机路径只生成一次，不复审；失败直接报未取得结果',async()=>{
+  let calls=0;
+  const work=createInteractionWork({model:{async work(_input,{schema}){
+    calls++;assert.equal(schema.properties.selected,undefined);return {reply:'本机答复'};
   }}});
-  assert.equal(await work({...config,cloud:()=>assert.fail('主力合格后无需云端')}),'合格答复');
-  assert.deepEqual(stages.map(s=>[s.tier,s.review]),[['main',false],['main',true],['main',false],['main',true]]);
-  assert.match(stages[2].input,/保留给出的单位/);
+  assert.equal(await work({...config,localOnly:true,cloud:()=>assert.fail('私密输入不发服务器')}),'本机答复');
+  assert.equal(calls,1);
+  const failing=createInteractionWork({model:{work:async()=>({error:'LOCAL_AI_MODEL_MISSING'})}});
+  await assert.rejects(failing({...config,localOnly:true}),{code:'WORK_CANDIDATES_FAILED'});
 });
 
-for(const [name,upgrade,cloud,selected,expected] of [
-  ['只有升级可用',{reply:'升级答复'},{error:'AI_COOLDOWN'},1,'升级答复'],
-  ['只有云端可用',{error:'LOCAL_AI_INFERENCE_FAILED'},{reply:'云端答复'},1,'云端答复'],
-  ['两份同时返回',{reply:'升级答复'},{reply:'云端答复'},2,'云端答复'],
-  ['两路都失败',{error:'LOCAL_AI_INFERENCE_FAILED'},{error:'AI_COOLDOWN'},0,null],
-  ['候补均被复审拒绝',{reply:'升级答复'},{reply:'云端答复'},0,null],
-])test(`${name} · 候补相互独立，合并复审一次`,async()=>{
-  const calls=[];
-  const started=Promise.withResolvers();
-  const work=createInteractionWork({model:{async work(input,options){
-    if(options.schema.properties.selected){calls.push('review');return {selected,feedback:'核对结果'};}
-    calls.push(options.tier);
-    if(options.tier==='main')return {error:'LOCAL_AI_INFERENCE_FAILED'};
-    await started.promise;
-    return upgrade;
-  }}});
-  const run=work({...config,redraft:0,cloud(){calls.push('cloud');started.resolve();return cloud;}});
-  if(expected)assert.equal(await run,expected);
-  else await assert.rejects(run,{code:'WORK_CANDIDATES_FAILED'});
-  assert.deepEqual(calls.slice(0,3).sort(),['cloud','main','upgrade']);
-  assert.equal(calls.filter(x=>x==='review').length,upgrade.error&&cloud.error?0:1);
+test('文字单次交给半岛；半岛失败才退回服务器候补，私密资料不外发',async t=>{
+  const key=process.env.bandao_api_key,realFetch=globalThis.fetch,seen=[];
+  process.env.bandao_api_key='fixture-key';
+  let mode='ok';
+  globalThis.fetch=async(url,options)=>{
+    seen.push(JSON.parse(options.body));
+    return mode==='ok'?Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'云端答复'})}}]}):new Response(null,{status:500});
+  };
+  t.after(()=>{globalThis.fetch=realFetch;if(key===undefined)delete process.env.bandao_api_key;else process.env.bandao_api_key=key;});
+  const work=createInteractionWork({model:{work:()=>assert.fail('有半岛时不占本机')}});
+  assert.equal(await work(config),'云端答复');
+  assert.equal(seen.length,1);assert.equal(seen[0].model,'deepseek-v4.1-flash');assert.equal(seen[0].reasoning_effort,'low');
+  assert.deepEqual(JSON.parse(seen[0].messages[1].content.split('\n\n（')[0]),{原始输入:context});
+  mode='down';
+  assert.equal(await work({...config,cloud:()=>({reply:'服务器答复'})}),'服务器答复');
+  await assert.rejects(work({...config,localOnly:true}),{code:'WORK_CANDIDATES_FAILED'});
 });
 
-test('取消候补时两路信号终止，迟到结果不会进入复审',async()=>{
-  const abort=new AbortController(),cloudStarted=Promise.withResolvers(),late=Promise.withResolvers();
-  let upgraded;
-  const work=createInteractionWork({model:{async work(input,{tier,signal,schema}){
-    assert.equal(Boolean(schema.properties.selected),false);
-    if(tier==='main')return {error:'LOCAL_AI_INFERENCE_FAILED'};
-    upgraded=signal;
-    return late.promise;
-  }}});
-  const run=work({...config,redraft:0,signal:abort.signal,cloud(signal){assert.equal(signal,abort.signal);cloudStarted.resolve();return late.promise;}});
-  await cloudStarted.promise;
-  abort.abort();
-  await assert.rejects(run,{name:'AbortError'});
-  assert.ok(upgraded.aborted);
-  late.resolve({reply:'迟到答复'});
-});
-
-test('本地专用输入不发送云端候补和最终复审',async()=>{
-  const work=createInteractionWork({request:()=>assert.fail('本地证据不能外发'),model:{async work(input,options){
-    if(options.schema.properties.selected)return {selected:1,feedback:''};
-    return options.tier==='upgrade'?{reply:'本地识读'}:{error:'LOCAL_VISION_UNAVAILABLE'};
-  }}});
-  assert.equal(await work({...config,localOnly:true,redraft:0,cloud:()=>assert.fail('不可上传')}),'本地识读');
-});
-
-test('主力忽略截止信号时仍允许云端候补和一次复审，迟到主力作废',async()=>{
-  const late=Promise.withResolvers(),events=[];
-  const work=createInteractionWork({model:{work:()=>late.promise},log:event=>events.push(event),
-    request:async()=>Response.json({work:{selected:1,feedback:''}})});
-  // AbortSignal.timeout 的计时器不独占 Node 事件循环。
-  const timer=setTimeout(()=>late.resolve({reply:'迟到主力'}),250);
-  try{
-    assert.equal(await work({...config,budget:20,cloud:()=>({reply:'复审后答案'})}),'复审后答案');
-    assert.ok(events.some(event=>event.stage==='主力本地 AI'&&event.error==='LOCAL_AI_TIMEOUT'));
-    assert.deepEqual(events.filter(event=>event.step==='复审').map(event=>event.processor),['cloud']);
-  }finally{clearTimeout(timer);late.resolve({reply:'迟到主力'});}
+test('图片识读只调用传入的视觉候选一次，不经文字模型',async()=>{
+  let calls=0;
+  const work=createInteractionWork({model:{work:()=>assert.fail('图片不走文字模型')}});
+  const answer=await work({...config,mainCandidate:async()=>{calls++;return {text:'一只猫'};},
+    normalize:raw=>raw?.text?{value:raw.text,review:raw.text}:{error:'LOCAL_VISION_UNAVAILABLE'}});
+  assert.equal(answer,'一只猫');assert.equal(calls,1);
+  await assert.rejects(work({...config,mainCandidate:async()=>({reason:'看不清'}),
+    normalize:raw=>raw?.text?{value:raw.text}:{error:'LOCAL_VISION_UNAVAILABLE'}}),{code:'WORK_CANDIDATES_FAILED'});
+  assert.equal(calls,1);
 });
 
 test('云端候补契约支持受限图像操作与单轮复审，不接受任意工具',async()=>{
@@ -122,14 +91,13 @@ test('旧链在检查后结束，新登记也不能跳过确认',async t=>{
   assert.equal(submitted,0);
 });
 
-test('TXT 气泡把完整正文交给主力并复审，本地合格时不上传',async t=>{
+
+test('TXT 气泡把完整正文一次交给本机 4B，不复审、不上传',async t=>{
   const ui=questionFixture(),root=resolve(import.meta.dirname,'../..');
   const body='合成 TXT 开头。'+'这是测试正文。'.repeat(300)+'最后的编号是 Z-172。';
-  let reviews=0;
-  const interactionWork=createInteractionWork({model:{async work(input,{schema}){
+    const interactionWork=createInteractionWork({model:{async work(input,{schema}){
     assert.match(input,/合成 TXT 开头/);
     assert.match(input,/最后的编号是 Z-172/);
-    if(schema.properties.selected){reviews++;return {selected:1,feedback:''};}
     return {reply:'文档最后的编号是 Z-172。'};
   }}});
   const host=attachScreenQuestion(ui.electron,{win:ui.win,root,bundle:'unused',profile:'unused',history:ui.history,interactionWork,
@@ -137,10 +105,9 @@ test('TXT 气泡把完整正文交给主力并复审，本地合格时不上传'
   t.after(()=>host.close());await host.open();
   const result=await ui.handlers.get('screen-qa:ask')(ui.event(host.panel),{text:'概括这个文件',attachment:{name:'合成.txt',kind:'text',data:body}});
   assert.equal(result.text,'文档最后的编号是 Z-172。');
-  assert.equal(reviews,1);
 });
 
-test('普通聊天保留上一轮上下文，拦截长段复述并完整归档长回复',async t=>{
+test('普通聊天保留上一轮上下文，拦截长段复述（带反馈重答一次）并完整归档长回复',async t=>{
   const ui=questionFixture(),root=resolve(import.meta.dirname,'../..');
   const oldReply='下雨时沿着有屋檐的商店街慢慢走，走到尽头就能从河边的玻璃窗看见车站对面那棵已经开始变红的枫树。';
   const copiedReply='好呀。'+oldReply.replace('，','。');
@@ -148,18 +115,14 @@ test('普通聊天保留上一轮上下文，拦截长段复述并完整归档�
     +'记得带一件轻薄的外套，傍晚回来的路上会凉一点。要是不想走太远，我们就在桥头折返，还能顺便看看周末开的小摊有没有收摊。'
     +'等天色完全暗下来再坐车回家，路上的灯刚亮起来，正好能看见倒映在河里的那一排树影。回程也可以提前一站下车，绕到街角买杯热茶。';
   const at=Date.now(),saved=new Map([['previous',{id:'previous',at:at-1000,state:'answer',question:'下雨时到哪走走？',text:oldReply}]]);
-  const drafts=[],reviews=[],events=[];
+  const drafts=[],events=[];
   const history={latest:()=>saved.get('previous'),read:()=>[...saved.values()].reverse(),save:turn=>saved.set(turn.id,turn)};
   const interactionWork=createInteractionWork({log:event=>events.push(event),model:{async work(input,{schema}){
     const data=JSON.parse(input);
-    if(schema.properties.selected){
-      reviews.push(data.候选[0]);
-      return {selected:1,feedback:''};
-    }
     drafts.push(data);
     const question=data.原始输入.用户请求;
     const reply=question==='把上一轮的话原样复述一遍。'?freshReply
-      : data.复审反馈?question+'\n\n'+freshReply:copiedReply;
+      : data.上轮反馈?question+'\n\n'+freshReply:copiedReply;
     const limit=schema.properties.reply.maxLength;
     return {reply:limit?reply.slice(0,limit):reply};
   }}});
@@ -170,27 +133,30 @@ test('普通聊天保留上一轮上下文，拦截长段复述并完整归档�
   const actual=await ask('那太阳出来呢？');
   assert.ok([...freshReply].length>160);
   assert.equal(actual.text,freshReply);
-  assert.equal(drafts[0].原始输入.上一轮.绯月,oldReply);
-  assert.match(drafts[1].复审反馈,/复用了上一轮/);
-  assert.deepEqual(reviews,[freshReply]);
+  assert.equal(drafts[0].原始输入.最近对话.at(-1).绯月,oldReply);
+  assert.match(drafts[1].上轮反馈,/复用了此前/);
   assert.deepEqual([...saved.values()].map(turn=>turn.text),[oldReply,freshReply]);
   assert.ok(events.some(event=>event.error==='CHAT_REPLY_REPEATED'));
   assert.equal((await ask('把上一轮的话原样复述一遍。')).text,freshReply);
   assert.equal(drafts.length,3);
 });
 
-test('主力无法加载且只有云端给出答复，用云端最终复审一次后才能交付',async()=>{
-  let reviews=0;
-  const work=createInteractionWork({model:{work:async()=>({error:'LOCAL_AI_MODEL_MISSING'})},request:async(path,options)=>{
-    assert.equal(path,'/api/assistant/message');
-    const {work}=JSON.parse(options.body);
-    assert.equal(work.purpose,'review');
-    assert.match(work.content,/可核对答复/);
-    assert.doesNotMatch(work.content,/只在本机的记忆/);
-    reviews++;
-    return Response.json({work:{selected:1,feedback:''}});
-  }});
-  assert.equal(await work({...config,context:{...context,记忆:'只在本机的记忆'},allowCloudReview:false,cloudReviewContext:context,
-    cloud:()=>({reply:'可核对答复'})}),'可核对答复');
-  assert.equal(reviews,1);
+
+test('普通对话带最近几轮（至多 4 轮、按时间顺序），转写与其他文种不带多轮历史',async t=>{
+  const ui=questionFixture(),root=resolve(import.meta.dirname,'../..');
+  const seen=[];
+  const interactionWork=createInteractionWork({model:{async work(input,{instruction}){
+    const data=JSON.parse(input).原始输入;seen.push({data,instruction});return {reply:'答：'+data.用户请求};
+  }}});
+  const host=attachScreenQuestion(ui.electron,{win:ui.win,root,bundle:'unused',profile:'unused',history:ui.history,interactionWork,
+    client:{askText:()=>assert.fail('无需云端'),forget(){}},visible:false});
+  t.after(()=>host.close());await host.open();
+  const ask=text=>ui.handlers.get('screen-qa:ask')(ui.event(host.panel),{text});
+  for(const text of ['话题甲','话题乙','话题丙','话题丁','话题戊','话题己'])assert.equal((await ask(text)).state,'answer');
+  assert.equal(seen[0].data.最近对话,undefined);
+  const last=seen.at(-1).data;
+  assert.deepEqual(last.最近对话.map(round=>round.用户),['话题乙','话题丙','话题丁','话题戊']);
+  assert.deepEqual(last.最近对话.map(round=>round.绯月),['答：话题乙','答：话题丙','答：话题丁','答：话题戊']);
+  assert.match(seen.at(-1).instruction,/最近对话.*保持话题连贯/u);
+  assert.match(seen.at(-1).instruction,/上轮反馈/);
 });

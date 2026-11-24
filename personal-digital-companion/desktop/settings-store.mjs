@@ -6,6 +6,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {SOUND_NODES,normalizeSound} from './sound.mjs';
 import {WINDOW_NODES} from './window-nodes.mjs';
 const ordinaryStates=['idle','special','hover','click','work','drag','walk'];
+const defaultRandomMovement=true;
 export const STATE_IDS=[...ordinaryStates,...Object.keys(WINDOW_NODES)];
 export const PHASES=['single','enter','loop','exit'];
 const mapping={idle:'idle',special:'idle-special',hoverIn:'hover',hoverLoop:'hover-loop',hoverOut:'hover-exit',click:'click',workIn:'work-enter',workLoop:'work-loop',workOut:'work-exit',dragIn:'drag-enter',dragLoop:'drag-loop',dragOut:'drag-exit'};
@@ -22,7 +23,7 @@ export function defaults(old){
     states[id]={mode:node.mode,force:true,play:node.play,slots:{...node.slots},
       sound:Object.fromEntries(PHASES.map(phase=>[phase,{on:false,volume:100,voice:'',delay:0}]))};
   }
-  return {version:1,target:'pc',idleSpecialDelaySeconds:60,confineToScreen:false,master:{enabled:sound.enabled,volume:sound.volume},states};
+  return {version:1,target:'pc',idleSpecialDelaySeconds:60,confineToScreen:false,randomMovement:defaultRandomMovement,master:{enabled:sound.enabled,volume:sound.volume},states};
 }
 export class SettingsStore{
   constructor(profile,bundle,old){
@@ -50,6 +51,7 @@ export class SettingsStore{
       if(migrateIdle){saved.config.idleSpecialDelaySeconds=this.data.config.idleSpecialDelaySeconds;saved.idleTimingVersion=2;}
       const missingScreenLock=saved.config.confineToScreen===undefined;
       if(missingScreenLock)saved.config.confineToScreen=false;
+      if(saved.config.randomMovement===undefined)saved.config.randomMovement=defaultRandomMovement;
       for(const id of missing)saved.config.states[id]=this.data.config.states[id];
       this.data=saved;
       this.validate(saved.config);
@@ -59,6 +61,7 @@ export class SettingsStore{
   catalog(data=this.data){return [...this.builtins,...data.custom.map(a=>({...a,url:pathToFileURL(resolve(this.profile,'media',a.file)).href}))].map(a=>({...a,name:data.names[a.id]||a.name}));}
   reload(){
     const next=JSON.parse(readFileSync(this.file,'utf8').replace(/^\uFEFF/,''));
+    if(next.config&&next.config.randomMovement===undefined)next.config.randomMovement=defaultRandomMovement;
     if(isDeepStrictEqual(next,this.data))return null;
     if(!Array.isArray(next.custom)||!next.names||typeof next.names!=='object'||Array.isArray(next.names)
       ||Object.values(next.names).some(name=>typeof name!=='string'))throw Error('资源清单无效');
@@ -78,7 +81,7 @@ export class SettingsStore{
   snapshot(){return {target:'pc',config:structuredClone(this.data.config),assets:this.catalog()};}
   validate(c,data=this.data){
     const finite=(x,min,max)=>Number.isFinite(x)&&x>=min&&x<=max;
-    if(c?.target!=='pc'||c.version!==1||!finite(c.idleSpecialDelaySeconds,1,3600)||typeof c.confineToScreen!=='boolean'||typeof c.master?.enabled!=='boolean'||!finite(c.master.volume,0,100))throw Error('仅支持本地 PC；设置数据无效');
+    if(c?.target!=='pc'||c.version!==1||!finite(c.idleSpecialDelaySeconds,1,3600)||typeof c.confineToScreen!=='boolean'||typeof c.randomMovement!=='boolean'||typeof c.master?.enabled!=='boolean'||!finite(c.master.volume,0,100))throw Error('仅支持本地 PC；设置数据无效');
     const assets=this.catalog(data),has=(id,kind)=>assets.some(a=>a.id===id&&a.kind===kind);
     for(const id of STATE_IDS){const s=c.states?.[id];if(!s||!['single','triple'].includes(s.mode)||typeof s.force!=='boolean'||!['once','loop'].includes(s.play))throw Error('状态配置无效：'+id);
       const windowNode=WINDOW_NODES[id];
@@ -93,6 +96,7 @@ export class SettingsStore{
     if(domain==='animation'){c.idleSpecialDelaySeconds=input.idleSpecialDelaySeconds;for(const id of STATE_IDS){const s=input.states?.[id];if(!s)throw Error('缺少状态');Object.assign(c.states[id],{mode:s.mode,force:s.force,play:s.play,slots:s.slots});}}
     else if(domain==='sound'){c.master=input.master;for(const id of STATE_IDS)c.states[id].sound=input.states?.[id]?.sound;}
     else if(domain==='display'){if(typeof input.confineToScreen!=='boolean')throw Error('屏幕锁定设置无效');c.confineToScreen=input.confineToScreen;}
+    else if(domain==='movement')c.randomMovement=input.randomMovement;
     else throw Error('设置域无效');
     if(input.target!=='pc')throw Error('禁止写入非本地 PC 目标');this.validate(c);const next={...this.data,config:c};this.persist(next);this.data=next;return this.snapshot();
   }

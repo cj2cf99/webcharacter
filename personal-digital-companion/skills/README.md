@@ -1,6 +1,6 @@
 # 绯月本地技能目录
 
-在支持外置 Skill 的桌面版中，可从默认总纲发布新的子 Skill 版本并即时切换。总纲的用途、调用方式和范例也供本机 `GET /v1/skills` 查询。[外置更新与新增方法](../docs/SKILL_HOT_UPDATE.md)
+总纲、调用接口及外置 Skill 的更新、新增和回退方法见[绯月组织结构与 Skill](../docs/DEVELOPMENT.md#绯月组织结构与-skill)。下文为仓库随附技能索引和维护说明。
 
 总体入口是 `feiyue-interaction`，图像编排入口是 `image-task-chain`。代码和父 skill 使用稳定标识查找子 skill。例如，问答选择登记后加载 `record-submission`，图像任务再按操作使用 `comfy-image-workflows` 的图。桌面规则决定可执行的动作，模型只在该动作范围内理解输入。
 
@@ -28,13 +28,15 @@
 | 已保存的绯月日记与唠叨 | [memory-refinement](memory-refinement/source/SKILL.md) | 闲时逐条核对、拟稿和复核，本机保留修订前后版本和备注 |
 | 本机生图、重绘、局部指令编辑、高清放大 | image-task-chain、comfy-image-workflows | 按步骤保存中间图并返回最终 PNG |
 
-## 更新和查找
+## 随附版本维护和查找
 
 更新绯月手记范本时，同时核对 diary-writing/source/SKILL.md 的成篇范例和同目录 local-ai.json 的六个阶段。每轮手记或补评通过 diaryWriting 读取一次技能快照，Aggressive 9B 按阶段接收短指令，推理日志记录技能名和版本。手动「看绯月写日记」与定时手记沿用同一入口。
 
 手记质问走 `diaryAudit`，使用 `diary-audit` 的摘录、比对、本机关键词联想、回答完整度判定和收笔指令。引文可以跨篇，线上唯一主篇排在引文首位。
 
 绯月记录修订走 `memoryRefinement`。同一条日记或唠叨固定使用一个 Skill 版本，核对、每段稿件和复核依次保存。离线或中断时继续原单条任务，后台复核通过且本机备份落盘后才提交最新版。`python -B skills/catalog.py memoryRefinement` 可检查实际装载的阶段提示与输出结构。
+
+唠叨回应和手记草稿的复审固定核对说话人、行动者、当前事项、原话与栏目的边界。发现复述、答偏、无依据细节、空占位和不再需要的追问时按证据纠正。已保存的历史问题按条进入原记录修订流程，旧问答仍可逐句回查。
 
 在绯月项目目录执行 `python -B skills/catalog.py conversationTranscription` 可读取同版本的转录提示、固定输出结构和本地草稿模板。草稿模板字段由既有业务模板校验。转录执行段独占同一在线模型会话，待确认清单只保存候选和来源。关窗触发、模型会话占用和批量提交已接入桌面开发版。
 

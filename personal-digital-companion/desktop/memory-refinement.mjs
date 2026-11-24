@@ -7,7 +7,6 @@ import {nagCorrectionAfterword} from './nag-reply-check.mjs';
 
 const limit=20;
 const size=144;
-const interactionBudget=15000;
 const title=kind=>kind==='diaries'?'日记':'唠叨';
 const idOf=(kind,record)=>kind==='diaries'?record.day+'.'+record.part:record.id;
 const formatHint=kind=>kind==='diaries'?'diaryWriting':'diaryAudit';
@@ -269,21 +268,20 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,readLo
     const formatRule=draftField==='summary'?'只写一行简短摘要。禁止换行、栏目、日期抬头或重复正文。':
       draftField==='body'?'只编辑给定正文片段。沿用有效栏目，禁止生成整篇日记的日期抬头、摘要、天气、情绪或标签。':
       '当前文种格式：'+shorten(format.content,220);
-    const instruction=[skill.localAi.rules??shorten(skill.content,220),skill.localAi[stage],
+    const instruction=[stage==='review'?skill.localAi.reviewRules??'':skill.localAi.rules??shorten(skill.content,220),skill.localAi[stage],
       stage==='review'?'复核结论只允许 accept 或 revise。':'',formatRule].filter(Boolean).join('\n');
     const modelData=queued&&draftField==='summary'?{原摘要:data.part.text,当前正文:shorten(data.revisedBody,320)}:data;
     const aiCheckpoint=queued?'refine:'+job.taskId+':'+await refinementDigest([stage,skill.version,format.version,job.baseRevision,modelData]):undefined;
-    const deadline=queued?null:AbortSignal.timeout(interactionBudget);
-    const wait=deadline?AbortSignal.any([signal,deadline]):signal;
     let output;
     try{
-      output=await untilAbort(model.memory(JSON.stringify(modelData),instruction,schema,wait,
-        {name:skill.skill,version:skill.version,stage,maxTokens:tokens,...(queued?{aiCheckpoint,aiReview:stage==='draft',aiTier:'2',aiFallback,
-          ...(originalDates.length?{aiKeep:{text:originalDates}}:{})}:{})}),wait);
+      output=await untilAbort(model.memory(JSON.stringify(modelData),instruction,schema,signal,
+        {name:skill.skill,version:skill.version,stage,maxTokens:tokens,...(queued?{aiCheckpoint,aiReview:stage==='draft',aiRole:stage==='review'||stage==='plan'?'assist':'main',aiPriority:stage==='draft'&&data.review?2:1,aiFallback,
+          ...(originalDates.length?{aiKeep:{text:originalDates}}:{})}:{})}),signal);
     }catch(error){
       signal.throwIfAborted();
-      if(deadline?.aborted||error.code==='TimeoutError'||error.code==='LOCAL_AI_TIMEOUT')
-        throw Object.assign(Error('本机修订单次思索达到 15 秒，已保留进度'),{code:'LOCAL_AI_REFINEMENT_TIMEOUT'});
+      if(error.code==='LOCAL_AI_TASK_DISCARDED')outputKey=aiCheckpoint;
+      if(error.code==='TimeoutError'||error.code==='LOCAL_AI_TIMEOUT')
+        throw Object.assign(Error('本机修订单步超时，已保留进度'),{code:'LOCAL_AI_REFINEMENT_TIMEOUT'});
       throw error;
     }
     signal.throwIfAborted();
@@ -354,12 +352,13 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,readLo
   async function run(signal,progress=()=>{}){
     if(running)return {deferred:true};
     running=true;
+    let job;
     try{
       signal.throwIfAborted();
       const local=await reviseLocalNag(signal,progress);
       if(local)return local;
       if(!api)return '本轮没有符合条件的本机修订';
-      let job=JSON.parse(active.get()?.data??'null');
+      job=JSON.parse(active.get()?.data??'null');
       if(!job)job=await choose(signal);
       if(!job)return '本轮没有符合条件的修订';
       if(cancelRemoteIfPrivate(job))return '这条唠叨改为仅本机，已停止远端修订';
@@ -492,6 +491,10 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,readLo
       job.submission={refineId:randomUUID(),fields,digest:reviewDigest};
       store(job);
       return await submit(job,signal,progress);
+    }catch(error){
+      if(!job||error.code!=='LOCAL_AI_TASK_DISCARDED')throw error;
+      await complete(job,null);acknowledge();
+      return '修订任务执行超时，已丢弃';
     }finally{outputKey=undefined;running=false;}
   }
   return {run};

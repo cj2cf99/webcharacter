@@ -1,4 +1,4 @@
-import {appendFile, mkdir, open, readFile, rename, stat} from 'node:fs/promises';
+import {appendFile, mkdir, open, readFile, rename, stat, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tokyoDay} from './conversation-history.mjs';
 import {refusalExcerpt} from '../agent/host/refusal-response.mjs';
@@ -42,9 +42,10 @@ function responseSummary(body) {
   };
 }
 
-export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock = Date.now,memory} = {}) {
+export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock = Date.now,memory,safeStorage} = {}) {
   const file = join(profile, 'task-traffic.jsonl');
   const previous = join(profile,'task-traffic.previous.jsonl');
+  const deepSeekFolder=join(profile,'deepseek-call-snapshots');
   let pending = Promise.resolve();
   let failed = false;
   let indexedDay;
@@ -68,6 +69,48 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
       await appendFile(file, line, {encoding: 'utf8', mode: 0o600});
     }).catch(() => { failed = true; return false; });
     return pending;
+  }
+  async function readDeepSeekStep(id){
+    if(typeof id!=='string'||!/^deepseek-[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/u.test(id)||
+      !await safeStorage?.isAsyncEncryptionAvailable?.())return null;
+    const encrypted=await readFile(join(deepSeekFolder,id+'.bin')).catch(error=>{
+      if(error.code!=='ENOENT')throw error;
+      return null;
+    });
+    if(!encrypted)return null;
+    const {result}=await safeStorage.decryptStringAsync(encrypted);
+    return JSON.parse(result);
+  }
+  async function beginDeepSeek({purpose,input}){
+    const id='deepseek-'+crypto.randomUUID(),started=clock();
+    const event={route:'DeepSeek',operation:purpose,model:input.model,ai_step_id:id};
+    if(!await safeStorage?.isAsyncEncryptionAvailable?.()){
+      await write({...event,direction:'local',error:'DEEPSEEK_AUDIT_UNAVAILABLE'});
+      throw Error('无法加密保存 DeepSeek 调用记录');
+    }
+    const snapshot={provider:'DeepSeek',started,input,status:'running'};
+    const target=join(deepSeekFolder,id+'.bin');
+    try{
+      await mkdir(deepSeekFolder,{recursive:true});
+      await writeFile(target,await safeStorage.encryptStringAsync(JSON.stringify(snapshot)),{flag:'wx',mode:0o600,flush:true});
+    }catch(cause){
+      await write({...event,direction:'local',error:'DEEPSEEK_AUDIT_FAILED'});
+      throw cause;
+    }
+    if(await write({...event,direction:'send'})===false)throw Error('无法写入 DeepSeek 任务日志');
+    return async ({output,error,durationMs,httpStatus})=>{
+      const finished=clock();
+      const result={...snapshot,finished,status:error?'failed':'done',output,error,durationMs,httpStatus};
+      const candidate=target+'.tmp';
+      try{
+        await writeFile(candidate,await safeStorage.encryptStringAsync(JSON.stringify(result)),{flag:'wx',mode:0o600,flush:true});
+        await rename(candidate,target);
+      }catch(cause){
+        await write({...event,direction:'receive',status:httpStatus,error:'DEEPSEEK_AUDIT_FAILED',duration_ms:durationMs});
+        throw cause;
+      }
+      await write({...event,direction:'receive',status:httpStatus,error,duration_ms:durationMs});
+    };
   }
   // 游标只保留文件标识和字节位置。追加日志不改变已打开阅读的分页边界。
   async function readPage(cursor,day=tokyoDay(clock())) {
@@ -175,7 +218,7 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
   }
   return {
     get file(){return memory?join(memory.folder(tokyoDay(clock())),'日志','任务通信.jsonl'):file;},
-    write, readPage, inspectRecent, flush: () => pending, failed: () => failed,
+    write, readPage, inspectRecent, beginDeepSeek, readDeepSeekStep, flush: () => pending, failed: () => failed,
     wrap(request) {
       return async (path, options = {}) => {
         // The query can hold filters and headers carry credentials. Record identifiers and statuses only.

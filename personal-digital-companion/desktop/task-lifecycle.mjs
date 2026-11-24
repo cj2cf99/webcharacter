@@ -26,14 +26,14 @@ export function interruptionDetail(task) {
   const time=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',dateStyle:'medium',timeStyle:'medium'}).format(new Date(date));
   return `任务：${task.metadata?.name||task.type} (${task.task_id})\n参数：${JSON.stringify(task.params)}\n最后记录：${last?`第${last.attempt_no}次 ${last.status}`:task.status}，${time} JST\n结果未知，可能已产生部分操作。重做可能重复原操作。`;
 }
-export async function createDesktopTasks({profile,dialog,request,handlerModule,pollerOptions={},memory,generateImage,openImage,desktopBusy=()=>false,onAutomaticProgress=()=>{},
+export async function createDesktopTasks({profile,dialog,request,handlerModule,pollerOptions={},memory,safeStorage,generateImage,openImage,desktopBusy=()=>false,onAutomaticProgress=()=>{},onExecutionChange=()=>{},
   hasRoom=()=>true,beforeExecute=async()=>{},registrationMayStart=()=>true}={}) {
   // 正式工作队列（docs/FORMAL_WORK_QUEUE.md）：hasRoom 为本地待处理是否还有名额；beforeExecute 在每个任务开始执行前等待正在执行的登记批次并让闲时工作暂停。
   const identity=await getDeviceIdentity(profile);
   let configurationError=null, connection;
   if(request===undefined)try {connection=await loadCloudConnection(profile); request=connection?.request;} catch(error){configurationError=error.message;request=null;}
   const controller=new AbortController();
-  const traffic=createTaskTrafficLog(profile,{memory});
+  const traffic=createTaskTrafficLog(profile,{memory,safeStorage});
   let heartbeatCall;
   let outstanding=0,draining=false,resuming=null;
   const continuation=restartWork(profile);
@@ -201,7 +201,7 @@ export async function createDesktopTasks({profile,dialog,request,handlerModule,p
           await previous;await beforeExecute();
           if(automatic)onAutomaticProgress({title:auto.title,stage:receipt.task.type===PC_IMAGE_GENERATE?'等待生图结果':'正在本机执行'});
           executing++;
-          try{return await sync.executeClaimed(receipt);}finally{executing--;}
+          try{onExecutionChange();return await sync.executeClaimed(receipt);}finally{executing--;onExecutionChange();}
         }finally{release();}
       })();
       inFlight.add(pending);

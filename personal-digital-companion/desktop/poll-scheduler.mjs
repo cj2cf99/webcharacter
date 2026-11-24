@@ -1,7 +1,8 @@
 const memoryPolls=new Set(['diary','nag','review','diaryAudit','curiosity','refinement']);
-const memoryLimit=10*60_000;
 const queueRetryMs=15_000;
-const pauseDetail='闲置整理已满 10 分钟，等下一轮轮询继续';
+const diaryAuditContinuationMs=15_000;
+const diaryAuditWindowMs=5*60_000;
+const diaryAuditWindowKey='diaryAuditWindow';
 const types=[
   {id:'tasks',name:'任务轮询',minutes:15},
   {id:'due',name:'到期事项',minutes:20},
@@ -24,7 +25,7 @@ const goals={tasks:'检查云端待办并处理可领取任务',due:'检查今�
   news:'查阅关注主题的公开报道，有新消息时提醒',newsEditorial:'推进一项新闻编辑或社媒查询阶段',diary:'整理未入册的素材并跟进未解悬念',review:'核查待整理专题并补写缺失的行动评价',
   refinement:'逐条核对绯月已保存的手记或唠叨，修订后保存',inspection:'检查最近的本机任务完成与失败记录'};
 
-export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,clearTimer,add,audit,onIdleResult,weatherLastAt,lastRun=()=>null}){
+export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,clearTimer,add,audit,onIdleResult,weatherLastAt,lastRun=()=>null,beginAiRound}){
   db.exec(`CREATE TABLE IF NOT EXISTS local_polls (
     id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, minutes INTEGER NOT NULL, maximum INTEGER NOT NULL,
     misses INTEGER NOT NULL, queuedAt INTEGER);
@@ -32,56 +33,78 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
   const legacy=db.prepare('SELECT misses,due FROM checks WHERE misses IS NOT NULL ORDER BY id DESC LIMIT 1').get();
   const insert=db.prepare('INSERT OR IGNORE INTO local_polls VALUES(?,?,?,?,?,?)');
   const save=db.prepare('UPDATE local_polls SET enabled=?,minutes=?,maximum=?,misses=?,queuedAt=? WHERE id=?');
+  const readTime=db.prepare('SELECT at FROM idle_poll_resume WHERE id=?');
+  const saveTime=db.prepare('INSERT OR REPLACE INTO idle_poll_resume VALUES(?,?)');
   const jobs=new Map();
   for(const {id,name,minutes} of types){
     if(!handlers[id])continue;
     const misses=id==='due'?legacy?.misses??0:0;
     insert.run(id,Number(id!=='curiosity'),minutes,id==='news'?1:3,misses,misses>=3?legacy.due:null);
     const row=db.prepare('SELECT * FROM local_polls WHERE id=?').get(id);
-    const resumeAt=db.prepare('SELECT at FROM idle_poll_resume WHERE id=?').get(id)?.at??0;
+    const resumeAt=readTime.get(id)?.at??0;
     jobs.set(id,{...row,name,enabled:Boolean(row.enabled),resumeAt,nextAt:null,timer:null,running:false,first:true});
   }
   let started=false,closed=false,retry=null,warmUntil=0;
+  let auditWindowStart=readTime.get(diaryAuditWindowKey)?.at??0;
   const abort=new AbortController();
-  let memoryRound=null;
-  function expire(round){
-    if(round!==memoryRound||round.controller.signal.aborted)return;
+  let aiRound;
+  function releaseRoundIfIdle(){
+    if(aiRound&&![...jobs.values()].some(j=>memoryPolls.has(j.id)&&j.enabled&&(j.running||j.continuing||j.queuedAt!==null))){
+      aiRound.release();aiRound=null;
+    }
+  }
+  let pausedAt=null,retryAt=null,retryRemaining=queueRetryMs;
+  // 暂停中也能新建截止时间，只顺延该倒计时实际经历的暂停部分。
+  function frozenDeadline(due,createdAt=0,at=now()){
+    return pausedAt!==null&&due>pausedAt?due+Math.max(0,at-Math.max(pausedAt,createdAt)):due;
+  }
+  const warmDeadline=()=>frozenDeadline(warmUntil,warmUntil-60_000);
+  function clearRetryIfEmpty(){
+    if(queue().length)return;
+    clearTimer(retry);retry=null;retryRemaining=queueRetryMs;
+  }
+  function setExecutionBusy(busy){
+    if(closed||busy===(pausedAt!==null))return;
     const at=now();
-    for(const j of jobs.values()){
-      if(!memoryPolls.has(j.id)||!j.enabled||(!j.running&&j.queuedAt===null&&j.nextAt>at))continue;
-      j.resumeAt=j.nextAt>at?j.nextAt:at+j.minutes*60_000;
-      db.prepare('INSERT OR REPLACE INTO idle_poll_resume VALUES(?,?)').run(j.id,j.resumeAt);
-      if(!j.running){
-        add(j.name,'已暂停',pauseDetail,at,j.queuedAt??at);
-        audit?.skip(j.name,goals[j.id],pauseDetail,j.queuedAt??at);
+    if(busy){
+      pausedAt=at;
+      for(const j of jobs.values()){
+        clearTimer(j.timer);j.timer=null;
+        if(j.nextAt!==null)j.remaining=Math.max(0,j.nextAt-at);
       }
-      j.queuedAt=null;j.misses=0;persist(j);arm(j,j.resumeAt);
+      if(retry!==null){clearTimer(retry);retry=null;retryRemaining=Math.max(0,retryAt-at);}
+    }else{
+      warmUntil=frozenDeadline(warmUntil,warmUntil-60_000,at);
+      for(const j of jobs.values())if(j.resumeAt>pausedAt){
+        j.resumeAt=frozenDeadline(j.resumeAt,j.resumeSetAt,at);
+        saveTime.run(j.id,j.resumeAt);
+      }
+      pausedAt=null;
+      for(const j of jobs.values())if(j.enabled&&j.nextAt!==null)arm(j,at+j.remaining);
+      retryLater();
     }
-    round.controller.abort();
-    memoryRound=null;
-    changed();
-  }
-  function startMemoryRound(){
-    if(!memoryRound){
-      const round={controller:new AbortController(),until:now()+memoryLimit};
-      memoryRound=round;
-      round.timer=setTimer(()=>expire(round),memoryLimit);
-      round.timer?.unref?.();
-    }
-    return memoryRound;
-  }
-  function releaseRound(){
-    if(memoryRound&&![...jobs.values()].some(j=>memoryPolls.has(j.id)&&(j.running||j.queuedAt!==null))){
-      clearTimer(memoryRound.timer);memoryRound=null;
-    }
+    if(started)changed();
   }
   function persist(j){save.run(+j.enabled,j.minutes,j.maximum,j.misses,j.queuedAt,j.id);}
   const queue=()=>[...jobs.values()].filter(j=>j.queuedAt!==null&&j.enabled).sort((a,b)=>a.queuedAt-b.queuedAt);
   function arm(j,at){
-    clearTimer(j.timer);j.nextAt=at;
+    clearTimer(j.timer);j.nextAt=at;j.remaining=Math.max(0,at-now());
+    if(pausedAt!==null){j.timer=null;return;}
     j.timer=setTimer(()=>tick(j,at),Math.max(0,at-now()));j.timer?.unref?.();
   }
+  function armAudit(j,at,delay){
+    j.resumeSetAt=at;
+    j.resumeAt=at+delay;
+    saveTime.run(j.id,j.resumeAt);
+    arm(j,j.resumeAt);
+  }
+  function clearAuditWindow(){
+    if(!auditWindowStart)return;
+    db.prepare('DELETE FROM idle_poll_resume WHERE id=?').run(diaryAuditWindowKey);
+    auditWindowStart=0;
+  }
   function drain(){
+    if(pausedAt!==null)return false;
     const waiting=queue();
     const at=now();
     const ready=j=>!j.running&&j.resumeAt<=at&&!isBusy(j.id)&&(j.id==='tasks'||at>=warmUntil);
@@ -94,12 +117,13 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
     return Boolean(candidate);
   }
   function retryLater(){
-    if(closed||!started||retry!==null||!queue().length)return;
+    if(closed||!started||pausedAt!==null||retry!==null||!queue().length)return;
+    retryAt=now()+retryRemaining;
     retry=setTimer(()=>{
-      retry=null;
+      retry=null;retryRemaining=queueRetryMs;
       drain();
       retryLater();
-    },queueRetryMs);
+    },retryRemaining);
     retry?.unref?.();
   }
   function postpone(j,due,existing=null){
@@ -119,22 +143,40 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
   }
   async function execute(j,due){
     if(closed||!j.enabled||j.running)return;
-    if(memoryRound&&now()>=memoryRound.until)expire(memoryRound);
-    if(j.resumeAt>now())return;
+    const at=now();
+    if(j.resumeAt>at)return;
+    if(j.id==='diaryAudit'){
+      const nextWindow=auditWindowStart+j.minutes*60_000;
+      if(auditWindowStart&&at>=auditWindowStart+diaryAuditWindowMs&&at<nextWindow){
+        j.continuing=false;j.queuedAt=null;j.misses=0;persist(j);
+        armAudit(j,at,nextWindow-at);
+        clearRetryIfEmpty();releaseRoundIfIdle();changed();
+        return;
+      }
+      if(!auditWindowStart||at>=nextWindow){
+        auditWindowStart=at;
+        saveTime.run(diaryAuditWindowKey,at);
+      }
+    }
     j.first=false;j.running=true;
-    const at=now(),id=add(j.name,'检查中',j.queuedAt!==null?'执行本地等待任务':'开始轮询',at,due);
+    j.continuing=false;
+    const id=add(j.name,'检查中',j.queuedAt!==null?'执行本地等待任务':'开始轮询',at,due);
     changed();
-    let status='已检查',detail,blocked=false,idleStarted=false;
-    const round=memoryPolls.has(j.id)?startMemoryRound():null;
+    let status='已检查',detail,blocked=false,idleStarted=false,continueAudit=false;
+    const idle=memoryPolls.has(j.id);
+    if(idle)aiRound??=beginAiRound?.();
     const goal=goals[j.id];
     const action=audit?.begin(j.name,goal,undefined,at);
     try{
-      const signal=round?AbortSignal.any([abort.signal,round.controller.signal]):abort.signal;
+      const signal=idle&&aiRound?AbortSignal.any([abort.signal,aiRound.signal]):abort.signal;
       const result=await handlers[j.id](signal,action?.step,goal);
-      blocked=result?.deferred===true;
+      blocked=result?.deferred===true&&!result.roundPaused;
+      continueAudit=j.id==='diaryAudit'&&result?.nextBatch===true;
+      if(continueAudit)status='本批完成';
+      if(result?.roundPaused)status='已暂停';
       idleStarted=result?.started===true;
       detail=result?.detail??(typeof result==='string'?result:undefined);
-      if(!closed&&j.enabled&&!signal.aborted&&!blocked&&['nag','diary','diaryAudit','news'].includes(j.id)){
+      if(!closed&&j.enabled&&!signal.aborted&&!blocked&&!continueAudit&&['nag','diary','diaryAudit','news'].includes(j.id)){
         const anchor=lastRun(j.id);
         const next=result?.nextAt??(anchor&&anchor+j.minutes*60000);
         if(next>now())arm(j,next);
@@ -142,33 +184,51 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
     }catch(error){status=error.code==='NO_CONNECTION'?'未执行':'查询失败';detail=error.message;}
     if(closed)return;
     const finishedAt=now();
-    if(round&&finishedAt>=round.until)expire(round);
+    if(idle&&(aiRound?.paused||status==='已暂停')){
+      status='已暂停';blocked=false;continueAudit=false;
+      detail??='本轮 4B 执行预算已到，待下一轮继续';
+      if(j.enabled){
+        const delay=j.minutes*60_000;
+        if(j.id==='diaryAudit')armAudit(j,finishedAt,delay);
+        else arm(j,finishedAt+delay);
+      }
+      for(const pending of jobs.values()){
+        if(!pending.enabled||!memoryPolls.has(pending.id)||pending.running||(!pending.continuing&&pending.queuedAt===null))continue;
+        const wasContinuing=pending.continuing;
+        pending.continuing=false;
+        pending.queuedAt=null;pending.misses=0;persist(pending);
+        if(wasContinuing)armAudit(pending,finishedAt,pending.minutes*60_000);
+        else if(pending.nextAt===null||(pausedAt===null?pending.nextAt<=finishedAt:pending.remaining===0))
+          arm(pending,finishedAt+pending.minutes*60_000);
+      }
+    }
     if(blocked)detail??=idleStarted?'等待下次轮询':'执行前被本地任务占用';
-    if(round?.controller.signal.aborted){status='已暂停';detail=blocked&&typeof detail==='string'&&detail.startsWith('中断时进度')?pauseDetail+' · '+detail:pauseDetail;blocked=false;}
     if(typeof detail!=='string'||!detail.trim())detail='本轮未提供结果回执';
+    const windowEnded=continueAudit&&finishedAt+diaryAuditContinuationMs>=auditWindowStart+diaryAuditWindowMs;
+    if(continueAudit&&j.enabled)detail+=windowEnded?'，下个轮询周期继续':'，下批从原进度继续';
     const outcome=blocked?(idleStarted?'已暂停':'推延'):status;
     action?.finish(outcome,detail,finishedAt);
     j.running=false;
-    if(round&&(!blocked||idleStarted)){
+    if(idle&&!continueAudit&&(!blocked||idleStarted)){
       onIdleResult?.({id:j.id,status:outcome,detail,durationMs:Math.max(0,finishedAt-at)});
     }
     if(blocked&&j.enabled){
-      if(j.id==='diaryAudit'&&idleStarted){
-        j.resumeAt=finishedAt+queueRetryMs;
-        j.queuedAt??=due;
-        db.prepare('INSERT OR REPLACE INTO idle_poll_resume VALUES(?,?)').run(j.id,j.resumeAt);
-        db.prepare('UPDATE checks SET status=?,detail=? WHERE id=?').run(outcome,detail,id);
-        persist(j);changed();retryLater();
-      }else postpone(j,due,id);
+      postpone(j,due,id);
+      releaseRoundIfIdle();
       return;
     }
+    if(continueAudit&&j.enabled){
+      j.continuing=!windowEnded;
+      const delay=windowEnded?Math.max(diaryAuditContinuationMs,auditWindowStart+j.minutes*60_000-finishedAt):diaryAuditContinuationMs;
+      armAudit(j,finishedAt,delay);
+    }else if(j.id==='diaryAudit')clearAuditWindow();
     db.prepare('UPDATE checks SET status=?,detail=? WHERE id=?').run(blocked?'未执行':status,detail,id);
     j.queuedAt=null;j.misses=0;persist(j);
-    if(!queue().length){clearTimer(retry);retry=null;}
-    releaseRound();changed();retryLater();
+    clearRetryIfEmpty();
+    releaseRoundIfIdle();changed();retryLater();
   }
   function tick(j,due){
-    if(closed||!j.enabled)return;
+    if(closed||pausedAt!==null||!j.enabled)return;
     j.first=false;
     const interval=j.minutes*60_000;
     arm(j,due+(1+Math.max(0,Math.floor((now()-due)/interval)))*interval);
@@ -186,17 +246,16 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
     void execute(j,due);
   }
   function initial(j){
-    if(j.id==='refinement')return Math.max(now(),warmUntil)+memoryLimit+60_000;
     if(j.id==='aiHeartbeat')return now()+j.minutes*60_000;
     // 避免手记核对从同一分钟耗尽共享预算，导致修订每轮都排不到。
-    if(j.id==='refinement')return Math.max(now(),warmUntil)+memoryLimit+60_000;
+    if(j.id==='refinement')return Math.max(now(),warmDeadline())+11*60_000;
     const last=j.id==='weather'?weatherLastAt():lastRun(j.id);
-    const earliest=j.id==='tasks'?now():Math.max(now(),warmUntil);
+    const earliest=j.id==='tasks'?now():Math.max(now(),warmDeadline());
     return last?Math.max(earliest,Math.min(now(),last)+j.minutes*60_000):earliest;
   }
   function snapshot(){
-    return [...jobs.values()].map(({id,name,enabled,minutes,maximum,misses,queuedAt,running,nextAt,first})=>
-      ({id,name,enabled,minutes,maximum,misses,queuedAt,running,nextAt,first}));
+    return [...jobs.values()].map(({id,name,enabled,minutes,maximum,misses,queuedAt,running,nextAt,first,remaining})=>
+      ({id,name,enabled,minutes,maximum,misses,queuedAt,running,nextAt:pausedAt!==null&&nextAt!==null?now()+remaining:nextAt,first,paused:pausedAt!==null}));
   }
   function configure(id,input){
     const j=jobs.get(id);
@@ -205,25 +264,27 @@ export function createPollScheduler({db,handlers,isBusy,changed,now,setTimer,cle
         !Number.isInteger(maximum)||maximum<0||maximum>100)throw Error('间隔须为 10–300 分钟，最大推延须为 0–100 次，均为整数。');
     const enabledBefore=j.enabled,minutesBefore=j.minutes;
     Object.assign(j,{enabled:input.enabled,minutes:input.minutes,maximum});
-    if(!j.enabled){clearTimer(j.timer);j.timer=null;j.nextAt=null;j.queuedAt=null;j.misses=0;}
+    if(!j.enabled){clearTimer(j.timer);j.timer=null;j.nextAt=null;j.queuedAt=null;j.misses=0;j.continuing=false;}
     else if(j.misses>0&&j.misses>=j.maximum&&j.queuedAt===null)j.queuedAt=now();
     persist(j);
     if(started&&j.enabled&&(!enabledBefore||minutesBefore!==j.minutes)){
       const at=now()+j.minutes*60_000;
-      arm(j,Math.max(j.resumeAt,enabledBefore&&j.first?Math.min(initial(j),at):at));
+      arm(j,Math.max(frozenDeadline(j.resumeAt,j.resumeSetAt),enabledBefore&&j.first?Math.min(initial(j),at):at));
     }
-    if(!queue().length){clearTimer(retry);retry=null;}
-    retryLater();changed();return snapshot();
+    clearRetryIfEmpty();
+    releaseRoundIfIdle();retryLater();changed();return snapshot();
   }
   function enqueue(id){
-    const j=jobs.get(id);if(closed||id==='aiHeartbeat'||!j?.enabled||j.resumeAt>now())return;
+    const j=jobs.get(id);if(closed||id==='aiHeartbeat'||!j?.enabled||frozenDeadline(j.resumeAt,j.resumeSetAt)>now())return;
+    const added=j.queuedAt===null;
     j.queuedAt??=now();persist(j);retryLater();
+    if(added&&started)changed();
   }
-  return {snapshot,configure,enqueue,get pending(){return queue().length>0;},get(id){return jobs.get(id);},
+  return {snapshot,configure,enqueue,setExecutionBusy,get paused(){return pausedAt!==null;},get pending(){return queue().length>0;},get(id){return jobs.get(id);},
     readQueue:()=>queue().map(({name,queuedAt,running})=>({name,queuedAt,running})),
     start(){if(started||closed)return;started=true;warmUntil=now()+60_000;
-      for(const j of jobs.values())if(j.enabled)arm(j,Math.max(j.resumeAt,initial(j)));
+      for(const j of jobs.values())if(j.enabled)arm(j,Math.max(frozenDeadline(j.resumeAt,j.resumeSetAt),initial(j)));
       retryLater();
     },
-    close(){closed=true;if(memoryRound)clearTimer(memoryRound.timer);for(const j of jobs.values())clearTimer(j.timer);clearTimer(retry);abort.abort();}};
+    close(){closed=true;for(const j of jobs.values())clearTimer(j.timer);clearTimer(retry);abort.abort();aiRound?.release();aiRound=null;}};
 }

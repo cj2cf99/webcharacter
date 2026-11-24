@@ -14,10 +14,14 @@ const cfg=defaults(),c=new BehaviorController(cfg,()=>{});c.start('idle');c.inpu
 c.input('walk',true);c.ended();assert.equal(c.phase,'loop');assert.equal(cfg.states.walk.force,true);c.finishWalk();assert.equal(c.phase,'exit','到达预告不等待循环剩余帧');assert.equal(c.walk,false);assert(!c.canNativeLoop());c.ended();assert.equal(c.current,'idle');
 const dir=mkdtempSync(join(tmpdir(),'walk-migration-'));
 try{
- const old=defaults();delete old.states.walk;old.master.volume=32;old.states.hover.sound.enter.volume=19;
+ const old=defaults();delete old.states.walk;delete old.randomMovement;old.master.volume=32;old.states.hover.sound.enter.volume=19;
  writeFileSync(join(dir,'pc-behavior-settings.json'),JSON.stringify({config:old,custom:[],names:{}}));
  const store=new SettingsStore(dir,resolve('output/desktop-bundle'));
- const migrated=store.snapshot().config;const restored=structuredClone(migrated);delete restored.states.walk;assert.deepEqual(restored,old,'旧节点、音量全部保留');
+ const migrated=store.snapshot().config;const restored=structuredClone(migrated);delete restored.states.walk;delete restored.randomMovement;assert.deepEqual(restored,old,'旧节点、音量全部保留');
+ assert.equal(migrated.randomMovement,true,'旧配置默认沿用随机移动');
+ store.save({target:'pc',randomMovement:false},'movement');
+ const reopened=new SettingsStore(dir,resolve('output/desktop-bundle'));
+ assert.equal(reopened.snapshot().config.randomMovement,false,'重启后仍关闭随机移动');
  assert.equal(migrated.states.walk.sound.loop.on,false);assert.equal(migrated.states.walk.sound.enter.voice,'voice:walk-enter');
  for(const id of ['walk-enter','walk-loop','walk-exit','voice:walk-enter','voice:walk-exit']){const a=store.catalog().find(a=>a.id===id);assert(a&&existsSync(new URL(a.url)));if(a.compact)assert(existsSync(new URL(a.compact)));}
  assert(JSON.parse(readFileSync(join(dir,'pc-behavior-settings.json'))).config.states.walk);

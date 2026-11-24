@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {bankMaterial,cacheStudyImage,languageMaterial,publicQuestion,questionMedia,sceneMaterial,studyAssetIds,studyQuestionBase,studyQuestionId,validSelection} from './study-materials.mjs';
+import {bankMaterial,cacheStudyImage,languageMaterial,publicQuestion,questionMedia,sceneMaterial,studyAssetIds,studyQuestionBase,studyQuestionId,validSelection,validStudyQuestionBase} from './study-materials.mjs';
 import {pairChoice} from './pair-choice.mjs';
 
 const prefix='/api/study/v1';
@@ -24,8 +24,14 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
       signal:AbortSignal.timeout(12_000),
     }:{signal:AbortSignal.timeout(12_000)});
     const body=await response.json().catch(()=>undefined);
-    if(!response.ok)throw Object.assign(Error(body?.error?.message??(response.status===401||response.status===403
-      ?'学习服务授权未就绪':'学习服务请求失败（'+response.status+'）')),{status:response.status,code:body?.error?.code});
+    if(!response.ok){
+      const code=body?.error?.code;
+      const known={AUTH_REQUIRED:'学习服务授权未就绪',NOT_FOUND:'来源没有此项，可能已移除，请刷新目录',
+        CLOUD_UNAVAILABLE:'来源资料暂不可用，请稍后重试',STUDY_NOT_CONFIGURED:'学习服务尚未配置'};
+      const message=body?.error?.message??known[code]??([401,403].includes(response.status)?
+        '学习服务授权未就绪':'学习服务请求失败（'+response.status+'），请重试');
+      throw Object.assign(Error(message),{status:response.status,code});
+    }
     if(body===undefined||body===null&&path!==prefix+'/sessions/current')throw Error('学习服务返回了无效数据');
     return body;
   }
@@ -119,9 +125,10 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
           media:questionMedia(q.stem,done?q.explanation:'',q.assets)},done);
         if(done)Object.assign(question,{explanation:q.explanation,correct:q.type==='matching'
           ?q.answer_pairs.map(pair=>pairChoice(pair.pair_id,pair.option_id)):q.answer_option_ids});
-        const evidenceId=done?studyQuestionId(q.bank_id??dto.bank_id,item.question_id??q.id,q.type,q.stem,
+        const bankId=q.bank_id??dto.bank_id,questionId=item.question_id??q.id;
+        const base=[bankId,questionId].every(value=>typeof value==='string'&&value.trim())?studyQuestionBase(bankId,questionId):undefined;
+        const evidenceId=done&&base?studyQuestionId(bankId,questionId,q.type,q.stem,
           q.options.map(({id,text})=>({id,text})),(q.pairs??[]).map(({id,text})=>({id,text})),question.correct):undefined;
-        const base=studyQuestionBase(q.bank_id??dto.bank_id,item.question_id??q.id);
         return {question,evidenceId,base,answer:item.selected_ids,flag:item.flagged,
           result:done?item.correctness:undefined};
       })};
@@ -137,9 +144,10 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
     const items=s.items.map(item=>{
       const patch=row.drafts?.[item.question.id];
       const {evidenceId,base,...display}=item;
-      return {...display,...(!done?patch:undefined),unsure:!!row.unsure?.[item.question.id],canRetry:done&&!!evidenceId&&!!base,
+      const hasSource=done&&validStudyQuestionBase(base);
+      return {...display,...(!done?patch:undefined),unsure:!!row.unsure?.[item.question.id],canRetry:hasSource&&!!row.material&&!!evidenceId,
         serverAnswer:patch?.answer!==undefined?item.answer:undefined,serverFlag:patch?.flag!==undefined?item.flag:undefined,
-        pending:Boolean(patch),draftAnswer:done?patch?.answer:undefined,doubt:done&&base?store.isDoubt(base):undefined};
+        pending:Boolean(patch),draftAnswer:done?patch?.answer:undefined,doubt:hasSource?store.isDoubt(base):undefined};
     });
     return {id,material:row.material,title:s.bank_name,mode:'formal',status:s.status,created:s.started_at,finished:s.finished_at,
       position:row.position??s.current_position??0,remaining:s.effective_remaining_ms==null?null:Math.max(0,s.effective_remaining_ms-
@@ -159,7 +167,7 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
       if(Object.keys(remaining).length)drafts[id]=remaining;
       else delete drafts[id];
     }
-    const evidence=session.status==='completed'?session.items.map(item=>({
+    const evidence=session.status==='completed'?session.items.filter(item=>item.evidenceId&&item.base).map(item=>({
       question:{id:item.evidenceId,base:item.base},result:item.result,unsure:!!previous.unsure?.[item.question.id],
       mistaken:item.result==='wrong'?item.answer.filter(id=>!item.question.correct.includes(id)):undefined,
     })):null;
@@ -167,7 +175,8 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
     const position=keepPosition&&session.status!=='completed'?previous.position:undefined;
     const needsReview=(changes.conflict||previous.reviewDrafts)&&
       (Object.keys(drafts).length>0||position!=null&&position!==session.current_position);
-    store.formalReceipt({...previous,session,drafts,position,received:clock(),offline:false,error:null,conflict:false,...changes,reviewDrafts:needsReview},evidence);
+    store.formalReceipt({...previous,session,drafts,position,received:clock(),offline:false,error:null,...changes,
+      conflict:Boolean(changes.conflict)&&(needsReview||!writable(session)),reviewDrafts:needsReview},evidence);
     if(!record('latest')||!previous.session||record('latest').id===session.id)store.relaySet('latest',{id:session.id});
     return view(session.id);
   }
@@ -230,7 +239,7 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
     const row=record(id),item=row?.session.items[index];
     if(!item)throw Error('找不到正式考试作答');
     if(kind==='doubt'&&row.session.status==='completed'){
-      if(!item.base)throw Error('此旧回执缺少题目来源，无法调整强化状态');
+      if(!validStudyQuestionBase(item.base))throw Error('此旧回执缺少题目来源，无法调整强化状态');
       store.setDoubt(item.base,Boolean(value));return view(id);
     }
     if(kind==='position')row.position=index;

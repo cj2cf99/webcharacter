@@ -79,9 +79,11 @@ async function test(){
   assert.ok(overlay.panel.getBounds().y+overlay.panel.getBounds().height<=home.y,'头顶有空间时优先在上方显示');
   const waiting=await display({title:'检查天气',stage:'正在查询'});
   assert.match(waiting.text,/正在查询/);assert.equal(waiting.counted,false);
-  const goal=await display({title:'闲时 · 核对手记',goal:'我想核对近七天的手记，找出待确认的疑点'});
-  assert.match(goal.text,/我想核对近七天的手记，找出待确认的疑点/);
+  const goal=await display({title:'闲时 · 核对手记',goal:'正在核对近七天手记'});
+  assert.match(goal.text,/正在核对近七天手记/);
   assert.ok(goal.summaryFits&&goal.timeHidden&&!goal.barHidden);
+  const auditStage=await display({title:'闲时 · 核对手记',stage:'提取手记线索'});
+  assert.match(auditStage.text,/提取手记线索/);assert.doesNotMatch(auditStage.text,/已保存/);
   const outcome=await display({title:'闲时 · 核对手记',stage:'近七天手记没有新的关键疑点',durationMs:12500});
   assert.match(outcome.text,/近七天手记没有新的关键疑点\s+用时 12\.5 秒/);
   assert.ok(outcome.summaryFits&&outcome.clickThrough&&outcome.barHidden&&!outcome.timeHidden);

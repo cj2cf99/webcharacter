@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel knowledge-page">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; object-src 'none'; base-uri 'none'">
+  <title>绯月 · 知识库</title>
+  <link rel="stylesheet" href="feiyue-surface.css">
+  <link rel="stylesheet" href="knowledge.css">
+</head>
+<body>
+  <header class="fy-titlebar"><div class="fy-caption"><h1>知识库</h1></div></header>
+  <nav class="catalog-nav fy-bar" aria-label="知识库分类">
+    <div class="fy-seg">
+      <button type="button" data-view="positive"><i class="mark mark-book" aria-hidden="true"></i><span>正向</span></button>
+      <button type="button" data-view="negative"><i class="mark mark-rule" aria-hidden="true"></i><span>负向</span></button>
+      <button type="button" data-view="pending"><i class="mark mark-note" aria-hidden="true"></i><span>待我确认</span></button>
+      <button type="button" data-view="backup"><i class="mark mark-box" aria-hidden="true"></i><span>备份</span></button>
+    </div>
+  </nav>
+  <div id="toolbar" class="catalog-tools">
+    <div class="catalog-search"><i class="mark mark-search" aria-hidden="true"></i>
+      <input id="search" type="search" aria-label="搜索知识标题或别名" placeholder="查找标题或别名">
+    </div>
+    <select id="kind-filter" aria-label="待确认类型" hidden><option value="">全部</option><option value="positive">正向</option><option value="negative">负向</option></select>
+    <button type="button" id="new" class="primary">新建</button>
+  </div>
+  <p id="status" class="fy-toast" role="status" hidden></p>
+  <main id="content" class="fy-scroll" aria-busy="true"><p class="fy-empty">正在打开目录…</p></main>
+  <footer id="actions" class="fy-foot catalog-footer" hidden></footer>
+  <template id="shelf-art">
+    <div class="shelf-art" aria-hidden="true">
+      <div class="shelf-moon"></div>
+      <div class="shelf-tiers">
+        <div class="shelf-tier">
+          <i class="spine p1"></i><i class="spine p2"></i><i class="spine p3"></i><i class="spine p4"></i>
+          <i class="shelf-bloc"></i>
+        </div>
+        <div class="shelf-tier">
+          <i class="spine p5"></i><i class="spine p6"></i><i class="spine p7"></i>
+          <i class="shelf-stack"></i>
+        </div>
+      </div>
+    </div>
+  </template>
+  <script type="module" src="knowledge-ui.mjs"></script>
+</body>
+</html>

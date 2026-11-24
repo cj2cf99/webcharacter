@@ -25,7 +25,7 @@ try{
    constructor(options){super({...options,show:false});}
  }}:electron;
  let lockApplied=null;
- host=attachSettings(hostElectron,{win,profile,bundle:resolve(root,'output/desktop-bundle'),root,legacySound:{enabled:false,volume:50},onDisplayChange:value=>{lockApplied=value;}});
+ host=attachSettings(hostElectron,{win,profile,bundle:resolve(root,'output/desktop-bundle'),root,legacySound:{enabled:false,volume:50},onPositionSettingsChange:({confineToScreen})=>{lockApplied=confineToScreen;}});
  await win.loadFile(resolve(root,'output/desktop-bundle/index.html'));host.open();
  const panel=host.panel;await new Promise(r=>panel.webContents.once('did-finish-load',r));
  const wait=async(fn)=>{for(let i=0;i<100;i++){if(await fn())return;await new Promise(r=>setTimeout(r,100));}throw Error('timed out');};

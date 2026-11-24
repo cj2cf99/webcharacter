@@ -4,9 +4,10 @@ import {calendarDate,datePattern as calendarDatePattern,tokyoDate} from './calen
 import {timeValue} from './reminder-command.mjs';
 import {readInteractionSkill} from './interaction-skills.mjs';
 import {prepareMainSiteTask} from '../agent/host/main-site-task-adapter.mjs';
+import {isKnowledgeFeedback,knowledgeReply} from './knowledge-runtime.mjs';
 
 const title='对话内容转录';
-const labels={organize:'归纳事项',recover:'逐段核对遗漏',classify:'按模板拟稿',review:'集中复核'};
+const labels={organize:'归纳事项',recover:'逐段核对遗漏',classify:'按模板拟稿',classifyDeepSeek:'DeepSeek 补拟草稿',review:'集中复核'};
 const enumState=new Set(['occurred','planned','interest','idea','uncertain']);
 const categories=new Set(['records.create','resources.create']);
 const datePattern=/^\d{4}-\d{2}-\d{2}(?:T(?:[01]\d|2[0-3]):[0-5]\d)?$/u;
@@ -17,6 +18,9 @@ const finalHeart=/(?:❤[\uFE0E\uFE0F]?\s*)+$/u;
 const string=value=>typeof value==='string'?value.trim():'';
 const list=value=>Array.isArray(value)?value:[];
 const missingDependency='有效的前置登记';
+const registrationWithdrawal=/^(?:(?:取消|撤销)(?:刚才的?|上一条)?(?:登记|记录)|(?:别|不要|不用|先不)(?:再|帮我|替我)?(?:登记|记录|记下|提醒))/u;
+const confirmedRegistrationInstruction='先提取事项，再按已提取的事项写摘要。对于 registrationRequested=true 的原话，必须写出用户要登记的具体事项，在 requests 至少写一条 intent=explicit 的请求。已经发生的事仍可被委托登记，保留登记对象、数量和单位。例「帮我记下吃喝：午餐吃了两个饭团」在 requests 写「登记午餐吃了两个饭团」，证据引用该条原话和 sourceId。';
+const namedActivityRegistration=/^(?:(?:请|绯月|帮我|给我|替我|麻烦你)[，,\s]*)*(?:记下|记一下|记录|登记)(?:一下)?\s*(吃喝|运动)\s*[：:]\s*(\S[\s\S]*)$/u;
 const pastDeadline=(deadline,now)=>deadline.slice(0,10)<tokyoDate(now)
   ||deadline.includes('T')&&Date.parse(deadline+'+09:00')<=now;
 
@@ -314,7 +318,10 @@ function withRegistrationDiary(rows,work,turns){
     dependsOn:row.dependsOn.map(parent=>merged.has(parent)?id:parent)}))];
 }
 
-async function transcribe(data,model,skill,save,signal){
+// 多候选复核需要列出每个错误和原文依据，单个候选的短核对才适合 CPU。
+const transcriptionRole=(stage,input)=>stage==='review'&&input.candidates?.length<=1?'assist':'main';
+
+async function transcribe(data,model,skill,save,signal,rules){
   const {turns}=data,templates=skill.templates.templates;
   const stamp=titleTime.format(turns[0].at);
   for(const turn of turns)turn.tokyo=localTime.format(turn.at)+' JST';
@@ -325,8 +332,8 @@ async function transcribe(data,model,skill,save,signal){
     if(stage==='recover')schema={type:'object',additionalProperties:false,required:input.reviewIds,
       properties:Object.fromEntries(input.reviewIds.map(id=>[id,schema]))};
     if(stage==='classify'&&input.organized.recentFactIds.length)schema.properties.candidates.minItems=1;
-    return call(JSON.stringify(input),{schema,instruction:skill.localAi[stage],
-      skill:{name:skill.skill,version:skill.version},maxTokens}).then(result=>{
+    return call(JSON.stringify({...input,...rules}),{schema,instruction:skill.localAi[stage],
+      skill:{name:skill.skill,version:skill.version,stage},aiRole:transcriptionRole(stage,input),maxTokens}).then(result=>{
       if(result?.error)throw Error(result.error);
       return result;
     });
@@ -416,6 +423,7 @@ async function transcribe(data,model,skill,save,signal){
 
 const budgetFailure=error=>/LOCAL_AI_(?:BATCH_BUDGET|CONTEXT_BUDGET|OUTPUT_BUDGET|RESULT_INVALID)/u.test(error.code??error.message);
 const adaptiveUnderflow='LOCAL_AI_ADAPTIVE_OUTPUT_BUDGET';
+const localDraftDeferred=new Set(['THREAD_STAGE_YIELD','LOCAL_AI_GPU_DEFERRED','LOCAL_AI_TIER_WAIT','LOCAL_AI_BUSY','LOCAL_AI_STOPPED','LOCAL_AI_TASK_DISCARDED','AbortError']);
 function threadSections(text,limit=620){
   const parts=[];
   let rest=Array.from(text);
@@ -433,42 +441,56 @@ function candidateSignature(row){
   return JSON.stringify([row.type,title?.replace(/^\[([^\]]*)\]绯月助记-.*$/u,'$1'),params,row.evidence.map(item=>item.quote).toSorted()]);
 }
 
-async function transcribeThread(job,model,skill,save){
+async function transcribeThread(job,model,skill,save,rules,generateRemoteDraft,lifetime){
   const templates=skill.templates.templates;
   const [organizeCommand,classifyCommand,reviewCommand]=skill.workflow?.steps??[{run:'organize'},{run:'classify'}];
   const prompt=(stage,command,extra='')=>[skill.localAi[stage],command.instruction,extra].filter(Boolean).join('\n');
   const menu=Object.entries(templates).map(([type,t])=>({type,useWhen:t.useWhen,required:t.required,defaults:t.defaults}));
-  const history=job.history.slice(-4).map(({who,at,text})=>({speaker:who,text:text.slice(0,110),tokyo:localTime.format(at)+' JST'}));
+  // 转写只看本次的新发言，不带历史对话：避免旧话题串进登记草稿。
+  const history=[];
   const turns=job.turns.flatMap(({id,at,text,handled,reference,backgroundRegistration})=>threadSections(text)
-    .map((part,index)=>({sourceId:id+'-'+index,speaker:'user',text:part,tokyo:localTime.format(at)+' JST',at,
-      handled:handled&&!backgroundRegistration||reference})));
+    .map((part,index)=>({sourceId:id+'-'+index,originalSourceId:id,speaker:'user',text:part,tokyo:localTime.format(at)+' JST',at,
+      handled:handled&&!backgroundRegistration||reference,
+      ...(backgroundRegistration&&!reference?{registrationRequested:true}:{})})));
+  // 对话可能在收集到同一批次之前撤回。随后重新提出的请求仍按登记处理。
+  const lastWithdrawal=turns.findLastIndex(turn=>!turn.registrationRequested&&registrationWithdrawal.test(turn.text));
+  for(const turn of turns.slice(0,lastWithdrawal+1))delete turn.registrationRequested;
   let calls=0;
-  async function step(key,stage,input,instruction,maxTokens,validate){
+  async function step(key,stage,input,instruction,maxTokens,validate,remote=false){
     const attempt=job.steps[key]??={id:job.id+'-'+key,input,state:'waiting',attempts:[]};
     if(attempt.state==='done')return attempt.output;
     if(attempt.state==='split')throw Object.assign(Error(attempt.error),{code:attempt.error});
-    if(calls>=2)throw Object.assign(Error('等待下一个整理时隙'),{code:'THREAD_STAGE_YIELD'});
-    calls++;
+    if(!remote){
+      if(calls>=2)throw Object.assign(Error('等待下一个整理时隙'),{code:'THREAD_STAGE_YIELD'});
+      calls++;
+    }
     const priorAttempts=(attempt.attempts??=[]).slice(attempt.manualFrom??0);
     const fullOutputBudget=priorAttempts.some(item=>item.error===adaptiveUnderflow);
     const call={at:Date.now(),state:'running',fullOutputBudget};
     (attempt.attempts??=[]).push(call);
-    const signal=AbortSignal.timeout(55000);
-    attempt.state='running';save(stage);
+    const signal=remote?AbortSignal.any([lifetime,AbortSignal.timeout(60_000)]):lifetime;
+    const phase=remote?'classifyDeepSeek':stage;
+    attempt.state='running';save(phase);
     try{
-      const output=await model.memory(JSON.stringify(attempt.input),instruction,schemaFor(skill.schemas,stage),signal,
-        {name:skill.skill,version:skill.version,stage,aiPriority:4,aiBudget:45000,aiTier:'4',boundedOutput:true,backgroundBudget:true,
-          adaptiveOutput:stage,fullOutputBudget,maxTokens});
-      call.raw=output;
+      const schema=schemaFor(skill.schemas,stage);
+      const output=remote?await generateRemoteDraft(attempt.input,instruction,schema,signal):
+        await model.memory(JSON.stringify({...attempt.input,...rules}),instruction,schema,signal,
+        {name:skill.skill,version:skill.version,stage,aiPriority:4,aiRole:transcriptionRole(stage,attempt.input),boundedOutput:true,backgroundBudget:true,
+          adaptiveOutput:stage,fullOutputBudget,maxTokens,aiPrivate:Boolean(rules)||skill.localAi?.policy?.localOnly===true,
+          ...(generateRemoteDraft&&stage==='classify'?{aiSingleAttempt:true}:{})});
+      if(!rules)call.raw=output;
       if(!output||output.error)throw Object.assign(Error(output?.error??'模型未返回结果'),{code:output?.error});
-      attempt.output=validate(output);call.state=attempt.state='done';delete attempt.error;save(stage);return attempt.output;
+      attempt.output=validate(output);call.state=attempt.state='done';delete attempt.error;save(phase);return attempt.output;
     }catch(error){
+      if(lifetime.aborted){
+        call.state='cancelled';attempt.state='waiting';save(stage);throw error;
+      }
       if(error.code==='LOCAL_AI_GPU_DEFERRED'){
         call.state=attempt.state='waiting';call.error=error.code;save(stage);throw error;
       }
       call.state=attempt.state=error.code==='LOCAL_AI_BATCH_BUDGET'?'split':'failed';attempt.error=call.error=error.code??error.message;
-      error.stepsExhausted=attempt.attempts.slice(attempt.manualFrom??0).filter(item=>item.state==='failed'||item.state==='unknown').length>=3;
-      save(stage);throw error;
+      error.stepsExhausted=remote||attempt.attempts.slice(attempt.manualFrom??0).filter(item=>item.state==='failed'||item.state==='unknown').length>=3;
+      save(phase);throw error;
     }
   }
   function splitRows(summary,items){
@@ -505,11 +527,34 @@ async function transcribeThread(job,model,skill,save){
     const types=new Set(summary.fixed.map(item=>item.type));
     const available=types.size===items.length?menu.filter(entry=>types.has(entry.type)||entry.type==='diaries.create'):menu;
     const name=key+'-classify';
+    const confirmedIds=new Set(summary.requests.filter(item=>item.intent==='explicit'&&item.evidence.some(ref=>
+      material.some(turn=>turn.sourceId===ref.sourceId&&turn.registrationRequested))).map(item=>item.id));
+    if(confirmedIds.size&&items.every(item=>confirmedIds.has(item.id)&&summary.fixed.some(fixed=>fixed.matterId===item.id))){
+      save('classify');
+      return reviewDraft(key,material,summary,draftCandidates({candidates:[],notes:[]},summary,basis,templates));
+    }
+    const instruction=prompt('classify',classifyCommand,'每项核对本批证据，保留状态和日期。选择适用的最少登记项，理由和缺项简写。历史只用于指代。'+
+      (confirmedIds.size?'已确认的登记请求必须生成引用其 id 的候选。字段不足时在 missing 标出并保留候选。':''));
+    const validate=output=>draftCandidates(output,summary,basis,templates);
+    const remoteName=name+'-deepseek';
+    const sources=new Set(items.flatMap(item=>item.evidence.map(ref=>ref.sourceId)));
+    const remoteTurns=material.filter(turn=>!turn.handled&&sources.has(turn.sourceId));
+    const canUseRemote=generateRemoteDraft&&remoteTurns.length;
+    const hasConfirmedDrafts=drafted=>[...confirmedIds].every(id=>drafted.rows.some(row=>row.related.includes(id)));
+    const share=entries=>rules?entries.map(({id,evidence})=>({id,evidence})):entries;
+    const remoteDraft=()=>step(remoteName,'classify',{
+      turns:remoteTurns,
+      organized:{actions:share(summary.actions),requests:share(summary.requests),signals:share(summary.signals),recentFactIds:summary.recentFactIds},
+      templates:available
+    },instruction,2048,output=>{
+      const drafted=validate(output);
+      if(!hasConfirmedDrafts(drafted))throw Error('已确认的登记请求缺少有原文依据的草稿');
+      return drafted;
+    },true);
     let result;
     try{
-      result=await step(name,'classify',{turns:material,history:reference,organized:summary,templates:available},
-        prompt('classify',classifyCommand,'每项核对本批证据，保留状态和日期。选择适用的最少登记项，理由和缺项简写。历史只用于指代。'),2048,
-        output=>draftCandidates(output,summary,basis,templates));
+      if(!canUseRemote||!job.steps[remoteName])
+        result=await step(name,'classify',{turns:material,organized:summary,templates:available},instruction,2048,validate);
     }catch(error){
       if(error.code==='LOCAL_AI_RESULT_INVALID'&&items.every(item=>summary.fixed.some(fixed=>fixed.matterId===item.id))){
         const attempt=job.steps[name];
@@ -517,27 +562,35 @@ async function transcribeThread(job,model,skill,save){
         attempt.state='done';save('classify');
         return reviewDraft(key,material,summary,attempt.output);
       }
-      if(!budgetFailure(error)||items.length===1&&!reference.length)throw error;
-      job.steps[name].state='split';save('classify');
-      const middle=Math.ceil(items.length/2);
-      const revised=[];
-      for(const [index,part] of [items.slice(0,middle),items.slice(middle)].entries()){
-        if(!part.length)continue;
-        const keep=splitRows(summary,part);
-        const evidence=new Set(part.flatMap(item=>item.evidence.map(ref=>ref.sourceId)));
-        revised.push(await draft(name+index,material.filter(item=>evidence.has(item.sourceId)),basis.filter(item=>evidence.has(item.id)),keep,[]));
+      if(localDraftDeferred.has(error.code)||localDraftDeferred.has(error.name))throw error;
+      if(!canUseRemote){
+        if(!budgetFailure(error)||items.length===1&&!reference.length)throw error;
+        job.steps[name].state='split';save('classify');
+        const middle=Math.ceil(items.length/2);
+        const revised=[];
+        for(const [index,part] of [items.slice(0,middle),items.slice(middle)].entries()){
+          if(!part.length)continue;
+          const keep=splitRows(summary,part);
+          const evidence=new Set(part.flatMap(item=>item.evidence.map(ref=>ref.sourceId)));
+          revised.push(await draft(name+index,material.filter(item=>evidence.has(item.sourceId)),basis.filter(item=>evidence.has(item.id)),keep,[]));
+        }
+        return {rows:revised.flatMap(part=>part.rows),notes:revised.flatMap(part=>part.notes)};
       }
-      return {rows:revised.flatMap(part=>part.rows),notes:revised.flatMap(part=>part.notes)};
     }
+    if(!result?.rows.length&&canUseRemote)result=await remoteDraft();
+    if(!hasConfirmedDrafts(result))
+      throw Error('已确认的登记请求缺少有原文依据的草稿');
     return reviewDraft(key,material,summary,result);
   }
   async function analyze(key,material,reference){
     const basis=material.filter(item=>!item.handled).map(({sourceId:id,at,text})=>({id,at,text}));
+    const confirmed=material.filter(turn=>turn.registrationRequested);
     const name=key+'-organize';
     let summary;
     try{
-      summary=await step(name,'organize',{turns:material,history:reference},
-        prompt('organize',organizeCommand,'history 只作参考。候选只能引用 turns 的新发言及其 sourceId。已由入口处理的 handled=true 只作背景。证据尽量引用短原话。'),1550,
+      summary=await step(name,'organize',{turns:material},
+        prompt('organize',organizeCommand,'候选只能引用 turns 的新发言及其 sourceId。已由入口处理的 handled=true 只作背景。证据尽量引用短原话。'+
+          (confirmed.length?'\n'+confirmedRegistrationInstruction:'')),1550,
         output=>organize(output,basis,true));
     }catch(error){
       if(!budgetFailure(error)||material.length===1&&!reference.length&&Array.from(material[0].text).length<=200)throw error;
@@ -549,6 +602,24 @@ async function transcribeThread(job,model,skill,save){
       for(const [index,part] of [pieces.slice(0,middle),pieces.slice(middle)].entries())
         if(part.length)results.push(...await analyze(name+index,part,[]));
       return results;
+    }
+    if(confirmed.length){
+      const requests=[...summary.requests];
+      const fixed=[...summary.fixed];
+      for(const turn of confirmed){
+        let request=requests.find(item=>item.intent==='explicit'&&item.evidence.some(ref=>ref.sourceId===turn.sourceId));
+        if(!request){
+          request={id:'registration:'+turn.sourceId,summary:turn.text,subject:'user',state:'uncertain',
+            intent:'explicit',timeText:'',conditions:[],evidence:[{sourceId:turn.sourceId,quote:turn.text}]};
+          requests.push(request);
+        }
+        const named=namedActivityRegistration.exec(turn.text);
+        if(named&&!fixed.some(item=>item.matterId===request.id)){
+          const type=named[1]==='吃喝'?'hu-shi.food.create':'hu-shi.exercise.create';
+          fixed.push({type,matterId:request.id,params:{body:named[2].trim()}});
+        }
+      }
+      summary={...summary,requests,fixed};
     }
     return [{summary,...await draft(key,material,basis,summary,reference)}];
   }
@@ -615,7 +686,7 @@ export async function prepareConversationBatch(rows,request,now=Date.now){
   return {missing,plan:{pending:[],chain:{name:title,nodes}}};
 }
 
-export function createConversationTranscription({profile,safeStorage,model,registration,prepareBatch,canStart=()=>true,
+export function createConversationTranscription({profile,safeStorage,model,registration,prepareBatch,knowledge,generateRemoteDraft,canStart=()=>true,
   changed=()=>{},notify=()=>{},log,loadSkill=()=>readInteractionSkill('conversationTranscription'),now=Date.now}){
   const db=new DatabaseSync(join(profile,'conversation-transcription.sqlite'));
   db.exec(`CREATE TABLE IF NOT EXISTS transcriptions (
@@ -639,7 +710,10 @@ export function createConversationTranscription({profile,safeStorage,model,regis
     CASE WHEN ?=1 THEN json_extract(summary,'$.yieldedAt') IS NULL ELSE json_extract(summary,'$.yieldedAt') IS NOT NULL END,
     coalesce(json_extract(summary,'$.yieldedAt'),at),at LIMIT 1`);
   const workers=new Map();
-  let timer=null,closed=false,threadFinished=()=>{};
+  function cancelInference(){
+    for(const worker of workers.values())worker.inference?.abort();
+  }
+  let timer=null,closed=false,threadFinished=()=>{},threadReady=()=>{};
   for(const row of db.prepare("SELECT * FROM transcriptions WHERE state IN ('open','running','submitting')").all()){
     const job=decode(row);
     for(const step of Object.values(job.steps??{}))if(step.state==='running'){
@@ -708,32 +782,60 @@ export function createConversationTranscription({profile,safeStorage,model,regis
       changed();return;
     }
     worker.active={id:job.id,title,stage:'正在准备本机模型'};
+    worker.inference=new AbortController();
     save(job,'running');changed();
     try{
       // 已开始的同一作业可能跨多个调度时隙或重启，复用原提示、步骤和输出约定。
       const skill=job.skill??=await loadSkill();
       save(job,'running');
-      const signal=AbortSignal.timeout(skill.localAi.policy.timeBudgetMs);
+      const {signal}=worker.inference;
       const progress=phase=>{
-        job.stage=worker.active.stage=labels[phase];save(job,'running');changed();
+        job.stage=worker.active.stage=labels[phase];
+        if(worker.claim)worker.claim.stage=job.stage;
+        save(job,'running');changed();
       };
-      job.result=job.line?await transcribeThread(job,model,skill,progress):await transcribe(job,model,skill,progress,signal);
+      if(knowledge){
+        job.knowledge??=[];
+        job.knowledgeThrough??=0;
+        // 拆片前按已保存的原始发言核对，每个原事件只检查一次。
+        while(job.knowledgeThrough<job.turns.length){
+          const turn=job.turns[job.knowledgeThrough];
+          const checked=!turn.knowledgePrivate&&!isKnowledgeFeedback(turn.text)&&await knowledge.inspect({
+            text:turn.text,source:'message/'+turn.id,scope:'transcription',signal,priority:4});
+          if(knowledgeReply(checked))throw Object.assign(Error(checked.answer),{code:'KNOWLEDGE_REVIEW_REQUIRED'});
+          if(checked?.state==='apply')job.knowledge.push({sourceId:turn.id,rules:checked.rules.map(({id,revision})=>({id,revision}))});
+          job.knowledgeThrough++;
+          save(job,'running');
+          if(job.knowledgeThrough<job.turns.length&&job.line)throw Object.assign(Error('等待下一次本机知识核对'),{code:'THREAD_STAGE_YIELD'});
+        }
+      }
+      const references=(job.knowledge??[]).flatMap(({sourceId,rules})=>{
+        const current=knowledge?.readRules(rules)??[];
+        return current.length?[{sourceId,rules:current}]:[];
+      });
+      const rules=references.length?{本机知识:references}:undefined;
+      const localOnly=[...job.turns,...(job.history??[])].some(turn=>turn.mode==='direct'||turn.localOnly);
+      job.result=job.line?await transcribeThread(job,model,skill,progress,rules,localOnly?undefined:generateRemoteDraft,signal):
+        await transcribe(job,model,skill,progress,signal,rules);
       job.durationMs=now()-job.closedAt;job.error=undefined;
       if(job.line)removeDuplicates(job);
       if(!job.result.rows.length)setRetention(job);
       delete job.skill;
+      delete job.knowledge;
       save(job,job.result.rows.length?'ready':'empty');
       if(job.line)threadFinished(job.line);
+      // 先在对话里留下可见的提示，系统通知弹不弹出都不影响结果可见。
+      if(job.line&&job.result.rows.length)try{threadReady({thread:job.line.thread,id:job.id,count:job.result.rows.length});}catch{/* 任务管理仍可查看。 */}
       if(job.result.rows.length)try{notify(status(job));}catch{/* 任务管理仍可查看已保存的结果。 */}
     }catch(error){
-      if(error.code==='THREAD_STAGE_YIELD'||error.code===adaptiveUnderflow&&!error.stepsExhausted){
+      if(worker.inference.signal.aborted||error.code==='THREAD_STAGE_YIELD'||error.code===adaptiveUnderflow&&!error.stepsExhausted){
         job.yieldedAt=now();save(job,'queued');return;
       }
       job.error=error.message;job.durationMs=now()-job.closedAt;
       job.needsReview=job.line&&error.stepsExhausted===true;
       job.retryAt=job.line&&!job.needsReview?now()+60000:undefined;
       save(job,error.code==='LOCAL_AI_BUSY'&&!job.line?'queued':'failed');
-    }finally{worker.active=null;changed();}
+    }finally{worker.active=null;worker.inference=null;changed();}
   }
   function pump(){
     if(closed||!available())return;
@@ -745,6 +847,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
     const worker={exclusive,active:null};
     const claim={worker:lane+1,startedAt:now(),stage:job.stage??'准备整理'};
     if(job.line)(job.claims??=[]).push(claim);
+    worker.claim=claim;
     workers.set(lane,worker);
     worker.promise=execute(job,worker).finally(()=>{
       if(job.line){
@@ -762,6 +865,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
   function allowedId(id){if(typeof id!=='string'||!/^[\w-]{1,128}$/u.test(id))throw Error('作业编号无效');}
   return {
     onThreadFinished(callback){threadFinished=callback;},
+    onThreadReady(callback){threadReady=callback;},
     canCollectThread:()=>!closed&&available()&&!model.isBusy?.()&&!model.aiSnapshot?.().running&&canStart('queued',true),
     fromThread(batch){
       cleanOldSnapshots();
@@ -774,7 +878,9 @@ export function createConversationTranscription({profile,safeStorage,model,regis
         return;
       }
       const {turns,history,...line}=batch;
-      save({id:line.id,at:line.at,closedAt:now(),turns,history,line,steps:{}},'queued');changed();kick();
+      const allowed=turns.filter(turn=>!turn.knowledgePrivate&&!isKnowledgeFeedback(turn.text));
+      if(!allowed.length){threadFinished(batch);return;}
+      save({id:line.id,at:line.at,closedAt:now(),turns:allowed,history:history.filter(turn=>!turn.knowledgePrivate),line,steps:{}},'queued');changed();kick();
     },
     async referencedReminder({id,at,text,title,deadline,revise,messageId}){
       const {templates:{templates}}=await loadSkill();
@@ -793,7 +899,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
       changed();
     },
     turn(id,turn){
-      if(closed)return;
+      if(closed||turn.knowledgePrivate||isKnowledgeFeedback(turn.text))return;
       const job=get(id)??{id,at:turn.at,turns:[],work:[],state:'open'};
       if(job.state!=='open')return;
       if(!job.turns.some(item=>item.id===turn.id)){job.turns.push(turn);save(job,'open');}
@@ -886,6 +992,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
     start(){cleanOldSnapshots();kick();},get active(){return [...workers.values()].find(worker=>worker.active)?.active??null;},
     get busy(){return workers.size>0;},settled:()=>Promise.allSettled([...workers.values()].map(worker=>worker.promise)),
     formalCount:()=>db.prepare("SELECT count(*) AS total FROM transcriptions WHERE state IN ('queued','running','approved','submitting')").get().total,
-    async close(){closed=true;clearTimeout(timer);await Promise.allSettled([...workers.values()].map(worker=>worker.promise));db.close();},
+    cancelInference,
+    async close(){closed=true;cancelInference();clearTimeout(timer);await Promise.allSettled([...workers.values()].map(worker=>worker.promise));db.close();},
   };
 }

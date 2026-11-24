@@ -89,13 +89,13 @@ export function createEmotionService({profile,model,diary,memory,topics,now=Date
         '本次证据只有事实标题。登记、发布、整理等记录只证明标题明确记载的工作。核对标题具体完成了什么：若没有写明旧欲求所需的能力、对象或效果，quote 填空串，status 填 keep。delta 填 0，curiosity 留空。';
       const instruction=[appraisal.localAi.assess,eventRule,loop.localAi.assessment].join('\n\n');
       const a=await model.memory(emotionMaterials(context),instruction,desire?priorDesireAssessment:newDesireAssessment,signal,
-        {name:appraisal.skill,version:appraisal.version,stage:'情绪复盘',boundedOutput:true,backgroundBudget:true,maxTokens:384,aiBudget:45000});
+        {name:appraisal.skill,version:appraisal.version,stage:'情绪复盘',boundedOutput:true,backgroundBudget:true,maxTokens:384});
       signal.throwIfAborted();
       if(![-1,0,1].includes(a.delta)||!['keep','release','satisfied'].includes(a.status)||!word(a.positive)||!word(a.negative)||
         !['line','quote','want','condition'].every(k=>typeof a[k]==='string'&&a[k].length<=180)||!a.line.trim()){
         deferred.set(e.seq,Infinity);warn('评价字段无效，保留待评','EMOTION_RESULT_INVALID');return;
       }
-      store.settle(e,a,{skill:appraisal.version,loop:loop.version,model:'Qwen3.5 Aggressive 9B',context});
+      store.settle(e,a,{skill:appraisal.version,loop:loop.version,model:model.dualTaskWorkers?'Qwen3.5-4B':model.snapshot?.().model,context});
       deferred.delete(e.seq);
       if(topics&&typeof a.curiosity==='string'&&a.curiosity.length>=2&&a.curiosity.length<=40&&facts.user.includes(a.curiosity)){
         try{await topics.remember(a.curiosity,e.key);}
