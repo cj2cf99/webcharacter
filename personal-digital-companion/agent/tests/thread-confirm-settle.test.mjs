@@ -20,7 +20,7 @@ function folder(t,cleanup){
   return profile;
 }
 
-test('确认结果留言：只结束没有未回复、未整理发言的待确认线',t=>{
+test('生成后结束对话：待确认线与普通聊天线一样，不受其他发言影响',t=>{
   const cleanup=[];
   const profile=folder(t,cleanup);
   const store=createConversationThreads(profile,codec);
@@ -40,19 +40,17 @@ test('确认结果留言：只结束没有未回复、未整理发言的待确�
   assert.equal(store.notice(question.id,'已整理出 1 项待确认'),null);
 
   const ordinary=store.create();
-  assert.equal(settle(ordinary.id).closed,false);
-  assert.equal(store.get(ordinary.id).closed,null);
+  store.submit(ordinary.id,{text:'还有一句'});
+  assert.equal(settle(ordinary.id).closed,true);
+  assert.notEqual(store.get(ordinary.id).closed,null);
+  assert.deepEqual(store.organizationLinks(),[ordinary.id],'结束后未整理的发言仍会整理');
 
-  const waiting=store.create({kind:'question'});
-  store.submit(waiting.id,{text:'还有一句',organize:false});
-  store.fail(waiting.id,{text:'本机暂未答复'});
-  assert.equal(settle(waiting.id).closed,false);
-  assert.equal(store.get(waiting.id).error.text,'本机暂未答复','留言不清掉可重试状态');
-
-  const unorganized=store.create({kind:'question'});
-  const message=store.submit(unorganized.id,{text:'再记一条'});
-  store.finish(unorganized.id,[message.id],'好');
-  assert.equal(settle(unorganized.id).closed,false,'还有待整理发言，可能再出一张卡');
+  // 受阻的结果不带收尾语，线保持打开并保留可重试状态。
+  const blocked=store.create();
+  store.submit(blocked.id,{text:'还有一句',organize:false});
+  store.fail(blocked.id,{text:'本机暂未答复'});
+  assert.equal(store.notice(blocked.id,'登记还没全部完成。',{},{result:true}).closed,false);
+  assert.equal(store.get(blocked.id).error.text,'本机暂未答复','留言不清掉可重试状态');
 });
 
 const row=(id,title,extra={})=>({id,type:'diaries.create',label:'日记',params:{title,content:title},conditions:[],
@@ -97,7 +95,7 @@ test('全部生成与全部不生成都了结这次确认',async t=>{
   await next(2);
 });
 
-test('部分生成列出没生成的项目；缺信息时不结束并写明缺什么',async t=>{
+test('部分生成列出没生成的项目；缺信息的项目写明缺什么，同样结束',async t=>{
   const {store,add,next}=jobs(t);
   add('a',[row('r1','晚饭'),row('r2','一个标题特别特别长需要被截断的跑步记录条目')]);
   store.decide({id:'a',selected:['r1']});
@@ -107,17 +105,8 @@ test('部分生成列出没生成的项目；缺信息时不结束并写明缺�
   add('b',[row('r1','晚饭'),row('r2','[看牙]绯月助记-2026-11-25 11:00:00',{missing:['deadline','内容待核对']})]);
   store.decide({id:'b',selected:['r1']});
   const incomplete=await next(2);
-  assert.equal(incomplete.final,false);
-  assert.equal(incomplete.text,'已登记 1 项。缺信息没生成：《看牙》（缺 截止日期、内容待核对）。要登记的话，把这一条完整再说一遍。');
-});
-
-test('同一条线还有别的待确认卡时只留言',async t=>{
-  const {store,add,next}=jobs(t);
-  add('a',[row('r1','晚饭')]);add('b',[row('r1','跑步')]);add('other',[row('r1','别的线')],'other-line');
-  store.decide({id:'a',selected:['r1']});
-  assert.equal((await next(1)).final,false);
-  store.decide({id:'b',selected:['r1']});
-  assert.equal((await next(2)).final,true);
+  assert.equal(incomplete.final,true);
+  assert.equal(incomplete.text,'已登记 1 项。缺信息没生成：《看牙》（缺 截止日期、内容待核对）。要登记的话，另开一条对话完整说一遍。');
 });
 
 test('跳过、停止、未完成、报错与登记前缺项各有留言',async t=>{
@@ -137,7 +126,7 @@ test('跳过、停止、未完成、报错与登记前缺项各有留言',async 
     run.add('a',[row('r1','晚饭')]);
     run.store.decide({id:'a',selected:['r1']});
     const note=await run.next(1);
-    assert.equal(note.final,final);assert.equal(note.card,card);assert.match(note.text,pattern);
+    assert.equal(Boolean(note.final),final);assert.equal(note.card,card);assert.match(note.text,pattern);
   }
 });
 
@@ -163,7 +152,7 @@ test('确认收尾的质问不留续问，也不记成用户结束',()=>{
   assert.equal(saved.length,count);
 });
 
-test('主程序接线：确认结果写进对话线，结束待确认线并结掉原质问',async t=>{
+test('主程序接线：确认结果写进对话线，结束对话并结掉原质问',async t=>{
   const cleanup=[];
   const profile=folder(t,cleanup);
   const seed=createConversationThreads(profile,codec);
