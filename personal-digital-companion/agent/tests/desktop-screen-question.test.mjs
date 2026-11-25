@@ -30,6 +30,20 @@ test('DSQ01：鼠标屏幕严格匹配、按缩放取整屏、capture后才waiti
   assert.equal(dep.log.bodies.length,0);assert.equal(states[0].state,'waiting');assert.doesNotMatch(JSON.stringify(states),/data_base64|api_token|Bearer/);
   dep.log.sources=[{display_id:'1',thumbnail:native()}];assert.equal((await client.captureAndAsk('新问题')).code,'DISPLAY_NOT_FOUND');assert.equal(dep.log.bodies.length,0);
 });
+test('DSQ01b：多显示器同时截图（鼠标屏优先）及多张附件图片同时识读',async()=>{
+  const dep=dependencies();
+  dep.screen.getAllDisplays=()=>[{id:1,size:{width:1920,height:1080},scaleFactor:1},{id:2,size:{width:1600,height:900},scaleFactor:1.5}];
+  dep.log.sources=[{display_id:'1',thumbnail:native(20,1920,1080)},{display_id:'2',thumbnail:native(12,2400,1350)}];
+  const client=await createScreenQuestionClient(dep);
+  assert.equal((await client.captureAndAsk('两个屏幕分别是什么？')).state,'answer');
+  assert.equal(Array.isArray(dep.log.localImage),true);
+  assert.equal(dep.log.localImage.length,2);
+  assert.equal(Buffer.from(dep.log.localImage[0].data_base64,'base64').length,12,'鼠标所在屏应排在首位');
+  assert.equal(Buffer.from(dep.log.localImage[1].data_base64,'base64').length,20);
+  dep.log.localImage=null;
+  assert.equal((await client.askText('对比这两张图',{images:[native(15),native(25)]})).state,'answer');
+  assert.equal(dep.log.localImage.length,2);
+});
 test('DSQ02：NativeImage过大依次质量与resize，不空图、不落盘',async()=>{
   const dep=dependencies();dep.log.sources=[{display_id:'2',thumbnail:native(4*1024*1024+1)}];
   const client=await createScreenQuestionClient(dep);assert.equal((await client.captureAndAsk('问题')).state,'answer');

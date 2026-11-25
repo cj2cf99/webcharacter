@@ -35,7 +35,7 @@ export function createInteractionWork({model,log}={}){
       return result;
     }
     if(mainCandidate){
-      const image=await step('云端视觉',true,()=>mainCandidate(signal));
+      const image=await step('本地视觉',false,()=>mainCandidate(signal));
       if(image.value!==undefined)return image.value;
       throw Object.assign(new Error('未取得可交付结果 · 视觉 '+image.error),{code:'WORK_CANDIDATES_FAILED'});
     }

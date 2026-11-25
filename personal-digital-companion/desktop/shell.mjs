@@ -6,7 +6,7 @@ import {screenPosture} from './screen-posture.mjs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {dirname,resolve} from 'node:path';
 import {createInteractionWork} from './interaction-work.mjs';
-import {isBandaoConfigured,cloudVision,setCloudTaskAudit,createLocalAi,createPrivateModel,desktopModelPath,readGpuLoad,testAgyCliPipeline} from './ai-gateway.mjs';
+import {isBandaoConfigured,createVision,setCloudTaskAudit,createLocalAi,createPrivateModel,desktopModelPath,readGpuLoad} from './ai-gateway.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
 import {readFile,stat} from 'node:fs/promises';
@@ -485,7 +485,7 @@ export async function startDesktop(electron,options={}){
       return n&&diary.questionCitation(n,true);
     },
     openNews:newsPanel.open,openStudy:study.open,resumeAudit:resumeQuestion,onRegistration:()=>contextualAction('chat-registration'),serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
-    memory,vision:memory&&(options.vision??cloudVision()),readTasks:memory?.readTasks??tasks.executor?.review.read,
+    memory,vision:memory&&(options.vision??createVision()),readTasks:memory?.readTasks??tasks.executor?.review.read,
     readTraffic:tasks.traffic?.readPage,readDeepSeekStep:tasks.traffic?.readDeepSeekStep,client:options.screenQuestionClient,requestRestart,localModel,interactionWork,upgradeVision,log:tasks.traffic?.write});
   const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark,recordCheck:checks.record,checks});
   const reminderReview=tasks.reminderReview?attachReminderReview(electron,{bundle,root,flow:tasks.reminderReview}):null;
@@ -507,7 +507,7 @@ export async function startDesktop(electron,options={}){
     }catch{void tasks.traffic?.write({direction:'local',route:'绯月情绪',stage:'本机情绪库未能打开，保留原资料'});}
     scenePanel=attachScenePanel(electron,{root,bundle,finish:(scene,answer)=>curiosity.finish(scene,answer)});
     curiosity=createSceneCuriosity({profile,memory,diary,model:backgroundModel,electron,
-      vision:options.vision??cloudVision(),show:scenePanel.show,draw:screenQuestion.drawScene,
+      vision:options.vision??createVision(),show:scenePanel.show,draw:screenQuestion.drawScene,
       queueQuestion:async(scene,signal)=>{
         if(diary.nags().some(n=>n.source==='curiosity'&&n.source_id===scene.id))return true;
         const candidate={source:'curiosity',source_id:scene.id,title:scene.text,reason:'此刻所想',priority:2,
@@ -1022,32 +1022,29 @@ export async function startDesktop(electron,options={}){
     privateTimer.unref();
   }
   let currentMenu=null;
-  async function runAgyCliTest() {
+  async function runMultiScreenVisionTest() {
     const started = performance.now();
-    let testResult;
+    let result, turn;
     try {
-      taskThought = '绯月正在测试 AGY CLI 推理…';
+      taskThought = '绯月正在截取多屏并确认内容…';
       syncActivity();
-      testResult = await testAgyCliPipeline({log: tasks.traffic?.write});
+      ({result, turn} = await screenQuestion.testScreenQuestion());
     } catch (err) {
-      testResult = {success: false, error: err.message};
+      result = {state: 'error', text: err?.message || '多屏截图测试失败'};
     } finally {
       taskThought = null;
       syncActivity();
     }
     const duration = Math.round(performance.now() - started);
-    const success = testResult.success;
+    const success = result?.state === 'answer';
     await messages.showMessageBox({
-      title: 'AGY CLI 推理测试',
+      title: '线上测试 · 多屏截图内容确认',
       type: success ? 'info' : 'warning',
-      message: success ? 'AGY CLI 推理与解析正常' : 'AGY CLI 测试未通过',
+      message: success ? '多屏截图与识图正常' : '多屏截图内容确认未通过',
       detail: [
-        '执行路径：' + (testResult.path || '未找到'),
-        'CLI 版本：' + (testResult.version || '未知'),
-        '总耗时：' + duration + ' 毫秒',
-        success
-          ? ('\n【对话测试响应】\n' + testResult.chatReply + '\n\n【结构化 JSON 解析】\n' + JSON.stringify(testResult.structuredData, null, 2))
-          : ('错误信息：' + testResult.error)
+        ...(turn?.image?.route ? [`处理链路：${turn.image.route}`] : []),
+        `总耗时：${duration} 毫秒`,
+        success ? `\n【识别结果】\n${result.text}` : `原因：${result?.text || '未知错误'}`
       ].join('\n'),
       buttons: ['确定']
     });
@@ -1105,7 +1102,7 @@ export async function startDesktop(electron,options={}){
       pollSettings:{click:()=>taskNotice(pollSettings.open())},
       retry:{click:()=>{taskNotice(tasks.retryPending());}},
       connection:tasks.showCloudConnection && {click:()=>taskNotice(tasks.showCloudConnection(localModel))},
-      agyTest:{click:()=>taskNotice(runAgyCliTest())},
+      multiScreenTest:{click:()=>taskNotice(runMultiScreenVisionTest())},
       log:tasks.traffic && {click:()=>taskNotice(screenQuestion.openLog())},
       home:{click:()=>goHome()},
       restart:{click:()=>{void requestRestart({fromMenu:true}).catch(error=>messages.showMessageBox({type:'info',title:'重启绯月',message:error.message,buttons:['确定']}));}},

@@ -64,6 +64,67 @@ test('截图问答经 Gemini 官方兼容端点，使用 flash-lite，无证据�
   assert.match((await make('[UNCERTAIN]')('图里有什么？',image,AbortSignal.timeout(5000))).reason,/无法可靠判断/);
 });
 
+test('公用识图模块优先走本机 AGY CLI 并自动清理临时图片，未安装时回退备用视觉',async t=>{
+  const {mkdtemp,readdir,rm}=await import('node:fs/promises');
+  const {tmpdir}=await import('node:os');
+  const {join}=await import('node:path');
+  const {createAgyVision}=await import('../../desktop/vision-client.mjs');
+  const tempDir=await mkdtemp(join(tmpdir(),'agy-vision-unit-'));
+  t.after(()=>rm(tempDir,{recursive:true,force:true}));
+  const seen=[];
+  const vision=createAgyVision({
+    tempDir,
+    isAvailable:()=>true,
+    runAgy:async({prompt,model})=>{
+      const files=await readdir(tempDir);
+      seen.push({prompt,model,files});
+      return {success:true,response:'画面里是一块红色方块'};
+    }
+  });
+  const image={mime_type:'image/png',data_base64:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII='};
+  assert.deepEqual(await vision('图里有什么？',image,AbortSignal.timeout(5000)),{text:'画面里是一块红色方块'});
+  assert.equal(seen.length,1);
+  assert.equal(seen[0].files.length,1);
+  assert.match(seen[0].files[0],/^vision-.*\.png$/);
+  assert.match(seen[0].prompt,new RegExp(seen[0].files[0]));
+  assert.deepEqual(await readdir(tempDir),[],'识图结束后应立即清理临时图片');
+  assert.deepEqual(await vision('帮我抠图',image,AbortSignal.timeout(5000)),{reason:'视觉模型无法输出图像蒙版'});
+
+  const fallbackVision=createAgyVision({
+    tempDir,
+    isAvailable:()=>false,
+    fallback:async()=>({text:'备用视觉回答'})
+  });
+  assert.deepEqual(await fallbackVision('图里有什么？',image,AbortSignal.timeout(5000)),{text:'备用视觉回答'});
+
+  const multiSeen=[];
+  const multiVision=createAgyVision({
+    tempDir,
+    isAvailable:()=>true,
+    runAgy:async({prompt})=>{
+      const files=(await readdir(tempDir)).sort();
+      multiSeen.push({prompt,files});
+      return {success:true,response:'图1是红块，图2是蓝块'};
+    }
+  });
+  assert.deepEqual(await multiVision('对比两张图',[image,{mime_type:'image/jpeg',data_base64:image.data_base64}],AbortSignal.timeout(5000)),{text:'图1是红块，图2是蓝块'});
+  assert.equal(multiSeen[0].files.length,2);
+  assert.match(multiSeen[0].prompt,/图1（vision-.*）.*图2（vision-.*）/);
+  assert.deepEqual(await readdir(tempDir),[],'多图识读结束后应清理全部临时图片');
+
+  const schema={type:'object',properties:{seen:{type:'string'},action:{enum:['ask','quiet']}},required:['seen','action'],additionalProperties:false};
+  const structuredVision=createAgyVision({
+    tempDir,
+    isAvailable:()=>true,
+    runAgy:async({schema:passedSchema})=>{
+      assert.deepEqual(passedSchema,schema);
+      return {success:true,structuredOutput:{seen:'桌面有一张图',action:'ask'},response:'{"seen":"桌面有一张图","action":"ask"}'};
+    }
+  });
+  assert.deepEqual(await structuredVision('看图并判断',image,AbortSignal.timeout(5000),{schema}),
+    {data:{seen:'桌面有一张图',action:'ask'},text:'{"seen":"桌面有一张图","action":"ask"}'});
+});
+
 test('路由策略集中在 ai-gateway：判断、复核、私密、短评留本机，其余在配置半岛后走云端',async t=>{
   const {routesToCloud}=await import('../../desktop/ai-gateway.mjs');
   const key=process.env.bandao_api_key;

@@ -52,7 +52,8 @@ async function setup(t,decision,{first='observe',position='[300,200,100,120]',va
     model:{memory:async(data,prompt)=>{prompts.push({data:JSON.parse(data),prompt});return prompts.length===1?{choice:first,idea:''}:decision;}},
     electron:{screen:{getCursorScreenPoint:()=>({x:50,y:50}),getDisplayNearestPoint:()=>({id:2,size:{width:1000,height:1000}})},
       desktopCapturer:{getSources:async()=>{captures++;return [{display_id:'2',thumbnail:image}];}},nativeImage:{createFromPath:()=>image}},
-    vision:async q=>({text:q.startsWith('裁剪')?valid:q.startsWith('用能包住')?position:readable?'画面中有一弯月亮。':''}),
+    vision:async(_q,_img,_sig,opts)=>opts?.schema?{data:{...decision,seen:readable?'画面中有一弯月亮。':'',box:valid==='是'?JSON.parse(position):[]}}
+      :({text:readable?'画面中有一弯月亮。':''}),
     show:async s=>{views.push(s);return true;},draw:async()=>'fixture.png',eligible:()=>true,wake:()=>wake(),context:()=>'平静'};
   const service=createSceneCuriosity(options);t.after(()=>service.close());
   return {profile,options,service,notes,views,prompts,captures:()=>captures,onReady:()=>new Promise(r=>{wake=r;})};

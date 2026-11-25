@@ -184,7 +184,7 @@ win.webContents.emit('context-menu');assert.equal(tray.openedMenu,tray.menu,'角
 assert.deepEqual(labels(tray.menu.find(item=>item.label==='任务').submenu),['看绯月写日记','补写本机任务执行评价','绯月任务管理','中断任务与补传','任务日志']);
 const settingsLabels=labels(tray.menu.find(item=>item.label==='设置与维护').submenu);
 if(process.platform==='win32'){
-  assert.deepEqual(settingsLabels,['动画与声音','轮询设定','登录 Windows 后延迟 1 分钟启动','云端连接','测试 AGY CLI 推理','重启绯月','退出']);
+  assert.deepEqual(settingsLabels,['动画与声音','轮询设定','登录 Windows 后延迟 1 分钟启动','云端连接','线上测试','重启绯月','退出']);
   const item=tray.menu.getMenuItemById('loginStart');
   assert.equal(item.type,'checkbox');assert.equal(item.checked,false);assert.equal(loginWrites,0);
   item.checked=true;item.click(item);assert.equal(item.checked,true);
@@ -196,7 +196,8 @@ if(process.platform==='win32'){
   loginError=false;item.checked=false;item.click(item);assert.equal(item.checked,false);assert.equal(loginEntries.length,0);
   result.hide();app.emit('second-instance',{},['--feiyue-login']);assert.equal(win.visible,false);
   app.emit('second-instance',{},[]);assert.equal(win.visible,true);
-}else assert.deepEqual(settingsLabels,['动画与声音','轮询设定','云端连接','测试 AGY CLI 推理','重启绯月','退出']);
+}else assert.deepEqual(settingsLabels,['动画与声音','轮询设定','云端连接','线上测试','重启绯月','退出']);
+assert.deepEqual(labels(tray.menu.find(item=>item.label==='设置与维护').submenu.find(item=>item.label==='线上测试').submenu),['多屏截图内容确认']);
 ipcMain.emit('desktop:sound-preview',event,'click');assert.equal(win.sent.at(-1)[0],'desktop:sound-preview');
 const savedBounds={...win.getBounds()};
 const postureMessages=()=>win.sent.filter(m=>m[0]==='desktop:posture');
@@ -405,11 +406,17 @@ displayList=[primary,left];screen.emit('display-added',{},left);home();
 const cover=(id,rect,extra={})=>({id,...rect,minimized:false,maximized:false,eligible:true,...extra});
 const onPrimary=cover('movie',primary.bounds),onLeft=cover('game',left.physicalBounds);
 const maximized=cover('ordinary',primary.workArea,{maximized:true});
+const snipOverlay=cover('snip',primary.bounds,{eligible:false,overlay:true});
 const snapshotOf=(...windows)=>publishWindows({foreground:'other-screen',windows});
 const beforeFull=win.getBounds();
 snapshotOf(maximized,onPrimary);
 snapshotOf({...onPrimary,minimized:true});
-assert.deepEqual(win.getBounds(),beforeFull,'普通最大化、被遮住或最小化的全屏窗口不触发避让');
+snapshotOf(snipOverlay);
+assert.deepEqual(win.getBounds(),beforeFull,'普通最大化、被遮住、最小化或截屏遮罩不触发避让');
+snapshotOf(snipOverlay,onPrimary);
+assert(centerX()<0,'截屏遮罩后方仍有真实全屏窗口时继续避让');
+home();
+snapshotOf();
 crossMenu().submenu[0].click();
 snapshotOf(onLeft);
 assert.equal(lastWalk(),false,'目的屏变成全屏，立即收住跨屏路线');

@@ -7,7 +7,7 @@ import {tmpdir} from 'node:os';
 import {briefNews,createNewsBriefing} from '../../desktop/news-briefing.mjs';
 import {conversationRoute} from '../../desktop/conversation-routing.mjs';
 import {arrangeNews,needsChinese,newsHighlights} from '../../desktop/news-layout.mjs';
-import {newsWindowStart} from '../../desktop/news-history.mjs';
+import {isRoundup,newsWindowStart,titleSimilarity} from '../../desktop/news-history.mjs';
 import {createNewsEditor} from '../../desktop/news-editor.mjs';
 
 test('新闻排版随内容影响调整，跨栏目同一事件排相邻栏',()=>{
@@ -511,4 +511,64 @@ test('按已生成期次覆盖最多72小时，空轮、栏目失败、延迟恢
     assert.deepEqual(news.edition().items.map(r=>r.title),['三天内']);
     assert.deepEqual(days,[3,1,2,2,3]);
   }finally{db.close();}
+});
+
+test('同题不同写法按标题相似度归入同一事件，行情模板稿与汇总稿不被误并',async()=>{
+  const r=title=>({title});
+  // 取自正式库的真实写法：去掉栏目包装、媒体后缀和话题标签后比较
+  assert.ok(titleSimilarity(r('我国已牵头制定78项人工智能国际标准'),r('市场监管总局：我国牵头制定78项人工智能国际标准'))>=0.55);
+  assert.ok(titleSimilarity(r('日本东京万人集会抗议高市政权政策'),r('日本东京万人集会抗议高市政权政策--国际'))>=0.8);
+  assert.ok(titleSimilarity(r('美股异动| 大型科技股集体反弹SpaceX(SPCX.US)涨逾9%_全球市场'),
+    r('美股异动| 马斯克承认AI研发落后SpaceX(SPCX.US)跌超1.5%_全'))<0.55);
+  assert.ok(isRoundup(r('【早报】高开低走，深夜美股大跳水')));
+  assert.ok(isRoundup(r('11月20日隔夜要闻：油价震荡')));
+  assert.ok(!isRoundup(r('早报道称某公司发布新品')));
+
+  const at=Date.parse('2026-11-25T10:00:00+09:00'), hour=3600000, signal=new AbortController().signal;
+  const row=(id,topic,title,ago)=>({url:'https://example.org/s'+id,topic,title,source:'报'+id,publishedAt:at-ago*hour});
+  const rounds=[
+    [row(1,'人工智能','我国已牵头制定78项人工智能国际标准',30),
+     row(2,'美国股市','美股异动| 大型科技股集体反弹SpaceX(SPCX.US)涨逾9%',29)],
+    [row(3,'大模型','市场监管总局：我国牵头制定78项人工智能国际标准',20),
+     row(4,'美国股市','美股异动| 马斯克承认AI研发落后SpaceX(SPCX.US)跌超1.5%',19)],
+    [row(5,'人工智能','【早报】我国牵头制定78项人工智能国际标准',2)]
+  ];
+  let round=0, clock=at-28*hour;
+  const db=new DatabaseSync(':memory:');
+  const news=createNewsBriefing(db,()=>clock,()=>{},async()=>({items:rounds[round],failed:[]}));
+  for(const when of [at-28*hour,at-18*hour,at-hour]){clock=when;await news.poll(signal);round++;}
+  const items=news.feed().items, standard=items.find(item=>/78项/u.test(item.title));
+  const details=news.event(standard.id);
+  assert.equal(details.reports.length,3);
+  assert.equal(details.nodes.length,1,'转载与汇总稿补入原节点，不新增进展');
+  assert.ok(!/早报/u.test(standard.title),'汇总稿不当标题');
+  assert.equal(items.filter(item=>/SpaceX/u.test(item.title)).length,2,'行情模板稿不靠相似度合并');
+  db.close();
+});
+
+test('一次性重并只运行一次：现存同题单节点事件合并，来源索引随之迁移',()=>{
+  const at=Date.parse('2026-11-25T10:00:00+09:00'), hour=3600000;
+  const db=new DatabaseSync(':memory:');
+  createNewsBriefing(db,()=>at-48*hour,()=>{},async()=>({items:[],failed:[]}));
+  db.exec('DELETE FROM news_history_migration WHERE id=5');
+  const report=(id,topic,title,ago)=>({url:'https://example.org/m'+id,topic,title,source:'报'+id,publishedAt:at-ago*hour});
+  const put=(id,reports)=>{
+    const event={id,topic:reports[0].topic,at:reports[0].publishedAt,nodes:[{at:reports[0].publishedAt,timeKind:'报道时间',reports}]};
+    db.prepare('INSERT INTO news_events(id,at,version,content) VALUES(?,?,1,?)').run(id,event.at,JSON.stringify(event));
+    for(const row of reports)db.prepare('INSERT INTO news_event_urls VALUES(?,?)').run(row.url,id);
+  };
+  put('a',[report(1,'日本社会','日本东京万人集会抗议高市政权政策',30)]);
+  put('b',[report(2,'日本社会','东京万人集会抗议高市政权 民众担忧和平宪法受威胁',20)]);
+  put('c',[report(3,'日本社会','山区公交恢复运行',10)]);
+  const news=createNewsBriefing(db,()=>at,()=>{},async()=>({items:[],failed:[]}));
+  const items=news.feed().items;
+  assert.equal(items.length,2);
+  const merged=items.find(item=>/集会/u.test(item.title));
+  assert.equal(news.event(merged.id).reports.length,2);
+  assert.equal(db.prepare('SELECT count(DISTINCT event_id) AS n FROM news_event_urls WHERE url LIKE ?').get('%/m%').n,2);
+  // 第二次启动不再重排
+  put('d',[report(4,'日本社会','东京万人集会抗议高市政权政策',5)]);
+  createNewsBriefing(db,()=>at,()=>{},async()=>({items:[],failed:[]}));
+  assert.equal(createNewsBriefing(db,()=>at,()=>{},async()=>({items:[],failed:[]})).feed().items.length,3);
+  db.close();
 });

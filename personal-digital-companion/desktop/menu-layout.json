@@ -44,7 +44,9 @@
     {"action":"pollSettings","label":"轮询设定","icon":"⏲"},
     {"action":"loginStart","label":"登录 Windows 后延迟 1 分钟启动","icon":"🚀"},
     {"action":"connection","label":"云端连接","icon":"☁"},
-    {"action":"agyTest","label":"测试 AGY CLI 推理","icon":"⚡"},
+    {"label":"线上测试","icon":"🧪","items":[
+      {"action":"multiScreenTest","label":"多屏截图内容确认","icon":"🖥"}
+    ]},
     "-",
     {"action":"restart","label":"重启绯月","icon":"♻","tone":"danger"},
     {"action":"quit","label":"退出","icon":"⏻","tone":"danger"}

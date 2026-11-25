@@ -27,6 +27,7 @@ main.fy-scroll, .overview { scrollbar-gutter:stable; }
   position:absolute; background:none; border:0; overflow:hidden;
   --heat-tone:light-dark(#edb29c,#90462f);
 }
+[data-heatmap] .event-heading { height:100%; }
 [data-heatmap] #key-list .event, #event-list[data-heatmap] .event {
   --heat-tone:light-dark(#a8cbb7,#476959);
 }

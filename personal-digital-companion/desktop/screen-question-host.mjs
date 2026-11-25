@@ -112,7 +112,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   const service=()=>servicePromise??=(client?Promise.resolve(client):createScreenQuestionClient({profile,screen,memory,vision,upgradeVision,interactionWork,desktopCapturer:{
     async getSources(options) {
       const target=panel;
-      if(!target||target.isDestroyed())throw Error('气泡已关闭');
+      if(!target||target.isDestroyed())return await desktopCapturer.getSources(options);
       target.setContentProtection(true);
       try{
         // 等桌面合成器应用截图排除；窗口对用户始终可见。
@@ -348,7 +348,11 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         }finally{if(token===generation){busy=false;controller=null;}}
       });
     }
-    if(extra.length)return {state:'error',text:'请说明如何使用这些参考图，例如“把图1的外套换成图2的”。'};
+    if(extra.length){
+      if(!args?.attachment||!files.every(f=>validAttachment(f)&&f.kind==='image'))return {state:'error',text:'附件无效，请重新添加。'};
+      const prompt=text?args.text:`请描述并对比这 ${files.length} 张图片。`;
+      return track(()=>perform(prompt,false,false,'auto',null,files[0],null,null,null,files));
+    }
     if(args?.attachment!=null){
       if(!validAttachment(args.attachment))return {state:'error',text:'附件无效，请重新添加。'};
       const attachment=args.attachment;
@@ -387,12 +391,13 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     if(disposed||token!==generation||!panel||panel.isDestroyed()||detachedCommand&&detachedCommand!==threadId&&value.threadId!==threadId)return;
     state=value;place();panel.webContents.send('screen-qa:changed',value.threadId?{...viewOptions(),...value,mode:undefined}:value);
   }
-  async function perform(question,withScreen=false,retry=false,mode='auto',decision=null,attachment=null,commandThread=null,commandSignal=null,messageId=null){
+  async function perform(question,withScreen=false,retry=false,mode='auto',decision=null,attachment=null,commandThread=null,commandSignal=null,messageId=null,attachments=null){
     if(disposed||!panel&&!commandThread)return cancelled();
     if(busy)return {state:'error',code:'BUSY',text:'正在处理上一条。',retryable:false};
     const text=retry?lastRequest?.text?.trim()??'':typeof question==='string'?question.trim():'';
     const assent=/^(?:我)?(不同意|同意|放弃)(这组(?:提醒)?修改)?[。！!]?$/u.exec(text);
-    const route=retry?lastRequest:mode==='direct'?{kind:'direct'}:mode==='attachmentRegistration'?{kind:'attachmentRegistration',fileName:attachment?.name}:attachment?{kind:'question',fileName:attachment.name}:decision?{kind:'decision',decision}:memory&&withScreen&&mode==='auto'?{kind:'question'}:mode==='auto'&&assent&&(reviewedGroup||assent[2]||edits?.hasPending())?
+    const multiName=attachments?.length>1?`${attachments[0].name} 等 ${attachments.length} 张图片`:attachment?.name;
+    const route=retry?lastRequest:mode==='direct'?{kind:'direct'}:mode==='attachmentRegistration'?{kind:'attachmentRegistration',fileName:attachment?.name}:attachment?{kind:'question',fileName:multiName}:decision?{kind:'decision',decision}:memory&&withScreen&&mode==='auto'?{kind:'question'}:mode==='auto'&&assent&&(reviewedGroup||assent[2]||edits?.hasPending())?
       {kind:'reminderConsent',action:assent[1]==='同意'?'approve':'reject',token:reviewedGroup}:conversationRoute(text,mode,withScreen);
     if(route?.kind==='memory')return {state:'error',code:'MEMORY_NOT_AVAILABLE',text:'记忆查询暂未开放。'};
     if(!['reminders','reminderConsent'].includes(route?.kind))reviewedGroup='';
@@ -438,8 +443,8 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       turn.emotionPrior=retry?route.turn?.emotionPrior??null:emotion().store.snapshot().desire?.id??null;
       if(['registration','decision','attachmentRegistration'].includes(route.kind))turn.registrationMood=emotion().expression();
     }
-    if(retry)attachment=route.attachment??attachment;
-    else lastRequest={...route,text:userText,turn,operation,attachment,inputAt,reviewState,knowledgeSource};
+    if(retry){attachment=route.attachment??attachment;attachments=route.attachments??attachments;}
+    else lastRequest={...route,text:userText,turn,operation,attachment,attachments,inputAt,reviewState,knowledgeSource};
     if(!retry&&!decision&&route.kind!=='registration')supplement='';
     busy=true;const token=commandThread?generation:++generation;controller=new AbortController();
     const manual=commandSignal?AbortSignal.any([controller.signal,commandSignal]):controller.signal;
@@ -693,7 +698,12 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
             if(image.localMs!==undefined)timing.localMs+=image.localMs;
             await records.save({...turn,state:'waiting',text:image.reason??image.route});
           }};
-        if(attachment){
+        if(attachments?.length>1){
+          options.grounded=true;
+          options.images=attachments.map(item=>electron.nativeImage.createFromDataURL(item.data));
+          if(options.images.some(img=>img.isEmpty()))return {state:'error',text:'图片解码失败，请重新添加。'};
+          options.image=options.images[0];
+        }else if(attachment){
           options.grounded=true;
           if(attachment.kind==='image'){
             options.image=electron.nativeImage.createFromDataURL(attachment.data);
@@ -1134,7 +1144,22 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     });
     queueMicrotask(()=>{if(!disposed){threadReplies.recover();wakeOrganization();}});
   }
-  return {open,speak,showNag,notifyPending,askUser,openImage,get inquiryPanel(){return inquiry.panel;},generateServerImage:images.generateServerImage,drawScene:(prompt,id)=>images.generateServerImage(prompt,id,true),openReview:(view=threads?'chat':'tasks')=>details.open(null,view),
+  async function testScreenQuestion(question='请根据当前屏幕截图，判断用户正在干什么，以及是否在玩游戏？请简明扼要地给出判断和画面依据。'){
+    const api=await service();
+    const turn={id:crypto.randomUUID(),at:Date.now(),question};
+    const timing=newTiming();
+    const result=await api.captureAndAsk(question,{
+      grounded:true,
+      turn,
+      onImage:async image=>{
+        turn.image=image;
+        if(image.localMs!==undefined)timing.localMs+=image.localMs;
+      }
+    });
+    void logTiming(timing,turn,'线上测试 · 多屏截图内容确认',result.state);
+    return {result,turn};
+  }
+  return {open,speak,showNag,notifyPending,askUser,openImage,testScreenQuestion,get inquiryPanel(){return inquiry.panel;},generateServerImage:images.generateServerImage,drawScene:(prompt,id)=>images.generateServerImage(prompt,id,true),openReview:(view=threads?'chat':'tasks')=>details.open(null,view),
     threadArchive:day=>threads?.archiveTurns(day)??[],
     openThreadReview:id=>{if(threads)syncQuestionLines();return details.open(null,threads?'chat':'pending',id);},
     openLog:()=>details.open(null,'log'),hide,abandon,
