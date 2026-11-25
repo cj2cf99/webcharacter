@@ -90,12 +90,19 @@ test('公用识图模块优先走本机 AGY CLI 并自动清理临时图片，�
   assert.deepEqual(await readdir(tempDir),[],'识图结束后应立即清理临时图片');
   assert.deepEqual(await vision('帮我抠图',image,AbortSignal.timeout(5000)),{reason:'视觉模型无法输出图像蒙版'});
 
+  let fallbackCalls=0;
   const fallbackVision=createAgyVision({
     tempDir,
     isAvailable:()=>false,
-    fallback:async()=>({text:'备用视觉回答'})
+    fallback:async()=>{fallbackCalls++;return {text:'备用视觉回答'};}
   });
+  assert.deepEqual(await fallbackVision('图里有什么？',[],AbortSignal.timeout(5000)),{reason:'AGY CLI 识图参数无效'});
+  assert.equal(fallbackCalls,0,'无效图片不应触发备用视觉');
+  const aborted=new AbortController();aborted.abort();
+  await assert.rejects(()=>fallbackVision('图里有什么？',image,aborted.signal),/AbortError/);
+  assert.equal(fallbackCalls,0,'已取消请求不应触发备用视觉');
   assert.deepEqual(await fallbackVision('图里有什么？',image,AbortSignal.timeout(5000)),{text:'备用视觉回答'});
+  assert.equal(fallbackCalls,1);
 
   const multiSeen=[];
   const multiVision=createAgyVision({

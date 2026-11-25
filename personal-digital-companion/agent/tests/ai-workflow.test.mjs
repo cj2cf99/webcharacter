@@ -488,21 +488,22 @@ test('短补评 CPU 暂不可用后可续办，每条只推理一次并保留原
   finally{db.close();}
 });
 
-test('补评超过旧的单项和整轮阈值仍保存，手动再扫不重复推理',async t=>{
-  const {profile,file,after}=fixture(t),slow='超时材料';
-  let clock=0,slowCalls=0;
-  const tasks=[slow,'正常材料'].map((title,i)=>({at,task_id:'budget-'+i,title,action:'已完成',detail:'检查原件'}));
-  const ai=createAiWorkflowModel({file,executionPolicy:{now:()=>clock},model:model({async memory(text,_prompt,schema){
-    if(text.includes(slow)){clock+=61*60_000;slowCalls++;}
+test('补评超过旧的 120s 单项阈值但未超现行 5 分钟上限仍保存，超 5 分钟上限按现行规则丢弃，手动再扫不重复推理',async t=>{
+  const {profile,file,after}=fixture(t),medium='四分钟材料',overLimit='超五分钟材料';
+  let clock=0,mediumCalls=0,overLimitCalls=0;
+  const tasks=[medium,overLimit,'正常材料'].map((title,i)=>({at,task_id:'budget-'+i,title,action:'已完成',detail:'检查原件'}));
+  const ai=createAiWorkflowModel({file,executionPolicy:{now:()=>clock},model:model({async memory(text){
+    if(text.includes(medium)){clock+=4*60_000;mediumCalls++;}
+    else if(text.includes(overLimit)){clock+=6*60_000;overLimitCalls++;}
     return {review:'我记下了。'};
   }})});
   const diary=createPersonalityDiary({profile,model:ai,now:()=>at,weather:()=>[],
     memory:{archiveDays:()=>[day],read:()=>[],readTasks:()=>tasks}});
   after(async()=>{diary.close();await ai.close();});
   const first=await diary.run('task-review',signal());
-  assert.match(first,/补写 2 条执行评价/);assert.doesNotMatch(first,/超时丢弃/);
+  assert.match(first,/补写 2 条执行评价/);assert.match(first,/执行超时丢弃 1 条/);
   assert.match(await diary.run('task-review',signal()),/补写 0 条执行评价/);
-  assert.equal(slowCalls,1);
+  assert.equal(mediumCalls,1);assert.equal(overLimitCalls,1);
 });
 
 test('业务入口成批补评价时为审核保留 CPU，剩余零星短评允许代写',async t=>{

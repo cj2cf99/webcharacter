@@ -27,7 +27,7 @@ test('情绪评价超时只延后重试一次，之后的材料先完成，正�
       assert.equal(options.maxTokens,384);
       if(text==='慢材料')throw new DOMException('评价超时','TimeoutError');
       if(text==='先让行'&&calls.filter(call=>call==='先让行').length===1){
-        service.interrupt();signal.throwIfAborted();
+        service.interrupt(true);signal.throwIfAborted();
       }
       return text==='正常材料'?{...valid,curiosity:'正常材料'}:valid;
     }}});

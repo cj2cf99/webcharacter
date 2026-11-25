@@ -165,13 +165,17 @@ export function createAgyVision({
   fallback
 } = {}) {
   return async (question, imageOrImages, signal, options = {}) => {
+    signal?.throwIfAborted?.();
     const rejected = rejectCutoutQuestion(question);
     if (rejected) return {reason: rejected};
     const images = normalizeImageList(imageOrImages);
+    if (!images.length || images.some(img => !img?.data_base64)) {
+      return {reason: 'AGY CLI 识图参数无效'};
+    }
     if (!isAvailable?.()) {
       return fallback ? fallback(question, imageOrImages, signal, options) : {reason: '未安装 AGY CLI'};
     }
-    if (!images.length || images.some(img => !img?.data_base64) || !tempDir || typeof runAgy !== 'function') {
+    if (!tempDir || typeof runAgy !== 'function') {
       return {reason: 'AGY CLI 识图参数无效'};
     }
 

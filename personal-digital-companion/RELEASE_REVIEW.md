@@ -1,3 +1,17 @@
+## 2026-11-25 远端同步后自审修复与新闻编辑技能 v2.4 热更新 · 绯月 Windows 正式安装版 · 已部署
+
+状态：**已于 2026-11-25 17:47 JST 完成 `skills/news-editorial/` 4 文件原子同步并经运行实例 PID `27632` 的 `GET /v1/skills` 验收生效（`news-editorial@2.4`），12 个核心 `desktop/` 文件含本次自审修复均核对 100% 一致；花园登记已于 17:50 JST 完成回读并取回确认（`34.5 → 34.6`，修订 `190 → 191`）**。自审报告见 [SYNC_INTEGRATION_SELF_REVIEW_2026-11-25.md](docs/reviews/SYNC_INTEGRATION_SELF_REVIEW_2026-11-25.md)。第三方审核：无。
+
+### 安装、验收与花园登记回执
+- 备份路径：`G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/install-backup-sync-self-review-20261125/`（原 `latest.json` 与 `source/local-ai.json`）。
+- 原子替换与校验：4/4 文件（`skills/news-editorial/source/local-ai.json`、`latest.json`、`versions/news-editorial-v2-4/local-ai.json`、`SKILL.md`）原子写入并核对 SHA-256 100% 一致；12 个核心 `desktop/` 文件（含本次自审修复的 `vision-client.mjs`、`screen-question-client.mjs`、`screen-question-host.mjs`）已核对与开发工作区 SHA-256 100% 一致。
+- 实例与热更新验收：`http://127.0.0.1:8765/infoguide` 核对 `pid=27632`、`started=2026-11-25T08:45:09.130Z`（17:45:09 JST）、资料目录不变；`GET /v1/skills` 返回 `id=news-editorial version=2.4 source=bundled`。
+- 自动化验证：全量 606 项单测（603 通过、3 跳过、0 失败）、`tools/test-desktop-shell.mjs`（7/7 `PASS`）、`tools/build-desktop.mjs` 与 29 项专项复测全部通过。
+- 花园登记：用户确认“确认登记”。批次 `feiyue-sync-self-review-20261125`，登记包提交 `9f28c5d069206a2934bfed041765ee165d166484`（`G:/cloudflare/myapp`，本地提交，未推送），确认摘要 `bc7f4424a7f59152bdaebff7003468b95c90ca444c7b9dadf77c4be3b17cda8f`。于 `17:49:52 JST` 入队、`17:50:10 JST` 步骤核验 `verified`、`17:50:16 JST` 状态 `done`、`17:50:18 JST` 完成 `ack`：修订 `190 → 191`、部署 `#116` / 明细 `#200`、「网页角色组件 → 绯月（桌面精灵）」版本 `34.5 → 34.6`。纯登记元数据，未做数据库备份。
+- 恢复方案：将备份目录中 `skills/news-editorial/` 2 个原文件覆回并删除 `versions/news-editorial-v2-4/` 即可回退至 `news-editorial@2.3`。
+
+---
+
 ## 2026-11-25 WSL2 独立 AGY CLI、20 分钟熔断、即用即预热、AGY 识图与清单生成收尾 · 绯月 Windows 正式安装版 · 已部署（线上效果待用户确认）
 
 状态：**已于 2026-11-25 17:42 JST 完成 12 文件原子安装并受控重启（PID `11232`，WSL2 `agy-wsl` 启动即自动预热就绪），花园登记已于 17:46 JST 完成回读并取回确认（`34.4 → 34.5`，修订 `189 → 190`）**。发布前 2 轮自审通过，见 [COMBINED_DEPLOY_SELF_REVIEW_2026-11-25.md](docs/reviews/COMBINED_DEPLOY_SELF_REVIEW_2026-11-25.md)。真实桌面 UI 与多屏截图效果由用户手动确认。第三方审核：无。

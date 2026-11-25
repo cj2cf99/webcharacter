@@ -95,7 +95,7 @@ export async function createScreenQuestionClient({profile,screen,desktopCapturer
   if(!configurationError&&typeof request!=='function')configurationError=failure('CONFIG_NOT_CONFIGURED','问答连接尚未配置');
   let active=null,last=null;
   const capture=signal=>captureAllDisplays(screen,desktopCapturer,signal);
-  async function run(question,{signal,onState,onFailure,onImage,turn,grounded=false,image:attachedImage,images:attachedImages,document,feedback}={},retry=false,withScreen=false){
+  async function run(question,{signal,onState,onFailure,onImage,turn,grounded=false,archive=true,image:attachedImage,images:attachedImages,document,feedback}={},retry=false,withScreen=false){
     if(active)return failure('BUSY','已有一个问题正在处理');
     const controller=new AbortController(),externalAbort=()=>controller.abort();active=controller;
     signal?.addEventListener('abort',externalAbort,{once:true});if(signal?.aborted)controller.abort();
@@ -132,7 +132,7 @@ export async function createScreenQuestionClient({profile,screen,desktopCapturer
       }
       if(payload.sources?.length){
         let ref;
-        if(memory){
+        if(memory&&archive){
           try{ref=await memory.storeImage(turn,payload.sources[0]);await onImage?.({...ref,route:'本地识图'});}
           catch{return failure('ARCHIVE_FAILED','图片未能保存到记忆目录，请检查磁盘后重试。',true);}
           controller.signal.throwIfAborted();
@@ -161,11 +161,11 @@ export async function createScreenQuestionClient({profile,screen,desktopCapturer
         const value=local?.text?{state:'answer',text:local.text}:failure(local?.code??'LOCAL_VISION_UNAVAILABLE',reason+'，请补充文字或重试。',true);
         emit(value);return value;
       }
-      emit({state:'waiting',text:payload.weather?'正在查询天气…':payload.endpoint.endsWith('/message')?'正在回答…':payload.attachedImage?'正在查看图片…':'正在查看屏幕…'});
+      emit({state:'waiting',text:payload.weather?'正在查询天气…':payload.endpoint.endsWith('/message')?'正在回答…':'正在查看屏幕…'});
       let value;
       for(let attempt=1;attempt<=2;attempt++){
         const startedAt=Date.now();
-        const diagnostic={attempt,operation:payload.weather?'天气查询':payload.endpoint.endsWith('/message')?'文字问答':payload.attachedImage?'图片问答':'截图问答',phase:'发送请求'};
+        const diagnostic={attempt,operation:payload.weather?'天气查询':payload.endpoint.endsWith('/message')?'文字问答':'截图问答',phase:'发送请求'};
         value=await call(request,payload,controller.signal,diagnostic);
         const routes=diagnostic.routes;
         delete diagnostic.routes;

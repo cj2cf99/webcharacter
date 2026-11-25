@@ -43,6 +43,10 @@ test('DSQ01b：多显示器同时截图（鼠标屏优先）及多张附件图�
   dep.log.localImage=null;
   assert.equal((await client.askText('对比这两张图',{images:[native(15),native(25)]})).state,'answer');
   assert.equal(dep.log.localImage.length,2);
+  let stored=0;
+  const noArchiveClient=await createScreenQuestionClient({...dep,memory:{storeImage:async()=>{stored++;return {path:'mem.jpg'};}}});
+  assert.equal((await noArchiveClient.captureAndAsk('测试截图',{archive:false})).state,'answer');
+  assert.equal(stored,0,'archive=false 时不应写入正式记忆目录');
 });
 test('DSQ02：NativeImage过大依次质量与resize，不空图、不落盘',async()=>{
   const dep=dependencies();dep.log.sources=[{display_id:'2',thumbnail:native(4*1024*1024+1)}];

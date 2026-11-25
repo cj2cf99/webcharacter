@@ -1150,6 +1150,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
     const timing=newTiming();
     const result=await api.captureAndAsk(question,{
       grounded:true,
+      archive:false,
       turn,
       onImage:async image=>{
         turn.image=image;
