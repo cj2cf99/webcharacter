@@ -1,0 +1,2905 @@
+{
+ "target": "G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion",
+ "files": [
+  {
+   "path": ".gitignore",
+   "baseline": "2ca562a86850e3f59e5bf75461c62313eec5472beaede6329bfec59b74de1034",
+   "candidate": "fe115e40a5da55a625ba813e8e38d975a9761ac1c8caa6df5504a6058cc03965"
+  },
+  {
+   "path": "AGENTS.md",
+   "baseline": "5293fba83c62971a3f61b80236d720056f0f2442dceb6f17cf0b17e14b507f91",
+   "candidate": "3c9ad7a16ea62c4270b67037121a19e99227076e6711436cf2fa9bd87b722bc7"
+  },
+  {
+   "path": "README.md",
+   "baseline": "63698c9e3d9c25b2d631200f00a1fbf1e6051657e20f756605eb9cfd7d6a91a8",
+   "candidate": "b299a8b641e097b3e1145f3f368273d84109d5e5c548167633593c24678b395f"
+  },
+  {
+   "path": "RELEASE_REVIEW.md",
+   "baseline": "d21682023b487608b2ddaa21ac5456b924a4e07862e622ae4d14a893fdbdb8db",
+   "candidate": "6087dbee8d17a0339b689a3e921dc1d628165c0aefaf7ce05e241c091506aa56"
+  },
+  {
+   "path": "REQUIREMENTS.md",
+   "baseline": null,
+   "candidate": "1bb5081bd173af4e75ab4c95e37659ed5b870b691ef880b7cf2c7f8c4d9783ed"
+  },
+  {
+   "path": "agent/README.md",
+   "baseline": "b06adc0e0c9f08ee792120ad3f5a5b7e0d690b227f64f386463eb8c5be6b896e",
+   "candidate": "0f1419fc54a2d6db58cd554af0f73572eb06f98a71805ce348aedb6bfda5e120"
+  },
+  {
+   "path": "agent/assistant/original-txt.mjs",
+   "baseline": null,
+   "candidate": "3a5fa7c82108937a7748b61238f6bffd76aae52991b5c7c06d0fd6e9773e388d"
+  },
+  {
+   "path": "agent/assistant/personality-memory.mjs",
+   "baseline": "465cdf4a3318647ddf31f6382d568e552dd37e1c48adf5a99108731099bedcb3",
+   "candidate": "da647285b75ada5d70bb3598b4f79fb326d7ed15b5c48d8cb6cf67b2ba875745"
+  },
+  {
+   "path": "agent/assistant/provider-test.mjs",
+   "baseline": null,
+   "candidate": "54a91c0f5a7c38bd2817f172428affc85f5b20d9e18e5b2e0987941cccc84d7c"
+  },
+  {
+   "path": "agent/assistant/registration-plan.mjs",
+   "baseline": "0eeb1affa8526d37a4c484ef8456f07ee3c5c95cd13e9885ac866538fb3b8c0d",
+   "candidate": "ed92c951ba33f26767dbe36575fd8717be39c549d42f0d06ceaf859df201a487"
+  },
+  {
+   "path": "agent/fixtures/dev-databases/README.md",
+   "baseline": null,
+   "candidate": "a4c9e4572fde1d676398cfbcd6e430af51b6558ec0a170985f88151fa5ed3970"
+  },
+  {
+   "path": "agent/fixtures/dev-databases/companion-d1.sqlite",
+   "baseline": null,
+   "candidate": "03c2f2988514df38ed176d052c644a09e7ac0a583e28089486ed8d05f9cc0079"
+  },
+  {
+   "path": "agent/fixtures/dev-databases/desktop-tasks.sqlite",
+   "baseline": null,
+   "candidate": "2dc6cd1d99cb8c03bfcf85dfc20c46599145aac2fe78d2fae25e62a82fb582e0"
+  },
+  {
+   "path": "agent/fixtures/dev-databases/main-d1.sqlite",
+   "baseline": null,
+   "candidate": "c291010f92aa4e7598c51a12da04a91120907d91d5114affc391f572bdca8275"
+  },
+  {
+   "path": "agent/fixtures/dev-databases/main-seed.sql",
+   "baseline": null,
+   "candidate": "8811595eb6a0ff19856903eab7e60ca6728f3ca887ce63147e5e7a4409f451e1"
+  },
+  {
+   "path": "agent/host/memory-page.mjs",
+   "baseline": "cc0c1c4139551d86abb78029d4ce15e33cd4c2cd18fe1961f5c7b9d34438c124",
+   "candidate": "0bce0a2f4058f96503e7e8205167a1eeb3c93ff4798664c0532353e2d47fac7e"
+  },
+  {
+   "path": "agent/host/memory-reader.mjs",
+   "baseline": "871e85af35fdcd9fe1da2f80eb7a71ab4f1bd627de9053f3d30dba586f3494ca",
+   "candidate": "ee7cc565f3990baa965cb7e8483af04d882fa5237ac1b3466bafa2e353a222c7"
+  },
+  {
+   "path": "agent/host/memory-route.mjs",
+   "baseline": "3c8ba0033dea8225f96d24ac9605b3afdb67911dcd5380585de3c0520f62b365",
+   "candidate": "6989b396770e7cc7a63ba1f087ce24eaf0b2be36bd0603943b3fe8ae71bb3c07"
+  },
+  {
+   "path": "agent/host/memory-sources.mjs",
+   "baseline": null,
+   "candidate": "d47091af8b83e8a3567d111080c5f0c5de7a2404cfec3eb6e019403287337387"
+  },
+  {
+   "path": "agent/host/registration-ai.mjs",
+   "baseline": "eb3d9645a40df9d3c01b1c3696d6dc6f2468b169e0f6668e78b9a04906970c75",
+   "candidate": "1fcd53c3e599b79563ffa1d29a709d3e363c357610eb5d43795bef4fd748e9bb"
+  },
+  {
+   "path": "agent/host/registration-data.mjs",
+   "baseline": "6bf83bbc88a60ae7bd4e8cfb8823fb202cb17d7158172f26d29bf17e35ea721b",
+   "candidate": "9787184542457386639b28df05ebc9bec828930ee5408e88efb9b7e9f82357de"
+  },
+  {
+   "path": "agent/host/subscriptions.mjs",
+   "baseline": "6a8f6723f424edf7d3ec0440b3e513d68512192229a2fa717acfc86c36c2a27e",
+   "candidate": "97f5294c6ff97a0c94de7197be8e94e8fad376714710e09daf73c14c3dfad053"
+  },
+  {
+   "path": "agent/host/txt-files.mjs",
+   "baseline": null,
+   "candidate": "21e250a44f8ac7572778d24cb9a0e37aba4020c54329ff28f35bbb3188ed0eae"
+  },
+  {
+   "path": "agent/integration/personality-api.patch",
+   "baseline": "d3f44141a0ca7859fd725aff2de1ff0f71e3e962c09db1d7041bc945697594c0",
+   "candidate": "c644fcac5162edec765593ab15099ded2a5d50cdb6ccd79a4b37f3212992e656"
+  },
+  {
+   "path": "agent/integration/personality-main.patch",
+   "baseline": "d9bb9ed7d0b6cea8dadf56c50cd95c51be0f293b526315fe153c3f03ec10a5f3",
+   "candidate": "25468ba03c4453506fa53f059a88aef5a0722a7579da526201314ffbfe81379f"
+  },
+  {
+   "path": "agent/seeds/tasklist-preview.sql",
+   "baseline": "e66563dca81dd5a666d0c3d5379ced36865c71fd5909e8f290abdb1111714876",
+   "candidate": "1eb765cf432753115b9cedceecf7412fa3e2da6ce3a6ef3d8cbde1a3e4554025"
+  },
+  {
+   "path": "agent/seeds/tasklist-registration.sql",
+   "baseline": "fe59a29c4526c3da1561ecc3eff2f6a64d65db7e099aee1465028111260a49a2",
+   "candidate": "032a77e6d26f59e655a5d8df3348cb0fc250439caf64ace0c7b4fbdcc878bc1e"
+  },
+  {
+   "path": "agent/tests/agy-bandao-fallback.test.mjs",
+   "baseline": null,
+   "candidate": "9a9fe63a3d1aad1a2c9bbf18287a44a88a2ed10fa823ead39fb41bfcdd88bc51"
+  },
+  {
+   "path": "agent/tests/agy-cli.test.mjs",
+   "baseline": null,
+   "candidate": "043ddb6fa13ce0722ac6cda4f9106b0644801f5f93392186b2fb002ef810876f"
+  },
+  {
+   "path": "agent/tests/agy-standby.test.mjs",
+   "baseline": null,
+   "candidate": "3b75aab0eaa049051c001b092408ff42c7f0f22133b23afa74d7dd14e00bbb91"
+  },
+  {
+   "path": "agent/tests/ai-gateway-guard.test.mjs",
+   "baseline": null,
+   "candidate": "f8a978cb21cd1c8ab703c7f5666404926013b44886611591194af82b785bdfab"
+  },
+  {
+   "path": "agent/tests/ai-workflow.test.mjs",
+   "baseline": null,
+   "candidate": "ecda8eed0651ba01dbe49619b722a96bbfa89a9a356ea5f9c69c2f3719e050dd"
+  },
+  {
+   "path": "agent/tests/autonomous-idle.test.mjs",
+   "baseline": "8257e726671e357d8e66122d6ecc41c61f41ff268418a428f111de204c292b0b",
+   "candidate": "f9f9e609c35fa9b872bf468203efd4fc7d10790c5ed4f7a9e2d4c61a0f8870f3"
+  },
+  {
+   "path": "agent/tests/balanced-local-model.test.mjs",
+   "baseline": "305df61e21bb61e9797ebba30fda9dada31dc8ff4c248adfdb0c1d6c7d1dd0c9",
+   "candidate": "1582c5996f099ca1fdc5071c706b4bb5b93e0d9838dbc5c11861fab26e9f5d4d"
+  },
+  {
+   "path": "agent/tests/chat-registration-boundary.test.mjs",
+   "baseline": "b01b5501a8cf3b7409216be9f830dd9eaa945414e13b69add41f2c5bc3e8a4b7",
+   "candidate": "70d544151445d4d818f9805210bf06660af6ebdda327e3f50a7813913fafda07"
+  },
+  {
+   "path": "agent/tests/cloud-lane.test.mjs",
+   "baseline": null,
+   "candidate": "7b2c7515bf645664e08a36d437a70f262a7833f98bd50e34793c2dc21a4c590b"
+  },
+  {
+   "path": "agent/tests/conversation-threads.test.mjs",
+   "baseline": null,
+   "candidate": "5c7279460da4f4e53124c975c40ae2b59bf047cf6040b85860f0d21fef702502"
+  },
+  {
+   "path": "agent/tests/desktop-quit.test.mjs",
+   "baseline": "76b718f2b9e010010f6a76eefe4f0d616e19b806fc3971e8721e9a9d4ccbfddd",
+   "candidate": "8c98c4129e2b59495143ff459f87606db36dc167c8af5082d4c129048af11b52"
+  },
+  {
+   "path": "agent/tests/desktop-screen-question.test.mjs",
+   "baseline": "d16407a7b0aa216a93f93a91f6019a6ce787cc910852b3efa13583141867e570",
+   "candidate": "b4a5fccf693ff2e69467b86a40947f91a7d49a1936c91cdeef28393fbd319495"
+  },
+  {
+   "path": "agent/tests/diary-audit.test.mjs",
+   "baseline": null,
+   "candidate": "25d575fdb6ed8d057872725f37cc348e4a58cff7fbd1db4097fd4c8bc48de5f3"
+  },
+  {
+   "path": "agent/tests/diary-narration.test.mjs",
+   "baseline": null,
+   "candidate": "a5c5a41527080dc218cd7a42f4d66ea91c058a2e95572db04669557dbf1262fb"
+  },
+  {
+   "path": "agent/tests/direct-local.test.mjs",
+   "baseline": null,
+   "candidate": "53f2412a1df744494b1f2cf79d66346fce59135fe3c5e5a8ea7459afd1fe95f9"
+  },
+  {
+   "path": "agent/tests/emotion-core.test.mjs",
+   "baseline": null,
+   "candidate": "bd9e855ffc997599bcf8d2f6204fc9b711a82d749bae83beaee97a6b1e4a0eac"
+  },
+  {
+   "path": "agent/tests/emotion-initiative.test.mjs",
+   "baseline": null,
+   "candidate": "2c2a4376de2246954e90e64f1a5af58ec279bd99217f042c83491d00fefd8f45"
+  },
+  {
+   "path": "agent/tests/fixtures/fake-agy.mjs",
+   "baseline": null,
+   "candidate": "44613c989867c4fb31c73c62df2ce581bb29bd42b7080b1983ec77e92fbecf36"
+  },
+  {
+   "path": "agent/tests/fixtures/original-txt.mjs",
+   "baseline": null,
+   "candidate": "d9558d4d4b028cce9245d23bb0eb15d6f7b444fafb88c3945f8d574864522fe3"
+  },
+  {
+   "path": "agent/tests/fixtures/personality-memory.mjs",
+   "baseline": null,
+   "candidate": "0067966d997e9a1768fc0240e6bde1ff5628fb6c4396972bbe3f9e3d7592fc02"
+  },
+  {
+   "path": "agent/tests/fixtures/personality-memory.sql",
+   "baseline": null,
+   "candidate": "0b3b4e108f7c6aaf096c17422e24a0e334489b2c313a0f3ce5fd32f889bca859"
+  },
+  {
+   "path": "agent/tests/fixtures/txt-files.mjs",
+   "baseline": null,
+   "candidate": "d36d91c1426a190c0c744c89693c197764575be2f96e83f97aa874ca86b97602"
+  },
+  {
+   "path": "agent/tests/garden-first-use.test.mjs",
+   "baseline": "a5a0f419e93f4cec8795d36e07d1e488be3c2b27f3b4438fa12e1fde06edc928",
+   "candidate": "863c1f1e320e82f7fb067b74900ee1d1c44491be28b10f47a7d81b5279c86dae"
+  },
+  {
+   "path": "agent/tests/image-gemini.test.mjs",
+   "baseline": null,
+   "candidate": "29a9b457d4f9d841b12d458fd2666ab9c5fd9d507be3447cb4ae63a66e3ddbbe"
+  },
+  {
+   "path": "agent/tests/knowledge-library.test.mjs",
+   "baseline": null,
+   "candidate": "cf3538605260a46cf6781be7ec12df10d4223e716cbec87d25455b977707c979"
+  },
+  {
+   "path": "agent/tests/local-first-interaction.test.mjs",
+   "baseline": null,
+   "candidate": "a5bea17abe506d187a2389d212dcbcb349a21a6aece48de4c4c20b125ba0ca9d"
+  },
+  {
+   "path": "agent/tests/local-rest-garden.test.mjs",
+   "baseline": "22ffd2171c04c5c3544050ad968b72113c9843dac0508cdbf48bc666069c2500",
+   "candidate": "9c4ee51435833294c98e2f04d806e0a2d5bde1bf2d01692c710abb36d57d7616"
+  },
+  {
+   "path": "agent/tests/local-rest-reminders.test.mjs",
+   "baseline": null,
+   "candidate": "1d0bac8e76eb26981c19c3fe86294c66ca13ac551c64c3b26125b89f4526b535"
+  },
+  {
+   "path": "agent/tests/memory-archive.test.mjs",
+   "baseline": "ba0438dfac5b7e3518c110ad39dc759b738464ccb09d8b5996e100e6cba8a2b3",
+   "candidate": "7b3ebad5f823b13ff5207ed9ee04f1547bc7ad7e6faf93ecba04b935def33a21"
+  },
+  {
+   "path": "agent/tests/memory-refinement.test.mjs",
+   "baseline": null,
+   "candidate": "2dc7878d22e58fd94327edb3b2b4f7e7d3b0f3d447a448db35cabf0ab010e90a"
+  },
+  {
+   "path": "agent/tests/nag-reply-release.test.mjs",
+   "baseline": null,
+   "candidate": "133db48197ca15aae6ccea2eed99c52f955e48202612dc92ff4cf2215847691f"
+  },
+  {
+   "path": "agent/tests/news-briefing.test.mjs",
+   "baseline": "6896c9489ac02a6441d161f9da48e2d7939edc57c88d8788e2b93fb56d9921cb",
+   "candidate": "a31f9b7fb443b3faadbad6605f393745565fa06617ba5d9f9efa279dfef3be0c"
+  },
+  {
+   "path": "agent/tests/news-editorial.test.mjs",
+   "baseline": null,
+   "candidate": "ef060fd3a76fcbb4f35aa8cfc6aba7e30d266c2c9a9b3bffc977854e38f0e6a2"
+  },
+  {
+   "path": "agent/tests/original-txt.test.mjs",
+   "baseline": null,
+   "candidate": "2ea24c5d378ab56f3a0f230ee251c122492d2bc625c6a2bfc407d95fcc6cc0ff"
+  },
+  {
+   "path": "agent/tests/panel-window.test.mjs",
+   "baseline": null,
+   "candidate": "8cd54b50522a252b9c5d3163ea59aecc25fdba5486dd14926efc01fed03273fa"
+  },
+  {
+   "path": "agent/tests/pending-poller.test.mjs",
+   "baseline": "5482acd2127487f52fc18d283903e878a8171a74d91808e09d3af071c7496997",
+   "candidate": "488467c17a7987957441f3d767b7a680d34bb0c3c14e810e0a6715bcfe520f7c"
+  },
+  {
+   "path": "agent/tests/personality-memory.test.mjs",
+   "baseline": "9c97dd1f045181b8d64390be31a7daae2286cb3dc4e1e85470ae04582fa49d56",
+   "candidate": "604908fd64b60de7ecddf678627acfcd082b410f95bce8bf6a1baf075eb3e601"
+  },
+  {
+   "path": "agent/tests/planner-hours.test.mjs",
+   "baseline": null,
+   "candidate": "d462128af3e8e2491441b654b8ea6643181849d49f41ef5db4c020781bda5c9a"
+  },
+  {
+   "path": "agent/tests/prompt-rules.test.mjs",
+   "baseline": null,
+   "candidate": "f2d25202bfcf5480571905d961f233d2fc4982609487a75206c7773fc311f110"
+  },
+  {
+   "path": "agent/tests/provider-test.test.mjs",
+   "baseline": null,
+   "candidate": "a967afd3968853c796cab2502f6ccc78896b80f3ed52e8225c99858306b4abe8"
+  },
+  {
+   "path": "agent/tests/recovery.test.mjs",
+   "baseline": "71cfd64d490b16177cbd5d308e02ee6219d34cb67d469622ab8c517012993d6e",
+   "candidate": "471a3fb0fb7c18ec52b01221eaa561da77055e46e3ec665b43fb92d147fef65d"
+  },
+  {
+   "path": "agent/tests/registration-ai-log.test.mjs",
+   "baseline": "fa43d869279f20c1183dc00ee6a8a20d07156a74fb89f2eef18e7a750f8755dd",
+   "candidate": "19f96f7f807b40dacb6a8a4237152ab664469b3e66d2d9a7718aa7a8ea3f32fe"
+  },
+  {
+   "path": "agent/tests/registration-flow.test.mjs",
+   "baseline": "dfbe0e3f7514809e63303d98bf86806b6071a6910c62df4bb6dc94940242a2ca",
+   "candidate": "9d3110b8b13ae3f6d695db46b128556540c622a05eb58ae86880a2a93da8aaae"
+  },
+  {
+   "path": "agent/tests/registration-photo-fixture.sql",
+   "baseline": null,
+   "candidate": "f4162502f6dda458f5379acc8e8612bd0b81232bdf71aa995355f24bce96b063"
+  },
+  {
+   "path": "agent/tests/reminder-approvals.test.mjs",
+   "baseline": "ce28bff5a893402dba144d81c63d0be6bf2d1a0d874b370be7db8ee94377dbf3",
+   "candidate": "37ad6dc944d203a8c806c82a51951003b095c2c151999093c99a6287bd94f571"
+  },
+  {
+   "path": "agent/tests/reminder-review.test.mjs",
+   "baseline": null,
+   "candidate": "94f7e2bf9b5525719bbbf5f11672481c5b877e4c3c3ed3cac9fac9b3bd8bba74"
+  },
+  {
+   "path": "agent/tests/response-style.test.mjs",
+   "baseline": null,
+   "candidate": "182166bae3f1ac62b5d91d2dd85efca56e2ad774748b7452d9ba739f946b1195"
+  },
+  {
+   "path": "agent/tests/scene-curiosity.test.mjs",
+   "baseline": null,
+   "candidate": "b8481d77bac78ea7d50a9a4e885953ce91f52c71d3974d114ca4b6492c666333"
+  },
+  {
+   "path": "agent/tests/screen-question-fixture.mjs",
+   "baseline": "bdcbe5d4499daaff0bd694985aab7add93d8d7f9c55a653887969c0fbcebbe88",
+   "candidate": "17aa00e9c60db3cec6f94a6fbd7e4f73e07505cfa97889c8ecee3a618f716342"
+  },
+  {
+   "path": "agent/tests/screen-question-host.test.mjs",
+   "baseline": "24e2ee64c6e4fb929c5fbb2a2dae5e1d5d82f131edcaedfce32869a9efd2d620",
+   "candidate": "87bf69baf175e5b087c3db4a424eb4c343c18f495d9db42b3141ee5b4c253586"
+  },
+  {
+   "path": "agent/tests/screen-question.test.mjs",
+   "baseline": "262d092c1dd5374884e043e851b87b6031cd295ddcaaf8bfbc438b38e59eea8c",
+   "candidate": "e4cbfd89a89ed4918ac204570a77767e4d40216194e769992254463238d64784"
+  },
+  {
+   "path": "agent/tests/server-image-task.test.mjs",
+   "baseline": "06c0cf5a7fe5e3f3ff2531015578df7d2dc0e7531123785b5e20751bd5ca7946",
+   "candidate": "49264da9bb6375d40f96c7498b60328cb6b1255f093553d8be878ce33cae2a03"
+  },
+  {
+   "path": "agent/tests/skill-directory-question.test.mjs",
+   "baseline": null,
+   "candidate": "28135b6da76dd4d5a7bbbbe2487a10ffe602bad7ec8038bc32dc63465324bcda"
+  },
+  {
+   "path": "agent/tests/skill-hot-update.test.mjs",
+   "baseline": null,
+   "candidate": "b60cc262bffb6950b72a7aa77e2602d1ca95474612e04bbd58e93e4878acdd5f"
+  },
+  {
+   "path": "agent/tests/study.test.mjs",
+   "baseline": null,
+   "candidate": "1cc86397923f5a69c293f744c1c3cfd958af51d55fb51f6ee263dbc21ab968d5"
+  },
+  {
+   "path": "agent/tests/task-log-reader.test.mjs",
+   "baseline": "f7e49a11ad20c50eeaf29cbd7c5d2d1ae0bacb9d02017222c289e02dec547618",
+   "candidate": "a7cb61357724995508dac5fe3b418a7999141c4172a80f16c5431f3bd06d318e"
+  },
+  {
+   "path": "agent/tests/thread-confirm-settle.test.mjs",
+   "baseline": null,
+   "candidate": "00809ed821f5a87d8a02d4b1902b4e32f913072c15f3e57a44c464aa7e73efd7"
+  },
+  {
+   "path": "agent/tests/thread-ready-notice.test.mjs",
+   "baseline": null,
+   "candidate": "e3774f5164bf2fcd12c3db0299eb1d5b9f2f78988f91ddb907f55245f8e061c1"
+  },
+  {
+   "path": "agent/tests/topic-recovery.test.mjs",
+   "baseline": null,
+   "candidate": "c09d8de8af1ae3af651c281aa7c143314967d07c2d0091aeb69ecd14f166f97b"
+  },
+  {
+   "path": "agent/tests/txt-test-bucket.mjs",
+   "baseline": null,
+   "candidate": "9deeaab6027af7064861067c54751279601c2a68a59d6ee91a88802dcfd85fa7"
+  },
+  {
+   "path": "agent/tests/unified-conversation.test.mjs",
+   "baseline": "fa375fd0faeb399539332d982c940b282676ab03257594e25f216e9c94fba544",
+   "candidate": "11cee2da0c112287fd5a9a1d94fda4ab920aa2c30128e4a9fc64a1d899eedc7b"
+  },
+  {
+   "path": "agent/worker.mjs",
+   "baseline": "68a71885643b53f72926527fbb9a6dcad38600acd0bdf3643a66350bf6e49bec",
+   "candidate": "8d3978b3390a0205069d0eb4cca95c449dd4f1b2933d4278d46a379a1088bf5c"
+  },
+  {
+   "path": "agent/wrangler.jsonc",
+   "baseline": "3a4b8411f1697b693be881ee1777e3fa188af768e0d9787a4ad4ed0093c9c2e7",
+   "candidate": "7a6d4227b74addbb466af22a6216ea853aef603983ec5390070bce61e8f38143"
+  },
+  {
+   "path": "assets/desktop-media/README.md",
+   "baseline": "a3e2ba618b635c3ec96ca7332b8c8dabb3f05f54eba2a881759d0a8433cec237",
+   "candidate": "cf1c048370cc82d2d8a76baf890504ba6686da4767e1de61139fb1259db865a7"
+  },
+  {
+   "path": "desktop/README.md",
+   "baseline": "d4c4a2cf3a2d1ef2d6a61f9b75954d2038df07313282727f7270fdd6c214fadb",
+   "candidate": "eec0075fc64ebc4496f1a688831cc76a7221608527e3ee58efc7d23757f9314c"
+  },
+  {
+   "path": "desktop/bubble-voice.mjs",
+   "baseline": "d2039c0e39c69321694b465bef2520f7ae2d523043f615569773a5a34bde9d81",
+   "candidate": "9647b94996d9efc1d100b7936119e10995df76f5929949eabdc5ad44b5afcf3d"
+  },
+  {
+   "path": "desktop/garden-backend.mjs",
+   "baseline": "7107c2541f80a81a0b598256b9bdf35cb3c0e0ef068b2a085e8ed6ffe9bbb708",
+   "candidate": "cebb4abba5fb34bb3d9b75aa86a064bc70678f8f7f9110f029a147b7a31b95e2"
+  },
+  {
+   "path": "desktop/garden-registration.mjs",
+   "baseline": "d6acd2cc3fe5a085a62eddbdf4f70da8f22bae6b2e221aa33fb21836effcd600",
+   "candidate": "0c8ce8f4c6282814c8cd05da2b2fae431715057a7580b2644fe1b761689305af"
+  },
+  {
+   "path": "desktop/image-planning.mjs",
+   "baseline": "4c5ab09ec0bfd20419693218c2ee2a633041f279bbbbdbc9599d31e33e3212a0",
+   "candidate": "14e9f5e8eb2555e50b56066269226959dccc66ed9e937675bb092389aa717a19"
+  },
+  {
+   "path": "desktop/personality-diary.mjs",
+   "baseline": "92253f60eb73f6f07625fba917393a74df65941fee1f576d005b462235b3e6dd",
+   "candidate": "964a38ae5b2a342481644a4d702749d77318f32264454e6644817b6e29673555"
+  },
+  {
+   "path": "desktop/settings.html",
+   "baseline": "d6922f4d93f158dcfb3adb698c9eb0eb2996b554d4660d38e0a9ede3f3115913",
+   "candidate": "521cc7ce0791eb13eee90468f8b4ce4a6b1a5242c8f0bd5a53098b07a3071333"
+  },
+  {
+   "path": "desktop/source-updates.mjs",
+   "baseline": "9114881e67b98729229acd2362703e268f0c55e73733fe0034da905ae635f931",
+   "candidate": "2617eeb9405c2f6c666967b1000aafd9fd9e159d9f5276f4f8618b91432403d3"
+  },
+  {
+   "path": "docs/AI_INTERFACES_2026-11-24.md",
+   "baseline": null,
+   "candidate": "5cff6829b47e2b4deb741c9e1a8c2ed65e18d2923ce6cc159b53e2743cabdd5f"
+  },
+  {
+   "path": "docs/BUBBLE_VOICE.md",
+   "baseline": "094c7eed0b09c8a17f629c6a0b590ef315d981858c670928b0b1f49bb1ed656b",
+   "candidate": "b6bde96aec09c5dbcf1f1b8bed2209407a9d51c272ce3e0720c6c0abd9b0b74b"
+  },
+  {
+   "path": "docs/DESIGN.md",
+   "baseline": null,
+   "candidate": "adcbcd787a88a87212539f3f2ee2c63c0f6f9baf7dcc54573da72baa5ca17582"
+  },
+  {
+   "path": "docs/DESKTOP_TASK_LIFECYCLE_HANDOFF.md",
+   "baseline": "de61334545d76162c895a6b69d28a468ca4b2872992994bc84191ae4890fca6f",
+   "candidate": "9bd3b2f9a25ca7e76e5855247d77871511e266e0b0c874bc2c0f85bc3ad99294"
+  },
+  {
+   "path": "docs/DESKTOP_UI_GUIDE.md",
+   "baseline": "67166e3aca4aa6500f0a52b111f29ddd4534f421205d083b7f9fd4867a8f1c8b",
+   "candidate": "ac6337e1ce8ec032e48a9ac6b3650e061162d72b499fc5bb2cfa391db2e9e15e"
+  },
+  {
+   "path": "docs/DEVELOPMENT.md",
+   "baseline": "5dd7bdcf8423e59abb2b237f66ef3d2bda88c9a394386a058fb93091df02863f",
+   "candidate": "de5d20bd5e61545ed6a5ce0347eaab77564966b89ab75fdd90a7975026c95b42"
+  },
+  {
+   "path": "docs/FEIYUE_CONVERSATION_THREADS_DESIGN.md",
+   "baseline": null,
+   "candidate": "8b05c3fc9050deffd6d6e63fbd335126d0e3fc797610cda93411e1bae8ad9837"
+  },
+  {
+   "path": "docs/FEIYUE_EMOTIONS.md",
+   "baseline": null,
+   "candidate": "79bf6ccf3981b4771f514fdef5533e0caff407fbb1f07170e3a9eba1e5d6f1d2"
+  },
+  {
+   "path": "docs/FEIYUE_EMOTION_INTEGRATION.md",
+   "baseline": null,
+   "candidate": "27699c04032a0aaf394dae7fba31bfd1020a9d519434ca9100309d441841626e"
+  },
+  {
+   "path": "docs/FEIYUE_EMOTION_PROGRAM_DESIGN.md",
+   "baseline": null,
+   "candidate": "7763514c065eaa3f864dd58921d3ccae3c40b438fc6159f958f5150e8c8aecba"
+  },
+  {
+   "path": "docs/FEIYUE_EMOTION_SKILLS.md",
+   "baseline": null,
+   "candidate": "72ff922a1433c2e156866858628e084143d907f200d751d232a28e9d9e7b772f"
+  },
+  {
+   "path": "docs/FEIYUE_EMOTION_STORAGE.md",
+   "baseline": null,
+   "candidate": "6567c52259cd5ff20fef731412a175566504319a7883a90d0d2a7789e062a7fc"
+  },
+  {
+   "path": "docs/FEIYUE_FOUNDATION_IMPLEMENTATION.md",
+   "baseline": null,
+   "candidate": "a9dd9433e90b83e42487c53c02752d42f2f276475aaf2fed1fd8b9912685ce93"
+  },
+  {
+   "path": "docs/FEIYUE_LOVE_AND_REASON.md",
+   "baseline": null,
+   "candidate": "0299b93b668d7231c3616588f42c716b7f68f12cc491d2304182ee37292b21c6"
+  },
+  {
+   "path": "docs/FEIYUE_PERSONALITY_MEMORY.md",
+   "baseline": "e4149022069c1f91a4fa4bf147026baf29ccebccdd0b6906c0f9534aa831c8b4",
+   "candidate": "d1f588fbddfe4f858d25545b7f96f97221fdbaa87edeaf2375c21b9389800d39"
+  },
+  {
+   "path": "docs/FEIYUE_WORKFLOW_CHANGE_MAP.md",
+   "baseline": null,
+   "candidate": "7e280635cb893ace9e904f14e86b0fda812c9526980e2695b688ce2875ed7651"
+  },
+  {
+   "path": "docs/NEWS_BRIEFING_ARCHIVE_DESIGN.md",
+   "baseline": "3366c6e8da5e6cf172ad72bcf39ff80c96d724cb6f6f873f0c5efa01c1d3103b",
+   "candidate": "31ce23811fbc55c5d367c7086b94c2588469c388f1d06695622101648969a493"
+  },
+  {
+   "path": "docs/RECORDING_CHAIN_RELEASE_DESIGN.md",
+   "baseline": "69f745001de1ebc6c4d6d3c8f2764bcc250ca8b1266113f2a7fce6c6c6c68d25",
+   "candidate": "7694a879f24e80696378f6872db9c3b9ee0c99a125ac21f90250282c80277f05"
+  },
+  {
+   "path": "docs/REQUIREMENT_CHANGES.md",
+   "baseline": "30904a0a3c57b006850daa48b783610fd3a1681381586abf97a12ba55d6586f7",
+   "candidate": "8be16dcef6f5b9c0488e8392d22a6353489d6a918a4da001ca942b9ce4c99232"
+  },
+  {
+   "path": "docs/SCENE_CURIOSITY.md",
+   "baseline": null,
+   "candidate": "fd15263f4f2d693f6e883d92c6336868d550a1b3af249d7be855001c31ad4abc"
+  },
+  {
+   "path": "docs/SCREEN_QA_REQUIREMENTS.md",
+   "baseline": "df48655409a9f3a61d2c27a7789285ec2d68044e895d9f80137d4a9f6375161f",
+   "candidate": "6d7cd579457ab738b09af1cac7e17b10fa573bc70138e5132a56140efb663d45"
+  },
+  {
+   "path": "docs/SKILL_HOT_UPDATE.md",
+   "baseline": "5512b369417be6c508b8f3d21e89fe84e1ebdc08f7e67f8efb9dcf008d1df5bb",
+   "candidate": "ae4087411d43f5aae49c39102c8b3c682c4668b6a278124b99781b4f58645371"
+  },
+  {
+   "path": "docs/STUDY_DESIGN.md",
+   "baseline": null,
+   "candidate": "ed2fd19c338e041f6518cdc069729e4504b8c7805be87382368a2c3f6c26f23d"
+  },
+  {
+   "path": "docs/WORKSPACE_ZONE.md",
+   "baseline": null,
+   "candidate": "3d2160a8be22e78d742e430f16942928c937383b477ea39237f0b9e02e275a6d"
+  },
+  {
+   "path": "docs/archive/installed-docs-20261125/AGENTS.md.installed",
+   "baseline": null,
+   "candidate": "5293fba83c62971a3f61b80236d720056f0f2442dceb6f17cf0b17e14b507f91"
+  },
+  {
+   "path": "docs/archive/installed-docs-20261125/README.md",
+   "baseline": null,
+   "candidate": "776f1565388a5540811bf8fd9fb4eb92788f1856c6146bc986131a151beb8e18"
+  },
+  {
+   "path": "docs/archive/installed-docs-20261125/RELEASE_REVIEW.md.installed",
+   "baseline": null,
+   "candidate": "d21682023b487608b2ddaa21ac5456b924a4e07862e622ae4d14a893fdbdb8db"
+  },
+  {
+   "path": "docs/archive/installed-docs-20261125/docs__DEVELOPMENT.md.installed",
+   "baseline": null,
+   "candidate": "5dd7bdcf8423e59abb2b237f66ef3d2bda88c9a394386a058fb93091df02863f"
+  },
+  {
+   "path": "docs/archive/installed-docs-20261125/docs__FEIYUE_PERSONALITY_MEMORY.md.installed",
+   "baseline": null,
+   "candidate": "e4149022069c1f91a4fa4bf147026baf29ccebccdd0b6906c0f9534aa831c8b4"
+  },
+  {
+   "path": "docs/archive/installed-docs-20261125/docs__REQUIREMENT_CHANGES.md.installed",
+   "baseline": null,
+   "candidate": "30904a0a3c57b006850daa48b783610fd3a1681381586abf97a12ba55d6586f7"
+  },
+  {
+   "path": "docs/news-hot/README.md",
+   "baseline": null,
+   "candidate": "8091ac0ba9fb5ca056fa5905834782975256137a09aaf0303b39e33720d645cd"
+  },
+  {
+   "path": "docs/news-hot/prototype/heatmap.js",
+   "baseline": null,
+   "candidate": "fbb50ab68823985213b1cac58d9af99ac232d21152bd2923194ba7f2ded9b672"
+  },
+  {
+   "path": "docs/news-hot/prototype/index.html",
+   "baseline": null,
+   "candidate": "7e18d98c64cbb15a637e13ea5119029729ecee2da9755d7735995a37da06103e"
+  },
+  {
+   "path": "docs/news-hot/prototype/news-hot.css",
+   "baseline": null,
+   "candidate": "7e3502a1fd4c43f77ffbecedaa227c1bb339e3acdbef7bfd0bf2b46645bc9c55"
+  },
+  {
+   "path": "docs/news-hot/prototype/news-hot.js",
+   "baseline": null,
+   "candidate": "f2adffe42269abc3b78eb4edcebcf2085944959367207bc0b49570b28a202777"
+  },
+  {
+   "path": "docs/news-hot/prototype/real-data.js",
+   "baseline": null,
+   "candidate": "7a2f3ee65d428664f5d043a0fc72c720ce32d2eed7915e76e072666798fb8e5d"
+  },
+  {
+   "path": "docs/news-hot/prototype/styles/feiyue-surface.css",
+   "baseline": null,
+   "candidate": "8e392febaf3f0f5b468f85277a5e80c54d03d9b079c36c8928e4a60650cb53e7"
+  },
+  {
+   "path": "docs/news-hot/prototype/styles/news-editorial.css",
+   "baseline": null,
+   "candidate": "949971e1353f049a8bfd5f47d7d34b8fd95126d4b5134e72572c09ec30f04818"
+  },
+  {
+   "path": "docs/news-hot/prototype/styles/news-panel.css",
+   "baseline": null,
+   "candidate": "02e2e80793a1356ec596cd18a698894cd8359500e55ace8128499e19e65bfa38"
+  },
+  {
+   "path": "docs/news-hot/prototype/styles/news-weekly.css",
+   "baseline": null,
+   "candidate": "7ffd2dd33ba6bb66056610f04ce85bba7b536c2c4cc3db9813dd3c7da27c4ea9"
+  },
+  {
+   "path": "docs/releases/batch-20261124/desktop-manifest.json",
+   "baseline": null,
+   "candidate": "8ab98a88a238b258bfa188ccdb3d06a60bc2aa0d45f426ed616c4adcee90b39c"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/agy-cli-client.mjs",
+   "baseline": null,
+   "candidate": "65e18c6dbb62b4ba692b34285e2bfa61f3af1a2db235b357e44d7a28212a6e33"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/agy-local-model.mjs",
+   "baseline": null,
+   "candidate": "52379deca316d963af0d28cb5d6e94d69443e9c4908a19e0733144d866b08eea"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/ai-gateway.mjs",
+   "baseline": null,
+   "candidate": "b0b04edb26418ff4afd33e24a15095ff47f7288a0de5e7b486b73d3a72a0326d"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/ai-schema.mjs",
+   "baseline": null,
+   "candidate": "99e34a1a50f40eaddb6826c693ce9a67dc37a6e653a99d512ddb23564463169b"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/ai-workflow-model.mjs",
+   "baseline": null,
+   "candidate": "55ffafd83ca020fe12b5edc48d081d1c9a5889a95d651acf3cee35aec62606a4"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/balanced-local-model.mjs",
+   "baseline": null,
+   "candidate": "ff084fd49081aaebb27cb70e6f4e254863d9ea045fc5c0971fd8e6f178d61263"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/chat-deepseek.mjs",
+   "baseline": null,
+   "candidate": "c55435964c916fc3ae749fdd09a3b8c9ecaa3033d2ae6a2bedc2b8d3fa792773"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/conversation-thread-replies.mjs",
+   "baseline": null,
+   "candidate": "e578bdcd87c78c0b9b3043a1c694168b65a0d4696f2df382690287b5ec1bb527"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/conversation-transcription.mjs",
+   "baseline": null,
+   "candidate": "163227e9cbd2e0fd4bd48d264bc3ff70d912ca7350f5935ef13d3eae065497ea"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/diary-deepseek.mjs",
+   "baseline": null,
+   "candidate": "cdcab92a338d78c12d750341abe48ff88d4097f8d4df66d15ed53bcfb86c4066"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/image-tasks.mjs",
+   "baseline": null,
+   "candidate": "18dfa0d1dcb68bf4e7f1811e94334dfad1289aab5582a824ec1fe7b90f645a72"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/interaction-work.mjs",
+   "baseline": null,
+   "candidate": "482d7d76ec73cc2c4cdc93764136e1be72db858e20e8b5fda5c3f47a9e46969e"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/local-model-process.mjs",
+   "baseline": null,
+   "candidate": "c57ddcf59e604afebd3350dade25084ee371024d3671c49e1ed6c9209e784da1"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/local-model.mjs",
+   "baseline": null,
+   "candidate": "fa2aeab9ce6368a360b1a45d8c43ea46e6a2afeafabe297d57a07213621d3030"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/memory-refinement.mjs",
+   "baseline": null,
+   "candidate": "982c529a9226182c0cfbee604f903c9169cad295ddeee8cd4b3bfe3946aaebd3"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/public-search.mjs",
+   "baseline": null,
+   "candidate": "a70ecd8e3cdd71757859cb7cf11d0eda393f102f2d2223621cb69722950047ae"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/screen-question-host.mjs",
+   "baseline": null,
+   "candidate": "9a54deeaabae02ebff827447abb2596b11ba2d5d97765c2d470437ccdfcb0d34"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/server-task-command.mjs",
+   "baseline": null,
+   "candidate": "a0cb4a69b36c413be5356aa6884c1e1f9cf983df6a1fc95f88d81602f1430c2e"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/shell.mjs",
+   "baseline": null,
+   "candidate": "0f3337343553f50c87dd126a13387b9a01ef6f0cf7f1250aef460a475634e446"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/desktop/transcription-deepseek.mjs",
+   "baseline": null,
+   "candidate": "a6cb7bff8b1c44da8530aec8542787288af05a0566ccb14b3e070cd8040a875b"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/skills/diary-writing/source/local-ai.json",
+   "baseline": null,
+   "candidate": "1109de48e1a21cb13c4c2fb75c14913102d45d247928579ac0ddb7c3d9299049"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/skills/memory-refinement/source/local-ai.json",
+   "baseline": null,
+   "candidate": "869b9728f786f97c60f0608cebbf0899da818dd296be618136847b0f8ab64b93"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/skills/news-editorial/source/local-ai.json",
+   "baseline": null,
+   "candidate": "9e5f971d93b9b22199bb0085e305b0dd504131f54a5ab802a61171074ff40193"
+  },
+  {
+   "path": "docs/releases/batch-20261124/files/skills/personal-conversation/source/local-ai.json",
+   "baseline": null,
+   "candidate": "cc53af47ee3412af69cc991212778c9374f6cfc96ae72dd44e679b4e8de8bf62"
+  },
+  {
+   "path": "docs/releases/batch2-20261125/desktop-manifest.json",
+   "baseline": null,
+   "candidate": "d6787e88e210e2df262e77f6a3f4c4dab83103fc68364a69f9918e3acf025902"
+  },
+  {
+   "path": "docs/releases/batch2-20261125/files/desktop/agy-local-model.mjs",
+   "baseline": null,
+   "candidate": "1741bed1c77e9b28e1e48ea9d01df170f0e80f0b24bc942db5f78ca3f8ae9c7f"
+  },
+  {
+   "path": "docs/releases/batch2-20261125/files/desktop/ai-workflow-model.mjs",
+   "baseline": null,
+   "candidate": "2712ead7f1ac705b676a14f6ea386237f8f24e161aeb88883af52ce712afdaf3"
+  },
+  {
+   "path": "docs/releases/batch2-20261125/files/desktop/conversation-threads.mjs",
+   "baseline": null,
+   "candidate": "55938f82abd83f786fb8dfb46ab1e05d13fae41b9c566f101bc8b99e9040654e"
+  },
+  {
+   "path": "docs/releases/batch2-20261125/files/desktop/conversation-transcription.mjs",
+   "baseline": null,
+   "candidate": "d781cdcab6614de4594b08d6f61eb645412f8a2cd1d59b8a9d80343cbf905106"
+  },
+  {
+   "path": "docs/releases/batch2-20261125/files/desktop/conversation-ui.mjs",
+   "baseline": null,
+   "candidate": "256de9582ec83df202c2ab316ad759d020175884432a8d9ac8a2adece3fc5ae4"
+  },
+  {
+   "path": "docs/releases/batch2-20261125/files/desktop/screen-question-host.mjs",
+   "baseline": null,
+   "candidate": "1e028c802e082d7cb490f6ee4d808d82c862268ce4ee33f29f8a9af08ab7d425"
+  },
+  {
+   "path": "docs/releases/confirm-settle-20261125/desktop-manifest.json",
+   "baseline": null,
+   "candidate": "52906fd4f149e669588836ead11b7d098af0370601229747b4e120905dc8666f"
+  },
+  {
+   "path": "docs/releases/confirm-settle-20261125/files/desktop/conversation-thread-reference.mjs",
+   "baseline": null,
+   "candidate": "664bb6e93c100e647f01d3f26ddf668eac99ce6de7be4dc879141ce4d69d0dcc"
+  },
+  {
+   "path": "docs/releases/confirm-settle-20261125/files/desktop/conversation-threads.mjs",
+   "baseline": null,
+   "candidate": "94bba3e7b63f517cbb81a00b0d4c6d0ea4af52f8459c0c9f2a82247494bdb752"
+  },
+  {
+   "path": "docs/releases/confirm-settle-20261125/files/desktop/conversation-transcription.mjs",
+   "baseline": null,
+   "candidate": "e8c861cd90ab944ccb7e33239eaf4edf7b0609f430ae13d514c66c62b7a586a0"
+  },
+  {
+   "path": "docs/releases/confirm-settle-20261125/files/desktop/personality-nags.mjs",
+   "baseline": null,
+   "candidate": "d58448394decac54a618c9cb4a710bc09390c8a515f7f1c34176d16bcc683960"
+  },
+  {
+   "path": "docs/releases/confirm-settle-20261125/files/desktop/screen-question-host.mjs",
+   "baseline": null,
+   "candidate": "d72722aa92ac4e99a06483af203d4126a7f647d8679270f3c34e5327a067a4b9"
+  },
+  {
+   "path": "docs/releases/confirm-settle-20261125/files/desktop/shell.mjs",
+   "baseline": null,
+   "candidate": "e60f9888f21b57b0cf53a492890069500bb816f21d37117164847fc7c46875df"
+  },
+  {
+   "path": "docs/releases/confirm-settle-20261125/files/desktop/task-inbox-ui.mjs",
+   "baseline": null,
+   "candidate": "58ced4be3e8828e1ba93df93370e1c2f312700966957d63eacd25988e2ecb069"
+  },
+  {
+   "path": "docs/releases/confirm-settle-20261125/files/desktop/task-inbox.css",
+   "baseline": null,
+   "candidate": "44c7a8621ceb5b814667ea6122aa8a790956f21822be72f4ca76f044301e6ed4"
+  },
+  {
+   "path": "docs/releases/diary-audit-continuation-44b422e8c3e2/install-receipt.json",
+   "baseline": null,
+   "candidate": "456afcb258df04ad2e61e2a1e950b2fbc373ec919b1da4910ef7dd51943e7814"
+  },
+  {
+   "path": "docs/releases/diary-audit-continuation-44b422e8c3e2/installed-entry.md",
+   "baseline": null,
+   "candidate": "c6a504fe766449ba733367c14bd224a52167d526bc5d4f075365646c9b200f00"
+  },
+  {
+   "path": "docs/releases/diary-audit-continuation-44b422e8c3e2/release-entry.md",
+   "baseline": null,
+   "candidate": "48e0621407f24c7b8e41bf9eaca8c69ed6c439dec02d242a41e33180961934b2"
+  },
+  {
+   "path": "docs/releases/diary-audit-continuation-44b422e8c3e2/windows-files.json",
+   "baseline": null,
+   "candidate": "44b422e8c3e2959c8b6c493208bf93b1952ca6677c0034e1d55a3954a546b498"
+  },
+  {
+   "path": "docs/releases/diary-audit-continuation-44b422e8c3e2/windows-payload.zip",
+   "baseline": null,
+   "candidate": "0bce8e027eb751cd321b502f4d14a85f9d290dd86c261bf055241478d5972b46"
+  },
+  {
+   "path": "docs/releases/diary-audit-continuation-44b422e8c3e2/windows.patch",
+   "baseline": null,
+   "candidate": "7d65813afe672b4155498ca649af13651f1372caac999c0604becd3e22e5dec0"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/desktop-manifest.json",
+   "baseline": null,
+   "candidate": "3e49b745f1c543841c7e4f47c0ca6574408ef52718c519dbc695731165b4eebf"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/desktop/ai-gateway.mjs",
+   "baseline": null,
+   "candidate": "b6f7e7fc31ac4b78836cb54f5f1dc51d2a93a267bfd38fbb1518acdb201d2dee"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/desktop/ai-workflow-model.mjs",
+   "baseline": null,
+   "candidate": "5e61fd2c719730581853465dacdfed1823cf0699800c36b8f9bde55fdca883bb"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/desktop/conversation-thread-reference.mjs",
+   "baseline": null,
+   "candidate": "fba4dce9d805fcecb25cf4cda6fc75967f71501d96f08e2d6a9b0e21c478861c"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/desktop/conversation-thread-replies.mjs",
+   "baseline": null,
+   "candidate": "9b703c17387021c5894066c4b6217fc71d38db9227c5c51e10df567ec1a3544d"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/desktop/conversation-threads.mjs",
+   "baseline": null,
+   "candidate": "3a1378bffda364ac9459202a6fdfbc1359a84edddfbd4ac9601680798e197b14"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/desktop/conversation-transcription.mjs",
+   "baseline": null,
+   "candidate": "845506d8fcaa805930c4c6d8ea9504b593444ec1c609dfed0b53ba7bc4a727b6"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/desktop/emotion-core.mjs",
+   "baseline": null,
+   "candidate": "60df67fdf4345cdaed5a8b1cbd16c03a3c37d2d33bdc5fcd6aa902383e9e2529"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/desktop/emotion-service.mjs",
+   "baseline": null,
+   "candidate": "b61271fdf1d4a8daf48b6efd9c04f02c5878d971968b91b6579b41ce49867f3a"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/desktop/knowledge-runtime.mjs",
+   "baseline": null,
+   "candidate": "3fd7188ced132e1fb4289e82ae14f47611f540712310ad5aa2f6830202248ee8"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/desktop/personality-diary.mjs",
+   "baseline": null,
+   "candidate": "92253f60eb73f6f07625fba917393a74df65941fee1f576d005b462235b3e6dd"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/desktop/screen-question-host.mjs",
+   "baseline": null,
+   "candidate": "23b2aec1ea4a1eb72eafdcef472f1e7650028c36da2763b82ef157addbac341b"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/desktop/topic-memory.mjs",
+   "baseline": null,
+   "candidate": "2ec493fe657e610a0acf737b072526cad0dbb26c95ac9338699b0be2eaf22799"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/skills/catalog.py",
+   "baseline": null,
+   "candidate": "70c36f93179ec4d7f13bd79d1f802106fc7cea4de6da8b7fc8db869b76bfc883"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/skills/feiyue-interaction/latest.json",
+   "baseline": null,
+   "candidate": "e6263e1ad2218d3e63314ce0e1a786b3c7d30ed9066ba90a8f109e9d27f4d8b6"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/skills/feiyue-interaction/source/SKILL.md",
+   "baseline": null,
+   "candidate": "d00a9b1cac510bb94e7fb47b7d432a508f84538450eed422fd90ca06728f6aa1"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/skills/feiyue-interaction/versions/feiyue-interaction-v3-4/SKILL.md",
+   "baseline": null,
+   "candidate": "967a9c11ac0533e56d236547ca57cbda3cc5c1d58fa2e48c2566c9e1af9ff69d"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/files/skills/feiyue-interaction/versions/feiyue-interaction-v3-4/routes.json",
+   "baseline": null,
+   "candidate": "ca4d037c95b00018251febe12eeb5ad4d8e45b08c3a6e2996794039cc4d7db7d"
+  },
+  {
+   "path": "docs/releases/direct-local-20261125/garden-request.json",
+   "baseline": null,
+   "candidate": "f99e7343f283620b26ed5fd4693013ebbc6160bb781e5866e96049a59422c21a"
+  },
+  {
+   "path": "docs/releases/dual-ai-manual-bba9a244c54c/ai-requests-upgrade.sql",
+   "baseline": null,
+   "candidate": "1224e49d5fc9714fde2f316965f157afed0f036a91db2c2f5648056bea357fe1"
+  },
+  {
+   "path": "docs/releases/dual-ai-manual-bba9a244c54c/archive-note.md",
+   "baseline": null,
+   "candidate": "d8e76d3a435cbd3b511226aba99cd1bf96fc6ba95ac67ba66dee3d52590df7d0"
+  },
+  {
+   "path": "docs/releases/dual-ai-manual-bba9a244c54c/install-receipt.json",
+   "baseline": null,
+   "candidate": "e3d42c7aa9a48b8189c7d45122998460db4f3888f4a1520db52413c577ba358c"
+  },
+  {
+   "path": "docs/releases/dual-ai-manual-bba9a244c54c/installed-entry.md",
+   "baseline": null,
+   "candidate": "eca4ed3e59785125b6fbf08eca45bd54a34913d8ac13d5d2f4ad51bad965f8a3"
+  },
+  {
+   "path": "docs/releases/dual-ai-manual-bba9a244c54c/release-entry.md",
+   "baseline": null,
+   "candidate": "5472b9c0345652ca2e17332e886561d3fd44c1814b928293715ec36458971ffa"
+  },
+  {
+   "path": "docs/releases/dual-ai-manual-bba9a244c54c/windows-files.json",
+   "baseline": null,
+   "candidate": "bba9a244c54cade535f5f20f58b6edc2990f45bc9fbce9bc54c78e5b777903b9"
+  },
+  {
+   "path": "docs/releases/dual-ai-manual-bba9a244c54c/windows-payload.zip",
+   "baseline": null,
+   "candidate": "f0cdc4083f63869a5822abb41824fe6de7011ee923bcc3fdb4fb1019f4455659"
+  },
+  {
+   "path": "docs/releases/dual-ai-manual-bba9a244c54c/windows.patch",
+   "baseline": null,
+   "candidate": "74e694c7c8850d3203d9e5c59fab79e8a9a88f5d3e2a857004c2e58db0344376"
+  },
+  {
+   "path": "docs/releases/emotion-news-20261121/GARDEN_DRAFT.md",
+   "baseline": null,
+   "candidate": "0e81eb422c8e471ab4b438e7220d41565572d46c34a78abb5533cc50c9ea6665"
+  },
+  {
+   "path": "docs/releases/emotion-news-20261121/ORIGINAL_REVIEW.md",
+   "baseline": null,
+   "candidate": "fc9b1b9bf6363b2d893cc0175d4e751ac146526edec7a7cbedf538c8c3d01fac"
+  },
+  {
+   "path": "docs/releases/emotion-news-20261121/REVIEW.md",
+   "baseline": null,
+   "candidate": "fc9b1b9bf6363b2d893cc0175d4e751ac146526edec7a7cbedf538c8c3d01fac"
+  },
+  {
+   "path": "docs/releases/emotion-news-20261121/heartbeat-baseline.json",
+   "baseline": null,
+   "candidate": "0d4de08205e8d8b7430bfb2497e81c2c0b894562d8ba6c388c7b8ba9ff7aab2d"
+  },
+  {
+   "path": "docs/releases/emotion-news-20261121/original-manifest.json",
+   "baseline": null,
+   "candidate": "472105cf6eefe6451ca8aa1d2e12e7d835e275b2a116d5b3c08063a51538cd12"
+  },
+  {
+   "path": "docs/releases/emotion-news-20261121/release-manifest.json",
+   "baseline": null,
+   "candidate": "c5780a79efc0bf5c92dce0bf8813b6ecebacb3a8eb325acfb35f96d752f7e00f"
+  },
+  {
+   "path": "docs/releases/feiyue-ai-compose-20261124/.gitattributes",
+   "baseline": null,
+   "candidate": "29240e78f30802ec733d5b30e88d48e707eb77d126ebca662e3fb4c389a8002f"
+  },
+  {
+   "path": "docs/releases/feiyue-ai-compose-20261124/install-receipt.json",
+   "baseline": null,
+   "candidate": "fc9883ec4913d95e9c5d669bff96f9e7cf0e351f3b631c548ff8748b69523d53"
+  },
+  {
+   "path": "docs/releases/feiyue-ai-compose-20261124/installed-entry.md",
+   "baseline": null,
+   "candidate": "b200fc25ebc43b911fee3610fe60c8568ee75d911dfdb96b62468bafe18e8804"
+  },
+  {
+   "path": "docs/releases/feiyue-ai-compose-20261124/release-entry.md",
+   "baseline": null,
+   "candidate": "2f48e3b0db61228b77de6b4b299156ab471eb2e817e73bb63131a2c65a099daf"
+  },
+  {
+   "path": "docs/releases/feiyue-ai-compose-20261124/windows-files.json",
+   "baseline": null,
+   "candidate": "9a049dd5788750c078048c7c84fabc94d0d47cfeaa7d500914f6dc86859994cb"
+  },
+  {
+   "path": "docs/releases/feiyue-ai-compose-20261124/windows-payload.zip",
+   "baseline": null,
+   "candidate": "ee98009a6389b4d423174a1d6764d9daf527705d7b6cdce36e1818bc9f5bda02"
+  },
+  {
+   "path": "docs/releases/feiyue-ai-compose-20261124/windows.patch",
+   "baseline": null,
+   "candidate": "c0c20377d5d8bdc1972192d41f0d39c3a14e83d6275097106e3ffa285b252e5b"
+  },
+  {
+   "path": "docs/releases/feiyue-nag-reply-20261121.md",
+   "baseline": null,
+   "candidate": "a21beb982af17f9eb895a0adf89251612ec1e591d8860e349afe2ece3f235abc"
+  },
+  {
+   "path": "docs/releases/feiyue-seven-20261121/desktop-files.json",
+   "baseline": null,
+   "candidate": "6c82501411518022c478cbee19cdc8c4f3092811eb316906dc9b1040e1c51ac0"
+  },
+  {
+   "path": "docs/releases/feiyue-study-install-20261123/windows-files.json",
+   "baseline": null,
+   "candidate": "247f3713f3f227c75c91d1d0cedf071f382044f91afafc55426ab3704bda1903"
+  },
+  {
+   "path": "docs/releases/garden-parallel-20261123/feiyue-manifest.json",
+   "baseline": null,
+   "candidate": "d13cd4d22bbd0bf64767b5d8af38cfea0f27662a630b987ace7fc2424499cbde"
+  },
+  {
+   "path": "docs/releases/garden-parallel-20261123/install-receipt.json",
+   "baseline": null,
+   "candidate": "35b4d3d0490a3f46436f6bcb7c4b43fc5f65d97dccb1f3436c9b9f43d1d290c3"
+  },
+  {
+   "path": "docs/releases/generate-ends-20261125/desktop-manifest.json",
+   "baseline": null,
+   "candidate": "17211870b581c06cba0d5641e8c8660c38d7aca8acae2752b1e23eb18168e790"
+  },
+  {
+   "path": "docs/releases/generate-ends-20261125/files/desktop/conversation-threads.mjs",
+   "baseline": null,
+   "candidate": "3a363214d4fa0c52ba1e75d5a833af180a0504ed8dd9d182e550c072b7184838"
+  },
+  {
+   "path": "docs/releases/generate-ends-20261125/files/desktop/conversation-transcription.mjs",
+   "baseline": null,
+   "candidate": "e5b402eec750515c90a7ba4e4b4ff0562d7433cdad4f0208fab6ce7de0502d88"
+  },
+  {
+   "path": "docs/releases/pending-menu-52b187f85636/install-receipt.json",
+   "baseline": null,
+   "candidate": "6f68ec133f5e8413645fc0f5de788873a8216aefcf86a5dc666450623c22757c"
+  },
+  {
+   "path": "docs/releases/pending-menu-52b187f85636/windows-files.json",
+   "baseline": null,
+   "candidate": "52b187f8563665f28af502fd38207749b90cb5b5f3b633dffa3ae1d276714b58"
+  },
+  {
+   "path": "docs/releases/pending-menu-52b187f85636/windows.patch",
+   "baseline": null,
+   "candidate": "50ed4d90a9db98ed01459fbf1180cf42822c94ebf92fad897358ca9100ad091b"
+  },
+  {
+   "path": "docs/releases/private-chat-20261122/desktop-files.json",
+   "baseline": null,
+   "candidate": "96e5b9924c6c0cc1ccc3fd8e826096aed84623845db3959925a4e2662a49dce5"
+  },
+  {
+   "path": "docs/releases/proactive-tray-406c598b7dbd/install-receipt.json",
+   "baseline": null,
+   "candidate": "d6a9e92ca5e317e25e67089ceb6ea86d7118659a485f0398286e3c9dcf2ea3c4"
+  },
+  {
+   "path": "docs/releases/proactive-tray-406c598b7dbd/windows-files.json",
+   "baseline": null,
+   "candidate": "406c598b7dbd91eb4989f44fe08566a8273e121611d29070ee242726d7510ca2"
+  },
+  {
+   "path": "docs/releases/proactive-tray-406c598b7dbd/windows.patch",
+   "baseline": null,
+   "candidate": "b0971cfc6ba89fd8e4d7f080ecdcd51ff1f0a0df5fc306229c5000f28e69499a"
+  },
+  {
+   "path": "docs/releases/random-movement-6f73e8b80764/.gitattributes",
+   "baseline": null,
+   "candidate": "62bae5671d7ec912f6f3cbcbbb06b20eb245f5f97c177267d7c352b22ab6f029"
+  },
+  {
+   "path": "docs/releases/random-movement-6f73e8b80764/install-receipt.json",
+   "baseline": null,
+   "candidate": "4cc8c0d01a1c366359e3b164962559604580563be2280ac0425064d47dd4c856"
+  },
+  {
+   "path": "docs/releases/random-movement-6f73e8b80764/installed-entry.md",
+   "baseline": null,
+   "candidate": "7b895970e499db2fb53c249597202086ab60b9dce70f439def4b3a51ae4e6ca0"
+  },
+  {
+   "path": "docs/releases/random-movement-6f73e8b80764/manifest.json",
+   "baseline": null,
+   "candidate": "6f73e8b807643e13ec55f9fb2df2980fa91307f87cfbd126c127bc7e4f43348a"
+  },
+  {
+   "path": "docs/releases/random-movement-6f73e8b80764/release-entry.md",
+   "baseline": null,
+   "candidate": "e531ef2da6fea9a4ac16eaecd82995ff68c74c2d77a84b36ffc0a10e3f9a171d"
+  },
+  {
+   "path": "docs/releases/random-movement-6f73e8b80764/windows-payload.zip",
+   "baseline": null,
+   "candidate": "ea6d77ae497217ed0a67737815af67e660ade0e9fd9ff29296b6a9b265a88761"
+  },
+  {
+   "path": "docs/releases/random-movement-6f73e8b80764/windows.patch",
+   "baseline": null,
+   "candidate": "27b50ee0b29567f4d01f77b47a73804f8e7b5f19054fb0463f17c3f1d197fd24"
+  },
+  {
+   "path": "docs/releases/screenshot-overlay-20261125/desktop-manifest.json",
+   "baseline": null,
+   "candidate": "76ea5ef57bd8b236f436a2dececddc796ee63dda8bb58f4a5f73de93f6ca221b"
+  },
+  {
+   "path": "docs/releases/screenshot-overlay-20261125/files/desktop/movement.mjs",
+   "baseline": null,
+   "candidate": "4dfec2d308b609286dee1107270a7352660eeb8f4253def88c60e2d7d0ed31e7"
+  },
+  {
+   "path": "docs/releases/screenshot-overlay-20261125/files/desktop/watch-windows.ps1",
+   "baseline": null,
+   "candidate": "93000776a71fe078909fc4d63cd6f81ae5ecf7c6c976f2a042fc43559ed27294"
+  },
+  {
+   "path": "docs/releases/study-completion-20261123/local-git-receipt.json",
+   "baseline": null,
+   "candidate": "83f37621344ba337afc1e5324dd5c2509951dd4a88478d81f4dde930e35b1a72"
+  },
+  {
+   "path": "docs/releases/study-completion-20261123/public-receipt.json",
+   "baseline": null,
+   "candidate": "a77a699c486f25cd7964f5aee914b4e12297727d5ef354d00c7a8a16fb62650f"
+  },
+  {
+   "path": "docs/releases/study-completion-20261123/release-entry.md",
+   "baseline": null,
+   "candidate": "f191fb8f43de445f9721881193ee4c84d025b9cf5e131dbe0f4a6e94718daa4c"
+  },
+  {
+   "path": "docs/releases/study-completion-20261123/windows-files.json",
+   "baseline": null,
+   "candidate": "d035d8bc77b21c77e5b560cddb2f66ca6ed068ab51c2664d5be4454c2a5473b9"
+  },
+  {
+   "path": "docs/releases/study-completion-20261123/worker-files.json",
+   "baseline": null,
+   "candidate": "208e5b7b82ef61e8e902d3cc60fed36959f14c47d12c4b28d3d8ac7beab12678"
+  },
+  {
+   "path": "docs/releases/study-completion-20261123/worker-inputs.json",
+   "baseline": null,
+   "candidate": "4c5e90338305bb88a17d44b4cee5dccb918eac1238c01260eed79e9504098d8c"
+  },
+  {
+   "path": "docs/releases/task-inbox-refresh-124b38f8de65/install-receipt.json",
+   "baseline": null,
+   "candidate": "94f82398ef18b345b82d09ccb90ab810872415fc1b2e4fbb1432aa8543248b60"
+  },
+  {
+   "path": "docs/releases/task-inbox-refresh-124b38f8de65/installed-entry.md",
+   "baseline": null,
+   "candidate": "68e4422ed7e2a5c1a345075c364967096635544be313fe16087e5bab0a8f894d"
+  },
+  {
+   "path": "docs/releases/task-inbox-refresh-124b38f8de65/release-entry.md",
+   "baseline": null,
+   "candidate": "5d825fb8465df8b12ae2399f5a1489802270f272fee938c35d586fb69e71d7ff"
+  },
+  {
+   "path": "docs/releases/task-inbox-refresh-124b38f8de65/windows-files.json",
+   "baseline": null,
+   "candidate": "124b38f8de652d042aef538d5011326a80168b02e10ef35cffb966480c4edebd"
+  },
+  {
+   "path": "docs/releases/task-inbox-refresh-124b38f8de65/windows-payload.zip",
+   "baseline": null,
+   "candidate": "3a4cb068aa1fa2af6721ab944da77d00d8fb6fc46c72fcdcea6080ea94c4705b"
+  },
+  {
+   "path": "docs/releases/task-inbox-refresh-124b38f8de65/windows.patch",
+   "baseline": null,
+   "candidate": "683981174ab8f50179378e666743ced5d26a962704c386f060530e45e337f5d6"
+  },
+  {
+   "path": "docs/releases/top-raise-20261124/desktop-manifest.json",
+   "baseline": null,
+   "candidate": "4c9541f1b60fc0774e4b5612ee483d751260b7f1e796621428cdedd3eb344cd2"
+  },
+  {
+   "path": "docs/releases/top-raise-20261124/files/desktop/panel-window.mjs",
+   "baseline": null,
+   "candidate": "2b488476a941f99671fb411899740da4f9d8e12603307a1ff9341d997cee9bb4"
+  },
+  {
+   "path": "docs/releases/top-raise-20261124/files/desktop/shell.mjs",
+   "baseline": null,
+   "candidate": "5365d387e3246ecbc596ddff109498c820a0bfcb63eafef76f57c506ed437a66"
+  },
+  {
+   "path": "docs/releases/transcription-deepseek-20261124/desktop-manifest.json",
+   "baseline": null,
+   "candidate": "5a40ccece7c6b26f55f87b33ace6279d4b4454319008748b4fa057c22362ae4b"
+  },
+  {
+   "path": "docs/releases/transcription-deepseek-20261124/files/desktop/conversation-transcription.mjs",
+   "baseline": null,
+   "candidate": "2f4aee46d620ec3c235186f088fd1ad360472605a5c5891802c6efa0fc49fe01"
+  },
+  {
+   "path": "docs/releases/transcription-deepseek-20261124/files/desktop/transcription-deepseek.mjs",
+   "baseline": null,
+   "candidate": "2df7b5fb4538212a7e2ddd83064c1c938277d02d6204f28e541a33e0b5d6f8dc"
+  },
+  {
+   "path": "docs/releases/txt-attachments-20261121/baseline-failures.txt",
+   "baseline": null,
+   "candidate": "bf8675f51a03fe22b8f72a2a12beb7d0a37f6082cf2113adf2de7bbc0ed67d30"
+  },
+  {
+   "path": "docs/releases/txt-attachments-20261121/desktop-manifest.json",
+   "baseline": null,
+   "candidate": "2b43e3d8416d689e87965e5f8fa8b303d9eebbcea109d3a68f708fc037eac34d"
+  },
+  {
+   "path": "docs/releases/txt-attachments-20261121/release-receipt.json",
+   "baseline": null,
+   "candidate": "5fbaeda28a6b7f71c6909c87a1d870837f2c20a9a710db54f3a777d4d7b4114b"
+  },
+  {
+   "path": "docs/releases/wsl-agy-combined-20261125/desktop-manifest.json",
+   "baseline": null,
+   "candidate": "e7ac1b41a118f689fcc5bed2e62e5b828ff1e41cdae4f4c35c3aedf4e8e3bc50"
+  },
+  {
+   "path": "docs/reviews/AI_HEARTBEAT_POLL_REVIEW_2026-11-21.md",
+   "baseline": null,
+   "candidate": "d8a5919775793348d1adac5d5e1b41de6cfeeab1a22eae479e56bf2c47e681c6"
+  },
+  {
+   "path": "docs/reviews/AUTONOMOUS_PUBLIC_LOOKUP_REVIEW_2026-11-21.md",
+   "baseline": null,
+   "candidate": "a5758e8b4b620519163520d3e8446d90e3659030653ad249ecbc284a611d0e83"
+  },
+  {
+   "path": "docs/reviews/AUTONOMOUS_SEARCH_BUDGET_REVIEW_2026-11-21.md",
+   "baseline": null,
+   "candidate": "3718c208b88aad637d38392895509aadbb193ad4a18edb99861e038c6fcde140"
+  },
+  {
+   "path": "docs/reviews/CHAT_DETAIL_MODEL_REVIEW_2026-11-21.md",
+   "baseline": null,
+   "candidate": "e42614330e50315070ac19fcf08296981c60e54ee3e8ad643c01d35730b9c1c4"
+  },
+  {
+   "path": "docs/reviews/COMBINED_DEPLOY_SELF_REVIEW_2026-11-25.md",
+   "baseline": null,
+   "candidate": "781629fdbda515e3920cc172b761f25d72cae6f0227c20e242128bff45f67614"
+  },
+  {
+   "path": "docs/reviews/CONVERSATION_REGISTRATION_DESIGN_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "ad4a3209a052cb1a30709ac98bf09109efecd6501dcbf4c5e2a11399e301a2b8"
+  },
+  {
+   "path": "docs/reviews/CONVERSATION_REGISTRATION_DESIGN_REVIEW_2026-11-22_2.md",
+   "baseline": null,
+   "candidate": "d3ad2d20698a9aab2c4d232c2b9974f4643da6dfec66221b7106112468a4eda3"
+  },
+  {
+   "path": "docs/reviews/CONVERSATION_REGISTRATION_DESIGN_REVIEW_2026-11-22_3.md",
+   "baseline": null,
+   "candidate": "d0a2275ea2ecfc7ee61edc9ab958742c0a144d82b39541ee13e9bd9be6712038"
+  },
+  {
+   "path": "docs/reviews/CONVERSATION_REGISTRATION_DESIGN_REVIEW_2026-11-22_4.md",
+   "baseline": null,
+   "candidate": "f67f21093cdf829701ff98ad6b9629bd060717723eb8a2257ff8b85f636e3880"
+  },
+  {
+   "path": "docs/reviews/CONVERSATION_TRANSCRIPTION_IMPLEMENTATION_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "418ca71633d0e1250009e0249135acc911f0581a7b6f25b540055bf1be9e8430"
+  },
+  {
+   "path": "docs/reviews/CONVERSATION_TRANSCRIPTION_LONG_INPUT_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "d88c7038b33e4a84ced033e89171a3e3e88960dd663bbf106a5a6aa7dd26aab0"
+  },
+  {
+   "path": "docs/reviews/CONVERSATION_TRANSCRIPTION_SKILL_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "71ec484063fae8b554c53a9cb7630c3d85c2fa066ffbee7303599425a3ae5403"
+  },
+  {
+   "path": "docs/reviews/CONVERSATION_TRANSCRIPTION_STABILITY_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "6c42bb1d88df5cac1b8eb6a6dc025d8ebd65266aa11a12d55a85ac89d5b7ee40"
+  },
+  {
+   "path": "docs/reviews/DIRECT_LOCAL_RELEASE_REVIEW_2026-11-25.md",
+   "baseline": null,
+   "candidate": "465d8d5db89ab0a8bb214b25345b93afbe6e9b5aa72900e629bdfec9508058b9"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_ADAPTIVE_TRANSCRIPTION_BUDGET_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "5aa64b2fd5a9437d8dd7eaee7185c17beefd578644c70953473d24733dcce002"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_AI_WORKFLOW_BURST_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "2dc226ec3b331c3fb3d2d58e37150dfe0925df7fac69df381d5f44f6c1a90c73"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_AI_WORKFLOW_DESIGN_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "87d52e1dd264ba019137a7aacb194204463086699a6ee89532df5c8a5ee37555"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_AI_WORKFLOW_IMPLEMENTATION_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "f88f66e16ca0051f4d0553b80b463d7fcff2eebffff651931b52b1dc509d8b97"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_AI_WORKFLOW_SQLITE_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "f09dd7227d100ab835c5656562d7e4c5a86f350228a962b78558ea9b5bec0310"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_CONVERSATION_THREADS_DESIGN_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "affe7fbf079deb28263885d828fb880bd22daed73911c135c7100fff9405e522"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_CONVERSATION_THREADS_IMPLEMENTATION_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "1d52d163ae791caec70792eb458c85573e5e0e942ed265422ab89f53f300d8f7"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_CYCLE_MENU_AVATAR_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "0ff2b8720cedfb8bda8ba9307147880f006b10a307f1c6f533e73c26551d767f"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_DIARY_AUDIT_2026-11-21.md",
+   "baseline": null,
+   "candidate": "d760f9b728f3c58b8326190681ef8cf76f176513b62558d6d7a491b777c75117"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_DIARY_OPENING_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "6effa47996671e89eecbdb5ac8bde5902104d69849b1d7bd814b48703e9b86b7"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_DIARY_SELF_AUDIT_2026-11-23.md",
+   "baseline": null,
+   "candidate": "d3fe29b49e1ed05f67f9dab90621d21e4bbe6dfd12d1894c90bcd440140aec0b"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_DIARY_SEMANTIC_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "52f3a1ca2a3e4ce0f6abc4456ebfaf34a7581bc30ad3ec1beb317e6f9c99a014"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_EMOTIONS_REVIEW_2026-11-21.md",
+   "baseline": null,
+   "candidate": "15a9d79be90401cb8533ea7307a9f70b7712f9cf265c1cb8070ee609ad4712bd"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_EMOTIONS_REVIEW_2026-11-21_2.md",
+   "baseline": null,
+   "candidate": "1648820be0044c5732db82e58b209c1f8685c2613509f9b6665dd81f2c5f83c6"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_EMOTIONS_REVIEW_2026-11-21_3.md",
+   "baseline": null,
+   "candidate": "9d64108e3ed2598fd11946dd85b94743ee5645e1304bf3a3c5e27a46ea9fb58e"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_EMOTION_DESIGN_REVIEW_2026-11-21.md",
+   "baseline": null,
+   "candidate": "00409206ee47baad9f059c989a5d404c8f589d12b1fb913276f30456ec901f54"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_EMOTION_IMPLEMENTATION_REVIEW_2026-11-21.md",
+   "baseline": null,
+   "candidate": "5080e56192375706bb41179c4ce84cdcda7f88ce28ea4d01c7433b5d750c8173"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_IDLE_SCHEDULING_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "750fb759c3dae1282f65059182576d24bfb10db071fa00e38854d15c9b3a2554"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_LOCAL_AI_INCIDENT_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "8d956671c1ef8fef7bee82e850097578bbeeaefc8688704d4b8a48e10908ebde"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_MEMORY_GARDEN_PLAN.md",
+   "baseline": "f545b8d8ecafe0b2a4f13ab537ff10fa82ddba4f3fd09c0f4c958dc107e9d7d6",
+   "candidate": "0b15d44d3f9cd61c9f2e7a8dcac95bb0033f0f256ea702051e2755bdf1991cb6"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_MEMORY_REFINEMENT_IMPLEMENTATION_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "c64a1e11aff375e388126b6f68ec5c692975a38d31230d46e0b6a65d197b00f2"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_MEMORY_REFINEMENT_REQUIREMENTS_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "aba80a7dff822cbc2e8e867a2da0850ff7eb787c98d6737271b701139c9ff680"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_NAG_REPLY_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "744f900409c6850971593c2c1353cbfe7bb1c28515f47f58bbccde4b2d55cb14"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_RECORD_QUALITY_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "c0b1e3eb4f2e65ea1152e0fd7c5e7b903d457850431ec40c8b38161595bf99b4"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_REFINEMENT_LATENCY_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "deee1d88c695c90deed2b9cbe09fa359cb589f5cf7fb1f9cab5a0670b53cb494"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_ACTION_REVIEW_RELEASE_2165f39c88c7.json",
+   "baseline": null,
+   "candidate": "2165f39c88c73e60ab46286a8eaa07612c34e240e23385b1bc1800cb4b69bae5"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_EMOTION_REPLAY_c2da3c2ccbf0.json",
+   "baseline": null,
+   "candidate": "c2da3c2ccbf0a8b0f9e008f8fe905cfbd0b413a26eb101703dae5545f6d18246"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_FIXED_OVERLAY_7fcdfda70149.json",
+   "baseline": null,
+   "candidate": "7fcdfda701494b1cbd427b61e0d643115988e8fc84ee5f70251b91a748ff54b4"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_FIXED_OVERLAY_RECEIPT_dda429cff282.json",
+   "baseline": null,
+   "candidate": "3b8130691e7b2d117b3f555862aaed4933be13948c751e861e0365e927fe4664"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_FIXED_OVERLAY_dda429cff282.json",
+   "baseline": null,
+   "candidate": "dda429cff282de7db0ecca6f872147c15962f29bde22dd6f299f5c931f823e2d"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_IDLE_RELEASE_f011f0687aec.json",
+   "baseline": null,
+   "candidate": "f011f0687aec301ee69876599c898197c965ff75317e9644fc3a6105eebeb4c9"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_LOCAL_AI_RELEASE_46c2e0ac0916.json",
+   "baseline": null,
+   "candidate": "46c2e0ac09167f3289620c4b15806f075daed1bf8a85d91a35bf8f2eafc033f8"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_NAG_REPLY_RELEASE_4f12e1d6d84e.json",
+   "baseline": null,
+   "candidate": "4f12e1d6d84ea5d711d3837eb3c4baccab6be43943f41167b7b7608a34aeb40f"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_NEWS_EDITORIAL_0585430f5e6d.json",
+   "baseline": null,
+   "candidate": "0585430f5e6daf7af6006ac304f4265912ebae0038b749268350feb1f37d3111"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_NEWS_EDITORIAL_20bc621f3af4.json",
+   "baseline": null,
+   "candidate": "20bc621f3af4cb2d70e3d46d90ddef9161dfc70f87c9aa63924e13403c8e7764"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_NEWS_EDITORIAL_cafa85c28ea2.json",
+   "baseline": null,
+   "candidate": "cafa85c28ea21822de9dedb6ab2dc0dc514f4d0e352e4d0ae3eb2dd19b049e75"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_NEWS_EDITORIAL_ea7695ce5088.json",
+   "baseline": null,
+   "candidate": "ea7695ce5088b2ae5be091714cc0f1cdce2b13d92f02b9e473ee31b233dc73a6"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_RECORD_QUALITY_9c9a1c162aed.json",
+   "baseline": null,
+   "candidate": "9c9a1c162aed7fbcd3f39361f3fb8a496cc2988e8f244b09b8ad4cda56a33086"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_SKILL_RELEASE_9f30f8978053.json",
+   "baseline": null,
+   "candidate": "9f30f89780536c2754a6d40f2854706dffc0c8c37561134df102f9e8fa8879f6"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_THREADS_RELEASE_49023239b9ad.json",
+   "baseline": null,
+   "candidate": "49023239b9adb37c79e539fb00b169feda64c35c2c884341042a3fadcca2448b"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WINDOWS_WEATHER_RELEASE_b8cc72a294b1.json",
+   "baseline": null,
+   "candidate": "b8cc72a294b1f5eadbf35cb1cde755359a19116206cc6ea186e970dc9b17a6e6"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WORKFLOW_CHANGE_MAP_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "a1cd25074ae941da27156d947e8d37befbbde952d4e68c5f6e3a80f023cd7472"
+  },
+  {
+   "path": "docs/reviews/FEIYUE_WORKFLOW_REQUIREMENTS_SELF_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "f6cc3ee0dbbba53e911538033a7452862f63e442c215d3c7305620e84106ae0b"
+  },
+  {
+   "path": "docs/reviews/FISHBONE_PROGRESS_REVIEW_2026-11-21.md",
+   "baseline": null,
+   "candidate": "702943c547ce1dd67c97638da2ba0ff5d672b34df6ebeb47d6ce5fcd1e51a654"
+  },
+  {
+   "path": "docs/reviews/FORMAL_QUEUE_DESIGN_REVIEW_2026-11-21.md",
+   "baseline": null,
+   "candidate": "30691d23afabcb151c6e0b6a3285fb036fe713cad771a85271ddb2342d7fb85a"
+  },
+  {
+   "path": "docs/reviews/KNOWLEDGE_LIBRARY_DESIGN_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "c04c583e4d6a1598c9275c6947e063c5e6646c067304ca2771f6aabbf56af9c4"
+  },
+  {
+   "path": "docs/reviews/LEARNING_IMPLEMENTATION_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "b671398aa256f13bfc25d5b7857a24ecaab29add66eada8c0333dffb32f299ef"
+  },
+  {
+   "path": "docs/reviews/LEARNING_REQUIREMENTS_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "0339224892d465730cbf2fc21220181318583100a55762217d3d048a632d460f"
+  },
+  {
+   "path": "docs/reviews/LOCAL_DIALOGUE_STYLE_REVIEW_2026-11-21.md",
+   "baseline": null,
+   "candidate": "cb7a9a7152b35cf05619690e457fb3e1ae212775a2a9738e6cda5e6667212bb6"
+  },
+  {
+   "path": "docs/reviews/LOCAL_FIRST_INTERACTION_DESIGN_REVIEW_2026-11-21.md",
+   "baseline": null,
+   "candidate": "6bae6c9b6b9db11da4ed896b8b2ad6613443209bba2ee02e723ff06d6dd7151e"
+  },
+  {
+   "path": "docs/reviews/LOCAL_FIRST_INTERACTION_IMPLEMENTATION_REVIEW_2026-11-21.md",
+   "baseline": null,
+   "candidate": "138509c6c79d894958c83a36ed023e015c6a9dfb2d6adde39b787c5d33fd5c0f"
+  },
+  {
+   "path": "docs/reviews/MENU_CONTENT_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "71af8e5a687b3d4d60b714813755ab0eb6f25e0d431cc713d2e16d3f67bcadf4"
+  },
+  {
+   "path": "docs/reviews/NEWS_EDITORIAL_SKILL_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "7be19163fc4499f0d95b8091de99ee56cafa15c39b4de67434da1b2ed9150e4f"
+  },
+  {
+   "path": "docs/reviews/NEWS_HOT_TOPICS_DESIGN_REVIEW_2026-11-25.md",
+   "baseline": null,
+   "candidate": "78ae6bbd2f8ae8db8d9a9777cbc1e14455bf71685d51530f27c418100ebb8a54"
+  },
+  {
+   "path": "docs/reviews/NEWS_WEEKLY_WINDOWS_RELEASE_MANIFEST_2026-11-21.json",
+   "baseline": null,
+   "candidate": "8a98e4da5249e02ee80eed977045c0758d18411964b63e0b421215d62e42616f"
+  },
+  {
+   "path": "docs/reviews/PENDING_CITATION_CLOSING_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "f43e1aa4330575c9dd62d8deb448fe6d213f46a100b29ca3d24ba453bb7b0b98"
+  },
+  {
+   "path": "docs/reviews/PENDING_QUESTIONS_QUALITY_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "c75f6210202be617498f43a7ba8ea999cc4be6f823c8cea085ab754e467c2649"
+  },
+  {
+   "path": "docs/reviews/PENDING_QUESTIONS_REVIEW_2026-11-21.md",
+   "baseline": null,
+   "candidate": "6aaa74e746b214a59ae300a4b7453c9499ac3a995f914711122eb842a5f90520"
+  },
+  {
+   "path": "docs/reviews/PENDING_QUESTIONS_TEST_RERUN_2026-11-21.md",
+   "baseline": null,
+   "candidate": "e026b76d18b0ba2ec81124d0ad837212263687d15aa40fc6cc7adca7d4f6f239"
+  },
+  {
+   "path": "docs/reviews/SKILL_GUIDE_LIVE_VERIFICATION_2026-11-23.md",
+   "baseline": null,
+   "candidate": "1a8b89304302b1ed1cbce2bbf000fb9d2474414150f4d87e894da21f8b399c12"
+  },
+  {
+   "path": "docs/reviews/SKILL_HOT_UPDATE_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "2756684e89e1263ff469a50092ad85d8b04dbc158a8c1d9d645d463ed49ea41f"
+  },
+  {
+   "path": "docs/reviews/SKILL_RELEASE_SELF_AUDIT_2026-11-23.md",
+   "baseline": null,
+   "candidate": "d3abe45bd8737f3c0f5cb66221004fff91486ea9e6ee2efe0267eedc7127a5f8"
+  },
+  {
+   "path": "docs/reviews/SKILL_RELEASE_SELF_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "050fa400ea3dbd6c4af01ba8242feef4c19ec3ba5cd314891c5d0a85f925de7b"
+  },
+  {
+   "path": "docs/reviews/STUDY_COMPLETION_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "cffb8d0dd0d0ccf4a40b7df589c9f37ebc2b9c316062ce6bd4b72811a12fac3a"
+  },
+  {
+   "path": "docs/reviews/STUDY_DESIGN_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "b8dd14544ddc31dfed23b4997af26384001670eafbe0c011ecfd2d67d8b1f7dc"
+  },
+  {
+   "path": "docs/reviews/SUBMISSION_QUEUE_SELF_REVIEW_2026-11-25.md",
+   "baseline": null,
+   "candidate": "04912ae9114fd57b92f8e26a038cb21aeae5907e1e81f8a396877739dcb3a833"
+  },
+  {
+   "path": "docs/reviews/SYNC_INTEGRATION_SELF_REVIEW_2026-11-25.md",
+   "baseline": null,
+   "candidate": "99709baa7312469746feec30ea04b120e43e79bef0b229f16f1d7942cb83894f"
+  },
+  {
+   "path": "docs/reviews/VOICE_PRIVATE_CHAT_DESIGN_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "9a9068084ac9e75b3033d11f4a5b94d7ff4a8a844587195ed9ddf9c4292cb6a5"
+  },
+  {
+   "path": "docs/reviews/VOICE_PRIVATE_CHAT_GPU_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "319580c5485c9162ddd86c7bd47c92a133c44858ccf5f809391150522af884a7"
+  },
+  {
+   "path": "docs/reviews/VOICE_WARMUP_PLAYBACK_REVIEW_2026-11-22.md",
+   "baseline": null,
+   "candidate": "b659469453a474fbb5a32c67f38acf9a8a74e42950d51c97d6ba5f29ce32a1a2"
+  },
+  {
+   "path": "docs/reviews/WEATHER_ACTION_REMINDERS_REVIEW_2026-11-23.md",
+   "baseline": null,
+   "candidate": "c2a81a540fb2f22feace85e8b0bb1b8fa8e2d330561704ef6ebf2922f773cdf8"
+  },
+  {
+   "path": "docs/reviews/WSL_AGY_MIGRATION_SELF_REVIEW_2026-11-25.md",
+   "baseline": null,
+   "candidate": "e92e432ba1ca5ec0cb6f65a400294c9a2afd94a86465f06dff1986cd767839e5"
+  },
+  {
+   "path": "prototype/conversation-threads/index.html",
+   "baseline": null,
+   "candidate": "e17a77a11ebe2be45aacc202aa39b88c2ea712c0066236b9e99c408798e0223d"
+  },
+  {
+   "path": "prototype/conversation-threads/preview.css",
+   "baseline": null,
+   "candidate": "ecfd8ad865d84a0b7869a3eb4839d6fad86890adee1823f04fad8f6c2fd8c80d"
+  },
+  {
+   "path": "prototype/conversation-threads/preview.js",
+   "baseline": null,
+   "candidate": "eba444c66ab1be773bad20f4ae825569c890bf8d333d8833d45830d89d535355"
+  },
+  {
+   "path": "prototype/private-chat/expressions.html",
+   "baseline": null,
+   "candidate": "032f4ee1577855437e4f23d4dd8e1939435b7e0bc3d2c7f587cda9e7426c6e3b"
+  },
+  {
+   "path": "prototype/private-chat/index.html",
+   "baseline": null,
+   "candidate": "e60d2b83304bddfd05b79f32a60b0db5274f3b5f5357d97c1a719a8c7d9ce29a"
+  },
+  {
+   "path": "prototype/private-chat/preview.css",
+   "baseline": null,
+   "candidate": "72dc6ad66b0be01f0fdd268d18075ce8678990bc8df6a8e1dbacdbac99d15198"
+  },
+  {
+   "path": "prototype/private-chat/preview.js",
+   "baseline": null,
+   "candidate": "82509af8e14741d15532e471c716b608f611854c03c2f62517508252360163a7"
+  },
+  {
+   "path": "prototype/registration-batch.css",
+   "baseline": null,
+   "candidate": "3345c1a152f0a4a6f3eb15495e63a4089b867a807a0eb405c1cd32b88193f095"
+  },
+  {
+   "path": "prototype/registration-batch.html",
+   "baseline": null,
+   "candidate": "855598294e8c885321ed6ab9ecdb290a00271195b9c1f8d7953000412c67331d"
+  },
+  {
+   "path": "prototype/registration-batch.js",
+   "baseline": null,
+   "candidate": "872deae12a97ab6cc65af6e087b5cea370f0c42b65d052c2e73fd92ae5af492f"
+  },
+  {
+   "path": "prototype/settings.html",
+   "baseline": "1f2966803b0518b45268a667da00838afe3da00a19842c8bdd3caf78932ed950",
+   "candidate": "c79f7856dff0ed5626d71aaddae2e0a539b6823016a505ee761adb883a81abea"
+  },
+  {
+   "path": "prototype/thought-cloud.html",
+   "baseline": null,
+   "candidate": "90f6cc393cce9521c2141ad6b64bc05c3eefa3800d87f960637f2a78f1db5905"
+  },
+  {
+   "path": "skills/README.md",
+   "baseline": "ee01a203ec0852e9419baf88da34334d8edcd89df9cca48d55f4ee2b4641917d",
+   "candidate": "ee35ab3d8fc24bbb4b82dd6a8f30bf781f6255271af52161ebfa54f7ace84e08"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-0/SKILL.md",
+   "baseline": null,
+   "candidate": "ffa9441f87c0497f6d971086af81dcfee3fca3546207f2a5d14c9e8e413e849a"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-0/local-ai.json",
+   "baseline": null,
+   "candidate": "be6149beb0ea87ec916200995412ee2d6f93882a9adfdd203f002d11ecf37557"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-0/schemas.json",
+   "baseline": null,
+   "candidate": "95f23b8be0efc904e5f941e2b8987d82a17dd6a47eae015548c6e2ce52682669"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-0/templates.json",
+   "baseline": null,
+   "candidate": "5db253d810fbc9ba01d4a63361de72d02b418477f40340f444b2a075c98f2f1d"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-1/SKILL.md",
+   "baseline": null,
+   "candidate": "7e70e0aa8cfd2b47d6234ecb4b7b47031998a5bc59c0a5896d121cf5928a192e"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-1/local-ai.json",
+   "baseline": null,
+   "candidate": "3d998eeec39d645a6d9a3b77a820dee8bb51e00279888a27f2ede2dd93644061"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-1/schemas.json",
+   "baseline": null,
+   "candidate": "95f23b8be0efc904e5f941e2b8987d82a17dd6a47eae015548c6e2ce52682669"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-1/templates.json",
+   "baseline": null,
+   "candidate": "5db253d810fbc9ba01d4a63361de72d02b418477f40340f444b2a075c98f2f1d"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-2/SKILL.md",
+   "baseline": null,
+   "candidate": "01349ff2067b4f545e90286086a694033fc2035f320f604c3e98e7bf898f720e"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-2/local-ai.json",
+   "baseline": null,
+   "candidate": "6dfdc859a1cc4b170a5cbccb14bff8edc69593dfb7d1d1d632f7ef2458617240"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-2/schemas.json",
+   "baseline": null,
+   "candidate": "be6366aeee028cdc132adddb303e48209ba3b6179cb48147b870bb3735f10a51"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-2/templates.json",
+   "baseline": null,
+   "candidate": "5db253d810fbc9ba01d4a63361de72d02b418477f40340f444b2a075c98f2f1d"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-3/SKILL.md",
+   "baseline": null,
+   "candidate": "abb437604c7623aa51168b8bd4869a945f40d31be6ce9473cc3b4799b8841426"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-3/local-ai.json",
+   "baseline": null,
+   "candidate": "7b98cb0c34f47f93203c7b6e972778e9ccd004b3c87c5776d4be02e66917917e"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-3/schemas.json",
+   "baseline": null,
+   "candidate": "87d2f183e1a3577586ed4b54ab7d108ecb8f51ccdac8d8ae445402f80649fe77"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-3/templates.json",
+   "baseline": null,
+   "candidate": "5db253d810fbc9ba01d4a63361de72d02b418477f40340f444b2a075c98f2f1d"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-4/SKILL.md",
+   "baseline": null,
+   "candidate": "40e0a885a0c36935a0f10b82ba51461419c39c03bad39df96c16c7f9e2df49b2"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-4/local-ai.json",
+   "baseline": null,
+   "candidate": "7b98cb0c34f47f93203c7b6e972778e9ccd004b3c87c5776d4be02e66917917e"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-4/schemas.json",
+   "baseline": null,
+   "candidate": "87d2f183e1a3577586ed4b54ab7d108ecb8f51ccdac8d8ae445402f80649fe77"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-4/templates.json",
+   "baseline": null,
+   "candidate": "5db253d810fbc9ba01d4a63361de72d02b418477f40340f444b2a075c98f2f1d"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-5/SKILL.md",
+   "baseline": null,
+   "candidate": "71be7128c69479290449c88ce96550481d259b84339dad342b1d4865893e3447"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-5/local-ai.json",
+   "baseline": null,
+   "candidate": "f8c4ce41e95f96c32f97f472e64c312dc813c79a113694fc6aba831a473de901"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-5/schemas.json",
+   "baseline": null,
+   "candidate": "bea5827f0aa9446c97e91a25d3e2f3bff77fa4a31ca1498d6a5453ec6d78448a"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-5/templates.json",
+   "baseline": null,
+   "candidate": "5db253d810fbc9ba01d4a63361de72d02b418477f40340f444b2a075c98f2f1d"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-6/SKILL.md",
+   "baseline": null,
+   "candidate": "6f4cc697a0a4380e6b9bf6926d5fbd90526c2784847bd0b46314a5dc6a427bf0"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-6/local-ai.json",
+   "baseline": null,
+   "candidate": "4fda1593ab1d57e8723213cca2a502fa832bf5b14b0e750c080d9506a9274577"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-6/schemas.json",
+   "baseline": null,
+   "candidate": "bea5827f0aa9446c97e91a25d3e2f3bff77fa4a31ca1498d6a5453ec6d78448a"
+  },
+  {
+   "path": "skills/conversation-transcription/versions/conversation-transcription-v1-6/templates.json",
+   "baseline": null,
+   "candidate": "026b875afc61fc26905208c0d9e2960c2833146da79e74ef79741462367d79d4"
+  },
+  {
+   "path": "skills/diary-audit/versions/diary-audit-v1-0/SKILL.md",
+   "baseline": null,
+   "candidate": "9f79d30869f2fb08fe024ea6d26b24da8687b75ddd2d174f262fe706d8959aac"
+  },
+  {
+   "path": "skills/diary-audit/versions/diary-audit-v1-0/local-ai.json",
+   "baseline": null,
+   "candidate": "22ec6a12d59d8aad0f23a3decabf1d465f0cdf5ed663cbaa28e468781649fc75"
+  },
+  {
+   "path": "skills/diary-audit/versions/diary-audit-v1-1/SKILL.md",
+   "baseline": null,
+   "candidate": "67ed2af2869e445c160ffeeb205d1fd8819fe80e5bb93aeee8a8f16ad5640528"
+  },
+  {
+   "path": "skills/diary-audit/versions/diary-audit-v1-1/local-ai.json",
+   "baseline": null,
+   "candidate": "0b3d3569bf91b020b7089dab5635ad753fb767a088fc880070bdea21fda57900"
+  },
+  {
+   "path": "skills/diary-audit/versions/diary-audit-v1-2/SKILL.md",
+   "baseline": null,
+   "candidate": "dcce135fdd63f1425f19223fd0ebe3fa4b8bf87feb75b1e771223ac3eb52ad6b"
+  },
+  {
+   "path": "skills/diary-audit/versions/diary-audit-v1-2/local-ai.json",
+   "baseline": null,
+   "candidate": "0b3d3569bf91b020b7089dab5635ad753fb767a088fc880070bdea21fda57900"
+  },
+  {
+   "path": "skills/diary-audit/versions/diary-audit-v1-3/SKILL.md",
+   "baseline": null,
+   "candidate": "88965f0bf378ba66669c128b49f4565d780fffda6b501cf93da8d07aad766815"
+  },
+  {
+   "path": "skills/diary-audit/versions/diary-audit-v1-3/local-ai.json",
+   "baseline": null,
+   "candidate": "c5bd558008e7f7e59a6870d06456098e946b1ac9bd791bc54f61f5089c6bc240"
+  },
+  {
+   "path": "skills/diary-writing/latest.json",
+   "baseline": "9bd1f179b26b69a92e40683d7adfc9c94252b6883753b3ebebcf64de642c961c",
+   "candidate": "4b03f6902e84a319fad0273b02f34f05238fafa8ba46ae627abb9675bbd70415"
+  },
+  {
+   "path": "skills/diary-writing/versions/diary-writing-v2-2/SKILL.md",
+   "baseline": null,
+   "candidate": "ff6222322dc9d428ad4afbd3a780fcc76c3b7d83b6e096b03d2256649ab80e2e"
+  },
+  {
+   "path": "skills/diary-writing/versions/diary-writing-v2-2/local-ai.json",
+   "baseline": null,
+   "candidate": "1109de48e1a21cb13c4c2fb75c14913102d45d247928579ac0ddb7c3d9299049"
+  },
+  {
+   "path": "skills/diary-writing/versions/diary-writing-v2-3/SKILL.md",
+   "baseline": null,
+   "candidate": "c7b2502aa8d7d3f5d0fcadcc99957fe20735fd663d5ffd4bc95f38514c4e978c"
+  },
+  {
+   "path": "skills/diary-writing/versions/diary-writing-v2-3/local-ai.json",
+   "baseline": null,
+   "candidate": "c3b33ca32de6f6ad7e9d3fe54779c3070decbf86aef17de612b195d2442c468d"
+  },
+  {
+   "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-7/SKILL.md",
+   "baseline": null,
+   "candidate": "4085dbc67325da9acb4e7faa8e7c21a3ebac85990af56376a3523928ce6d5fb1"
+  },
+  {
+   "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-7/local-ai.json",
+   "baseline": null,
+   "candidate": "b5e3a011157abf4e451e1b0fd33a83a58e580daf9c65936d0b3c2f8507745559"
+  },
+  {
+   "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-8/SKILL.md",
+   "baseline": null,
+   "candidate": "9206ca05f12247d211a656cd7ed2ddb10981e62fa316a3667f042f83647ed947"
+  },
+  {
+   "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-8/local-ai.json",
+   "baseline": null,
+   "candidate": "90f9b3cceb7668c7b358846f38bcd80f89f8c3ad3003d88025c6939cd7104fd4"
+  },
+  {
+   "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-9/SKILL.md",
+   "baseline": null,
+   "candidate": "cc1e81456bd1f6648b29613fc9034d3202d1eb8aa86b458ebd52408f076fc1e2"
+  },
+  {
+   "path": "skills/emotion-appraisal/versions/emotion-appraisal-v1-9/local-ai.json",
+   "baseline": null,
+   "candidate": "876f36ae2cf2b113b165f963fc0997357d7fdadd21656df720435c637a5caa54"
+  },
+  {
+   "path": "skills/emotion-appraisal/versions/emotion-appraisal-v2-0/SKILL.md",
+   "baseline": null,
+   "candidate": "0d555bbb3edcf7e0de88ea56b2cb18fa699c16f7750ee49e21d259b63680ec6a"
+  },
+  {
+   "path": "skills/emotion-appraisal/versions/emotion-appraisal-v2-0/local-ai.json",
+   "baseline": null,
+   "candidate": "3e1ff5b96859c6bc10561feda8df1fadad35a5c269286ddfc663e402ffb67e66"
+  },
+  {
+   "path": "skills/emotion-appraisal/versions/emotion-appraisal-v2-1/SKILL.md",
+   "baseline": null,
+   "candidate": "849923de131219c96b31be9f3416d382a1751e7bdc74c8f5c03417c2aa25cb9c"
+  },
+  {
+   "path": "skills/emotion-appraisal/versions/emotion-appraisal-v2-1/local-ai.json",
+   "baseline": null,
+   "candidate": "376bf5e4b0858846d0802ac64e8678006d6b7b90ea42f07a22eb91f41fe3386a"
+  },
+  {
+   "path": "skills/emotion-appraisal/versions/emotion-appraisal-v2-2/SKILL.md",
+   "baseline": null,
+   "candidate": "868a0dac788cf74cc73ba786add20a952aa28a3d8f6c0f21329066b2d48d2dff"
+  },
+  {
+   "path": "skills/emotion-appraisal/versions/emotion-appraisal-v2-2/local-ai.json",
+   "baseline": null,
+   "candidate": "d14a3ee9083db54ae977eaade5944d7c9a5b00f5f1b3ae1e090cef2ea6227a3a"
+  },
+  {
+   "path": "skills/feiyue-interaction/capabilities.json",
+   "baseline": "ccefbc062ada6888e075db36c9d8906412b0d81a85b40065940862e04dc6ebee",
+   "candidate": "d2ab95fe2618055f1daba9be3434250d3a7e5de8703bbef56dc9f7edca008c81"
+  },
+  {
+   "path": "skills/feiyue-interaction/versions/feiyue-interaction-v1-9/SKILL.md",
+   "baseline": null,
+   "candidate": "a2fa9ddf526298226ff636312ae3091f761a617b38f77e16de79e173e5539cf0"
+  },
+  {
+   "path": "skills/feiyue-interaction/versions/feiyue-interaction-v1-9/routes.json",
+   "baseline": null,
+   "candidate": "0885e11d835c64f834750cb59a72f210c8c8a8d35d78ac434d315b01c479f827"
+  },
+  {
+   "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-0/SKILL.md",
+   "baseline": null,
+   "candidate": "118a26bc8c6db3396c84ae03a09100fd8d9644da9272192d2c3b2cb251a2a4f7"
+  },
+  {
+   "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-0/routes.json",
+   "baseline": null,
+   "candidate": "e721a5dd18e52a1652cf87882655b3a15493c2183428efcf7fc835a0aa34d2ca"
+  },
+  {
+   "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-3/SKILL.md",
+   "baseline": null,
+   "candidate": "7a2fb41b8c0ca0cc6b7b1cb513fe775b6f1d008cdaa79996d06b0ab8fc6a2a3c"
+  },
+  {
+   "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-3/routes.json",
+   "baseline": null,
+   "candidate": "0ac2d333a8e612b029e0ecd0004037b3a82696868181489fea607a3cda107384"
+  },
+  {
+   "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-4/SKILL.md",
+   "baseline": null,
+   "candidate": "26ab6a89709fa1707772e9653d9c19b2d7e078ae89bb7374ff4695e5258ff2c2"
+  },
+  {
+   "path": "skills/feiyue-interaction/versions/feiyue-interaction-v2-4/routes.json",
+   "baseline": null,
+   "candidate": "0ac2d333a8e612b029e0ecd0004037b3a82696868181489fea607a3cda107384"
+  },
+  {
+   "path": "skills/feiyue-interaction/versions/feiyue-interaction-v3-0/SKILL.md",
+   "baseline": null,
+   "candidate": "c1e67aff039ce9c22a5488ff4d05660aa42c13fc59f3ed2e3d7664e9d0444ae3"
+  },
+  {
+   "path": "skills/feiyue-interaction/versions/feiyue-interaction-v3-0/routes.json",
+   "baseline": null,
+   "candidate": "9e78d6d4fb450f03e1288ffb82731f8d2db5a7ae19f0d84cb734723425af44bd"
+  },
+  {
+   "path": "skills/image-task-chain/latest.json",
+   "baseline": "7a65011f76dfc242066af78c14774cd61a094791570319cecfa4742d97114334",
+   "candidate": "0ccd0493647de0ed86747d756d1462367d65e899567985fe5723af6c0f39d33d"
+  },
+  {
+   "path": "skills/image-task-chain/versions/image-task-chain-v1-9/SKILL.md",
+   "baseline": null,
+   "candidate": "fa6d401e33b816c51dcdcc0b6eab2730e48ad51feab53f47081761bf55e32828"
+  },
+  {
+   "path": "skills/image-task-chain/versions/image-task-chain-v1-9/children.json",
+   "baseline": null,
+   "candidate": "cc6a996a1170ad35344e57355bb0724eae657b17354dca42dd135b85706a1c54"
+  },
+  {
+   "path": "skills/image-task-chain/versions/image-task-chain-v2-0/SKILL.md",
+   "baseline": null,
+   "candidate": "9014c23b4ca2c3837bde526ebd1e90b724ca4ad73d8199ff9a323427546ff57d"
+  },
+  {
+   "path": "skills/image-task-chain/versions/image-task-chain-v2-0/children.json",
+   "baseline": null,
+   "candidate": "cc6a996a1170ad35344e57355bb0724eae657b17354dca42dd135b85706a1c54"
+  },
+  {
+   "path": "skills/memory-refinement/latest.json",
+   "baseline": "3aafc1898c54f07478cda2220add0b3f4ff2c96b21227ffc1c55634bfbb946b6",
+   "candidate": "d25d8b0f98d6238cd8ebec65bbe1b1f0458b292d3966d6e3c19c8879c89467a3"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-0/SKILL.md",
+   "baseline": null,
+   "candidate": "14562c9c90306115a98c50741106e50a8f0533bf83018b46904a75f86e0c7818"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-0/local-ai.json",
+   "baseline": null,
+   "candidate": "41ef9187b5f0ba6a6f133149c5be3149b5e17ff3f586e22646e911cc0429c91b"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-0/schemas.json",
+   "baseline": null,
+   "candidate": "1395d3e588582fbb5ad1c113088eda96e5dc7a217efd552132fad400df031056"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-1/SKILL.md",
+   "baseline": null,
+   "candidate": "736bf4f8710c48d857987b882f3bddfb6770ae4b18cc3fa8ecfd1e8447f9450f"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-1/local-ai.json",
+   "baseline": null,
+   "candidate": "f18883a1d126605776078d35a54bf38b57b078b814396ca5a381529b6753b9d4"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-1/schemas.json",
+   "baseline": null,
+   "candidate": "1395d3e588582fbb5ad1c113088eda96e5dc7a217efd552132fad400df031056"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-2/SKILL.md",
+   "baseline": null,
+   "candidate": "41bda695e193dda8d75507396f22f03a9d76390804f5a983ff162eff8156bf1e"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-2/local-ai.json",
+   "baseline": null,
+   "candidate": "1be11dbefc431e7e1615f59c667cde7cabe438c5f6899346332e49328a2e2e08"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-2/schemas.json",
+   "baseline": null,
+   "candidate": "fecec6ac885419121eed808db71612f74e39a883e57c88da70bfd1ab4ed9bd27"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-3/SKILL.md",
+   "baseline": null,
+   "candidate": "c68aa500bc59020e56d935731e42bfe3bfccebb88c82297e93a9ae961094a30a"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-3/local-ai.json",
+   "baseline": null,
+   "candidate": "c0b767c8270800d1e9d1acd89e68ea86b5c4d1d5d4917b399a43c84954b16274"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-3/schemas.json",
+   "baseline": null,
+   "candidate": "a468e91570a6e72ba6bfdf31948f830b991694f3ba3fa10755f1d7e5c20c331e"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-4/SKILL.md",
+   "baseline": null,
+   "candidate": "ccaa19b6234dc8c48cf97fa45397ae3e59a9cd44efe855a9da47c365fce02be6"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-4/local-ai.json",
+   "baseline": null,
+   "candidate": "3325d8004ca3c1aa5892a2683acbba43f43335a97284002b63293de280971ea3"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-4/schemas.json",
+   "baseline": null,
+   "candidate": "a468e91570a6e72ba6bfdf31948f830b991694f3ba3fa10755f1d7e5c20c331e"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-5/SKILL.md",
+   "baseline": null,
+   "candidate": "2fd8d96b3099a846b53a80e004adcaf3e7396d023daaa43aa7c5d90e16c662a5"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-5/local-ai.json",
+   "baseline": null,
+   "candidate": "3325d8004ca3c1aa5892a2683acbba43f43335a97284002b63293de280971ea3"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-5/schemas.json",
+   "baseline": null,
+   "candidate": "a468e91570a6e72ba6bfdf31948f830b991694f3ba3fa10755f1d7e5c20c331e"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-7/SKILL.md",
+   "baseline": null,
+   "candidate": "a2f5c2ab68241c25fc01008179f3dd92ec904a3b108cca932189fd2883c8ba0a"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-7/local-ai.json",
+   "baseline": null,
+   "candidate": "a2c32770fe600d5d824b49182ebd408165e4e3095584d8d762912c897c687c82"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-7/schemas.json",
+   "baseline": null,
+   "candidate": "a468e91570a6e72ba6bfdf31948f830b991694f3ba3fa10755f1d7e5c20c331e"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-8/SKILL.md",
+   "baseline": null,
+   "candidate": "3bf6860848ed09dec1b074592979b728eddbaa5018f6f7b38288ea529c9af3a1"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-8/local-ai.json",
+   "baseline": null,
+   "candidate": "869b9728f786f97c60f0608cebbf0899da818dd296be618136847b0f8ab64b93"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-8/schemas.json",
+   "baseline": null,
+   "candidate": "a468e91570a6e72ba6bfdf31948f830b991694f3ba3fa10755f1d7e5c20c331e"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-9/SKILL.md",
+   "baseline": null,
+   "candidate": "38345c877d338e0b42249aad2d331ebee659c6085467e8470a6783853a0fcdac"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-9/local-ai.json",
+   "baseline": null,
+   "candidate": "ac1fc116b41fefad9b035799d24f40a26805cc41cf99ec1c41f3e0ebf41672fb"
+  },
+  {
+   "path": "skills/memory-refinement/versions/memory-refinement-v1-9/schemas.json",
+   "baseline": null,
+   "candidate": "a468e91570a6e72ba6bfdf31948f830b991694f3ba3fa10755f1d7e5c20c331e"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-0/SKILL.md",
+   "baseline": null,
+   "candidate": "bb247d8893b763a2aeb5a74b4ee70028620bdf006d27ae7c67a9403452251334"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-0/local-ai.json",
+   "baseline": null,
+   "candidate": "a19792a62521b54b36a39b28259074d7343f056b10c99d6986692779546d7532"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-1/SKILL.md",
+   "baseline": null,
+   "candidate": "517401fd7639c6b845a9d7903d2df7a81589c47d6ab7e320f711694f8ac94415"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-1/local-ai.json",
+   "baseline": null,
+   "candidate": "168c55e01af168cf26892d78ed5cd1e129b93233e75e2297ee32f5ef24fb7d1c"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-2/SKILL.md",
+   "baseline": null,
+   "candidate": "0a5f538629a3b21854c3e874ff71d0eb6d3323b9a1431338c6c637a956abf83b"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-2/local-ai.json",
+   "baseline": null,
+   "candidate": "3cbede87098056bfa1d712775a1a69c0d460fabee7a86c2b1a12e9c7f7b9b418"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-3/SKILL.md",
+   "baseline": null,
+   "candidate": "0e5f7022e61182f8f673a61aa45640cd656fb544b349d275e53885b39a75a15f"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-3/local-ai.json",
+   "baseline": null,
+   "candidate": "7036157d6010276f22dc0a738b7902b78c0e297dfd9630d742827131388a2b69"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-4/SKILL.md",
+   "baseline": null,
+   "candidate": "7837500f00cbb5a2cb634296e82ca497ba30a59c486f6dc7730006bde9dc517b"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-4/local-ai.json",
+   "baseline": null,
+   "candidate": "16637b658eef7e48850cfb17fa2b80e972f8544a9fafdd8e425415c19623cb96"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-5/SKILL.md",
+   "baseline": null,
+   "candidate": "6fa097179eb07405419ec5cc01c839b4dd7a85d6279362efbfb73e71192df48c"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-5/local-ai.json",
+   "baseline": null,
+   "candidate": "f97cf7faccfd40cf30d5cf37b2c38e9dcdd41adee2c75ab231725b554a5039d0"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-8/SKILL.md",
+   "baseline": null,
+   "candidate": "7bb182a2a854df5734fa8e79054ba693cf7f764478673dc2dcf66837e777dd1e"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-8/local-ai.json",
+   "baseline": null,
+   "candidate": "05c39ad7a937cadca0032729e078e9831f5621e34e4728955922909f1b1211a7"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-9/SKILL.md",
+   "baseline": null,
+   "candidate": "b07eed110c47055fc25ce8c832682bdf696f3f91e122b88d172aea507ea9736c"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v1-9/local-ai.json",
+   "baseline": null,
+   "candidate": "adb6aa1dde5124966585989daba36ba5297480b1a75a0668a3b9962bcb1e29ed"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v2-0/SKILL.md",
+   "baseline": null,
+   "candidate": "ac41ade264e4e8ac49bc0f237e0de4034e4450fc379c6efc58ffd78bf44fa5b7"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v2-0/local-ai.json",
+   "baseline": null,
+   "candidate": "a0d87db7a3964339ef59cfd53c94007884ba2fa3bc83d4cb0194a631cdd29341"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v2-1/SKILL.md",
+   "baseline": null,
+   "candidate": "62c8df835eecb6e1d540592c1551b765f82a0293fefb7e2f400241bb3c961565"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v2-1/local-ai.json",
+   "baseline": null,
+   "candidate": "9e5f971d93b9b22199bb0085e305b0dd504131f54a5ab802a61171074ff40193"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v2-2/SKILL.md",
+   "baseline": null,
+   "candidate": "82f65d54a0da9d950c6a564e6162fd1d99a8e0815bf0284150203e14a0ce3559"
+  },
+  {
+   "path": "skills/news-editorial/versions/news-editorial-v2-2/local-ai.json",
+   "baseline": null,
+   "candidate": "0ac82ec53fd714bf9684a24a2979f6719cb94121dc995b25ca8236071ed17073"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v1-8/SKILL.md",
+   "baseline": null,
+   "candidate": "86eb445d2697d9c5e1e351974f84ca026149ef5d435e63fe4f6e3e6cf33a73df"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v1-8/local-ai.json",
+   "baseline": null,
+   "candidate": "544f1344bb5a997f1c4a302fb7c043cb6d64dab4284dcd62ce461da4c4b9d147"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v1-9/SKILL.md",
+   "baseline": null,
+   "candidate": "dd1d06df90be6280ba3542fe11cbcd61d426eff557409c3518b7b1333b7d166d"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v1-9/local-ai.json",
+   "baseline": null,
+   "candidate": "03d059ffec1a09aa0ed9f4148300862109425fd889957f5384ea1744363f9a77"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v2-0/SKILL.md",
+   "baseline": null,
+   "candidate": "5d4fdda559567f9a7dd6d562e6ae24839e2360451dfcfe6de9cee56be6447151"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v2-0/local-ai.json",
+   "baseline": null,
+   "candidate": "24988df5c02203e70a025ef4e05edf2dc04a08c7bcc068478f1e1533ededc86d"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v2-1/SKILL.md",
+   "baseline": null,
+   "candidate": "4a9b3b8373c2001ff38cc5abf53ee221fa7320000c7c4387071f02a4517daace"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v2-1/local-ai.json",
+   "baseline": null,
+   "candidate": "e95a1816ae4f7daefc9b9d545a7a373028f8e45ad5dfa0c6ef8ecd66146bce33"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v2-2/SKILL.md",
+   "baseline": null,
+   "candidate": "505e4e416cc1c5cf249dd23c0e4de3aba41b0490a9cd43339c0ee7a7dbf80756"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v2-2/local-ai.json",
+   "baseline": null,
+   "candidate": "db2cbd3432d3bff29adbdcc2658375ad38d19a0274112ed74e8fdac3113070d8"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v2-3/SKILL.md",
+   "baseline": null,
+   "candidate": "233ff258d81cc699d99f11b751d71799e1c14999019db517122cf1ce14367b4b"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v2-3/local-ai.json",
+   "baseline": null,
+   "candidate": "bbd5ed46cb23e5b27c65fa64d84507a6954894150bb5fdfebd4f45001008cd08"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v2-4/SKILL.md",
+   "baseline": null,
+   "candidate": "1091707f7a7cd329c784997344c8eb03e5533292f804d1b58394498f7574ed45"
+  },
+  {
+   "path": "skills/personal-conversation/versions/personal-conversation-v2-4/local-ai.json",
+   "baseline": null,
+   "candidate": "24988df5c02203e70a025ef4e05edf2dc04a08c7bcc068478f1e1533ededc86d"
+  },
+  {
+   "path": "skills/reminder-review/latest.json",
+   "baseline": "11e259ac5876f049458f49edc4bf66e6a07c05aeb03a9248b4853904de313427",
+   "candidate": "7b5a44933ae3031c5cbde66e82da9d82a4d3ffa826cf9e30cf95afb4812bacc9"
+  },
+  {
+   "path": "skills/reminder-review/source/SKILL.md",
+   "baseline": "63ab161ede6039465d9a1180aeb3844d4b23543ae561ffb7a9debe674f58f3f3",
+   "candidate": "688554cb7325c77d7e760ba5032810d17af6f807ab3f682e029935c2fdf7d63b"
+  },
+  {
+   "path": "skills/reminder-review/versions/reminder-review-v1-3/SKILL.md",
+   "baseline": null,
+   "candidate": "666b8b05da1f5a6780b57d24d3bb67f755e033df4e074e87255ea6e44042bd7a"
+  },
+  {
+   "path": "skills/resource-registration/latest.json",
+   "baseline": "2a173ddb55d435e5919eeb6adbe62d08d12c2cf9fddf5dc2d095e70bd10b5d45",
+   "candidate": "ffb61771d7d7d34c4f159ee5ae81f0c030beae7c24c37cc09a4738825a2c1761"
+  },
+  {
+   "path": "skills/resource-registration/versions/resource-registration-v1-2/SKILL.md",
+   "baseline": null,
+   "candidate": "b363ad827f060d2192d618ff0dceb9ed3830c68c2105949be86c20973cdfb1f9"
+  },
+  {
+   "path": "skills/resource-registration/versions/resource-registration-v1-2/local-ai.json",
+   "baseline": null,
+   "candidate": "6a8c7db778d48931eca0320cf93de877d3ab700b0e8572b146275f2887e894e7"
+  },
+  {
+   "path": "skills/resource-registration/versions/resource-registration-v1-3/SKILL.md",
+   "baseline": null,
+   "candidate": "a688148cc04d1087888be369033ee6315f472606bed91d0e6ac611aa10200b50"
+  },
+  {
+   "path": "skills/resource-registration/versions/resource-registration-v1-3/local-ai.json",
+   "baseline": null,
+   "candidate": "41fef5b76555b949165f375917c3db4adeeaed39e97b7a7af3134c45c917c69a"
+  },
+  {
+   "path": "skills/task-lifecycle/latest.json",
+   "baseline": "edf04dee1e5a4898b72a2ca060776c5f09b6a7ca663d9f48a5ea4480152a5b60",
+   "candidate": "44d3aecbe294dfaa48f30a32bc62123149d51dbde51bffa9fa1bf1e67b774fa5"
+  },
+  {
+   "path": "skills/task-lifecycle/source/SKILL.md",
+   "baseline": "4b69856616035ca815a7845827b6b67c401b6a100bfd2e3a2ae33e6ef3662009",
+   "candidate": "6df5e510d7ef547b1437c852168069e2d7334d27c20893bb7544d17b1a60d176"
+  },
+  {
+   "path": "skills/task-lifecycle/versions/task-lifecycle-v1-3/SKILL.md",
+   "baseline": null,
+   "candidate": "7b23f105e4f5caba55062e2ed63020231c8e3b46870d3948a2503846b59d9a00"
+  },
+  {
+   "path": "tools/benchmark-pending-reviews.mjs",
+   "baseline": null,
+   "candidate": "6a48b89c921602201f9bbcc1447f007fde19a0945aaab92ad42dddb1b896c1e9"
+  },
+  {
+   "path": "tools/capture-menu-panels-electron.mjs",
+   "baseline": null,
+   "candidate": "cbab7bc93434339981fd03736e73a71ea8aed945706f15b15c8e3034c3bf776e"
+  },
+  {
+   "path": "tools/check-release-browser.mjs",
+   "baseline": "f9969f4c5cb5f514a8132dc5b894595a9d4b33bc8514cd8efc5bb77c4b8a67da",
+   "candidate": "40b37aca0e933b7886df513bcc09a280e7818b9cc7180c4466a61f3298177865"
+  },
+  {
+   "path": "tools/dev-databases.mjs",
+   "baseline": null,
+   "candidate": "87f10d0351b603429d6c74942d718e0e6121e772b28d5663a24f03eda24968a7"
+  },
+  {
+   "path": "tools/menu-panel-capture.mjs",
+   "baseline": null,
+   "candidate": "b30ed5a48bc72ced55630d413852fc9e09a32608791af9ebcf8460f10b9fbfc2"
+  },
+  {
+   "path": "tools/personality-memory-preview.mjs",
+   "baseline": "55db378fe5eb3bf0df854dc785a8ae2d741a24f29844e0f20a0618a3f8db1345",
+   "candidate": "b34853ba7a03901ce00a82294ce6bb62bbcdc468ad64c3c10b15415055295790"
+  },
+  {
+   "path": "tools/prepare-animation-speed.mjs",
+   "baseline": "a41a5a1cb8674d1500892894f06c8a53700224a9713e3d1d368afb9e440c97a6",
+   "candidate": "7861f0bb58e740c6e2895a0ad44cccfed4cb0768929e2a69876a62e2c81744c1"
+  },
+  {
+   "path": "tools/preview-news-editorial.mjs",
+   "baseline": null,
+   "candidate": "4db04da9528761691256fcd26e5d8a74e11df0f09b5cd92a79e4fec6bff0435d"
+  },
+  {
+   "path": "tools/preview-planner-hours.mjs",
+   "baseline": null,
+   "candidate": "1835b4d408661cf4b9f21a1e68db361265a3862fe87a6b51698e2893b08d6f77"
+  },
+  {
+   "path": "tools/release-preview.mjs",
+   "baseline": "a3d971a8a0613febc51dae81aa94892d60ddab61868a949d332b7cb33c9fcf3f",
+   "candidate": "d48ec52e14b0ceb0bb0ec98bf7bd4b32457b21d298220de145a020e8229ae358"
+  },
+  {
+   "path": "tools/scene-preview.mjs",
+   "baseline": null,
+   "candidate": "9d83addfce8b40b22b3dea9917396e015fc44dc8da7de6f7b8091eddc576ac47"
+  },
+  {
+   "path": "tools/sync-release-sources.mjs",
+   "baseline": "f337660670d0af1ac98f25b11167e85582bf2c7e0adc86baeb4484a2649680e6",
+   "candidate": "d83e798f6303ab4c01f0ef388385e5452aa82defb0b478f104164fe63a2d9527"
+  },
+  {
+   "path": "tools/test-autonomous-log-electron.mjs",
+   "baseline": "25ca7ffbb6c532b9e1b91e729aee6436b4254726e7d53eacf9553313077b0f49",
+   "candidate": "00497df0dd6a47dcadf1fb8f6e37dd7ee7b4505994daf3e66febe15bdef7f636"
+  },
+  {
+   "path": "tools/test-context-actions-electron.mjs",
+   "baseline": "9e03a1d411b94af5da681d05c2e384a4c55054ac197f581cccab1a6c62c21f3f",
+   "candidate": "1d2eb3bc5ff1f2de4d3f9faf85f584c4d59974af501047aec008e8d6e7732129"
+  },
+  {
+   "path": "tools/test-conversation-threads-electron.mjs",
+   "baseline": null,
+   "candidate": "053896c6fa3af172417edf113c8a3b3b5d18e2281b1ee106a7eb5a95b8d279fa"
+  },
+  {
+   "path": "tools/test-conversation-transcription-electron.mjs",
+   "baseline": null,
+   "candidate": "b4c63c6d64e39e9908bb17c6877264d61b754975806f33bbf4a644e657f5d2c5"
+  },
+  {
+   "path": "tools/test-conversation-transcription-stability-electron.mjs",
+   "baseline": null,
+   "candidate": "5463bb07bd696c6f916f23e68d597d55ed5a28a1805345ecf4f0e3d59fef0b4f"
+  },
+  {
+   "path": "tools/test-conversation-transcription.mjs",
+   "baseline": null,
+   "candidate": "d7e4efc6e141559ceaa45d4f3f8f3679493ec55fce5b98eda7c93a0c1ec2fa12"
+  },
+  {
+   "path": "tools/test-desktop-shell.mjs",
+   "baseline": "cd833f8c012838639459f72d0b978d78f4e4517eacc180b060b25a1360c66793",
+   "candidate": "e05ce958f48863b57b1083814b63daac06cb36b80fabccebbe3c6e122c83b083"
+  },
+  {
+   "path": "tools/test-dual-task-model-electron.mjs",
+   "baseline": null,
+   "candidate": "9d82313b010521ea79376dd4dd4ef0a0702ae4ba4eefd4f85b4bdf07d5c3f5f7"
+  },
+  {
+   "path": "tools/test-emotion-work-replay-electron.mjs",
+   "baseline": null,
+   "candidate": "d29305c119144b91fde6616a3df0c2ceee8ce1593e870f84850e488cd228169b"
+  },
+  {
+   "path": "tools/test-knowledge-electron.mjs",
+   "baseline": null,
+   "candidate": "8e9d44433405a160deb0036cb8560bb8dc629a34c533fb682bba0c22bf4a3268"
+  },
+  {
+   "path": "tools/test-live-updates-electron.mjs",
+   "baseline": "8a6fd790afe03206cb45a508626e384284b7969c700963576cacb0141634e06c",
+   "candidate": "b58ee5e8fef5ba0511135440b3ee3adc76865d37706baa35cd7c20297d0181d5"
+  },
+  {
+   "path": "tools/test-memory-electron.mjs",
+   "baseline": "eb71d041a3c0ba5973ac22893be50d2127d866c26fbc4e31533987acd0eb1c08",
+   "candidate": "5cbe9c1e200ffd87ec6d75ffedbdd1ad874825415aede4c9a5958409c8c1ed9e"
+  },
+  {
+   "path": "tools/test-menu-first-show-electron.mjs",
+   "baseline": null,
+   "candidate": "5516c738c2022683a3387c321aa7bab3e6edd38a218506a0191428f47cc18fed"
+  },
+  {
+   "path": "tools/test-menu-popup-electron.mjs",
+   "baseline": null,
+   "candidate": "01e80bd5f3dbb4a9a05d4bbe8fea25655b0947e0be12c00c599573007242c4a4"
+  },
+  {
+   "path": "tools/test-menu-shell-electron.mjs",
+   "baseline": null,
+   "candidate": "35bbeb68ba9a093f76ee1f265ed1aa34c55317f312d5fe97d388199b0770c3a1"
+  },
+  {
+   "path": "tools/test-news-editorial-electron.mjs",
+   "baseline": null,
+   "candidate": "5f3ed7dafd2087ded4e5227f1d3ff47e49561aca722e1da5bf7a5a7f249ea0b9"
+  },
+  {
+   "path": "tools/test-news-notice-electron.mjs",
+   "baseline": null,
+   "candidate": "5018b9e115c8e92b70d72ee30fd65a9a6951dee2e327e035d5678d9b1ac372eb"
+  },
+  {
+   "path": "tools/test-news-panel-electron.mjs",
+   "baseline": "eef210261248926c4dcf912a39d0e33e1ed69142f54ea01cc9704f5ac5a101bc",
+   "candidate": "6b8cba5da0399fbaf6b8f1e72e6c2787e2573cb061e1e1eb54cf67193d4d15a0"
+  },
+  {
+   "path": "tools/test-panel-titlebar-electron.mjs",
+   "baseline": "ba61d95277a3bee25b9559c7677ad07ea909231001eeaf0e4f005341aa8db939",
+   "candidate": "50c21acbf39f3af76109178ac1863069c880f3fc7ab79dfb51de24b2059f591e"
+  },
+  {
+   "path": "tools/test-pc-settings-electron.mjs",
+   "baseline": "645cbba2a3ea06596648d7fb82e181c5cb7c338d9d1c608f3ca1a988f9024e38",
+   "candidate": "d1b543be8bff43f137cbc291924b6a6faf96f9ab2d723010801bbd81c05373a7"
+  },
+  {
+   "path": "tools/test-personality-model-electron.mjs",
+   "baseline": "fe570ad309b325cf107393f4bba96fc864995039b8844f0f93a7d049e52a4c0f",
+   "candidate": "a14e824b5eefd77968fde5eeb5dd029f08f2f37678f500f2c0ad563b3e4e931d"
+  },
+  {
+   "path": "tools/test-personality-reader-electron.mjs",
+   "baseline": "f2483bc8dc799948a158d51d8354f428ca8335b99582a35bd07713da86c7f1dc",
+   "candidate": "5d4c7f5c81cc75727d75b8662c13cd905d7f744e53d118e0df99594ac37d21ae"
+  },
+  {
+   "path": "tools/test-planner-hours.mjs",
+   "baseline": "f5c6b2bffb443dc9d02046c2d040064701deb058492eb56e8a19a7fba522a27a",
+   "candidate": "e75b5427a65b31b8b9c596e04959fb42efe4cb18f0d51ac5256541da981a9102"
+  },
+  {
+   "path": "tools/test-poll-settings.mjs",
+   "baseline": "ebcf176567cea84e6986a4edb6328279c8d6989076b35c46ed11ca5c5896301d",
+   "candidate": "cdd8e5bda0ed6f00ea8dd58430b8a253455c9c784c7305f08f72b9fb1b412f3d"
+  },
+  {
+   "path": "tools/test-private-chat-electron.mjs",
+   "baseline": null,
+   "candidate": "0840a9519a5bb75f26b7bcdac0bd5eae4e56639855ff40c84e100d37b73d2be3"
+  },
+  {
+   "path": "tools/test-private-chat.mjs",
+   "baseline": null,
+   "candidate": "58935c8f897188efdf2511810a256de5602933a56cfabfd36d8bbaadd73fc531"
+  },
+  {
+   "path": "tools/test-reminder-checks.mjs",
+   "baseline": "e7d3ca916d748f03354b0a24b5e29b9bc7770cfb895c19be1189fec140b4bf68",
+   "candidate": "e4604154b9445d8278ca03e23527f23f4c8253eee794dfda204a487331cb4231"
+  },
+  {
+   "path": "tools/test-review-first-open-electron.mjs",
+   "baseline": null,
+   "candidate": "4b001a735c24dfec18c5c7d21304cfeafd87934c34ebc2e00ceb25436ddcf884"
+  },
+  {
+   "path": "tools/test-scene-native-electron.mjs",
+   "baseline": null,
+   "candidate": "d4a0b5939b5abdb87c0f600a43add73bf1322f6aa3d39d1588d6d512f5c08119"
+  },
+  {
+   "path": "tools/test-scene-preview-electron.mjs",
+   "baseline": null,
+   "candidate": "e704962d32839cbc70d28d2bb4bcc57a5e31aece8a6fa2f36b54ceb3b2948837"
+  },
+  {
+   "path": "tools/test-screen-question-electron.mjs",
+   "baseline": "a514ee9e498306e38deeb2c514de8f6cd51c0edae5d4d96a8a01b629e8b14c9a",
+   "candidate": "cab959de5ac1aa7f89f96edee69506c30e45f048a4363f26673dac40d0c61b2d"
+  },
+  {
+   "path": "tools/test-skills.py",
+   "baseline": "06ce0be12f39aaccebd65bf650257ce39e37ec154665e69e860f7e9a807d3228",
+   "candidate": "3872eac45ec7cd0318a60ecf008fb6770ccb437ff8f7a2fe13bb60aaa65e1a36"
+  },
+  {
+   "path": "tools/test-study-electron.mjs",
+   "baseline": null,
+   "candidate": "39cfbb1acd850e2b9f40f0d75574552f0583e1a292ba6e22832cce67e4235820"
+  },
+  {
+   "path": "tools/test-study-shared-worker.mjs",
+   "baseline": null,
+   "candidate": "d32605f56d665b5d2755ca264e51e9038aaf35f337879af3a5b8a18b990b592e"
+  },
+  {
+   "path": "tools/test-top-raise-electron.mjs",
+   "baseline": null,
+   "candidate": "17f2f2746177b9517e44ff9756c0b974a71fcb810aa4c04630d061cc9bc5c79d"
+  },
+  {
+   "path": "tools/test-walk.mjs",
+   "baseline": "13f1e1f220e1809fd95fcc4eaf653972ad7e5548b920ed47df58b94eae2e6c3a",
+   "candidate": "16aed6277cfd8b52c118672d2a56c12b3b00c834de35488eecbebf4adcdb7b67"
+  },
+  {
+   "path": "tools/test-weather-electron.mjs",
+   "baseline": "fdfc71e386923b086af5bd697e89670a243752d97f6af7c035da914ad8912a87",
+   "candidate": "c2d220a4fe98f87654d1118799db7e2855e7f32f8ba5190c8f28e4b516d3739c"
+  },
+  {
+   "path": "tools/test-weather.mjs",
+   "baseline": "feb53bd443cd8b40689f12badf139fd8a95a47d820e1c798c69be98380f888d1",
+   "candidate": "6b86d20d321219c4e3afb2125b6bbf63464103445a0b97820d80cc0b8d53f148"
+  },
+  {
+   "path": "tools/verify-heartbeat-panel.mjs",
+   "baseline": null,
+   "candidate": "52b396f45d22aaa83ca5b5665cabe0ee50a00ce65b5a2b9c59b2812083ee7b9f"
+  },
+  {
+   "path": "web/chains.css",
+   "baseline": "8bfac04b8846c737e43e6e9c8abed9fd75f204aed48512b963345a899ebcdbfb",
+   "candidate": "fe160bc121ec3930daa6b56758a879698c960d45f6e03b6331ec3c654cad4e43"
+  },
+  {
+   "path": "web/chains.js",
+   "baseline": "b633273e8d1eb4c4596ecddc97f38c101d08da9d54fa4a76163883ab30c52683",
+   "candidate": "ee824a3caad36031d49a891b9fad960a19f13f7ce0ff2480ef385afcb339a4d6"
+  },
+  {
+   "path": "web/icons/feiyue-journal-draw.svg",
+   "baseline": null,
+   "candidate": "3a8ef89830dfc264214dc53ff49a8f0f8b7a54d23746121dc944f0ff7ae67036"
+  },
+  {
+   "path": "web/icons/feiyue-journal-sweep.svg",
+   "baseline": null,
+   "candidate": "1c0f38cb613524ac40d15a20a66a5a7caf11d8f069d7bd246cb16d4530dd719d"
+  },
+  {
+   "path": "web/icons/feiyue-journal.svg",
+   "baseline": null,
+   "candidate": "95054d9a81166fa29d55edb9b6657d55caaf1dffad9317041593b877ba9a1ed3"
+  },
+  {
+   "path": "web/workspace/amusement.png",
+   "baseline": null,
+   "candidate": "e4c33071e840fe8c86a3861514a16902a80cd897db0f0c06562eadb226eba778"
+  },
+  {
+   "path": "web/workspace/excited.png",
+   "baseline": null,
+   "candidate": "cde9bcc84eb9e4260e37250753b66d536acfa1f4eafe75001635c78c36ba6f05"
+  },
+  {
+   "path": "web/workspace/motion.css",
+   "baseline": null,
+   "candidate": "ba167ebc251c2a5651bbd28570501bbd32328fdc58dbadebac973c6903bdcfd0"
+  },
+  {
+   "path": "web/workspace/motion.js",
+   "baseline": null,
+   "candidate": "bd1f822fd21beff6f6e1e21884c09e27c2e9c1b944ade4b044c42ae7b28664af"
+  },
+  {
+   "path": "web/workspace/neutral.png",
+   "baseline": null,
+   "candidate": "c9a0064f8412a848c7c1329b20ba3f0c74a1fd0e563decf2898c436132524a9c"
+  },
+  {
+   "path": "web/workspace/pride.png",
+   "baseline": null,
+   "candidate": "2e9f94b779ba2789fdc09400fbdb38412f0025af4ba9c237c1e5dd442cc4ba9a"
+  },
+  {
+   "path": "web/workspace/sorrow.png",
+   "baseline": null,
+   "candidate": "e82f94a97b61d59134d34220d768043bdfff57c21cd035234393d1224ead1875"
+  },
+  {
+   "path": "workflows/comfyui/news_social.py",
+   "baseline": "e2b7a5ed01b51c91bca61f01bff57e61bdb2fd2e5f9f096e478818fa668d3342",
+   "candidate": "e96a65de61898daf1586e49e4b6149ff61d3d45d632988de1907ada62ebe2cc7"
+  }
+ ]
+}

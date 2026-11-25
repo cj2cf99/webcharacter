@@ -1,3 +1,7 @@
+## 安装版与 main 对齐（2026-11-25 JST · 候选已验证，待安装）
+
+整树比对后以 `main` 为准补齐安装版；`main` 之前去掉的语音模型备用路径已恢复，安装版独有的文档归档到 `docs/archive/installed-docs-20261125/`。积压补记此前只是待确认候选，随本次启用与否由用户决定。见[发布前审核](reviews/ALIGN_MAIN_RELEASE_REVIEW_2026-11-25.md)。
+
 ## 全屏截图遮罩不触发闪现避让（2026-11-25 JST · 已部署，线上效果待用户确认）
 
 - **问题与改动**：Windows 系统截图（`Win+Shift+S`）弹出的全屏遮罩原会被 `fullscreenDisplays()` 误判为全屏应用，导致绯月瞬间避让闪现。现于 `desktop/watch-windows.ps1` 增加 `overlay` 字段，通过 `OpenProcess(QueryLimitedInfo)` + `QueryFullProcessImageName`（单次枚举内缓存 PID）识别 `ScreenClippingHost` 及带 `TopMost`/`ToolWindow` 样式的 `SnippingTool` 遮罩，置 `overlay=true`、`eligible=false`；`desktop/movement.mjs` 的 `fullscreenDisplays()` 跳过 `window.overlay` 窗口，使纯截屏遮罩不触发避让，而遮罩后方确有真实全屏应用时继续避让。
