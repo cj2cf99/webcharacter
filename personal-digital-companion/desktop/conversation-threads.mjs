@@ -47,6 +47,7 @@ export function createConversationThreads(profile,safeStorage,now=Date.now){
   const pendingOrganization=db.prepare('SELECT * FROM conversation_messages WHERE thread=? AND organize=1 ORDER BY seq LIMIT 12');
   const exactMessages=db.prepare('SELECT * FROM conversation_messages WHERE thread=? AND seq BETWEEN ? AND ? AND organize=1 ORDER BY seq');
   const oldMessages=db.prepare('SELECT * FROM conversation_messages WHERE thread=? AND seq<? ORDER BY seq DESC LIMIT 10');
+  const organizing=db.prepare('SELECT 1 FROM conversation_messages WHERE thread=? AND organize=1 LIMIT 1');
   function transaction(run){
     db.exec('BEGIN IMMEDIATE');
     try{const value=run();db.exec('COMMIT');return value;}
@@ -150,12 +151,17 @@ export function createConversationThreads(profile,safeStorage,now=Date.now){
       });
     return {rows,counts,page,pages};
   }
-  // 后台整理完成后，在对话里追加一条绯月的提示（不要求回复），带转录作业编号以便从对话直接打开待确认卡。
-  function notice(id,text,extra={}){
+  // 后台整理完成或清单确认后，在对话里追加一条绯月的提示（不要求回复）；带转录作业编号时可从对话直接打开待确认卡。
+  // result 表示确认结果，已结束的线也留言。closing 是收尾语，仅待确认线在没有未回复、未整理发言时用它结束。
+  function notice(id,text,extra={},{result=false,closing=''}={}){
     return transaction(()=>{
       const saved=row.get(id);
-      if(!saved||saved.closed!==null||saved.rounds>100)return null;
-      return append(id,{who:'绯月',text,answered:true,...extra});
+      if(!saved||saved.rounds>100||saved.closed!==null&&!result)return null;
+      const close=Boolean(closing)&&saved.closed===null&&saved.kind==='question'&&!saved.pending&&!organizing.get(id);
+      const message=append(id,{who:'绯月',text:close?text+closing:text,answered:true,...extra});
+      if(saved.failure)failure.run(saved.failure,id);
+      if(close)end.run(message.at,encode({...decode(saved.payload),endedBy:'绯月',endMessageId:message.id}),id);
+      return {...message,closed:close};
     });
   }
   function organization(id){

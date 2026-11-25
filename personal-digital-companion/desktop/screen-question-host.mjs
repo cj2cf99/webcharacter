@@ -1181,6 +1181,14 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
       const message=threads.notice(thread,'已整理出 '+count+' 项待确认，点下面的“查看待确认卡”核对。',{transcriptId:id});
       if(message)details.panel?.webContents.send('conversation:threads-changed',thread);
     });
+    transcription?.onThreadSettled?.(({thread,id,text,final,card})=>{
+      if(disposed)return;
+      const message=threads.notice(thread,text,card?{transcriptId:id}:{},{result:true,closing:final?'这条我先收起来啦。':''});
+      if(!message)return;
+      if(message.closed)threadOptions.resolveQuestion?.(thread);
+      details.panel?.webContents.send('conversation:threads-changed',thread);
+      if(panel&&ready&&threadId===thread)publish(threadView(),generation);
+    });
     queueMicrotask(()=>{if(!disposed){threadReplies.recover();wakeOrganization();}});
   }
   return {open,speak,showNag,notifyPending,askUser,openImage,get inquiryPanel(){return inquiry.panel;},generateServerImage:images.generateServerImage,drawScene:(prompt,id)=>images.generateServerImage(prompt,id,true),openReview:(view=threads?'chat':'tasks')=>details.open(null,view),

@@ -14,7 +14,7 @@ const lists={
 };
 let view='local';
 let shownTranscript,transcriptPage=0,transcriptDecision=false;
-let selection=new Set(),checklist,editingRow;
+let selection=new Set(),checklist,editingRow,dropWarning;
 const working=new Set();
 const operationKey=({method,id})=>method==='inspect'?'inspect':method+':'+id;
 
@@ -103,7 +103,7 @@ async function loadTranscripts(){
 async function showTranscript(id){
   const entering=shownTranscript!==id;
   shownTranscript=id;
-  if(entering){transcriptPage=0;selection=new Set();editingRow=undefined;}
+  if(entering){transcriptPage=0;selection=new Set();editingRow=undefined;dropWarning=undefined;}
   const data=await read('transcript',id);
   if(shownTranscript!==id)return;
   if((entering||checklist?.state!==data.state)&&data.state==='ready')
@@ -222,10 +222,20 @@ function renderTranscript(){
   const available=rows.filter(item=>!item.missing.length);
   const nextPage=Math.max(0,Math.ceil(rows.length/20)-1);
   transcriptPage=Math.min(nextPage,transcriptPage);
+  const incomplete=rows.filter(item=>item.missing.length);
   const actions=node('div');actions.className='transcript-tools';
-  const selected=button('生成已选',()=>{
-    if(selection.size)void transcriptAction('transcriptDecision',{id:data.id,selected:[...selection]});
-  },'transcript-selected');
+  const submit=mode=>{
+    const ids=mode==='all'?available.map(item=>item.id):[...selection];
+    dropWarning=undefined;
+    if(ids.length)void transcriptAction('transcriptDecision',{id:data.id,selected:ids});
+    else renderTranscript();
+  };
+  // 缺项勾不上，清单一经生成就不能再补，生成前先提醒一次。
+  const generate=mode=>{
+    if(!incomplete.length){submit(mode);return;}
+    dropWarning=mode;renderTranscript();
+  };
+  const selected=button('生成已选',()=>{if(selection.size)generate('selected');},'transcript-selected');
   const sync=()=>{selected.textContent=`生成已选（${selection.size}）`;selected.disabled=transcriptDecision||!selection.size;};
   for(const item of rows.slice(transcriptPage*20,(transcriptPage+1)*20)){
     const receipt=statuses.get(item.id);
@@ -261,8 +271,15 @@ function renderTranscript(){
     const previous=button('‹',()=>{transcriptPage--;renderTranscript();});previous.disabled=transcriptPage===0;
     const next=button('›',()=>{transcriptPage++;renderTranscript();});next.disabled=transcriptPage===nextPage;
     page.append(previous,node('span',`${transcriptPage+1} / ${nextPage+1}`),next);body.append(page);}
-  if(ready){
-    const all=button('全部生成',()=>void transcriptAction('transcriptDecision',{id:data.id,selected:available.map(item=>item.id)}),'transcript-all');
+  if(ready&&dropWarning&&incomplete.length){
+    actions.classList.add('transcript-warning');actions.setAttribute('role','alert');
+    actions.append(node('strong',`⚠ 还有 ${incomplete.length} 项缺信息会作废`),
+      button('返回补充',()=>{dropWarning=undefined;transcriptPage=Math.floor(rows.indexOf(incomplete[0])/20);renderTranscript();},'transcript-back'),
+      button('仍然生成',()=>submit(dropWarning),'transcript-drop'));
+    body.append(actions);
+    actions.scrollIntoView({block:'nearest'});
+  }else if(ready){
+    const all=button('全部生成',()=>generate('all'),'transcript-all');
     all.disabled=transcriptDecision||!available.length;
     actions.append(all,button('全部不生成',()=>void transcriptAction('transcriptDecision',{id:data.id,selected:[]}),'transcript-none'),selected);
     sync();body.append(actions);

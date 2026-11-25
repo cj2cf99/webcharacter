@@ -471,6 +471,7 @@ export async function startDesktop(electron,options={}){
       },
       answerQuestion:(...args)=>nags?.threadAnswer(...args),
       endQuestion:id=>nags?.threadEnd(id),
+      resolveQuestion:id=>nags?.threadResolved(id),
       openTranscript:id=>taskInbox?.open(id),
       overdue:id=>{
         if(!electron.Notification?.isSupported())return;

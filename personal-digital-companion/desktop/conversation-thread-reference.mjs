@@ -57,7 +57,7 @@ export function createThreadReference({store,archive,transcription}){
     }
     const title=matched.text.replace(dateToken,'').replace(/^(?:我(?:要|打算|准备|想)|记得|还要|需要)\s*/u,'').replace(/[，。！!\s]+$/u,'').trim()||'原话提醒';
     const jobId='reference-'+state.request;
-    await transcription.referencedReminder({id:jobId,at:matched.at,text:matched.text,title,deadline,revise:revise.test(latest.text),messageId:latest.id});
+    await transcription.referencedReminder({id:jobId,at:matched.at,text:matched.text,title,deadline,revise:revise.test(latest.text),messageId:latest.id,thread:id});
     store.saveReference(id,{...state,matched});
     return {reply:'找到「'+matched.text.slice(0,130)+'」。提醒日期为 '+deadline+'（JST）。请打开待确认卡核对后登记。',
       next:'回应',extra:{transcriptId:jobId}};

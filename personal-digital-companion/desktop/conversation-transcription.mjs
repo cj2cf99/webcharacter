@@ -657,6 +657,37 @@ async function transcribeThread(job,model,skill,save,rules,generateRemoteDraft,l
   return {rows:formatted,notes,summaries:work.map(part=>part.summary)};
 }
 
+const missingLabels={title:'标题',content:'内容',body:'内容',text:'内容',prompt:'提示词',deadline:'截止日期',reflection:'感想',
+  url:'网址',level:'级别',conditions:'准备条件',categoryLabel:'分类',category_id:'分类'};
+const clip=(text,limit)=>{const chars=Array.from(text);return chars.length>limit?chars.slice(0,limit).join('')+'…':text;};
+const itemName=row=>'《'+clip(String(row.params.title?.replace(/^\[([^\]]*)\]绯月助记-.*$/u,'$1')||row.label),15)+'》';
+const itemList=(rows,describe=itemName)=>rows.slice(0,5).map(describe).join('、')+(rows.length>5?' 等 '+rows.length+' 项':'');
+
+// 确认清单后的对话留言。final 表示这次确认已经了结，card 表示仍需回到卡片处理。
+function confirmationNotice(job){
+  const rows=job.result.rows,selected=new Set(job.selected);
+  if(job.state==='ready')return {card:true,text:'还不能登记：'+itemList(rows.filter(row=>selected.has(row.id)&&row.prepareError),
+    row=>itemName(row)+row.prepareError)+'。改好后再点生成。'};
+  if(job.state==='submit-pending')return {card:true,text:'登记还没全部完成。'+
+    (job.error?clip(job.error.replace(/。+$/u,''),80)+'。':'')+'打开待确认卡点“重试”可以接着办。'};
+  if(!selected.size)return {final:true,text:'好，这次不登记了。'};
+  const statuses=new Map((job.receipts??[]).map(item=>[item.key,item.status]));
+  if(job.state==='discarded'){
+    const done=[...selected].filter(id=>statuses.get(id)==='COMPLETED').length;
+    return {text:'登记已停止，完成了 '+done+' 项。'};
+  }
+  const skipped=rows.filter(row=>selected.has(row.id)&&statuses.get(row.id)==='SKIPPED');
+  const left=rows.filter(row=>!selected.has(row.id));
+  const dropped=left.filter(row=>!row.missing.length),incomplete=left.filter(row=>row.missing.length);
+  return {final:!incomplete.length,text:[
+    selected.size>skipped.length?'已登记 '+(selected.size-skipped.length)+' 项。':'',
+    skipped.length?'登记时跳过了：'+itemList(skipped)+'。':'',
+    dropped.length?'这些没生成：'+itemList(dropped)+'。':'',
+    incomplete.length?'缺信息没生成：'+itemList(incomplete,row=>itemName(row)+'（缺 '+
+      clip(row.missing.map(key=>missingLabels[key]??key).join('、'),30)+'）')+'。要登记的话，把这一条完整再说一遍。':'',
+  ].join('')};
+}
+
 export async function prepareConversationBatch(rows,request,now=Date.now){
   if(!request)throw Error('尚未配置登记连接，已确认清单保留在本机');
   const response=await request('/api/assistant/recording-plan',{method:'GET',cache:'no-store'});
@@ -701,7 +732,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
   const save=(job,state)=>{
     const {id,at,state:prior,...data}=job;
     const summary={stage:job.stage,durationMs:job.durationMs,count:job.result?.rows.length??0,yieldedAt:job.yieldedAt,
-      needsReview:job.needsReview,thread:job.line?.thread,cleanupAt:job.cleanupAt};
+      needsReview:job.needsReview,thread:job.line?.thread,origin:job.thread,cleanupAt:job.cleanupAt};
     write.run(id,state,at,safeStorage.encryptString(JSON.stringify(data)),JSON.stringify(summary));job.state=state;
   };
   const waiting=db.prepare(`SELECT * FROM transcriptions WHERE state IN ('queued','approved')
@@ -713,7 +744,18 @@ export function createConversationTranscription({profile,safeStorage,model,regis
   function cancelInference(){
     for(const worker of workers.values())worker.inference?.abort();
   }
-  let timer=null,closed=false,threadFinished=()=>{},threadReady=()=>{};
+  const otherCards=db.prepare(`SELECT 1 FROM transcriptions WHERE id<>?
+    AND state IN ('queued','running','ready','approved','submitting','submit-pending')
+    AND (json_extract(summary,'$.thread')=? OR json_extract(summary,'$.origin')=?) LIMIT 1`);
+  let timer=null,closed=false,threadFinished=()=>{},threadReady=()=>{},threadSettled=()=>{};
+  function settle(job){
+    const thread=job.line?.thread??job.thread;
+    if(!thread)return;
+    try{
+      const note=confirmationNotice(job);
+      threadSettled({...note,thread,id:job.id,final:note.final===true&&!otherCards.get(job.id,thread,thread)});
+    }catch{/* 确认结果已保存在任务管理。 */}
+  }
   for(const row of db.prepare("SELECT * FROM transcriptions WHERE state IN ('open','running','submitting')").all()){
     const job=decode(row);
     for(const step of Object.values(job.steps??{}))if(step.state==='running'){
@@ -767,7 +809,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
             const row=job.result.rows.find(row=>row.id===item.id);
             row.prepareError=item.message;
           }
-          save(job,'ready');changed();return;
+          save(job,'ready');settle(job);changed();return;
         }
         job.plan=prepared.plan;save(job,'submitting');
         const result=await registration.submitBatch(job.id,job.plan,job.submissionId,id=>{
@@ -779,7 +821,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
         if(['completed','stopped'].includes(result.status))setRetention(job);
         save(job,result.status==='completed'?'done':result.status==='stopped'?'discarded':'submit-pending');
       }catch(error){job.error=error.message;save(job,'submit-pending');}
-      changed();return;
+      settle(job);changed();return;
     }
     worker.active={id:job.id,title,stage:'正在准备本机模型'};
     worker.inference=new AbortController();
@@ -866,6 +908,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
   return {
     onThreadFinished(callback){threadFinished=callback;},
     onThreadReady(callback){threadReady=callback;},
+    onThreadSettled(callback){threadSettled=callback;},
     canCollectThread:()=>!closed&&available()&&!model.isBusy?.()&&!model.aiSnapshot?.().running&&canStart('queued',true),
     fromThread(batch){
       cleanOldSnapshots();
@@ -882,7 +925,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
       if(!allowed.length){threadFinished(batch);return;}
       save({id:line.id,at:line.at,closedAt:now(),turns:allowed,history:history.filter(turn=>!turn.knowledgePrivate),line,steps:{}},'queued');changed();kick();
     },
-    async referencedReminder({id,at,text,title,deadline,revise,messageId}){
+    async referencedReminder({id,at,text,title,deadline,revise,messageId,thread}){
       const {templates:{templates}}=await loadSkill();
       const prior=get(id);
       if(prior){
@@ -895,7 +938,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
       const row=formatEntry({id:'reference',type,label:'事项提醒',params:{title,content:text,deadline},
         conditions:[],dependsOn:[],missing:[],evidence:[{sourceId:id,quote:text}],
         sources:[{field:'deadline',kind:'explicit',basis:'引用原话的东京日期'}]},templates[type].format,titleTime.format(at));
-      save({id,at,closedAt:now(),lastRevision:messageId,result:{rows:[row],notes:[],summaries:[]}},'ready');
+      save({id,at,closedAt:now(),lastRevision:messageId,thread,result:{rows:[row],notes:[],summaries:[]}},'ready');
       changed();
     },
     turn(id,turn){
@@ -980,7 +1023,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
         throw Error('选择含缺项，或尚未勾选对应前置登记');
       job.selected=selected;job.error=undefined;
       if(!selected.length)setRetention(job);
-      save(job,selected.length?'approved':'discarded');changed();kick();return status(job);
+      save(job,selected.length?'approved':'discarded');if(!selected.length)settle(job);changed();kick();return status(job);
     },
     retry(id){
       allowedId(id);const job=get(id);

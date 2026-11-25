@@ -494,14 +494,24 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
     if(next)setFollowUp(n,next);
     return receipt({reply:[v.reply,next].filter(Boolean).join('\n'),next:next?'追问':'回应',extra:n.localOnly?{knowledgePrivate:true}:undefined});
   }
-  function threadEnd(id){
+  function detachPending(id){
     if(active?.id===id)active.leave('later');
     audit.detachThread(id);
     const n=store.nags().find(row=>row.id===id);
-    if(!n||!isPendingQuestion(n))return;
-    finish(n,'用户结束');
+    return n&&isPendingQuestion(n)?n:null;
   }
-  return {assessPending,prepareQuestion,poll,pollAudit,resume,enqueue,remind,recoverAudit:audit.recover,pending,pendingQuestions,threadAnswer,threadEnd,flush:sync,async close(){
+  function threadEnd(id){
+    const n=detachPending(id);
+    if(n)finish(n,'用户结束');
+  }
+  // 对话里的登记清单已确认，原质问随这条线收尾，不留续问，也不记成用户拒答或手记已解答。
+  function threadResolved(id){
+    const n=detachPending(id);
+    if(!n)return;
+    n.next='';
+    finish(n,'回合结束');
+  }
+  return {assessPending,prepareQuestion,poll,pollAudit,resume,enqueue,remind,recoverAudit:audit.recover,pending,pendingQuestions,threadAnswer,threadEnd,threadResolved,flush:sync,async close(){
     audit.close();active?.leave('interrupted');stopped=true;lifetime.abort();await syncJob;
   }};
 }

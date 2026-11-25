@@ -1,0 +1,51 @@
+body { margin:0 }
+main { padding:10px 12px }
+#cloud > section + section { margin-top:4px }
+li.fy-card { display:flex; align-items:center; justify-content:space-between; gap:8px }
+li.fy-card > div { flex:1; min-width:0; overflow-wrap:anywhere }
+li.fy-card > button { flex:none; min-height:26px; padding:2px 11px; font-size:12px }
+li.fy-card small, .hint { display:block; color:var(--fy-muted); font-size:11.5px }
+li.fy-card small:empty { display:none }
+.hint { margin:2px 0 6px }
+.hint:empty { display:none }
+#tasks-more, #chains-more { display:block; margin:8px auto 0; font-size:12px }
+/* 本机批次步骤：小圆点进度 */
+#local-items ol { margin:5px 0 0; padding:0; list-style:none; display:grid; gap:2px }
+#local-items ol li { position:relative; padding-left:14px; font-size:12px; color:var(--fy-muted) }
+#local-items ol li::before { content:""; position:absolute; left:2px; top:.55em; width:6px; height:6px; border-radius:50%; background:var(--fy-line) }
+#local-items ol li[data-state=verified]::before { background:var(--fy-ok) }
+#local-items ol li:is([data-state=checking],[data-state=applying])::before { background:var(--fy-accent); animation:fy-pulse 1.2s ease-in-out infinite }
+/* 任务链：折叠卡片，展开时才读取节点 */
+li.chain-item { display:block; padding:0 }
+.chain-item summary { display:grid; grid-template-columns:12px minmax(0,1fr) auto; gap:1px 7px; align-items:center; padding:7px 10px 7px 13px }
+.chain-item summary::before { content:"›"; grid-row:1 / span 2; color:var(--fy-accent); font-size:18px; line-height:1; transition:transform .2s }
+.chain-item details[open] summary::before { transform:rotate(90deg) }
+.chain-item summary strong { overflow-wrap:anywhere }
+.chain-item summary small { grid-column:2 / -1; margin:0 }
+.chain-state { border-radius:999px; padding:0 8px; font-size:11px; line-height:18px; color:var(--fy-accent); background:var(--fy-soft) }
+.chain-item details > div { padding:7px 10px 9px 26px; border-top:1px dashed var(--fy-line); animation:fy-rise .25s ease-out }
+.chain-steps { display:grid; gap:5px; margin:0 0 7px; padding:0; list-style:none }
+.chain-steps li.fy-card { background:var(--fy-paper) }
+.chain-steps dl { margin:5px 0 0; display:grid; grid-template-columns:auto minmax(0,1fr); gap:2px 8px; font-size:12px }
+.chain-steps dt { color:var(--fy-muted); overflow-wrap:anywhere; max-width:95px }
+.chain-steps dd { margin:0; white-space:pre-wrap; overflow-wrap:anywhere }
+#notice { flex:none; margin:8px 12px 0 }
+.transcript-tools { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:6px 0; }
+.transcript-warning { padding:6px 9px; border:1px solid var(--fy-danger); border-radius:9px; background:var(--fy-soft); animation:transcript-warning-enter .32s ease-out; }
+.transcript-warning strong { flex:1 1 150px; color:var(--fy-danger); font-size:12.5px; }
+@keyframes transcript-warning-enter { 0% { opacity:0; transform:translateY(5px); } 55% { transform:translateX(-4px); } 75% { transform:translateX(3px); } }
+#transcript-detail .fy-card { align-items:start; animation:transcript-review-enter .18s ease-out both; }
+@keyframes transcript-review-enter { from { transform:translateY(3px); } }
+#transcript-detail .fy-card > input { margin-top:5px; accent-color:var(--fy-accent); }
+#transcript-detail small { display:block; }
+#transcript-detail .transcript-text { white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0; }
+#transcript-detail details p { overflow-wrap:anywhere; }
+.transcript-edit { margin:3px 0; }
+#transcript-detail .fy-list { grid-template-columns:minmax(0,1fr); }
+.transcript-editor { display:grid; grid-template-columns:minmax(0,1fr); gap:6px; margin-top:6px; border-top:1px dashed var(--fy-line); padding-top:6px; }
+.transcript-editor label { display:grid; grid-template-columns:minmax(0,1fr); gap:3px; color:var(--fy-muted); font-size:12px; }
+.transcript-editor :is(input,textarea,select) { box-sizing:border-box; width:100%; min-width:0; }
+.transcript-editor textarea { min-height:74px; resize:vertical; }
+.transcript-editor small[role=alert] { color:var(--fy-danger); }
+.transcript-deadline { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px; }
+#transcript-detail div:has(> .transcript-editor) > :is(.transcript-edit,.transcript-text) { display:none; }
