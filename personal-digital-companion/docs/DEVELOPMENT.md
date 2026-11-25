@@ -1,3 +1,27 @@
+## 全屏截图遮罩不触发闪现避让（2026-11-25 JST · 已部署，花园待补登记）
+
+- **问题与改动**：Windows 系统截图（`Win+Shift+S`）弹出的全屏遮罩原会被 `fullscreenDisplays()` 误判为全屏应用，导致绯月瞬间避让闪现。现于 `desktop/watch-windows.ps1` 增加 `overlay` 字段，通过 `OpenProcess(QueryLimitedInfo)` + `QueryFullProcessImageName`（单次枚举内缓存 PID）识别 `ScreenClippingHost` 及带 `TopMost`/`ToolWindow` 样式的 `SnippingTool` 遮罩，置 `overlay=true`、`eligible=false`；`desktop/movement.mjs` 的 `fullscreenDisplays()` 跳过 `window.overlay` 窗口，使纯截屏遮罩不触发避让，而遮罩后方确有真实全屏应用时继续避让。
+- **验证与部署**：`movement.mjs` 语法校验、4 组全屏遮罩边界断言、`tools/test-walk.mjs`、`watch-windows.ps1` 实机编译运行及 C# `IsScreenshotOverlay` 6 项反射断言全部通过。已于 2026-11-25 14:23 JST 完成正式版 2 文件原子替换（备份至 `output/install-backup-screenshot-overlay-20261125/`），14:25 JST 重启新进程 PID `28832` 并核实 `http://127.0.0.1:8765/infoguide`；真机 `Win+Shift+S` 效果待用户确认。当前账号 Wrangler 未登录，花园登记（预设批次 `feiyue-screenshot-overlay-20261125`）待补办；发布回执见 [RELEASE_REVIEW.md](../RELEASE_REVIEW.md)。
+
+## 截图、附件与此刻所想识图改走本机 AGY CLI（2026-11-25 JST · 开发完成，未部署）
+
+- **现状**：新增公用识图模块 `desktop/vision-client.mjs`（整合 `captureCursorDisplay`、`captureAllDisplays`、`encodeImage`、`createAgyVision` 与共享提示词/JSON 解析校验）。桌面端截图问答、多张附件图片问答（最多 16 张）与「此刻所想」看屏观察经 `ai-gateway.mjs` 的 `createVision()` 优先走本机 AGY CLI（临时写图至 `%TEMP%/feiyue-agy` 并在 `finally` 清理，未安装 AGY 时按需回退 Gemini 云端视觉）。多显示器截图将鼠标所在屏排在首位；「此刻所想」看屏改为单次结构化提问（`observeExpression`），一次性提取 `seen`、`action`、`record`、`text`、`focus`、`box` 与 `drawing`，不再使用本地 `colourBounds` 启发式或多次串联调用。
+- **验证**：`scene-curiosity.test.mjs`、`ai-gateway-guard.test.mjs`、`agy-cli.test.mjs`、`agy-standby.test.mjs`、`desktop-screen-question.test.mjs` 全部通过（34/34），`cloud-lane.test.mjs` 视觉用例（2/2）通过，`test-desktop-shell.mjs` 与 `build-desktop.mjs` 通过。受当前代理终端的 Windows 桌面会话隔离限制，实机抓屏（`desktopCapturer` 报 `DISPLAY_NOT_FOUND`）与「此刻所想」实景 `box` 框选效果待正常 Windows 桌面实测，未更新 Windows 正式安装。
+
+## 清单确认后绯月留言并收尾（2026-11-25 JST · 已部署，线上效果待用户确认）
+
+问题：确认登记清单后结果不写回对话，用户补一句“我已经确认生成了”又被整理成一张新卡。改动：`conversation-transcription` 在确认、放弃、提交结束或受阻时通过 `onThreadSettled` 给出留言，`conversation-threads.notice` 写进原对话线（已结束的线也留言）。全部了结时结束「待确认」线并由 `personality-nags.threadResolved` 以“回合结束”结掉原质问、清掉续问；普通聊天线只留言。同线另有待确认或整理中的卡、有未回复或未整理的发言、有缺信息而没生成的项目、停止或未完成时保持打开。引用原话生成的提醒卡现在记录来源线。任务管理清单里有缺项时，「全部生成」「生成已选」先在原位提示会作废几项，可返回补充或仍然生成。无 SQLite 结构迁移。
+
+验证：新增 `agent/tests/thread-confirm-settle.test.mjs` 8 项通过，转录与质问相关用例通过；在“已提交版本 + 本次改动”的隔离副本中，转录清单 Electron 模拟巡检、标题栏巡检及缺项提示的浅深色检查通过。`conversation-threads` 的“已经排队的当前对话提权”和 `screen-question-host` 的“云端任务和服务器任务”两项在已提交版本上同样失败，本次未处理。未用真实模型和真实资料实测。已于 2026-11-25 12:20 JST 更新 Windows 正式安装（新进程 PID 25720），花园批次 `feiyue-confirm-settle-20261125` 完成，版本 34.1 → 34.2、修订 182 → 184；发布回执见 [RELEASE_REVIEW](../RELEASE_REVIEW.md)。
+
+## 新闻周 / 日热点版面与归并修正（2026-11-25 JST）
+
+- **现状**：设计与视觉已确认，整合说明和可以双击打开的原型都在 [news-hot/README.md](news-hot/README.md)。已实现的只有归并修正：按标题相似度合并同题报道，汇总稿不当标题，并加了一次性重并（迁移 5），代码在 `desktop/news-history.mjs`，已补测试。左周右日版面、话题表和 AGY 话题文案尚未开发。所有改动未提交、未部署。
+- **注意**：
+  - 正式安装版目前只执行过迁移 1–3，装新版时会依次执行迁移 4 和 5；
+  - news-briefing 测试跑完后进程不会自己退出，需要用 `timeout` 结束，这是原有问题；
+  - 原型的 `styles/` 是 11-25 的样式副本，开发时以 `desktop/` 为准。
+
 ## 手记收尾细化进度与悬念初筛加速（2026-11-25 JST）
 
 问题：闲时写日记在进入「整理手记收尾」阶段时，头顶气泡缺少 `done/total` 进度字段，前端进度条退化为无确定终点来回滑动的流动条；同时在核对往期悬念（`followThreads`）时，对未解悬念与后续事实无差别按时间倒序调用大模型，若首项不相关直接退出且白耗一次推理，多条累加导致收尾缓慢。
@@ -6,12 +30,6 @@
 1. **细化收尾进度**：在 `flush`（草稿同步）、`followThreads`（悬念核对）和归档入册阶段补充确定的 `done/total` 计数，气泡明确显示 `同步手记草稿 · X/Y`、`核对悬念 · X/Y`、`手记归档入册 · 1/1`，恢复确定性百分比进度条。
 2. **悬念初筛与优先排序**：为未解悬念提取 2-gram 及实质字符关键词，对后续事实内容与标签计算匹配分并降序排列，优先送审最相关事实；当悬念含具体实体且所有事实得分为 0 时，自动跳过无效的大模型推理（通用简短问句保留 1 次兜底）。
 3. **验证与回归**：新增测试 `手记收尾阶段汇报细化进度数字，悬念初筛优先核对相关事实并跳过无关项`，验证了事实粗筛不调用无关项、最高相关项优先成文闭环、以及收尾各阶段进度数字完整；全量 30 项 `personality-memory.test.mjs` 测试通过。
-
-## 清单确认后绯月留言并收尾（2026-11-25 JST · 已部署，线上效果待用户确认）
-
-问题：确认登记清单后结果不写回对话，用户补一句“我已经确认生成了”又被整理成一张新卡。改动：`conversation-transcription` 在确认、放弃、提交结束或受阻时通过 `onThreadSettled` 给出留言，`conversation-threads.notice` 写进原对话线（已结束的线也留言）。全部了结时结束「待确认」线并由 `personality-nags.threadResolved` 以“回合结束”结掉原质问、清掉续问；普通聊天线只留言。同线另有待确认或整理中的卡、有未回复或未整理的发言、有缺信息而没生成的项目、停止或未完成时保持打开。引用原话生成的提醒卡现在记录来源线。任务管理清单里有缺项时，「全部生成」「生成已选」先在原位提示会作废几项，可返回补充或仍然生成。无 SQLite 结构迁移。
-
-验证：新增 `agent/tests/thread-confirm-settle.test.mjs` 8 项通过，转录与质问相关用例通过；在“已提交版本 + 本次改动”的隔离副本中，转录清单 Electron 模拟巡检、标题栏巡检及缺项提示的浅深色检查通过。`conversation-threads` 的“已经排队的当前对话提权”和 `screen-question-host` 的“云端任务和服务器任务”两项在已提交版本上同样失败，本次未处理。未用真实模型和真实资料实测。已于 2026-11-25 12:20 JST 更新 Windows 正式安装（新进程 PID 25720），花园批次 `feiyue-confirm-settle-20261125` 完成，版本 34.1 → 34.2、修订 182 → 184；发布回执见 [RELEASE_REVIEW](../RELEASE_REVIEW.md)。
 
 ## 后台整理完成后对话里可见，补行动评价走批处理会话（2026-11-25 JST）
 
@@ -91,6 +109,8 @@ AGY 是 Google 云端的 Gemini 代理，不是本机推理：原先“私密任
 DeepSeek 依原材料筛选未处理事项，按重要性降序输出至多 4 件，客户端复核数量，手记接口和念叨筛选支持第四件。常规本地逐条复审仍取原先的前三。以模拟回包和隔离数据库验证重复项、超量、顺序、保存及追加。开发版改动，尚未发布写入接口或安装桌面正式版。
 
 ## 本机短任务与无推理时限（2026-11-23 JST）
+
+> **2026-11-25 更正**：本节关于「取消固定推理时限」的记录是 11-23 当时的状态。提交 `016bfd1` 起排队任务累计推理上限为 5 分钟，用户决定保留。现行规则见[设计](DESIGN.md#本机短任务与无推理时限2026-11-23-jst)；发布单原文用 `git show 016bfd1:RELEASE_REVIEW.md` 查看。本次只改文档，按代码静态阅读核对，未运行测试。
 
 ### 单轮自审
 

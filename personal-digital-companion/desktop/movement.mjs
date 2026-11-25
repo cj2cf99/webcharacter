@@ -25,8 +25,8 @@ export function snapMovement(value,grid){return Math.round(value/grid)*grid;}
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 
-// Win32 按 Z 顺序给出可见窗口的物理像素边界。小浮窗不遮掉后面的全屏状态；
-// 若上层普通最大化窗口已盖住工作区，则不把藏在它后面的全屏窗口计入。
+// Win32 按 Z 顺序给出可见窗口的物理像素边界。小浮窗不遮掉后面的全屏状态，
+// 截屏遮罩（overlay）不计为全屏应用；若上层普通最大化窗口已盖住工作区，则不把藏在它后面的全屏窗口计入。
 export function fullscreenDisplays(displays,windows){
   const occupied=new Set();
   function covers(window,area){
@@ -35,7 +35,7 @@ export function fullscreenDisplays(displays,windows){
   }
   for(const display of displays){
     if(!display.physicalBounds)continue;
-    const top=windows.find(window=>!window.minimized && covers(window,display.physicalArea));
+    const top=windows.find(window=>!window.minimized && !window.overlay && covers(window,display.physicalArea));
     if(top && covers(top,display.physicalBounds))occupied.add(display.id);
   }
   return occupied;

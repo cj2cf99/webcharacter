@@ -1,3 +1,68 @@
+## 2026-11-25 全屏截图遮罩不触发闪现避让 · 绯月 Windows 正式安装版 · 已部署（花园待补登记，线上效果待用户确认）
+
+状态：**已于 2026-11-25 14:23 JST 安装、14:25 新进程启动；花园登记因当前账号 Wrangler 未登录而待补登记**。真实桌面 `Win+Shift+S` 效果由用户手动确认。第三方审核：无。
+
+### 发布回执
+- 用户确认：“执行部署，登记，然后提交git，中间不需要再确认”。
+- 安装：14:23 JST 复核 2/2 基线哈希未变，备份到 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/install-backup-screenshot-overlay-20261125/`，原子替换后 2/2 SHA-256 与候选一致，`movement.mjs` 语法检查通过。
+- 重启：结束旧进程 PID `25720`，于 `2026-11-25 14:25:41 JST` 启动新进程 PID `28832`（`electron.exe` 加载正式安装目录 `desktop`），`http://127.0.0.1:8765/infoguide` 核对 `pid=28832`、`started=2026-11-25T05:25:45.368Z`（14:25:45 JST）、资料目录不变。
+- 花园登记：**受阻未执行**。当前 Windows 账号下 `wrangler whoami` 返回未认证（且无 `CLOUDFLARE_API_TOKEN` 环境变量），无法拉取远端 D1 快照制单。预设批次号保留为 `feiyue-screenshot-overlay-20261125`，待完成 `wrangler login` 或在已登录 Wrangler 的会话中补办登记（归属「网页角色组件 → 绯月（桌面精灵）」，成功发布版本 +0.1）。
+- 源码提交与推送：见本节后续更新或最新 Git 提交记录。
+
+### 需求与验收
+问题：在 Windows 上使用系统截图（`Win+Shift+S` / `ScreenClippingHost` / `SnippingTool`）时，全屏截屏遮罩被 `fullscreenDisplays()` 误判为全屏应用，导致绯月瞬间避让闪现到其他屏幕或归位，截图结束后又闪现回来。
+
+1. 识别系统截屏遮罩（`ScreenClippingHost` 全部窗口，以及带 `WS_EX_TOPMOST` 或 `WS_EX_TOOLWINDOW` 样式的 `SnippingTool` 窗口），标记 `overlay: true` 且 `eligible: false`（不附着、不计入全屏避让）。
+2. 普通 `SnippingTool` 编辑窗口（非置顶/非工具窗）不误判为遮罩。
+3. 截屏遮罩下方若原本存在真实全屏应用，仍继续保持全屏避让；下方为桌面或普通最大化窗口时不触发避让。
+4. 不混入工作区中其他进行中的未提交改动（如多屏识图、新闻样式等）。
+
+### 目标与基线
+- 目标：`G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`
+- Git 基线：`codex/workspace-checkpoint-20261120` @ `077162a`
+- 基线核验：正式安装目录当前 `desktop/movement.mjs`、`desktop/watch-windows.ps1` 与提交 `077162a` 内容一致。
+- 候选清单与 SHA-256 见 [desktop-manifest.json](docs/releases/screenshot-overlay-20261125/desktop-manifest.json)，候选文件位于同目录 `files/`：
+  - `desktop/movement.mjs`：基线 `4FDB17B67A74B686DF45C1E29938EA9738DBD331F407F9B548E378A632747387` → 候选 `4DFEC2D308B609286DEE1107270A7352660EEB8F4253DEF88C60E2D7D0ED31E7`
+  - `desktop/watch-windows.ps1`：基线 `A7B32D1B4F2B98A56530BA29D2EEB239FB4C75B12AB8FC178F9F79A3D253C0EF` → 候选 `93000776A71FE078909FC4D63CD6F81AE5ECF7C6C976F2A042FC43559ED27294`
+
+### 文件与行为
+| 文件（desktop/） | 变化 |
+| --- | --- |
+| `watch-windows.ps1` | `PetWindowInfo` 新增 `overlay` 字段；通过 `OpenProcess(QueryLimitedInfo)` + `QueryFullProcessImageName`（单次枚举内按 PID 缓存并 `finally CloseHandle`）识别 `ScreenClippingHost` 与置顶/工具窗形态的 `SnippingTool`，标记 `overlay=true` 且 `eligible=false`。 |
+| `movement.mjs` | `fullscreenDisplays()` 查找覆盖工作区的最上层窗口时跳过 `window.overlay === true`，仅截屏遮罩时不触发全屏避让，遮罩后方有真实全屏窗口时继续避让。 |
+
+工作区另含进行中的多屏识图等未提交改动，**不在本次发布范围内**。
+
+### 数据和配置影响
+无 SQLite 结构迁移，无配置文件、模型、令牌或资料目录变更。纯代码发布，按个人发布备份规则无需数据库备份。
+
+### 实际验证
+- `node --check personal-digital-companion/desktop/movement.mjs`：通过。
+- 安装版 `shell.mjs` 兼容导入校验：`startDesktop` 与 `fullscreenDisplays` 导入正常。
+- `movement.mjs` `fullscreenDisplays` 4 组边界断言（仅遮罩、遮罩+真实全屏、遮罩+普通最大化+真实全屏、无遮罩+真实全屏）：4/4 通过。
+- `node tools/test-walk.mjs`（在 `personal-digital-companion` 目录运行）：全部通过（PASS WALK、收步减速、混合 DPI 接缝路由）。
+- `watch-windows.ps1` PowerShell 实际编译与运行（输出 JSON 正常无报错）+ C# `PetWindowInfo.overlay` 及 `IsScreenshotOverlay` 6 项反射断言（`ScreenClippingHost`、`SnippingTool` TopMost/ToolWindow/普通窗、普通进程 TopMost）：6/6 通过。
+- 既有说明：`tools/test-desktop-shell.mjs` 在当前开发工作区因第 134 行写日记草稿断言失败（受工作区其他进行中改动影响，且历史发布单已记该脚本在安装基线存在既有环境差异）；本次新增的全屏遮罩避让断言逻辑已通过上述独立用例覆盖。
+- 未完成验证：真实 Windows 桌面按下 `Win+Shift+S` 的真机目视确认（需安装重启后由用户在桌面实测）。
+
+### 绯月实例与花园登记准备
+- 正式安装实例已核实：`http://127.0.0.1:8765/infoguide`（版本 7）、监听进程 PID `25720`（启动时间 `2026-11-25 12:21:16 JST`）、应用目录 `G:\selftool\.release-feiyue-handbook-desktop-20261120\personal-digital-companion\desktop`、资料目录一致。
+- 花园线上数据核对受阻：当前 Windows 账号下 `wrangler whoami` 返回未登录（`You are not authenticated`），因此 `prepare-garden-registration.mjs inspect` 无法拉取远端 D1 快照并预生成登记草案。
+- 默认仍按规则在部署完成后登记花园（归属「网页角色组件 → 绯月（桌面精灵）」，成功发布版本 `+0.1`），需用户先在当前环境完成 `wrangler login`（或在已登录 Wrangler 的账号/终端执行制单与提交），或明确指示本次跳过花园登记。
+
+### 部署步骤与恢复
+1. 复核正式安装目录 `desktop/movement.mjs` 与 `desktop/watch-windows.ps1` 仍等于上述基线哈希；若有变化则中止并重新合并。
+2. 备份上述 2 个文件到 `output/install-backup-screenshot-overlay-20261125/`，逐个原子替换并复核候选 SHA-256。
+3. 通过绯月菜单「重启绯月」受控重启，核对新进程目录、启动时间与 `http://127.0.0.1:8765/infoguide`。
+4. 恢复方案：用备份目录的 2 个文件覆盖回正式安装目录后重启绯月。
+5. 获准并完成安装后，仅提交与本次修复相关的改动（`desktop/watch-windows.ps1`、`desktop/movement.mjs`、`tools/test-desktop-shell.mjs`、`docs/releases/screenshot-overlay-20261125/`、`docs/DEVELOPMENT.md`、`RELEASE_REVIEW.md`）并推送远端，不混入其他未提交改动。
+
+### 未完成与风险
+- 若使用第三方截图软件（非 Windows 自带 `ScreenClippingHost` / `SnippingTool`），其全屏遮罩仍可能触发避让；后续按需补充进程白名单即可。
+- 当前账号尚未完成 Wrangler 认证，花园登记需登录 Wrangler 后制单或由用户明确跳过。
+
+---
+
 ## 2026-11-25 清单确认后绯月留言并收尾 · 绯月 Windows 正式安装版 · 已部署（线上效果待用户确认）
 
 状态：**已于 2026-11-25 12:20 JST 安装、12:21 新进程启动，花园登记已于 12:25 JST 完成**。线上功能效果由用户手动确认。第三方审核：无。

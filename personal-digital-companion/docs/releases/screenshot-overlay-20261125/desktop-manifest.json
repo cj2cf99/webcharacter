@@ -1,0 +1,15 @@
+﻿{
+    "target":  "G:\\selftool\\.release-feiyue-handbook-desktop-20261120\\personal-digital-companion",
+    "files":  [
+                  {
+                      "path":  "desktop/movement.mjs",
+                      "candidate":  "4DFEC2D308B609286DEE1107270A7352660EEB8F4253DEF88C60E2D7D0ED31E7",
+                      "baseline":  "4FDB17B67A74B686DF45C1E29938EA9738DBD331F407F9B548E378A632747387"
+                  },
+                  {
+                      "path":  "desktop/watch-windows.ps1",
+                      "candidate":  "93000776A71FE078909FC4D63CD6F81AE5ECF7C6C976F2A042FC43559ED27294",
+                      "baseline":  "A7B32D1B4F2B98A56530BA29D2EEB239FB4C75B12AB8FC178F9F79A3D253C0EF"
+                  }
+              ]
+}
