@@ -1,13 +1,13 @@
-## 2026-11-25 全屏截图遮罩不触发闪现避让 · 绯月 Windows 正式安装版 · 已部署（花园待补登记，线上效果待用户确认）
+## 2026-11-25 全屏截图遮罩不触发闪现避让 · 绯月 Windows 正式安装版 · 已部署（线上效果待用户确认）
 
-状态：**已于 2026-11-25 14:23 JST 安装、14:25 新进程启动；花园登记因当前账号 Wrangler 未登录而待补登记**。真实桌面 `Win+Shift+S` 效果由用户手动确认。第三方审核：无。
+状态：**已于 2026-11-25 14:23 JST 安装、14:25 新进程启动，花园登记已于 15:39 JST 完成**。真实桌面 `Win+Shift+S` 效果由用户手动确认。第三方审核：无。
 
 ### 发布回执
 - 用户确认：“执行部署，登记，然后提交git，中间不需要再确认”。
 - 安装：14:23 JST 复核 2/2 基线哈希未变，备份到 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/install-backup-screenshot-overlay-20261125/`，原子替换后 2/2 SHA-256 与候选一致，`movement.mjs` 语法检查通过。
-- 重启：结束旧进程 PID `25720`，于 `2026-11-25 14:25:41 JST` 启动新进程 PID `28832`（`electron.exe` 加载正式安装目录 `desktop`），`http://127.0.0.1:8765/infoguide` 核对 `pid=28832`、`started=2026-11-25T05:25:45.368Z`（14:25:45 JST）、资料目录不变。
-- 花园登记：**受阻未执行**。当前 Windows 账号下 `wrangler whoami` 返回未认证（且无 `CLOUDFLARE_API_TOKEN` 环境变量），无法拉取远端 D1 快照制单。预设批次号保留为 `feiyue-screenshot-overlay-20261125`，待完成 `wrangler login` 或在已登录 Wrangler 的会话中补办登记（归属「网页角色组件 → 绯月（桌面精灵）」，成功发布版本 +0.1）。
-- 源码提交与推送：见本节后续更新或最新 Git 提交记录。
+- 重启：结束旧进程 PID `25720`，于 `2026-11-25 14:25:41 JST` 启动新进程 PID `28832`（`electron.exe` 加载正式安装目录 `desktop`），`http://127.0.0.1:8765/infoguide` 核对 `pid=28832`、`started=2026-11-25T05:25:45.368Z`（14:25:45 JST）、资料目录不变；后续运行实例 PID `38852`（14:28:18 JST）在线。
+- 花园登记：批次 `feiyue-screenshot-overlay-20261125`，登记包提交 `0ba6de0d7c8cb6d7b4ef6b789c80bb950dd4f9b4`（G:/cloudflare/myapp，本地提交，未推送），摘要 `e9086e634413b144a6dfead071c0517727ba9f68fa2a93456c2ccd8ffeaef2be`。15:39:56 JST 状态 `done`，两步 `verified`（修订 185、186）：绯月（桌面精灵）`34.2 → 34.3`、部署 #113、明细 #197、新增 Bug #33（`open`，待真机 `Win+Shift+S` 确认后关闭）。纯登记元数据，未做数据库备份。
+- 源码：已提交并推送至 `codex/workspace-checkpoint-20261120`（首笔安装提交 `e9934fa`，回执补记见最新提交）。
 
 ### 需求与验收
 问题：在 Windows 上使用系统截图（`Win+Shift+S` / `ScreenClippingHost` / `SnippingTool`）时，全屏截屏遮罩被 `fullscreenDisplays()` 误判为全屏应用，导致绯月瞬间避让闪现到其他屏幕或归位，截图结束后又闪现回来。

@@ -1,7 +1,7 @@
-## 全屏截图遮罩不触发闪现避让（2026-11-25 JST · 已部署，花园待补登记）
+## 全屏截图遮罩不触发闪现避让（2026-11-25 JST · 已部署，线上效果待用户确认）
 
 - **问题与改动**：Windows 系统截图（`Win+Shift+S`）弹出的全屏遮罩原会被 `fullscreenDisplays()` 误判为全屏应用，导致绯月瞬间避让闪现。现于 `desktop/watch-windows.ps1` 增加 `overlay` 字段，通过 `OpenProcess(QueryLimitedInfo)` + `QueryFullProcessImageName`（单次枚举内缓存 PID）识别 `ScreenClippingHost` 及带 `TopMost`/`ToolWindow` 样式的 `SnippingTool` 遮罩，置 `overlay=true`、`eligible=false`；`desktop/movement.mjs` 的 `fullscreenDisplays()` 跳过 `window.overlay` 窗口，使纯截屏遮罩不触发避让，而遮罩后方确有真实全屏应用时继续避让。
-- **验证与部署**：`movement.mjs` 语法校验、4 组全屏遮罩边界断言、`tools/test-walk.mjs`、`watch-windows.ps1` 实机编译运行及 C# `IsScreenshotOverlay` 6 项反射断言全部通过。已于 2026-11-25 14:23 JST 完成正式版 2 文件原子替换（备份至 `output/install-backup-screenshot-overlay-20261125/`），14:25 JST 重启新进程 PID `28832` 并核实 `http://127.0.0.1:8765/infoguide`；真机 `Win+Shift+S` 效果待用户确认。当前账号 Wrangler 未登录，花园登记（预设批次 `feiyue-screenshot-overlay-20261125`）待补办；发布回执见 [RELEASE_REVIEW.md](../RELEASE_REVIEW.md)。
+- **验证与部署**：`movement.mjs` 语法校验、4 组全屏遮罩边界断言、`tools/test-walk.mjs`、`watch-windows.ps1` 实机编译运行及 C# `IsScreenshotOverlay` 6 项反射断言全部通过。已于 2026-11-25 14:23 JST 完成正式版 2 文件原子替换（备份至 `output/install-backup-screenshot-overlay-20261125/`），14:25 JST 受控重启（PID `28832`，后续运行实例 PID `38852`）；花园批次 `feiyue-screenshot-overlay-20261125` 于 15:39 JST 完成（版本 `34.2 → 34.3`，修订 `184 → 186`，部署 #113 / 明细 #197 / Bug #33 `open`）。真机 `Win+Shift+S` 效果待用户确认；发布回执见 [RELEASE_REVIEW.md](../RELEASE_REVIEW.md)。
 
 ## 截图、附件与此刻所想识图改走本机 AGY CLI（2026-11-25 JST · 开发完成，未部署）
 
