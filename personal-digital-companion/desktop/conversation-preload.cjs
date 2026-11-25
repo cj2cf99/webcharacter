@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('conversations',{
   onPending:callback=>ipcRenderer.on('conversation:pending-changed',()=>callback()),
   onChecks:callback=>ipcRenderer.on('conversation:checks-changed',()=>callback()),
   markNoticeRead:id=>ipcRenderer.invoke('conversation:read-notices',id),
+  openNotice:id=>ipcRenderer.invoke('conversation:notice-open',id),
   openSource:url=>ipcRenderer.invoke('conversation:source',url),
   image:(day,id,open=false)=>ipcRenderer.invoke('conversation:image',day,id,open),
   report:(day,id)=>ipcRenderer.invoke('conversation:report',day,id),

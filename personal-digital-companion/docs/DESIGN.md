@@ -600,3 +600,70 @@ Skill 要求保留有效原话、说话人、否定、纠正和原事件时间�
 已提问但停在确认窗口等待输入时释放时隙。提交补充材料后再次让位，关闭确认窗直接结束该次询问。其他后台结构化步骤遇到用时或输出瓶颈可从当前阶段简短重做一次。手记质询保留已完成的线索和比对，下一轮可继续核对。
 
 行动和来源评价沿用日常每步 45 秒。超时先从当前步骤续做，输出或上下文超限时拆可独立评价的长材料。保留旧的 360 字分片编号，更小的子片按字符对半拆到 120 字以内，来源标签随子片传递。短材料或需要完整归属的对话从原步骤返工，每个节点每轮最多尝试三次。阶段、已完成子片和已入库结果复用现有 SQLite 检查点。当前材料仍未完成时，同批其他材料继续，冷却后自动轮询可再续办，包括旧版一次退回就记满次数的评价。按[设计索引](TASK_TEMPLATE_PREVIEW.md)与全局框架偏好的最简约定复用原队列、归档和失败记录表。
+
+## 2026-11-25 JST · 待确认内容挂入提醒
+
+对照原始需求及确认范围（[REQUIREMENTS.md](../REQUIREMENTS.md#待确认内容挂入提醒2026-11-25-jst)）、`G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md` 与桌面面板结构（按既有索引未找到独立备忘录），按最简设计直接复用 `reminder-checks.sqlite` 的 `notices` 表与「本地复盘 → 提醒」页签：
+
+- **表结构兼容扩展**：`notices` 增加 `kind TEXT NOT NULL DEFAULT ''` 与 `target_id TEXT NOT NULL DEFAULT ''`（启动时按 `PRAGMA table_info` 缺列补齐，兼容历史天气和巡检记录）。`weatherDiary()` 显式限定 `kind IN ('','weather')`，避免待确认提醒串入绯月日记天气取材。
+- **去重写入与自动消未读**：`reminder-checks.mjs` 提供 `upsertNotice({kind, targetId, title, body, at})`、`resolveNotice(kind, targetId)` 与 `resolveNoticesExcept(kind, activeTargetIds)`。同一 `kind + target_id` 若已有未读记录则原位更新；若已读且标题正文未变则不重复新增。转录状态变化及启动时按当前 `ready` / `needsReview` 列表同步；提醒修改草案变更及启动时按 `edits.hasPending()` 同步。处理、放弃、重试或过期后自动将对应未读提醒标为已读。
+- **直达处理交互**：「本地复盘 → 提醒」点击待确认提醒时在详情条展示「查看并处理」按钮：`transcript` 经校验后的受限 IPC `conversation:notice-open` 打开「绯月任务管理」并定位该转录详情；`reminder-edit` 直接切换至「待确认业务」页签。
+
+## 2026-11-25 JST · 日记与唠叨缓慢重写机制
+
+### 参考依据与备忘录核查
+
+- 需求来源：[REQUIREMENTS.md](../REQUIREMENTS.md#2026-11-25-jst--日记与唠叨缓慢重写机制)（含三轮用户原话及确认口径）。
+- 框架约束：`G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md`（单人自用、最简设计、JST 展示 / UTC 存储）。
+- 项目备忘录与已知问题：已核查 [DEVELOPMENT.md](DEVELOPMENT.md#对话摘要与待确认的开发注意事项)（保留有效来源、区分明确答复与未说、禁止把脑补写成事实）及 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)；按既有文档索引未找到独立的全局或桌宠设计备忘录。
+
+### 架构与改造范围（最简复用）
+
+不新增并行调度器、不新建数据库表、不新增桌面面板，直接升级现有 `memory-refinement` 全链路（共享校验 + 云端 `/refine` + 桌面端引擎 + 专用 Skill）：
+
+| 模块 | 职责与改动 |
+| --- | --- |
+| `agent/assistant/memory-refinement.mjs` | 升级共享字段定义与校验：`refinementText` 放开日记 `tags` / `threads` 与唠叨 `talk`，继续锁死 `weather` / `mood`；放开 `protectedDiaryText` 对普通对话行的逐字锁死（仅保留附件锚点）；新增 `asked` 悬念编号保护与 `talk` 时间戳/结束记录校验；导出 `refinementRuleVersion`。 |
+| `agent/assistant/personality-memory.mjs` | 扩展 `/api/memory/:kind/:id/refine` 写入：日记同时更新 `body, summary, tags, threads`（SQL 不含 `weather` / `mood`）；唠叨同时更新 `beforeEvaluation, afterEvaluation, talk`（`mood` 不变）；保留最初版备份（`@refineOriginal` / `_refinement.original`）与 7 天冷却。 |
+| `desktop/memory-refinement.mjs` | 重塑为 4 步整篇流程（`diagnose → rewrite → review → submit`），取消 144 字分片与逐片复核；选篇改为「近 7 天旧→新优先，再 8～30 天旧→新」；接入已有 Tag 库与规则版本指纹；不做除直连以外的私密拦截，统一提交云端；头顶气泡汇报篇号、问题与步数。 |
+| `desktop/personality-diary.mjs` | 向 `createMemoryRefinement` 注入 `readTagPool()`（从本机 SQLite `pages` 统计高频实体 Tag）。 |
+| `skills/memory-refinement/source/` | 更新 `SKILL.md`、`local-ai.json`、`schemas.json` 为整篇体检、整篇重写与一次性整篇复核口径。 |
+
+### 数据结构与接口校验规则
+
+1. **日记可修订字段**：`{ body, summary, tags, threads }`
+   - `weather`、`mood` 不允许出现在提交 `fields` 中，传入即拒（HTTP 400）。
+   - `body`：非空且非纯 `无所事事的一天`，总长 ≤ 5000 字；必须保留原正文中的 `〔附件原文 ...〕` 锚点及已被 `audit` 质问引用的 `knownQuotes`。
+   - `summary`：单行极简脉络骨架，≤ 200 字，无换行。
+   - `tags`：字符串数组，长度 `0..10`，自动去重去空，单项 ≤ 50 字。
+   - `threads`：数组，长度 `0..8`（提示词要求未解悬念收紧至 ≤ 3 条）；原记录中 `asked === true` 的悬念必须保留原 `no` 和 `asked: true`（仅允许精简/润色 `text`，保留原 `resolved`），避免历史唠叨 `source_id` 断链。
+2. **唠叨可修订字段**：`{ ...(source==='audit' ? {} : { beforeEvaluation }), afterEvaluation, talk }`
+   - `mood` 不允许修改。
+   - `talk`：数组长度 `1..24`，每项 `{ who, at, text }`，`who ∈ ['绯月','你','结束记录']`，`text` 非空且 ≤ 12000 字，`at` 必须属于原 `talk` 中的合法 ISO 时间戳（按时间非降序）；若原 `talk` 含 `who === '结束记录'`，必须保留。
+3. **本机 SQLite 持久化**：继续复用 `memory_refinements`（活跃单任务断点 JSON + 历史修订记录）和 `memory_refinement_checked`（`(kind, record_id) -> fingerprint`，指纹纳入 `refinementRuleVersion`）。不再使用旧 `memory_refinement_scan` 的全库倒序分页游标。
+
+### 核心执行流程与头顶气泡展示
+
+1. **选篇（7 天优先，最多 30 天，从旧到新）**：
+   - 拉取云端列表直至覆盖东京日期 `[today - 29d, today]`（同时合并本机私密唠叨），过滤可修订、未在 7 天冷却内且本机 `checked` 指纹未命中当前 `refinementRuleVersion` 的候选。
+   - 先排 `[today - 6d, today]` 按日期升序，全部处理完后再排 `[today - 29d, today - 7d]` 按日期升序；取第 1 条建立本机单任务。
+2. **四步整篇慢修（每步落盘断点，中断续跑）**：
+   - **Step 1 · 体检（`1/4`）**：先跑零耗时确定性检查（禁用称呼、第三人称、重复小节、空栏目、空日记占位、技术残渣、Tag 超 10 或含泛词、悬念过多、相对时间词），再做一次轻量 AI 体检，输出具体 `issues` 列表（≤ 4 条短标签）。若无问题则直接写入 `checked` 指纹结束。
+   - **Step 2 · 整篇重写（`2/4`）**：一次性送入原记录、`issues`、关联证据、本机高频 Tag 池（前 80 个，剔除泛词）、必留附件锚点/`knownQuotes` 及已念叨悬念编号，生成完整重写稿并做本地 `checkedRefinement` 预检，立即落盘。
+   - **Step 3 · 一次性整篇复核（`3/4`）**：单次调用核对重写稿是否解决 `issues`、无脑补篡改、人称称呼正确、摘要极简、Tag 精准、时间无漂移；若返回 `revise` 且返工次数 < 2，带 `reason` 回到 Step 2 返工一次。
+   - **Step 4 · 提交同步（`4/4`）**：云端记录走幂等 `POST /api/memory/:kind/:id/refine` 并回读回执，本机私密唠叨直接原子更新 SQLite `nags` 表并写入本地修订历史。
+3. **头顶气泡文案格式**：
+   - 沿用 `thought-overlay.mjs` 与 `progress({ stage, done, total })`，不改窗体。
+   - 格式：`重写 日记 11-20.1 · 体检问题`（1/4）→ `重写 日记 11-20.1 · 修正口吻/精简对话/理清Tag`（2/4）→ `重写 日记 11-20.1 · 整篇复核`（3/4）→ `重写 日记 11-20.1 · 提交同步`（4/4）。
+
+### 验证计划
+
+- 单元测试（`agent/tests/memory-refinement.test.mjs`）：覆盖选篇窗口（7 天优先、8～30 天次之、超 30 天跳过、从旧到新）、整篇重写无 144 字分片、一次性复核与单次返工、`weather`/`mood` 锁死拒绝、`tags` ≤ 10 与 Tag 库注入、`threads` 精简与 `asked` 悬念编号保护、`talk` 精简与时间戳/结束记录保护、本机私密唠叨重写、中断恢复与气泡进度文案。
+- 契约与构建验证：`personality-memory` 相关服务端测试 + 桌面壳构建检查（`tools/build-desktop.mjs`、`tools/test-desktop-shell.mjs`）。
+- 若涉及主站 `subscriptions-api` / `myapp` 同步部署，按规范先完成独立测试与 `RELEASE_REVIEW.md` 再请用户确认。
+
+### 最简检查
+
+- 零新增依赖、零新增 SQLite 表、零新增桌面窗体、零新增云端路由；删除旧版 144 字分片拆分、逐片 `partPlans` 和逐片 `partReviews` 逻辑，代码复杂度与模型调用次数均低于改造前。
+
+

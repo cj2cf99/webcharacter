@@ -51,7 +51,7 @@ export function questionBounds(pet,area,preferredHeight=260){
   return {bounds:{x,y,width,height},tail,tailX:Math.max(20,Math.min(width-60,pet.x+pet.width/2-x-20))};
 }
 
-export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,readDeepSeekStep,checks,reminderRequest,requestRestart,localModel,interactionWork,transcription,threadOptions,log,emotion=()=>null,topics=()=>null,auditPending=()=>[],readQuestionCitation,resumeAudit,openNews,openStudy,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,deepseekReply=writeDeepSeekReply,visible=true,knowledge,voice=createBubbleVoice({root,profile})}={}){
+export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,readDeepSeekStep,checks,reminderRequest,requestRestart,localModel,interactionWork,transcription,openTranscript,threadOptions,log,emotion=()=>null,topics=()=>null,auditPending=()=>[],readQuestionCitation,resumeAudit,openNews,openStudy,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,deepseekReply=writeDeepSeekReply,visible=true,knowledge,voice=createBubbleVoice({root,profile})}={}){
   const sessions=new WeakMap(),replyHistory=new WeakMap();
   const {ipcMain,screen,desktopCapturer}=electron;
   let panel=null,servicePromise=null,controller=null,busy=false,disposed=false,generation=0,panelHeight=260,state={state:'idle',text:'想问我什么？'};
@@ -76,12 +76,29 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
         note.on('click',()=>{void open();});note.show();
       }
     }});
-  const edits=electron.safeStorage&&createReminderApprovals({profile,safeStorage:electron.safeStorage,request:reminderRequest,
+  let editNoticeSeq=0,edits;
+  function syncReminderEditNotice(){
+    if(!checks?.upsertNotice||!edits)return;
+    const seq=++editNoticeSeq;
+    if(!edits.hasPending()){checks.resolveNotice?.('reminder-edit','pending');return;}
+    void edits.view().then(data=>{
+      if(seq!==editNoticeSeq||disposed)return;
+      const parts=[];
+      if(data.choices?.length)parts.push(`待选择 ${data.choices.length} 项`);
+      if(data.entries?.length)parts.push(`待确认修改 ${data.entries.length} 项`);
+      if(!parts.length){checks.resolveNotice?.('reminder-edit','pending');return;}
+      checks.upsertNotice({kind:'reminder-edit',targetId:'pending',title:'提醒修改 · 待确认',
+        body:parts.join('，')+'，点击前往待确认业务处理。'});
+    }).catch(()=>{});
+  }
+  edits=electron.safeStorage&&createReminderApprovals({profile,safeStorage:electron.safeStorage,request:reminderRequest,
     onChange:()=>{
       reviewedGroup='';
       details?.panel?.webContents.send('conversation:pending-changed');
       if(panel&&!panel.isDestroyed())panel.webContents.send('screen-qa:pending-changed',pending());
+      syncReminderEditNotice();
     }});
+  queueMicrotask(()=>{if(!disposed)syncReminderEditNotice();});
   const pending=()=>edits?.hasPending()===true||auditPending().length>0;
   function notifyPending(){details?.panel?.webContents.send('conversation:pending-changed');panel?.webContents.send('screen-qa:pending-changed',pending());}
   const threadReplies=threads&&createThreadReplies({store:threads,model:localModel,log,knowledge,engaged:id=>threadId===id&&Boolean(panel&&!panel.isDestroyed()),
@@ -100,8 +117,9 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   });
   details=attachConversationDetails(electron,{root,profile,bundle,visible,history:records,memory,readTasks,readTraffic,
     readAiStep:id=>id.startsWith('deepseek-')?readDeepSeekStep?.(id):localModel?.readAiStep?.(id),checks,edits,auditPending,readQuestionCitation,
+    openTranscript:openTranscript??threadOptions?.openTranscript,
     threads:threads&&{store:threads,questions:syncQuestionLines,open:id=>openThread(id),newLine:()=>openThread(null,{fresh:true}),
-      note:(id,input)=>submitThread(id,input,false),retry:id=>threadReplies.run(id),openTranscript:threadOptions?.openTranscript},
+      note:(id,input)=>submitThread(id,input,false),retry:id=>threadReplies.run(id),openTranscript:openTranscript??threadOptions?.openTranscript},
     resumeAudit:async id=>{
       if(nag?.id===id){panel?.focus();return '已打开这条质问。';}
       if(panel)return '请先收起当前气泡，再回答这条质问。';

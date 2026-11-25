@@ -5,12 +5,12 @@ import {tokyoDay} from './conversation-history.mjs';
 import {createPanelWindow,showPanel} from './panel-window.mjs';
 import {readTaskReviews} from './personality-diary.mjs';
 
-export function attachConversationDetails(electron,{root,profile,bundle,history,memory,readTasks,readTraffic,readAiStep,checks,edits,auditPending=()=>[],readQuestionCitation,resumeAudit,visible,onReview,threads}) {
+export function attachConversationDetails(electron,{root,profile,bundle,history,memory,readTasks,readTraffic,readAiStep,checks,edits,auditPending=()=>[],readQuestionCitation,resumeAudit,visible,onReview,threads,openTranscript}) {
   const {ipcMain,shell}=electron;
   let initialView='chat';
   let panel=null, selection=null, selectedThread=null, shownSources=new Set(), loading=null;
   let shownThreads=new Set(),threadRead=0;
-  let shownAiSteps=new Set();
+  let shownAiSteps=new Set(),shownNotices=new Map();
   let reportDay='',shownTasks=new Set(),activeReport=null,imageFullscreen=false;
   const entry=resolve(bundle,'conversation.html');
   const trusted = event => panel && !panel.isDestroyed() && event.sender===panel.webContents && event.senderFrame===panel.webContents.mainFrame;
@@ -42,7 +42,11 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
         special:category==='questions'?auditPending().filter(item=>item.privateChat):[]};
     }
     if(view==='checks')return {day,view,...checks.read(day,cursor)};
-    if(view==='notices')return {day,view,...checks.notices(cursor?.filter,cursor?.page)};
+    if(view==='notices'){
+      const page=checks.notices(cursor?.filter,cursor?.page);
+      for(const item of page.events)shownNotices.set(item.id,item);
+      return {day,view,...page};
+    }
     if(view==='log'){
       try{
         const page=await readTraffic(cursor,day);
@@ -143,6 +147,15 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
     if(!trusted(event)||!checks)throw Error('仅复盘窗口可标记提醒');
     checks.markRead(id);
   });
+  ipcMain.handle('conversation:notice-open',(event,id)=>{
+    if(!trusted(event)||!Number.isSafeInteger(id)||!shownNotices.has(id))throw Error('请从当前提醒列表打开');
+    const notice=shownNotices.get(id);
+    if(notice.kind==='transcript'&&notice.target_id){
+      const openTarget=openTranscript??threads?.openTranscript;
+      if(!openTarget)throw Error('任务管理入口暂不可用');
+      return openTarget(notice.target_id);
+    }
+  });
   function reviewed(event,token){if(trusted(event)&&typeof token==='string')onReview?.(token);}
   ipcMain.handle('conversation:reminder-decision',async(event,input)=>{
     if(!trusted(event)||!edits)throw Error('请从待确认窗口操作。');
@@ -166,7 +179,7 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
       panel=created;
       created.webContents.setWindowOpenHandler(()=>({action:'deny'}));
       created.webContents.on('will-navigate',(event,url)=>{if(url!==pathToFileURL(entry).href)event.preventDefault();});
-      created.on('closed',()=>{if(panel===created){panel=null;selection=null;selectedThread=null;shownThreads.clear();shownSources.clear();shownTasks.clear();shownAiSteps.clear();activeReport=null;imageFullscreen=false;threadRead++;}});
+      created.on('closed',()=>{if(panel===created){panel=null;selection=null;selectedThread=null;shownThreads.clear();shownSources.clear();shownTasks.clear();shownAiSteps.clear();shownNotices.clear();activeReport=null;imageFullscreen=false;threadRead++;}});
       loading=created.loadFile(entry).catch(error=>{if(!created.isDestroyed())created.destroy();throw error;});
     }
     const current=panel;
@@ -180,6 +193,7 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
   }
   return {open,get panel(){return panel;},close(){
     ipcMain.removeHandler('conversation:read-notices');
+    ipcMain.removeHandler('conversation:notice-open');
     ipcMain.removeHandler('conversation:ai-step');
     for(const name of ['report','report-image','report-fullscreen','resume-audit','question-citation'])ipcMain.removeHandler('conversation:'+name);
     for(const name of Object.keys(threadHandlers))ipcMain.removeHandler('conversation:'+name);

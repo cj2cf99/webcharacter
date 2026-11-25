@@ -224,3 +224,37 @@ test('事项实际走只读接口；失败和空清单分别留痕',async()=>{
     assert.equal(checks.read(tokyoDay(Date.now())).events[0].status,'查询失败');
   }finally{checks.close();}
 });
+
+test('待确认提醒去重、自动消未读且不混入天气日记',()=>{
+  const profile=mkdtempSync(join(tmpdir(),'feiyue-pending-notices-'));
+  const day='2026-11-25';
+  const at=Date.parse('2026-11-25T18:50:00+09:00');
+  let changes=0;
+  const checks=createReminderChecks({profile,now:()=>at,changed:()=>{changes++;}});
+  try{
+    checks.saveWeather({lastCheck:at},{title:'天气简报',body:'未央区：晴，5～15°C'},at);
+    assert.equal(checks.upsertNotice({kind:'transcript',targetId:'job-1',at,title:'对话内容转录 · 待确认',body:'已整理 2 项待确认登记，点击查看并处理。'}),true);
+    assert.equal(checks.upsertNotice({kind:'transcript',targetId:'job-1',at,title:'对话内容转录 · 待确认',body:'已整理 2 项待确认登记，点击查看并处理。'}),false,'未读同内容不重复写');
+    assert.equal(checks.upsertNotice({kind:'transcript',targetId:'job-2',at:at+1000,title:'对话内容转录 · 待核查',body:'DeepSeek 补拟草稿未通过，需人工核查或重试。'}),true);
+    assert.equal(checks.upsertNotice({kind:'reminder-edit',targetId:'pending',at:at+2000,title:'提醒修改 · 待确认',body:'待确认修改 1 项，点击前往待确认业务处理。'}),true);
+    assert.equal(checks.unread,4);
+    assert.equal(checks.weatherDiary(day).length,1,'待确认提醒不混入日记天气');
+    const unread=checks.notices('unread',0).events;
+    assert.equal(unread.find(item=>item.target_id==='job-1')?.kind,'transcript');
+    assert.equal(unread.find(item=>item.target_id==='pending')?.kind,'reminder-edit');
+    // 已读后同内容不再新增，变更内容则重新生成未读
+    const job1Id=unread.find(item=>item.target_id==='job-1').id;
+    checks.markRead(job1Id);
+    assert.equal(checks.upsertNotice({kind:'transcript',targetId:'job-1',at,title:'对话内容转录 · 待确认',body:'已整理 2 项待确认登记，点击查看并处理。'}),false,'已读同内容不重弹');
+    assert.equal(checks.upsertNotice({kind:'transcript',targetId:'job-1',at:at+3000,title:'对话内容转录 · 待确认',body:'已整理 3 项待确认登记，点击查看并处理。'}),true,'内容变化重新提醒');
+    // resolveNoticesExcept 只保留仍活跃的 job-1，自动消掉 job-2
+    assert.equal(checks.resolveNoticesExcept('transcript',['job-1']),true);
+    assert.equal(checks.notices('unread',0).events.some(item=>item.target_id==='job-2'),false);
+    assert.equal(checks.notices('unread',0).events.some(item=>item.target_id==='job-1'),true);
+    // resolveNotice 消掉提醒修改草案
+    assert.equal(checks.resolveNotice('reminder-edit','pending'),true);
+    assert.equal(checks.resolveNotice('reminder-edit','pending'),false);
+    assert.equal(checks.unread,2);
+    assert.ok(changes>0);
+  }finally{checks.close();}
+});

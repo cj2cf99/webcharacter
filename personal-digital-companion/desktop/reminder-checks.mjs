@@ -30,9 +30,12 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
     project TEXT NOT NULL, status TEXT NOT NULL, detail TEXT NOT NULL, misses INTEGER);
     CREATE INDEX IF NOT EXISTS checks_day ON checks(day,id);
     CREATE TABLE IF NOT EXISTS weather_state(id INTEGER PRIMARY KEY, value TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS notices(id INTEGER PRIMARY KEY,at INTEGER NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,seen INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS notices(id INTEGER PRIMARY KEY,at INTEGER NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,seen INTEGER NOT NULL DEFAULT 0,kind TEXT NOT NULL DEFAULT '',target_id TEXT NOT NULL DEFAULT '');
     CREATE TABLE IF NOT EXISTS log_inspection(id INTEGER PRIMARY KEY CHECK(id=1),through INTEGER NOT NULL);
     UPDATE checks SET status='中断',detail='检查过程中绯月已退出，结果未知' WHERE status='检查中';`);
+  const noticeColumns=new Set(db.prepare('PRAGMA table_info(notices)').all().map(column=>column.name));
+  if(!noticeColumns.has('kind'))db.exec("ALTER TABLE notices ADD COLUMN kind TEXT NOT NULL DEFAULT ''");
+  if(!noticeColumns.has('target_id'))db.exec("ALTER TABLE notices ADD COLUMN target_id TEXT NOT NULL DEFAULT ''");
   const insert=db.prepare('INSERT INTO checks(day,at,due,project,status,detail,misses) VALUES(?,?,?,?,?,?,?)');
   let closed=false;
   function add(name,status,detail,at,due,count=null){
@@ -95,8 +98,9 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
     get unread(){return db.prepare('SELECT count(*) AS n FROM notices WHERE seen=0').get().n;},
     weatherDiary(day){
       const start=Date.parse(day+'T00:00:00+09:00');
-      return db.prepare("SELECT id,at,body FROM notices WHERE at>=? AND at<? AND title<>'绯月 · 任务日志巡检' ORDER BY at,id").all(start,start+86400000);
+      return db.prepare("SELECT id,at,body FROM notices WHERE at>=? AND at<? AND kind IN ('','weather') AND title<>'绯月 · 任务日志巡检' ORDER BY at,id").all(start,start+86400000);
     },
+    newsDiary:day=>news?.diary(day)??[],
     weatherState(){const row=db.prepare('SELECT value FROM weather_state WHERE id=1').get();return row&&JSON.parse(row.value);},
     weatherTemperatureHistory(place, through){
       const date=new Intl.DateTimeFormat('sv-SE',{timeZone:place.timezone});
@@ -131,6 +135,37 @@ export function createReminderChecks({profile,check,handlers={},lastRun,isBusy,l
       if(id==='all')db.exec('UPDATE notices SET seen=1 WHERE seen=0');
       else if(Number.isSafeInteger(id))db.prepare('UPDATE notices SET seen=1 WHERE id=?').run(id);
       changed();
+    },
+    upsertNotice({kind,targetId='',title,body,at=now()}){
+      if(closed||!kind||!title)return false;
+      const latest=db.prepare('SELECT id,title,body,seen FROM notices WHERE kind=? AND target_id=? ORDER BY id DESC LIMIT 1').get(kind,targetId);
+      if(latest){
+        if(latest.seen===0){
+          if(latest.title===title&&latest.body===body)return false;
+          db.prepare('UPDATE notices SET at=?,title=?,body=? WHERE id=?').run(at,title,body,latest.id);
+          changed();return true;
+        }
+        if(latest.title===title&&latest.body===body)return false;
+      }
+      db.prepare('INSERT INTO notices(at,title,body,kind,target_id) VALUES(?,?,?,?,?)').run(at,title,body,kind,targetId);
+      changed();return true;
+    },
+    resolveNotice(kind,targetId=''){
+      if(closed||!kind)return false;
+      const {changes}=db.prepare('UPDATE notices SET seen=1 WHERE kind=? AND target_id=? AND seen=0').run(kind,targetId);
+      if(changes)changed();
+      return changes>0;
+    },
+    resolveNoticesExcept(kind,activeTargetIds=[]){
+      if(closed||!kind)return false;
+      const active=new Set(activeTargetIds);
+      const rows=db.prepare('SELECT id,target_id FROM notices WHERE kind=? AND seen=0').all(kind);
+      const stale=rows.filter(row=>!active.has(row.target_id));
+      if(!stale.length)return false;
+      const mark=db.prepare('UPDATE notices SET seen=1 WHERE id=?');
+      db.exec('BEGIN');
+      try{for(const row of stale)mark.run(row.id);db.exec('COMMIT');}catch(error){db.exec('ROLLBACK');throw error;}
+      changed();return true;
     },
     record,
     takeEveningPraise(day){

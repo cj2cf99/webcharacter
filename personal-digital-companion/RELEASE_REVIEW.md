@@ -1,3 +1,42 @@
+## 2026-11-25 待确认内容挂入提醒 · 绯月 Windows 正式安装版 · 已部署（线上效果待用户确认）
+
+状态：**已于 2026-11-25 19:13 JST 安装、19:13 JST 受控重启生效（新 PID 17232，`GET http://127.0.0.1:8765/infoguide` 返回 200）；用户已明确确认本次跳过花园登记；本次改动随当前分支提交并推送。** 自审明细见 [待确认内容挂入提醒自审报告](docs/reviews/PENDING_NOTICES_SELF_REVIEW_2026-11-25.md)。
+
+### 需求与验收
+用户原话：“把待确认内容挂进提醒，要不然我得看好几个地方。” 确认范围（方案 A）：将对话内容转录的「待确认」（`ready`）与「待核查」（`failed && needsReview`）、以及「提醒修改草案」统一挂入「提醒」（右键菜单未读计数与「本地复盘 → 提醒」），点击提供「查看并处理」一键直达，处理/放弃/重试/过期后自动消未读；绯月主动提问保持现有菜单入口不变。
+
+### 目标、基线与差异
+目标：`G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`。
+来源：`codex/workspace-checkpoint-20261120` @ `40efa94` + 本次 8 个受控桌面文件与 3 个 `output/desktop-bundle` 前端文件（不混入工作区其他未提交改动）。部署前已核对 8 个目标文件在正式安装版中均与 Git `HEAD` 一致。
+
+### 行为变化
+| 文件 | 变化 |
+| --- | --- |
+| `desktop/reminder-checks.mjs` | `notices` 表兼容补齐 `kind`、`target_id` 列；新增 `upsertNotice`/`resolveNotice`/`resolveNoticesExcept`；`weatherDiary()` 限定 `kind IN ('','weather')` 防串入日记天气 |
+| `desktop/shell.mjs` | 启动及转录变更时同步 `ready`/`needsReview` 至提醒并自动消未读；向复盘面板透传 `openTranscript` |
+| `desktop/screen-question-host.mjs` | 启动及提醒修改草案变更时同步至提醒并自动消未读；透传 `openTranscript` |
+| `desktop/conversation-details.mjs`、`conversation-preload.cjs`、`conversation-ui.mjs`、`conversation.html`、`conversation.css`（含 `output/desktop-bundle/` 对应 3 份前端文件） | 「本地复盘 → 提醒」详情条为待确认提醒展示「查看并处理」按钮，经白名单 IPC 跳转对应转录详情或切至「待确认业务」页签 |
+
+### 数据和配置影响
+`reminder-checks.sqlite` 的 `notices` 表在启动时自动按 `PRAGMA table_info` 缺列补齐 `kind` 与 `target_id`（默认值 `''`），完全兼容旧记录；无业务库结构破坏，无密钥或资料目录变更，纯代码与兼容字段发布，不做数据库备份。
+
+### 实际验证
+- `node --test tools/test-reminder-checks.mjs`：12/12 通过
+- `node --test tools/test-conversation-transcription.mjs`：11/11 通过
+- `node tools/test-desktop-shell.mjs`：7 组全通过
+- `node tools/build-desktop.mjs`：构建成功
+
+### 未完成与风险
+- Electron 完整端到端模型脚本未长跑；线上界面视觉与交互效果待重启后由用户实测确认。
+
+### 部署步骤与恢复
+1. 备份正式安装版将替换的 8 个 `desktop/` 文件与 3 个 `output/desktop-bundle/` 文件到 `output/install-backup-pending-notices-20261125/`。
+2. 逐件覆盖并核对 SHA-256。
+3. 退出当前绯月进程，等待 5 秒确认旧进程与 `127.0.0.1:8765` 已释放，以独立非沙盒进程（清除 `ELECTRON_RUN_AS_NODE`）启动正式版绯月，核实新进程 PID 与 `GET http://127.0.0.1:8765/infoguide` 恢复。
+4. 恢复：用备份目录还原 11 个文件并重启绯月。
+
+---
+
 ## 2026-11-25 安装版与 main 对齐 · 绯月 Windows 正式安装版 · 已部署（线上效果待用户确认）
 
 状态：**已于 2026-11-25 18:21 JST 安装、18:22 重启生效，花园登记已于 18:23 JST 完成。** 线上功能效果由用户手动确认。第三方审核：无。明细见 [发布前审核](docs/reviews/ALIGN_MAIN_RELEASE_REVIEW_2026-11-25.md)。

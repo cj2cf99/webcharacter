@@ -166,7 +166,19 @@ function renderNotices(data){
     button.append(element('span',item.title,'fy-title'),element('time',short.format(item.at)));
     button.title=item.seen?'已读':'未读';
     button.onclick=async()=>{
-      noticeDetail.textContent=item.title+'\n'+item.body;
+      const nodes=[document.createTextNode(item.title+'\n'+item.body)];
+      if(item.kind==='transcript'&&item.target_id){
+        const action=element('button','查看并处理','notice-action');
+        action.type='button';
+        action.onclick=()=>void api.openNotice?.(item.id).catch(error=>{status.textContent=error?.message||'无法打开任务管理，请重试。';});
+        nodes.push(action);
+      }else if(item.kind==='reminder-edit'){
+        const action=element('button','查看并处理','notice-action');
+        action.type='button';
+        action.onclick=()=>void load(undefined,'pending');
+        nodes.push(action);
+      }
+      noticeDetail.replaceChildren(...nodes);
       if(!item.seen)try{await api.markNoticeRead(item.id);}catch{status.textContent='已读状态保存失败，请重试。';}
     };
     return button;
@@ -631,7 +643,7 @@ async function load(date,requestedView,explicit=true,cursor=null) {
   const token=++generation;
   if(requestedView!=='pending')pendingReceipt='';
   targetView=requestedView;
-  if(requestedView!=='notices'||!cursor){noticeDetail.textContent='';noticeFilter='unread';}
+  if(requestedView!=='notices'||!cursor){noticeDetail.replaceChildren();noticeFilter='unread';}
   if(requestedView!=='log'||!cursor){logCursors=[null];logIndex=0;}
   noticeControls.hidden=true;
   clearInterval(countdown);clearTimeout(checksRefresh);

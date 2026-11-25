@@ -446,12 +446,28 @@ export async function startDesktop(electron,options={}){
     }
     return questions;
   }
+  function syncTranscriptNotices(){
+    if(!transcription||!checks?.upsertNotice)return;
+    const active=[];
+    for(const item of transcription.list()){
+      if(item.state==='ready'){
+        active.push(item.id);
+        checks.upsertNotice({kind:'transcript',targetId:item.id,at:item.at,title:'对话内容转录 · 待确认',
+          body:item.count?`已整理 ${item.count} 项待确认登记，点击查看并处理。`:'已有待确认登记内容，点击查看并处理。'});
+      }else if(item.state==='failed'&&item.needsReview){
+        active.push(item.id);
+        checks.upsertNotice({kind:'transcript',targetId:item.id,at:item.at,title:'对话内容转录 · 待核查',
+          body:item.stage?item.stage+'未通过，需人工核查或重试。':'多次尝试未通过，需人工核查或重试。'});
+      }
+    }
+    checks.resolveNoticesExcept?.('transcript',active);
+  }
   if(localModel?.withWorkSession&&electron.safeStorage?.isEncryptionAvailable?.()&&!options.benchmark){
     transcription=createConversationTranscription({profile,safeStorage:electron.safeStorage,model:localModel,registration:tasks.registration,log:tasks.traffic?.write,knowledge,generateRemoteDraft:generateDeepSeekDraft,
       prepareBatch:rows=>prepareConversationBatch(rows,tasks.weatherRequest),
       canStart:(state,thread)=>!quitPending&&!privateChat?.active&&!localPool?.active&&!tasks.activeCount()&&
         (state==='approved'||(!work&&!backgroundJob&&(thread||!screenQuestion.executing)&&!study.executing)),
-      changed:()=>syncActivity(),notify:item=>{
+      changed:()=>{syncTranscriptNotices();syncActivity();},notify:item=>{
         const title='绯月 · 对话登记待确认',body=`已整理 ${item.count} 项，点击检查结果。`;
         if(electron.Notification?.isSupported()){
           const notice=new electron.Notification({title,body});
@@ -460,6 +476,7 @@ export async function startDesktop(electron,options={}){
       }});
   }
   const screenQuestion=attachScreenQuestion(electron,{win,profile,bundle,root,voice,checks,emotion:()=>emotion,topics:()=>topics,onForeground:interruptMemory,transcription,knowledge,
+    openTranscript:id=>taskInbox?.open(id),
     threadOptions:!options.benchmark&&{
       questions:day=>{
         const pending=nags?.pendingQuestions()??[];
@@ -500,7 +517,7 @@ export async function startDesktop(electron,options={}){
       const archived=await (memory.readForDiary??memory.read)(day);
       return [...screenQuestion.threadArchive(day),...archived.filter(turn=>!turn.threadId)].sort((a,b)=>b.at-a.at);
     }};
-    diary=createPersonalityDiary({profile,memory:diaryMemory,topics,reportOriginals:detail=>messages.showMessageBox({type:'info',title:'绯月 · 异常附件',message:'记录已完成。以下 TXT 超过自动上限，已保存到本机，可自行选择是否添加。',detail,buttons:['确定']}),model:backgroundModel,request:tasks.weatherRequest,weather:checks.weatherDiary});
+    diary=createPersonalityDiary({profile,memory:diaryMemory,topics,reportOriginals:detail=>messages.showMessageBox({type:'info',title:'绯月 · 异常附件',message:'记录已完成。以下 TXT 超过自动上限，已保存到本机，可自行选择是否添加。',detail,buttons:['确定']}),model:backgroundModel,request:tasks.weatherRequest,weather:checks.weatherDiary,news:checks.newsDiary});
     try{
       emotion=createEmotionService({profile,topics,model:localModel,diary,memory,log:tasks.traffic?.write});
       void emotion.recover();emotion.wake();
@@ -1398,6 +1415,7 @@ export async function startDesktop(electron,options={}){
   }
   taskNotice(Promise.resolve(screenQuestion.resumePaused()));
   transcription?.start();
+  syncTranscriptNotices();
   const remindersReady=waitForStartupReminders(reminderStartup.signal);
   if(!options.benchmark)checks.start();
   taskNotice(tasks.startup(remindersReady));
