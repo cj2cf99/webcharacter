@@ -7,7 +7,7 @@ import {createBalancedLocalModel,readGpuLoad} from './balanced-local-model.mjs';
 import {createAiWorkflowModel} from './ai-workflow-model.mjs';
 import {createLocalModel,desktopModelPath,LOCAL_MODEL_FILE} from './local-model.mjs';
 import {createAgyCliModel,testAgyCliPipeline} from './agy-local-model.mjs';
-import {isAgyInstalled,isAgyResourceExhausted,runAgyPrompt,standbyDir} from './agy-cli-client.mjs';
+import {extractJson,isAgyInstalled,isAgyResourceExhausted,runAgyPrompt,standbyDir} from './agy-cli-client.mjs';
 import {createAgyVision,normalizeImageList,normalizeVisionAnswer,parseVisionJson,rejectCutoutQuestion,VISION_SYSTEM_PROMPT} from './vision-client.mjs';
 import {createAiNetworkPool} from './ai-network-pool.mjs';
 import {capTimeoutMs} from './ai-execution-round.mjs';
@@ -29,14 +29,15 @@ function createBandaoFallback(){
           schema,
           input:input??prompt??'',
           signal,
-          purpose:purpose||'AGY 兜底'
+          purpose:purpose||'AGY 兜底',
+          allowAgyFallback:false
         });
         return {success:true,structuredOutput,response:JSON.stringify(structuredOutput),fallback:'bandao'};
       }
       const messages=instruction
         ?[{role:'system',content:instruction},{role:'user',content:String(input??prompt??'')}]
         :[{role:'user',content:String(prompt??input??'')}];
-      const {content}=await requestBandao({messages},{signal,purpose:purpose||'AGY 兜底'});
+      const {content}=await requestBandao({messages},{signal,purpose:purpose||'AGY 兜底',allowAgyFallback:false});
       return {success:true,response:content,fallback:'bandao'};
     }catch(error){
       signal?.throwIfAborted?.();
@@ -184,14 +185,13 @@ export function createCloudClient({endpoint,keyName,codePrefix,defaults={}}){
   return {request,isConfigured};
 }
 
-// ───────── 半岛文字（deepseek-v4.1-flash，低档思考）─────────
+// ───────── 半岛文字（deepseek-v4.1-flash，低档思考；失败时依次兜底 Gemini → AGY CLI）─────────
 
 // 半岛中转站 deepseek-v4.1-flash，统一低档思考。错误码沿用 DEEPSEEK_ 前缀，调用方无需改动。
 const bandaoClient=createCloudClient({
   endpoint:'https://sub.bandaoapi.com/v1/chat/completions',keyName:'bandao_api_key',codePrefix:'DEEPSEEK_',
   defaults:{model:'deepseek-v4.1-flash',reasoning_effort:'low'}
 });
-export const requestBandao=bandaoClient.request;
 export const isBandaoConfigured=bandaoClient.isConfigured;
 
 // ───────── Gemini 文字与视觉 ─────────
@@ -204,26 +204,151 @@ const geminiClient=createCloudClient({
 export const requestGemini=geminiClient.request;
 export const isGeminiConfigured=geminiClient.isConfigured;
 
+const nonFallbackBandaoCodes=new Set(['DEEPSEEK_KEY_MISSING','DEEPSEEK_AUDIT_FAILED','DEEPSEEK_CANCELLED']);
+const canFallbackBandaoError=error=>!nonFallbackBandaoCodes.has(error?.code);
+const FALLBACK_TIMEOUT_CAP_MS=30_000;
+const fallbackTimeoutMs=(timeoutMs,fallback=30_000)=>Math.min(capTimeoutMs(timeoutMs,fallback),FALLBACK_TIMEOUT_CAP_MS);
+const isAgyFallbackReady=()=>(globalThis.fetch===nativeFetch||Boolean(process.env.FEIYUE_AGY_PATH))&&isAgyInstalled()&&!isAgyResourceExhausted();
+
+function toGeminiPayload(payload){
+  const {model:_model,reasoning_effort:_effort,...rest}=payload??{};
+  return rest;
+}
+
+function messagesToAgyPrompt(messages,jsonObject=false){
+  const parts=[];
+  for(const msg of messages??[]){
+    const text=typeof msg?.content==='string'?msg.content:JSON.stringify(msg?.content??'');
+    if(!text.trim())continue;
+    parts.push(msg.role==='assistant'?'【此前回复】\n'+text:text);
+  }
+  if(jsonObject)parts.push('只输出一个合法的 JSON 对象，不要附加说明或代码块。');
+  return parts.join('\n\n');
+}
+
+async function runAgyWithTimeout(agyRun,{prompt,schema,signal,timeoutMs}){
+  const limitMs=fallbackTimeoutMs(timeoutMs,30_000);
+  const deadline=AbortSignal.timeout(limitMs);
+  const active=signal?AbortSignal.any([signal,deadline]):deadline;
+  try{
+    return await agyRun({prompt,schema,signal:active,timeoutMs:limitMs});
+  }catch{
+    signal?.throwIfAborted?.();
+    return {success:false,error:deadline.aborted?'TIMEOUT':'AGY_CLI_FAILED'};
+  }
+}
+
+function parseJsonObject(text){
+  const parsed=extractJson(text);
+  return parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed:undefined;
+}
+
+function stripCodeFence(text){
+  return String(text??'').trim().replace(/^```(?:json)?\s*/iu,'').replace(/\s*```$/u,'');
+}
+
+// 半岛文字统一入口：半岛失败时先兜底 Gemini，再兜底 AGY CLI；单条兜底超时自动停止并跳过，全部失败保留半岛原始错误码。
+export async function requestBandao(payload,options={}){
+  const {
+    signal,timeoutMs=30000,fetcher=fetch,audit=taskAudit,purpose='模型调用',priority=1,
+    fallback,allowAgyFallback=true,
+    geminiRequest=requestGemini,agyRun=runAgyPrompt,
+    geminiReady=isGeminiConfigured,agyReady=isAgyFallbackReady
+  }=options;
+  // 调用方显式注入测试 fetcher 时默认仅测半岛本身，除非显式开启 fallback:true。
+  const useFallback=fallback===undefined?fetcher===fetch:Boolean(fallback);
+  let primaryError;
+  try{
+    return await bandaoClient.request(payload,options);
+  }catch(error){
+    signal?.throwIfAborted?.();
+    primaryError=error;
+    if(!useFallback||!canFallbackBandaoError(error))throw error;
+  }
+  const fbTimeoutMs=fallbackTimeoutMs(timeoutMs,30_000);
+  const jsonMode=payload?.response_format?.type==='json_object';
+  if(geminiReady()){
+    try{
+      const gemRes=await geminiRequest(toGeminiPayload(payload),{
+        signal,timeoutMs:fbTimeoutMs,audit,priority,purpose:`${purpose}（Gemini 兜底）`
+      });
+      if(!jsonMode)return gemRes;
+      if(gemRes?.finishReason==='stop'){
+        const parsed=parseJsonObject(gemRes.content);
+        if(parsed)return {content:JSON.stringify(parsed),finishReason:'stop'};
+      }
+    }catch(error){
+      signal?.throwIfAborted?.();
+    }
+  }
+  if(allowAgyFallback&&agyReady()){
+    const agyPrompt=messagesToAgyPrompt(payload?.messages,jsonMode);
+    if(agyPrompt){
+      const agyRes=await runAgyWithTimeout(agyRun,{prompt:agyPrompt,signal,timeoutMs:fbTimeoutMs});
+      signal?.throwIfAborted?.();
+      if(agyRes?.success){
+        if(jsonMode){
+          const parsed=parseJsonObject(agyRes.response);
+          if(parsed)return {content:JSON.stringify(parsed),finishReason:'stop'};
+        }else{
+          const text=String(agyRes.response??'').trim();
+          if(text)return {content:text,finishReason:'stop'};
+        }
+      }
+    }
+  }
+  throw primaryError;
+}
+
 // ───────── 结构化 JSON 输出 ─────────
 
 // 本地调用文字模型的唯一云端入口：半岛 deepseek-v4.1-flash，JSON 输出并按 schema 校验。
-// 结果不符时抛 DEEPSEEK_RESULT_INVALID，由调用方决定重试或回退。
-export async function askBandaoJson({instruction,schema,input,signal,purpose='AI 任务',timeoutMs=90_000}){
+// 半岛失败（含 HTTP 502/超时或连续两次非 JSON）时依次兜底 Gemini → AGY CLI；单条兜底超时自动停止并跳过，全部失败抛半岛原始错误。
+export async function askBandaoJson({instruction,schema,input,signal,purpose='AI 任务',timeoutMs=90_000,
+  fallback=true,allowAgyFallback=true,geminiRequest=requestGemini,agyRun=runAgyPrompt,
+  geminiReady=isGeminiConfigured,agyReady=isAgyFallbackReady}={}){
   const text=typeof input==='string'?input:JSON.stringify(input);
   const system=instruction+'\n只输出符合以下 JSON Schema 的 JSON 对象，不附加说明。\n'+JSON.stringify(schema);
   // 中转站的 json_object 模式并不总是强制 JSON：模型偶尔直接写正文。用户消息末尾再提醒一次，仍不合格就带原因重来一次。
   const reminder='\n\n（只返回一个 JSON 对象，字段见系统提示的 Schema。）';
-  let last;
-  for(let attempt=0;attempt<2;attempt++){
-    const messages=[{role:'system',content:system},{role:'user',content:text+reminder}];
-    if(attempt)messages.push({role:'user',content:'上一次输出不是符合 Schema 的 JSON 对象。请重新作答，只输出 JSON 对象。'});
-    const {content,finishReason}=await requestBandao({response_format:{type:'json_object'},messages},{signal,timeoutMs,purpose});
-    let value;
-    try{value=JSON.parse(content);}catch{/* 下面按无效结果处理。 */}
-    if(finishReason==='stop'&&valid(value,schema))return value;
-    last=content;
+  async function runJsonClient(clientRequest,tag,stepTimeoutMs,allowFence=false){
+    let last;
+    for(let attempt=0;attempt<2;attempt++){
+      const messages=[{role:'system',content:system},{role:'user',content:text+reminder}];
+      if(attempt)messages.push({role:'user',content:'上一次输出不是符合 Schema 的 JSON 对象。请重新作答，只输出 JSON 对象。'});
+      const {content,finishReason}=await clientRequest({response_format:{type:'json_object'},messages},{signal,timeoutMs:stepTimeoutMs,purpose:tag?`${purpose}（${tag}）`:purpose});
+      let value;
+      try{value=JSON.parse(allowFence?stripCodeFence(content):content);}catch{/* 下面按无效结果处理。 */}
+      if(finishReason==='stop'&&valid(value,schema))return value;
+      last=content;
+    }
+    throw Object.assign(Error('云端结果与任务字段不符'),{code:'DEEPSEEK_RESULT_INVALID',output:String(last??'').slice(0,200)});
   }
-  throw Object.assign(Error('云端结果与任务字段不符'),{code:'DEEPSEEK_RESULT_INVALID',output:String(last??'').slice(0,200)});
+  let primaryError;
+  try{
+    return await runJsonClient(bandaoClient.request,undefined,timeoutMs);
+  }catch(error){
+    signal?.throwIfAborted?.();
+    primaryError=error;
+    if(!fallback||!canFallbackBandaoError(error))throw error;
+  }
+  const fbTimeoutMs=fallbackTimeoutMs(timeoutMs,30_000);
+  if(geminiReady()){
+    try{
+      return await runJsonClient(geminiRequest,'Gemini 兜底',fbTimeoutMs,true);
+    }catch(error){
+      signal?.throwIfAborted?.();
+    }
+  }
+  if(allowAgyFallback&&agyReady()){
+    const agyRes=await runAgyWithTimeout(agyRun,{prompt:instruction+'\n\n'+text,schema,signal,timeoutMs:fbTimeoutMs});
+    signal?.throwIfAborted?.();
+    if(agyRes?.success){
+      const value=agyRes.structuredOutput!==undefined?agyRes.structuredOutput:extractJson(agyRes.response);
+      if(valid(value,schema))return value;
+    }
+  }
+  throw primaryError;
 }
 
 // ───────── 视觉问答（AGY CLI 为主，Gemini 云端视觉为备用）─────────

@@ -7,8 +7,9 @@ const verdictSchema={type:'object',properties:{answer:{enum:['是','否']}},requ
 
 function setup(t,reply){
   const calls=[],local=[];
-  const key=process.env.bandao_api_key,realFetch=globalThis.fetch;
+  const key=process.env.bandao_api_key,geminiKey=process.env.gemini_aoxing_API_KEY,realFetch=globalThis.fetch;
   process.env.bandao_api_key='fixture-key';
+  delete process.env.gemini_aoxing_API_KEY;
   globalThis.fetch=async(url,options)=>{
     calls.push({url,headers:options.headers,body:JSON.parse(options.body)});
     return Response.json({choices:[{finish_reason:'stop',message:{content:reply}}]});
@@ -16,6 +17,7 @@ function setup(t,reply){
   t.after(()=>{
     globalThis.fetch=realFetch;
     if(key===undefined)delete process.env.bandao_api_key;else process.env.bandao_api_key=key;
+    if(geminiKey===undefined)delete process.env.gemini_aoxing_API_KEY;else process.env.gemini_aoxing_API_KEY=geminiKey;
   });
   const ai=createAiWorkflowModel({file:':memory:',model:{memory:async value=>{local.push(value);return {answer:'是'};},close:async()=>{}}});
   t.after(()=>ai.close());
@@ -161,6 +163,6 @@ test('半岛返回正文而不是 JSON 时带提醒重试一次，仍不合格�
   assert.match(bodies[0].messages[1].content,/只返回一个 JSON 对象/);
   assert.match(bodies[1].messages.at(-1).content,/上一次输出不是/);
   bodies.length=0;replies=['正文一','正文二'];
-  await assert.rejects(askBandaoJson({instruction:'回答',schema,input:'x'}),{code:'DEEPSEEK_RESULT_INVALID',output:'正文二'});
+  await assert.rejects(askBandaoJson({instruction:'回答',schema,input:'x',fallback:false}),{code:'DEEPSEEK_RESULT_INVALID',output:'正文二'});
   assert.equal(bodies.length,2);
 });

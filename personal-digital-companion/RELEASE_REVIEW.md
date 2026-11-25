@@ -1,6 +1,6 @@
-## 2026-11-25 日记与唠叨缓慢重写机制 · 生产 subscriptions-api 与 Windows 正式安装版 · 已部署待花园登记确认（线上效果待用户确认）
+## 2026-11-25 日记与唠叨缓慢重写机制 · 生产 subscriptions-api 与 Windows 正式安装版 · 已部署并登记（线上效果待用户确认）
 
-状态：**已于 2026-11-25 19:38:49 JST 完成生产 `subscriptions-api` 部署（版本 `a0d81f03-545d-4b66-9c44-2a704b480139`，100% 流量，绑定与变量不变）；19:39 JST 完成 Windows 正式安装版 9 文件精准替换与 `memory-refinement` v2.0 快照安装（前像备份至 `output/install-backup-memory-rewrite-20261125/`），等待 5 秒后独立拉起受控重启生效（新 PID `32248`，`GET http://127.0.0.1:8765/infoguide` 返回 200）。** 自审明细见 [记忆重写自审报告](docs/reviews/MEMORY_REWRITE_SELF_AUDIT_2026-11-25.md)（4 轮自审通过）。第三方审核：无。线上重写效果待用户确认。
+状态：**已于 2026-11-25 19:38:49 JST 完成生产 `subscriptions-api` 部署（版本 `a0d81f03-545d-4b66-9c44-2a704b480139`，100% 流量，绑定与变量不变）；19:39 JST 完成 Windows 正式安装版 9 文件精准替换与 `memory-refinement` v2.0 快照安装（前像备份至 `output/install-backup-memory-rewrite-20261125/`），等待 5 秒后独立拉起受控重启生效（新 PID `12268`，`GET http://127.0.0.1:8765/infoguide` 返回 200，`/v1/skills` 确认 `memory-refinement` `2.0`）；Git 推送并回读一致（`WebCharacter` `05f04fd`、`informationManage` `4c7c652`）；花园登记批次 `feiyue-memory-rewrite-20261125` 已于 19:44:59 JST 完成最终回读并于 19:45:01 JST 完成 `ack` 签收（版本 `34.8 → 34.9`，修订 `195 → 197`，审核包提交 `2210881c3663a342c0d5c333eefea82d43a03b44`，`reviewHash: b37486de...5fe1`）。** 自审明细见 [记忆重写自审报告](docs/reviews/MEMORY_REWRITE_SELF_AUDIT_2026-11-25.md)（4 轮自审通过）。第三方审核：无。线上重写效果待用户确认。
 
 ### 需求与验收
 - 需求与设计：[REQUIREMENTS.md](REQUIREMENTS.md#2026-11-25-jst--日记与唠叨缓慢重写机制)、[DESIGN.md](docs/DESIGN.md#2026-11-25-jst--日记与唠叨缓慢重写机制)。
@@ -36,9 +36,9 @@
 
 ---
 
-## 2026-11-25 半岛文字通道新增 Gemini + AGY CLI 两级兜底 · 绯月 Windows 正式安装版 · 已部署待登记确认（线上效果待用户确认）
+## 2026-11-25 半岛文字通道新增 Gemini + AGY CLI 两级兜底 · 绯月 Windows 正式安装版 · 已部署，花园登记已入队待回执（线上效果待用户确认）
 
-状态：**已于 2026-11-25 19:34 JST 完成正式版单文件精准替换（`desktop/ai-gateway.mjs`，SHA-256 前 12 位 `AD79EBE8FD60`，原文件备份至 `output/install-backup-bandao-fallback-20261125/`），19:34:36 JST 独立拉起受控重启生效（新 PID `22224`，`GET http://127.0.0.1:8765/infoguide` 返回 200）；正在准备花园登记清单待用户确认。** 自审明细见 [半岛兜底自审报告](docs/reviews/BANDAO_FALLBACK_SELF_REVIEW_2026-11-25.md)（3 轮自审通过）。第三方审核：无。
+状态：**已于 2026-11-25 19:34 JST 完成正式版单文件精准替换（`desktop/ai-gateway.mjs`，SHA-256 前 12 位 `AD79EBE8FD60`，原文件备份至 `output/install-backup-bandao-fallback-20261125/`），19:34:36 JST 独立拉起受控重启生效（新 PID `22224`，`GET http://127.0.0.1:8765/infoguide` 返回 200）；花园登记批次 `feiyue-bandao-fallback-20261125` 已于 19:44:39 JST 入队待回执（队列位置 `2/20`，审核包提交 `93afeb9741914d429e8e89379940eca4c15b6538`，确认摘要 `bf03d45f6812cb3b5f10dbd3a1d232ad89c495ea3e47da4ef3f4d2a5bc6cdedc`，预期版本 `34.8 → 34.9`）。** 线上实际效果待用户确认。自审明细见 [半岛兜底自审报告](docs/reviews/BANDAO_FALLBACK_SELF_REVIEW_2026-11-25.md)（3 轮自审通过）。第三方审核：无。
 
 ### 需求与验收
 - 用户原话：「给bandao加兜底，兜底对象分别是gemini和agy cli两条线，先问gemini」「没有监控到超时自动停止并跳过的要求吗」「修正这两处」
@@ -68,6 +68,13 @@
 3. 退出当前正式版绯月（PID `27464`），等待 5 秒确认旧进程与 `127.0.0.1:8765` 释放，清除 `ELECTRON_RUN_AS_NODE` 后独立启动正式版绯月。
 4. 核实新进程 PID、加载目录、启动时间及 `GET http://127.0.0.1:8765/infoguide` 返回 200。
 5. 恢复：用备份目录还原 `desktop/ai-gateway.mjs` 并按相同步骤重启。
+
+### 花园登记回执（已入队待回执）
+- 批次编号：`feiyue-bandao-fallback-20261125`（`desktop-update`，`release: succeeded`）
+- 审核包提交（`G:/cloudflare/myapp`）：`93afeb9741914d429e8e89379940eca4c15b6538`
+- 确认摘要（`reviewHash`）：`bf03d45f6812cb3b5f10dbd3a1d232ad89c495ea3e47da4ef3f4d2a5bc6cdedc`
+- 入队状态：`queued`（`2026-11-25 19:44:39 JST`，`queue: position 2 / used 2 / limit 20`）
+- 登记内容：网页角色组件（16）→ 绯月（桌面精灵）（61），新增功能改善（id `92`）+ 新增部署版本 `34.8 → 34.9`（deploy `119` / deploy_item `203`）；无需更新项：种子、Bug、项目关联、平台、平台功能、链接、数据源。
 
 ---
 
