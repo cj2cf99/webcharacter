@@ -1,3 +1,94 @@
+## 2026-11-25 半岛文字通道新增 Gemini + AGY CLI 两级兜底 · 绯月 Windows 正式安装版 · 部署中
+
+状态：**正在部署至 Windows 正式安装版（单文件精准更新 `desktop/ai-gateway.mjs`），重启核实后进入花园登记制单与确认。** 自审明细见 [半岛兜底自审报告](docs/reviews/BANDAO_FALLBACK_SELF_REVIEW_2026-11-25.md)（3 轮自审通过）。第三方审核：无。
+
+### 需求与验收
+- 用户原话：「给bandao加兜底，兜底对象分别是gemini和agy cli两条线，先问gemini」「没有监控到超时自动停止并跳过的要求吗」「修正这两处」
+- 验收：`requestBandao` 与 `askBandaoJson` 在半岛（`sub.bandaoapi.com`）失败（含 HTTP 502、超时、不可用、连续无效 JSON，排除用户取消/无密钥/审计失败）时，优先兜底 Gemini（`gemini-3.1-flash-lite`），失败或未配置再兜底 AGY CLI（自动跳过 20 分钟熔断期）；单条兜底封顶 30 秒且 AGY CLI 绑定 `AbortSignal.timeout` 超时即刻中止跳过；`createBandaoFallback` 传 `allowAgyFallback: false` 防止 `AGY → 半岛 → AGY` 循环；`json_object` 模式下校验纯 JSON 对象并剥离外层代码块，全部失败保留半岛原始 `DEEPSEEK_*` 错误码。
+
+### 目标、基线与差异
+- 目标：`G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`（部署前运行 PID `27464`，启动时间 `2026-11-25 19:29:10 JST`，资料目录 `output/desktop-profile`）。
+- 来源：`codex/workspace-checkpoint-20261120` @ `f23a026` 上精准变更 1 个运行文件：`desktop/ai-gateway.mjs`（不混入工作区其他未提交改动）。
+
+### 行为变化
+| 文件 | 正式版基线 SHA-256 前 12 位 | 候选 SHA-256 前 12 位 | 变化 |
+| --- | --- | --- | --- |
+| `desktop/ai-gateway.mjs` | `45600096C61D` | `AD79EBE8FD60` | `requestBandao` 与 `askBandaoJson` 增加 Gemini → AGY CLI 两级兜底、单步 30 秒超时自动中止跳过、`json_object` 纯对象校验与代码块剥离、`createBandaoFallback` 防环及单测环境隔离 |
+
+### 数据和配置影响
+无数据库结构或数据变更，无新增配置项或密钥；复用意有的 `gemini_aoxing_API_KEY` 与本机 WSL2/本地 AGY CLI。纯代码发布，跳过数据库备份。
+
+### 实际验证
+- `node --test --test-timeout=15000 agent/tests/bandao-fallback.test.mjs agent/tests/agy-bandao-fallback.test.mjs agent/tests/ai-gateway-guard.test.mjs agent/tests/cloud-lane.test.mjs agent/tests/task-log-reader.test.mjs`：**26/26 全部通过**（799ms）。
+
+### 未完成与风险
+- 未在生产环境触发真实半岛 502 → Gemini / AGY CLI 端到端联调；线上效果待重启后由用户确认。
+
+### 部署步骤与恢复
+1. 备份正式安装版 `desktop/ai-gateway.mjs` 至 `output/install-backup-bandao-fallback-20261125/desktop/ai-gateway.mjs`。
+2. 复制源码 `desktop/ai-gateway.mjs` 覆盖正式安装版，核对 `node --check` 与 SHA-256。
+3. 退出当前正式版绯月（PID `27464`），等待 5 秒确认旧进程与 `127.0.0.1:8765` 释放，清除 `ELECTRON_RUN_AS_NODE` 后独立启动正式版绯月。
+4. 核实新进程 PID、加载目录、启动时间及 `GET http://127.0.0.1:8765/infoguide` 返回 200。
+5. 恢复：用备份目录还原 `desktop/ai-gateway.mjs` 并按相同步骤重启。
+
+---
+
+## 2026-11-25 日记新增新闻 36 小时 Top 5 一句话新闻来源 · 绯月 Windows 正式安装版 · 已部署并登记（线上效果待用户确认）
+
+状态：**已于 2026-11-25 19:27 JST 完成正式版 6 文件精准替换，19:29:10 JST 独立拉起受控重启生效（新 PID `27464`，`GET http://127.0.0.1:8765/infoguide` 返回 200）；花园登记批次 `feiyue-diary-news-source-20261125` 已于 19:29:50 JST 完成最终回读并于 19:30:04 JST 完成 `ack` 签收（版本 `34.7 → 34.8`，修订 `193 → 195`，审核包提交 `678e34d2b136897ff4134a825aef9685a57962e2`）。** 线上写日记实际效果待用户确认。第三方审核：无。自审明细见 [日记新闻来源自审报告](docs/reviews/DIARY_NEWS_SOURCE_SELF_REVIEW_2026-11-25.md)。
+
+### 需求与验收
+用户原话：“日记的内容来源加一个 新闻的36小时top前5话题的一句话新闻。” 验收：写日记只读读取新闻 36 小时日榜 Top 5 话题的一句话新闻（优先 `dayText`、未生成时回退 `title`），按东京日归属，标记来源为 `热点新闻` 且带归属提示不当作夫君经历；同一新闻进展节点 `(news:<id>, at)` 不因后续补齐 `dayText` 重复写入，有新进展节点时正常收录。
+
+### 目标、基线与差异
+- 目标：`G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`（当前在跑进程 PID `3984`，启动时间 `2026-11-25 19:17:56 JST`，资料目录 `output/desktop-profile`）。
+- 来源：`f23a026` 上本次 6 个受控文件精准变更。经逐文件 diff 核对，`desktop/personality-diary.mjs` 与 `desktop/memory-refinement.mjs` 在开发工作区中含其他并行会话未发布的记忆修订改动，本次安装将**基于正式安装版当前基线精准打入本次改动**，绝不混入无关改动。
+
+### 行为变化
+| 文件 | 正式版基线 SHA-256 前 12 位 | 变化 |
+| --- | --- | --- |
+| `desktop/news-briefing.mjs` | `48F9E73846C9` | 新增只读 `diary(targetDay)`（7 天外直接快返，取 36h 日榜 Top 5，按东京日过滤，优先 `dayText` 回退 `title` 拼为 `栏目 · 一句话新闻`） |
+| `desktop/reminder-checks.mjs` | `C97D15B797B2` | 暴露 `newsDiary: day => news?.diary(day) ?? []` |
+| `desktop/shell.mjs` | `11DB9D024E92` | `createPersonalityDiary` 传入 `news: checks.newsDiary` |
+| `desktop/personality-diary.mjs` | `964A38AE5B2A` | 基于正式版基线精准合入：`sourceLabels` 加 `news:'热点新闻'`、参数加 `news=()=>[]`、`think()` 加新闻归属提示、`events()` 纳入新闻并按 `hasNewsSource(source,at)` 防同节点重复、`summarize()` 识别 `热点新闻：` |
+| `desktop/memory-refinement.mjs` | `982C529A9226` | 基于正式版基线仅改第 100 行：`bare` 正则增加 `热点新闻` |
+| `agent/host/memory-reader.mjs` | `EE7CC565F399` | 第 50 行分组正则增加 `热点新闻` |
+
+### 数据和配置影响
+无新增 SQLite 表、列或迁移脚本；`diary(targetDay)` 纯只读（`history.list(false)`），不写 `news_boards`；无密钥、资料目录或模型变更。纯代码发布，不做数据库备份。
+
+### 实际验证
+- `node --check` 检查全部改动文件：`SYNTAX_OK`
+- `node --test --test-force-exit agent/tests/news-briefing.test.mjs`：21/21 通过（含 36h Top 5 筛选、回退、只读与按东京日归属）
+- `node --test --test-force-exit agent/tests/news-editorial.test.mjs`：5/5 通过
+- `node --test --test-force-exit agent/tests/personality-memory.test.mjs`：31/31 通过（含逐条与整批成稿、归属提示、同节点文案更新不重复、新进展正常收录）
+- `node tools/test-reminder-checks.mjs`：12/12 通过
+- `node tools/test-desktop-shell.mjs`：7/7 PASS
+
+### 未完成与风险
+- 未用真实新闻库 + 真实 DeepSeek/AGY 模型跑端到端写日记；线上实际成稿效果待重启后由用户确认。
+
+### 部署步骤与恢复
+1. 备份正式安装版将替换的 6 个文件到 `output/install-backup-diary-news-source-20261125/`。
+2. 逐件写入精准候选文件（其中 `personality-diary.mjs` 与 `memory-refinement.mjs` 基于正式版基线精准打补丁），校验 `node --check` 与 SHA-256。
+3. 退出当前正式版绯月（PID `3984`），等待 5 秒确认旧进程与 `127.0.0.1:8765` 释放，以独立非沙盒进程（清除 `ELECTRON_RUN_AS_NODE`）启动正式版绯月。
+4. 核实新进程 PID、启动时间与 `GET http://127.0.0.1:8765/infoguide` 返回 200。
+5. 恢复：用 `output/install-backup-diary-news-source-20261125/` 原样还原 6 个文件并按相同步骤重启。
+
+### 花园登记回执（已完成并签收）
+- 批次编号：`feiyue-diary-news-source-20261125`（`desktop-update`，`release: succeeded`）
+- 审核包提交（`G:/cloudflare/myapp`）：`678e34d2b136897ff4134a825aef9685a57962e2`
+- 确认摘要（`reviewHash`）：`d3cb690276ab2640cfcddef9aa44338c9d1a3484e495631113e19fa3b7ad319e`
+- 安装后文件 SHA-256（前 12 位）：`news-briefing.mjs` `017B880572E7`、`reminder-checks.mjs` `F501C3CCD075`、`shell.mjs` `D092B2445A92`、`personality-diary.mjs` `389F021C6C39`、`memory-refinement.mjs` `63102312415D`、`memory-reader.mjs` `0954E32242F0`；原文件已备份至 `output/install-backup-diary-news-source-20261125/`。
+- 无需更新项：种子、Bug、项目关联、平台、平台功能、链接、数据源。
+
+| 步骤 | 归属项目 | 归属功能（既有） | 记录类型 | 标题 | 内容与行为变化（含版本变化与前后值） | 验收依据 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 网页角色组件（16） | 绯月（桌面精灵）（61） | 改善（新增） | 日记新增 36 小时 Top 5 热点新闻一句话来源 | 无 → 状态 `done`；写日记新增本机只读新闻来源，取 36 小时日榜 Top 5 话题一句话新闻（优先 `dayText`、回退 `title`），按东京日归属，按 `(news:<id>, at)` 防同节点文案更新重复入册，补齐归属提示与【热点新闻】分段渲染。 | 自审 3 轮通过；69 项单测 + 7 项桌面壳检查通过 | `verified`（修订 `194`，19:29:27 JST） |
+| 2 | 网页角色组件（16） | 绯月（桌面精灵）（61） | 部署（新增） | 登记绯月正式版安装版本 | 版本 `34.7 → 34.8`；备注 `[发布成功:feiyue-diary-news-source-20261125] 日记新增新闻 36 小时 Top 5 话题一句话新闻来源（6 文件精准替换，受控重启 PID 3696 验收在线）。` | 正式版安装、独立重启 PID `27464`（19:29:10 JST）`/infoguide` 200 | `verified`（修订 `195`，19:29:43 JST；终读 `19:29:50 JST`；`ack` `19:30:04 JST`） |
+
+---
+
 ## 2026-11-25 待确认内容挂入提醒 · 绯月 Windows 正式安装版 · 已部署（线上效果待用户确认）
 
 状态：**已于 2026-11-25 19:13 JST 安装、19:13 JST 受控重启生效（新 PID 17232，`GET http://127.0.0.1:8765/infoguide` 返回 200）；用户已明确确认本次跳过花园登记；本次改动随当前分支提交并推送。** 自审明细见 [待确认内容挂入提醒自审报告](docs/reviews/PENDING_NOTICES_SELF_REVIEW_2026-11-25.md)。

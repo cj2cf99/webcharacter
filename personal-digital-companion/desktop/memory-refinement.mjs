@@ -97,7 +97,7 @@ function tidyDiaryPart(text,last){
       sentence.trim()!==sentences[index-1].trim()).join('');
   }).join('\n');
   if(!last)return deduplicated;
-  const bare=/(?:^|\n)[ \t]*(?:【(?:你的日记|花园部署|当日消费|本机行动)】|来源摘记[:：]|当时的评价[:：]|绯月私语[:：])[ \t]*(?:\n[ \t]*)*$/u;
+  const bare=/(?:^|\n)[ \t]*(?:【(?:你的日记|花园部署|当日消费|热点新闻|本机行动)】|来源摘记[:：]|当时的评价[:：]|绯月私语[:：])[ \t]*(?:\n[ \t]*)*$/u;
   let result=deduplicated;
   while(bare.test(result))result=result.replace(bare,'');
   return result;

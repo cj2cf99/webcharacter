@@ -572,3 +572,42 @@ test('一次性重并只运行一次：现存同题单节点事件合并，来�
   assert.equal(createNewsBriefing(db,()=>at,()=>{},async()=>({items:[],failed:[]})).feed().items.length,3);
   db.close();
 });
+
+test('diary(day) 只返回 36 小时 Top 5 话题的一句话新闻并按东京日筛选',()=>{
+  const at=Date.parse('2026-11-25T18:00:00+09:00'), hour=3600000;
+  const db=new DatabaseSync(':memory:');
+  const news=createNewsBriefing(db,()=>at,()=>{},async()=>({items:[],failed:[]}),{editorial:{model:{}}});
+  const put=(id,topic,title,hoursAgo,count)=>{
+    const publishedAt=at-hoursAgo*hour;
+    const reports=Array.from({length:count},(_,i)=>({
+      url:`https://example.org/d-${id}-${i}`,topic,title,source:'报'+i,publishedAt:publishedAt-i*60000
+    }));
+    const event={id,topic,at:publishedAt,nodes:[{at:publishedAt,timeKind:'报道时间',reports}]};
+    db.prepare('INSERT INTO news_events(id,at,version,content) VALUES(?,?,1,?)').run(id,event.at,JSON.stringify(event));
+    for(const r of reports)db.prepare('INSERT INTO news_event_urls VALUES(?,?)').run(r.url,id);
+  };
+  // 6 条 36h 内话题（热度 7..2），加 1 条 50h 前旧闻（不入 36h 榜）
+  put('t1','科技','某公司发布芯片完整长标题',2,7);
+  put('t2','日本社会','东京地铁延长运营完整标题',4,6);
+  put('t3','美国股市','美股科技板块回调完整标题',6,5);
+  put('t4','科技','开源模型权重公开完整标题',20,4); // 2026-11-24 22:00 JST
+  put('t5','日本社会','关西暴雨预警解除完整标题',22,3); // 2026-11-24 20:00 JST
+  put('t6','科技','第六名不应入前五',1,2);
+  put('old','科技','超过三十六小时的旧话题',50,10);
+  // 为 t1、t4 写入一句话新闻 day
+  db.prepare("INSERT OR REPLACE INTO news_topics(event_id,basis,day,center,reports) VALUES(?,?,?,?,?)")
+    .run('t1',String(at-2*hour),'某公司发布新一代低功耗芯片','芯片换代','[]');
+  db.prepare("INSERT OR REPLACE INTO news_topics(event_id,basis,day,center,reports) VALUES(?,?,?,?,?)")
+    .run('t4',String(at-20*hour),'知名实验室开放大模型权重','开源模型','[]');
+
+  const today=news.diary('2026-11-25');
+  const yesterday=news.diary('2026-11-24');
+  assert.deepEqual(today.map(r=>r.id),['t1','t2','t3']);
+  assert.equal(today[0].text,'科技 · 某公司发布新一代低功耗芯片','优先使用话题一句话新闻 dayText');
+  assert.equal(today[1].text,'日本社会 · 东京地铁延长运营完整标题','未生成 dayText 时回退 title');
+  assert.deepEqual(yesterday.map(r=>r.id),['t4','t5']);
+  assert.equal(yesterday[0].text,'科技 · 知名实验室开放大模型权重');
+  assert.equal(news.diary('2026-11-23').length,0,'超过 36 小时的旧闻不进入日榜');
+  assert.equal(db.prepare('SELECT count(*) AS n FROM news_boards').get().n,0,'diary 读取不写榜单快照');
+  db.close();
+});

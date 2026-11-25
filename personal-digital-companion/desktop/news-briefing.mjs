@@ -1,6 +1,7 @@
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
+import {tokyoDay} from './conversation-history.mjs';
 import {cleanNewsTitle,needsChinese} from './news-layout.mjs';
 import {createNewsHistory,newsSourceUrl} from './news-history.mjs';
 import {describeMarket,followsMarketTrend,marketCoverage,marketGroup,marketSummary,sameMarketUpdate} from './news-market.mjs';
@@ -214,7 +215,22 @@ export function createNewsBriefing(db, now, notify, fetchNews=fetchNewsBriefing,
     const detail = failed.length?'；暂时未能读取'+failed.join('、'):'';
     return (fresh.length?'已收录 '+fresh.length+' 条新报道':'本次未收录新报道')+detail+archived;
   }
-  return {latest, edition, feed:()=>history.list(Boolean(editorial)), event:history.get, saveChinese, poll, last:()=>read.get()?.lastCheck,
+  function diary(targetDay) {
+    if(!targetDay||targetDay<tokyoDay(now()-7*day))return [];
+    const {items,boards}=history.list(false);
+    if(!items.length)return [];
+    const byId=new Map(items.map(row=>[row.id,row]));
+    const ranked=boards?.全部?.day?.length
+      ?boards.全部.day.slice(0,5).map(([id])=>byId.get(id)).filter(Boolean)
+      :items.filter(row=>(row.dayHeat??0)>0)
+        .sort((a,b)=>(b.dayHeat??0)-(a.dayHeat??0)||b.at-a.at).slice(0,5);
+    return ranked.filter(row=>tokyoDay(row.at)===targetDay).flatMap(row=>{
+      const headline=(row.dayText||row.title||'').trim();
+      if(!headline)return [];
+      return [{id:row.id,at:row.at,text:[row.topic,headline].filter(Boolean).join(' · ')}];
+    });
+  }
+  return {latest, diary, edition, feed:()=>history.list(Boolean(editorial)), event:history.get, saveChinese, poll, last:()=>read.get()?.lastCheck,
     editorialStep:editorial&&(async signal=>{
       const result=await editorial.step(history.list(true),history.get,signal,{
         getTopic:history.getTopic,saveTopic:history.saveTopic,saveNodeBrief:history.saveNodeBrief,

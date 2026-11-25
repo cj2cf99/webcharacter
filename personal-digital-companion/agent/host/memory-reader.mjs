@@ -47,7 +47,7 @@ export const memoryScript=String.raw`
     const sections=new Map();
     for(const paragraph of r.body.split(/\n\s*\n/)){
       const lines=paragraph.split('\n').filter(Boolean);
-      const label=/^【(你的日记|花园部署|当日消费)】$/.exec(lines[0])?.[1];
+      const label=/^【(你的日记|花园部署|当日消费|热点新闻)】$/.exec(lines[0])?.[1];
       let parent=container;
       if(label){
         lines.shift();

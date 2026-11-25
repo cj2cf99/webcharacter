@@ -787,3 +787,66 @@ test('手记收尾阶段汇报细化进度数字，悬念初筛优先核对相�
   assert(followProgress.every(p=>Number.isInteger(p.done)&&Number.isInteger(p.total)&&p.total>0));
   assert(progressList.some(p=>p.stage==='手记归档入册'&&p.done===1&&p.total===1));
 });
+
+test('日记来源纳入热点新闻一句话，正确归属且不重复写入',async t=>{
+  const {req}=fixture(t),profile=mkdtempSync(join(tmpdir(),'feiyue-diary-news-'));
+  const prompts=[],largeRecords=[];
+  const headlines=[
+    {id:'n1',at:start-3600000,text:'科技 · 某公司发布新一代低功耗芯片'},
+    {id:'n2',at:start-1800000,text:'日本社会 · 东京地铁周末延长运营'}
+  ];
+  const store=createPersonalityDiary({
+    profile,now:()=>start,weather:()=>[],
+    news:d=>d===day?headlines:[],
+    memory:{read:async()=>[],readTasks:async()=>[]},
+    request:(url,options)=>req(url.slice('/api/memory/'.length),options.body&&JSON.parse(options.body)),
+    model:{
+      memory:async(text,prompt,s)=>{
+        prompts.push({prompt,required:s.required,text});
+        if(s.required.includes('review'))return {review:'看到这条新闻挺有意思。'};
+        if(s.required.includes('mood'))return {mood:'好奇'};
+        return {text:'看到了今天的几条热点新闻。',comment:'我也跟着关注一下。',summary:'看新闻',tags:'新闻',thread:''};
+      }
+    }
+  });
+  t.after(()=>{store.close();rmSync(profile,{recursive:true,force:true});});
+  const sig=new AbortController().signal;
+  await store.run('diary',sig);
+  const page=store.pages().find(p=>p.day===day);
+  assert.match(page.body,/【热点新闻】/);
+  assert.match(page.body,/某公司发布新一代低功耗芯片/);
+  assert.match(page.summary,/热点新闻：/);
+  assert(prompts.some(p=>p.required.includes('review')&&p.prompt.includes('不要当作夫君的经历')));
+  const countBefore=prompts.length;
+  await store.run('diary',sig);
+  assert.equal(prompts.length,countBefore,'同一批热点新闻不重复评价或写入');
+  // 同一新闻同一进展节点后续生成 dayText 替换 title 时，不重复写入
+  headlines[0]={...headlines[0],text:'科技 · 某公司低功耗芯片正式发布'};
+  await store.run('diary',sig);
+  assert.equal(prompts.length,countBefore,'同一节点文案更新不重复写入');
+  // 有新进展节点（at 推进）时正常收录
+  headlines[0]={id:'n1',at:start-600000,text:'科技 · 某公司芯片公布发售价格'};
+  await store.run('diary',sig);
+  assert.match(store.pages().find(p=>p.day===day).body,/公布发售价格/);
+
+  // 验证整批成稿（writeLargeDiary）路径也带入「热点新闻」来源
+  const profile2=mkdtempSync(join(tmpdir(),'feiyue-diary-news-large-'));
+  const store2=createPersonalityDiary({
+    profile:profile2,now:()=>start,weather:()=>[],
+    news:d=>d===day?headlines:[],
+    memory:{read:async()=>[],readTasks:async()=>[]},
+    request:(url,options)=>req(url.slice('/api/memory/'.length),options.body&&JSON.parse(options.body)),
+    model:{
+      shortDiaryReviews:true,
+      writeLargeDiary:async({records})=>{
+        largeRecords.push(...records);
+        return {paragraphs:[{body:'今天看了两条热点新闻。',comment:'世界变化真快。'}],threads:[]};
+      }
+    }
+  });
+  t.after(()=>{store2.close();rmSync(profile2,{recursive:true,force:true});});
+  await store2.run('diary',sig);
+  assert.equal(largeRecords.length,2);
+  assert.deepEqual(largeRecords.map(r=>r.source),['热点新闻','热点新闻']);
+  assert.deepEqual(largeRecords.map(r=>r.content),['日本社会 · 东京地铁周末延长运营','科技 · 某公司芯片公布发售价格']);
+});
