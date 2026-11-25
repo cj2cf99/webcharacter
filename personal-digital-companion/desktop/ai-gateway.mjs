@@ -13,6 +13,7 @@ import {createAiNetworkPool} from './ai-network-pool.mjs';
 import {capTimeoutMs} from './ai-execution-round.mjs';
 
 const networkPool=createAiNetworkPool();
+const nativeFetch=globalThis.fetch;
 
 export {readGpuLoad,desktopModelPath,testAgyCliPipeline};
 
@@ -127,7 +128,7 @@ export function createCloudClient({endpoint,keyName,codePrefix,defaults={}}){
       if(!secret)throw unavailable(codePrefix+'KEY_MISSING');
       active.throwIfAborted();
       let responseOk,raw,body;
-      if(fetcher===fetch){
+      if(fetcher===nativeFetch){
         const res=await networkPool.dispatch({
           endpoint,
           headers:{authorization:'Bearer '+secret,'content-type':'application/json'},
