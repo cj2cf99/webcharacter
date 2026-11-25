@@ -21,7 +21,7 @@ export async function writeDeepSeekDiary({day,records,mood='平静'},signal,{fet
     result=await requestBandao({
       response_format:{type:'json_object'},
       messages:[{role:'system',content:instructions},{role:'user',content:JSON.stringify({...diaryPayload(day,records),情绪基础:mood})}]
-    },{fetcher,key,signal,timeoutMs:10*60_000,purpose:'手记成稿'});
+    },{fetcher,key,signal,timeoutMs:5*60_000,purpose:'手记成稿'});
   }catch(error){
     signal?.throwIfAborted();
     throw unavailable('DIARY_'+error.code);

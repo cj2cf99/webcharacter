@@ -6,6 +6,7 @@ import {mkdirSync} from 'node:fs';
 import {createInterface} from 'node:readline';
 import {valid} from './ai-schema.mjs';
 import {promisify} from 'node:util';
+import {capTimeoutMs} from './ai-execution-round.mjs';
 
 const run = promisify(execFile);
 
@@ -115,7 +116,7 @@ export function agyStandbyReady() {
 async function sendTurn(entry, prompt, {signal, timeoutMs}) {
   const abort = () => entry.child.kill();
   signal?.addEventListener('abort', abort, {once: true});
-  const timer = setTimeout(abort, timeoutMs);
+  const timer = setTimeout(abort, capTimeoutMs(timeoutMs, 60_000));
   try {
     if (!(await entry.ready)) return null;
     const answer = new Promise(resolve => {

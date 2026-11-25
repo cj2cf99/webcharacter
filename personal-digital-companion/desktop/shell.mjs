@@ -194,6 +194,7 @@ export async function startDesktop(electron,options={}){
     }
   }
   let diary,nags,curiosity,scenePanel,backgroundJob,backgroundController,backgroundKind,auditBubbleStage,backgroundCloud=false;
+  let backgroundYield=false,backgroundInFlight=0,backgroundYieldTimer=null;
   const memoryTitles={curiosity:'此刻所想',diary:'写日记',review:'补行动评价',nag:'准备念叨',diaryAudit:'核对手记',
     refinement:'修订手记与唠叨','task-review':'补写执行评价'};
   const memoryPolls=['diary','diaryAudit','nag','review','curiosity','refinement'];
@@ -202,13 +203,59 @@ export async function startDesktop(electron,options={}){
     tasks.activeCount()===0&&(!tasks.canPoll||tasks.canPoll());
   const roomForUnsolicitedPanel=()=>!screenQuestion.hasLocalWork&&!screenQuestion.panel&&!screenQuestion.inquiryPanel&&
     !scenePanel?.panel&&!reminderReview?.panel?.isVisible()&&!taskInbox?.panel?.isVisible();
-  function interruptMemory(){
-    if(!backgroundCloud)backgroundController?.abort();
-    emotion?.interrupt();
+  function scheduleBackgroundYield(){
+    if(!backgroundYield||backgroundInFlight>0||backgroundYieldTimer)return;
+    backgroundYieldTimer=setTimeout(()=>{
+      backgroundYieldTimer=null;
+      if(backgroundYield&&backgroundInFlight===0)backgroundController?.abort();
+    },0);
+    backgroundYieldTimer.unref?.();
+  }
+  function trackBackgroundCall(fn){
+    return async(...args)=>{
+      if(!backgroundJob)return fn(...args);
+      if(backgroundYield){
+        backgroundController?.abort();
+        throw Object.assign(Error('已有高优先度任务，暂停新开后台任务'),{name:'AbortError',code:'AbortError'});
+      }
+      backgroundInFlight++;
+      clearTimeout(backgroundYieldTimer);backgroundYieldTimer=null;
+      try{return await fn(...args);}
+      finally{
+        backgroundInFlight--;
+        scheduleBackgroundYield();
+      }
+    };
+  }
+  function wrapBackgroundModel(model){
+    if(!model)return model;
+    return new Proxy(model,{
+      get(target,prop,receiver){
+        const value=Reflect.get(target,prop,receiver);
+        if(typeof value==='function'&&['memory','writeDiaryNarration','writeLargeDiary'].includes(prop))
+          return trackBackgroundCall(value.bind(target));
+        return typeof value==='function'?value.bind(target):value;
+      }
+    });
+  }
+  function interruptMemory(immediate=false){
+    if(immediate){
+      backgroundYield=false;
+      clearTimeout(backgroundYieldTimer);backgroundYieldTimer=null;
+      backgroundController?.abort();
+      emotion?.interrupt(true);
+      return;
+    }
+    emotion?.interrupt(false);
+    if(!backgroundJob)return;
+    backgroundYield=true;
+    scheduleBackgroundYield();
   }
   async function memoryJob(kind,signal,manual=false,step,questionId,goal){
     if(backgroundJob||!memoryIdle())return {deferred:true};
     localModel?.aiPulse?.();
+    backgroundYield=false;backgroundInFlight=0;
+    clearTimeout(backgroundYieldTimer);backgroundYieldTimer=null;
     backgroundController=new AbortController();
     const round=localModel?.beginAiRound?.();
     const combined=AbortSignal.any([signal,backgroundController.signal,...(round?[round.signal]:[])]);
@@ -282,6 +329,7 @@ export async function startDesktop(electron,options={}){
     }
     finally{
       backgroundJob=null;backgroundKind=null;backgroundController=null;memoryThought=null;backgroundCloud=false;
+      backgroundYield=false;backgroundInFlight=0;clearTimeout(backgroundYieldTimer);backgroundYieldTimer=null;
       round?.release();updatePollClock();
       if(pausesEmotion)emotion?.resume();
       syncActivity();
@@ -352,7 +400,7 @@ export async function startDesktop(electron,options={}){
       screenQuestion.details?.webContents.send('conversation:checks-changed');
       pollSettings.update();
       const unread=checks.unread;
-      if(backgroundKind==='curiosity'&&!checks.polls().find(p=>p.id==='curiosity')?.enabled)interruptMemory();
+      if(backgroundKind==='curiosity'&&!checks.polls().find(p=>p.id==='curiosity')?.enabled)interruptMemory(true);
       const running=checks.polls().filter(job=>job.running);
       pollExecuting=running.some(job=>!['diary','review','due','aiHeartbeat'].includes(job.id));
       const polling=running.find(job=>['tasks','due','weather'].includes(job.id));
@@ -364,8 +412,11 @@ export async function startDesktop(electron,options={}){
     }});
   menuUnread=checks.unread;pendingCheckVisible=checks.pending;
   const pollSettings=attachPollSettings(electron,{root,bundle,checks});
-  updatePollClock=()=>checks.setExecutionBusy(Boolean(modelExecuting||backgroundJob||transcription?.busy||
-    privateChat?.active||localPool?.active||tasks.executingCount?.()||screenQuestion.executing));
+  updatePollClock=()=>{
+    checks.setExecutionBusy(Boolean(modelExecuting||backgroundJob||transcription?.busy||
+      privateChat?.active||localPool?.active||tasks.executingCount?.()||screenQuestion.executing));
+    if(!backgroundJob&&memoryIdle())emotion?.clearYield?.();
+  };
   const newsPanel=attachNewsPanel(electron,{root,bundle,checks,model:localModel,compile:compileNews});
   const study=attachStudy(electron,{root,bundle,profile,model:localModel,connection:options.studyConnection,onForeground:interruptMemory});
   const knowledge=attachKnowledge(electron,{profile,root,bundle,model:localModel,enabled:!options.benchmark});
@@ -442,18 +493,19 @@ export async function startDesktop(electron,options={}){
     transcriptDecision:transcription?.decide,transcriptRetry:transcription?.retry,
     local:async()=>[...(localPool?.pending()??[]).map(batch=>({batch:localPool.withQueue(batch),name:batch.title,started_at:batch.created})),...await (tasks.taskInbox?.local()??[])]}}):null;
   if(hasMemory){
-    topics=createTopicMemory({profile,memory,model:localModel,safeStorage:electron.safeStorage,traffic:tasks.traffic?.readPage});
+    const backgroundModel=wrapBackgroundModel(localModel);
+    topics=createTopicMemory({profile,memory,model:backgroundModel,safeStorage:electron.safeStorage,traffic:tasks.traffic?.readPage});
     const diaryMemory={...memory,async read(day){
       const archived=await (memory.readForDiary??memory.read)(day);
       return [...screenQuestion.threadArchive(day),...archived.filter(turn=>!turn.threadId)].sort((a,b)=>b.at-a.at);
     }};
-    diary=createPersonalityDiary({profile,memory:diaryMemory,topics,reportOriginals:detail=>messages.showMessageBox({type:'info',title:'绯月 · 异常附件',message:'记录已完成。以下 TXT 超过自动上限，已保存到本机，可自行选择是否添加。',detail,buttons:['确定']}),model:localModel,request:tasks.weatherRequest,weather:checks.weatherDiary});
+    diary=createPersonalityDiary({profile,memory:diaryMemory,topics,reportOriginals:detail=>messages.showMessageBox({type:'info',title:'绯月 · 异常附件',message:'记录已完成。以下 TXT 超过自动上限，已保存到本机，可自行选择是否添加。',detail,buttons:['确定']}),model:backgroundModel,request:tasks.weatherRequest,weather:checks.weatherDiary});
     try{
       emotion=createEmotionService({profile,topics,model:localModel,diary,memory,log:tasks.traffic?.write});
       void emotion.recover();emotion.wake();
     }catch{void tasks.traffic?.write({direction:'local',route:'绯月情绪',stage:'本机情绪库未能打开，保留原资料'});}
     scenePanel=attachScenePanel(electron,{root,bundle,finish:(scene,answer)=>curiosity.finish(scene,answer)});
-    curiosity=createSceneCuriosity({profile,memory,diary,model:localModel,electron,
+    curiosity=createSceneCuriosity({profile,memory,diary,model:backgroundModel,electron,
       vision:options.vision??cloudVision(),show:scenePanel.show,draw:screenQuestion.drawScene,
       queueQuestion:async(scene,signal)=>{
         if(diary.nags().some(n=>n.source==='curiosity'&&n.source_id===scene.id))return true;
@@ -465,7 +517,7 @@ export async function startDesktop(electron,options={}){
       context:()=>emotion?.expression()??'平静',wake:()=>checks.enqueue('curiosity'),
       eligible:()=>memoryIdle()&&roomForUnsolicitedPanel()&&win.isVisible()&&!menuOpen&&checks.polls().some(p=>p.id==='curiosity'&&p.enabled)&&
         electron.powerMonitor?.getSystemIdleState?.(300)==='active'});
-    const initiative=emotion&&createInitiative({emotion,memory,root:memory.root??profile,topics,localNags:diary.nags,model:localModel,speak:screenQuestion.speak,
+    const initiative=emotion&&createInitiative({emotion,memory,root:memory.root??profile,topics,localNags:diary.nags,model:backgroundModel,speak:screenQuestion.speak,
       queueConversation:electron.utilityProcess&&localModel.suspend?item=>privateChat?.plan(item):undefined,
       conversationPlanned:id=>privateChat?.planned(id),
       queueClarification:async(item,signal)=>{
@@ -495,7 +547,7 @@ export async function startDesktop(electron,options={}){
       }});
     if(nags.recoverAudit())checks.enqueue('diaryAudit');
   }
-  const suspendMemory=()=>{backgroundController?.abort();interruptMemory();if(nags?.pendingQuestions().some(n=>n.status==='提问中'))screenQuestion.hide();};
+  const suspendMemory=()=>{interruptMemory(true);if(nags?.pendingQuestions().some(n=>n.status==='提问中'))screenQuestion.hide();};
   electron.powerMonitor?.on?.('suspend',suspendMemory);
   const lockScene=()=>{suspendMemory();scenePanel?.dismiss();};
   electron.powerMonitor?.on?.('lock-screen',lockScene);
@@ -1185,7 +1237,7 @@ export async function startDesktop(electron,options={}){
     if(cleaned)return;cleaned=true;thoughtOverlay.close();
     clearInterval(privateTimer);void privateChat?.close();
     reminderStartup.abort();
-    interruptMemory();electron.powerMonitor?.removeListener?.('suspend',suspendMemory);
+    interruptMemory(true);electron.powerMonitor?.removeListener?.('suspend',suspendMemory);
     electron.powerMonitor?.removeListener?.('lock-screen',lockScene);
     curiosity?.close();scenePanel?.close();pollSettings.close();newsPanel.close();study.close();checks.close();
     stopLayout();

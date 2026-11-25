@@ -4,6 +4,7 @@ const source = `SELECT ${columns},${lockedBilling} AS billing FROM reminders r`;
 const day = value => typeof value === 'string' ? value.slice(0, 10) : '';
 const fail = (status, message) => Object.assign(new Error(message), {status});
 export const reminderReviewActions = ['tomorrow', 'complete'];
+export const reminderReviewBatchLimit = 7;
 export const recordPlannerHours = 'record-hours';
 export const validPlannerHours = value => Number.isFinite(value) && value >= 0 && value <= 24;
 
@@ -92,15 +93,59 @@ export function createReminderReview({db, visible, getDates, present, memberDays
     }
     return {accepted: true};
   }
-  return {list, status, change};
+  async function batchStatus(ids) {
+    if (!Array.isArray(ids) || !ids.length || ids.length > reminderReviewBatchLimit) {
+      throw fail(400, `每批最多查询 ${reminderReviewBatchLimit} 条提醒。`);
+    }
+    const unique = [...new Set(ids)];
+    if (unique.some(id => !Number.isSafeInteger(id) || id <= 0)) {
+      throw fail(400, '提醒编号无效。');
+    }
+    const items = await Promise.all(unique.map(async id => {
+      try {
+        return await status(id);
+      } catch (error) {
+        return {id, error: {status: error.status ?? 503, message: error.message}};
+      }
+    }));
+    return {items};
+  }
+  return {list, status, batchStatus, change};
 }
 
-const reviewPath = /^\/api\/reminder-review(?:\/([1-9]\d*))?$/;
+const reviewPath = /^\/api\/reminder-review(?:\/(batch|[1-9]\d*))?$/;
 export async function handleReminderReview(request, host, pathname) {
   const route = reviewPath.exec(pathname);
   if (!route) return null;
-  const id = route[1] ? Number(route[1]) : null;
   const reply = (body, status = 200) => Response.json(body, {status, headers: {'Cache-Control': 'no-store'}});
+  if (route[1] === 'batch') {
+    if (request.method !== 'POST') return reply({error: {message: '不支持此方法。'}}, 405);
+    const input = await request.json().catch(() => null);
+    const ids = input?.ids;
+    if (!input || Object.keys(input).length !== 1 || !Array.isArray(ids) || !ids.length || ids.length > reminderReviewBatchLimit
+      || ids.some(item => !Number.isSafeInteger(item) || item <= 0)) {
+      return reply({error: {message: `请提供 1 到 ${reminderReviewBatchLimit} 个有效提醒编号。`}}, 400);
+    }
+    try {
+      if (host.reviewReminderStatuses) {
+        const result = await host.reviewReminderStatuses(ids);
+        return result.error ? reply({error: {message: result.error}}, result.status) : reply(result);
+      }
+      const unique = [...new Set(ids)];
+      const items = await Promise.all(unique.map(async itemId => {
+        try {
+          const result = await host.reviewReminderStatus(itemId);
+          return result?.error ? {id: itemId, error: {status: result.status ?? 503, message: result.error}} : result;
+        } catch (error) {
+          return {id: itemId, error: {status: error.status ?? 503, message: error.message}};
+        }
+      }));
+      return reply({items});
+    } catch {
+      return reply({error: {message: '提醒服务暂不可用，请稍后核对。'}}, 503);
+    }
+  }
+  const id = route[1] ? Number(route[1]) : null;
   if (id !== null && !Number.isSafeInteger(id)) return reply({error: {message: '提醒编号无效。'}}, 400);
   try {
     if (request.method === 'GET') {

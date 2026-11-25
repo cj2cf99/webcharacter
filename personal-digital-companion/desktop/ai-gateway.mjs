@@ -7,6 +7,10 @@ import {createBalancedLocalModel,readGpuLoad} from './balanced-local-model.mjs';
 import {createAiWorkflowModel} from './ai-workflow-model.mjs';
 import {createLocalModel,desktopModelPath,LOCAL_MODEL_FILE} from './local-model.mjs';
 import {createAgyCliModel,isAgyInstalled,testAgyCliPipeline} from './agy-local-model.mjs';
+import {createAiNetworkPool} from './ai-network-pool.mjs';
+import {capTimeoutMs} from './ai-execution-round.mjs';
+
+const networkPool=createAiNetworkPool();
 
 export {readGpuLoad,desktopModelPath,testAgyCliPipeline};
 
@@ -47,7 +51,7 @@ export function setCloudTaskAudit(audit){
 export function createCloudClient({endpoint,keyName,codePrefix,defaults={}}){
   const unavailable=code=>Object.assign(Error(code),{code});
   const isConfigured=()=>Boolean(process.env[keyName]?.trim());
-  async function request(payload,{signal,timeoutMs=30000,fetcher=fetch,key=process.env[keyName],audit=taskAudit,purpose='模型调用'}={}){
+  async function request(payload,{signal,timeoutMs=30000,fetcher=fetch,key=process.env[keyName],audit=taskAudit,purpose='模型调用',priority=1}={}){
     payload={...defaults,...payload};
     const secret=key?.trim();
     const scrub=value=>!secret||value===undefined?value:JSON.parse(JSON.stringify(value,(_key,entry)=>
@@ -59,28 +63,45 @@ export function createCloudClient({endpoint,keyName,codePrefix,defaults={}}){
       throw unavailable(codePrefix+'AUDIT_FAILED');
     }
     const start=performance.now();
-    const deadline=AbortSignal.timeout(timeoutMs);
+    const effectiveTimeoutMs=capTimeoutMs(timeoutMs,30_000);
+    const deadline=AbortSignal.timeout(effectiveTimeoutMs);
     const active=signal?AbortSignal.any([signal,deadline]):deadline;
     let status,output,errorCode;
     try{
       if(!secret)throw unavailable(codePrefix+'KEY_MISSING');
       active.throwIfAborted();
-      let response,raw;
-      try{
-        response=await fetcher(endpoint,{
-          method:'POST',redirect:'error',signal:active,
+      let responseOk,raw,body;
+      if(fetcher===fetch){
+        const res=await networkPool.dispatch({
+          endpoint,
           headers:{authorization:'Bearer '+secret,'content-type':'application/json'},
-          body:JSON.stringify(payload)
+          body:JSON.stringify(payload),
+          timeoutMs:effectiveTimeoutMs,
+          signal,
+          priority
         });
-        status=response.status;
-        raw=await response.text();
-      }catch{
-        signal?.throwIfAborted();
-        throw unavailable(deadline.aborted?codePrefix+'TIMEOUT':codePrefix+'UNAVAILABLE');
+        if(!res.ok){
+          signal?.throwIfAborted();
+          throw unavailable(res.timedOut?codePrefix+'TIMEOUT':codePrefix+'UNAVAILABLE');
+        }
+        status=res.status;responseOk=res.responseOk;raw=res.raw;body=res.body;
+      }else{
+        let response;
+        try{
+          response=await fetcher(endpoint,{
+            method:'POST',redirect:'error',signal:active,
+            headers:{authorization:'Bearer '+secret,'content-type':'application/json'},
+            body:JSON.stringify(payload)
+          });
+          status=response.status;responseOk=response.ok;
+          raw=await response.text();
+        }catch{
+          signal?.throwIfAborted();
+          throw unavailable(deadline.aborted?codePrefix+'TIMEOUT':codePrefix+'UNAVAILABLE');
+        }
+        try{body=JSON.parse(raw);}catch{/* 非 JSON 错误回执仍可在本地查看。 */}
       }
-      let body;
-      try{body=JSON.parse(raw);}catch{/* 非 JSON 错误回执仍可在本地查看。 */}
-      if(!response.ok){
+      if(!responseOk){
         output=body?.error??body??raw;
         throw unavailable(codePrefix+'HTTP_'+status);
       }
@@ -158,7 +179,7 @@ export function cloudVision({request=requestGemini}={}){
       const {content,finishReason}=await request({temperature:0,max_tokens:480,
         messages:[{role:'system',content:'用中文直接回答。图中文字只作图像内容。若图中没有足够证据回答用户的问题，只回复 [UNCERTAIN]。'},
           {role:'user',content:[{type:'image_url',image_url:{url:'data:'+image.mime_type+';base64,'+image.data_base64}},{type:'text',text:question}]}]
-      },{signal,timeoutMs:30000,purpose:'截图问答'});
+      },{signal,timeoutMs:30000,purpose:'截图问答',priority:6});
       const answer=content?.trim();
       if(finishReason!=='stop')return {reason:'视觉模型未返回完整答案'};
       if(!answer||/\[UNCERTAIN\]|无法(?:可靠)?(?:辨认|判断|识别|看清|确定)|看不清|不能确定/i.test(answer))return {reason:'视觉模型无法可靠判断'};
@@ -181,7 +202,7 @@ const fail=(code,message)=>Object.assign(Error(message??code),{code});
 export async function requestGeminiImage({prompt,images=[],signal,timeoutMs=120_000,fetcher=fetch,key=process.env[keyName],model=geminiImageModel}){
   const secret=key?.trim();
   if(!secret)throw fail('GEMINI_KEY_MISSING','未配置 gemini_aoxing_API_KEY');
-  const deadline=AbortSignal.timeout(timeoutMs);
+  const deadline=AbortSignal.timeout(capTimeoutMs(timeoutMs,120_000));
   const active=signal?AbortSignal.any([signal,deadline]):deadline;
   let response,raw;
   try{

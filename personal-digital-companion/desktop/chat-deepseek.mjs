@@ -37,7 +37,7 @@ export async function writeDeepSeekReply({messages,history=[],style='speech',sou
     {role:'system',content:(style==='speech'?conversationInstruction:answerInstruction)+
       (sources?.length?' 用[编号]标注实际引用的公开资料。仅用资料支持的事实，有分歧就指出。':'')},
     {role:'user',content:JSON.stringify(material)},
-  ]},{signal,timeoutMs:45000,purpose:'对话回复'});
+  ]},{signal,timeoutMs:45000,purpose:'对话回复',priority:6});
   const reply=content?.trim();
   if(!reply||finishReason!=='stop')throw Object.assign(Error('DeepSeek 暂未返回完整回复。'),{code:'DEEPSEEK_REPLY_INVALID'});
   return {state:'answer',text:reply};

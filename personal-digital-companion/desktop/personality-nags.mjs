@@ -331,12 +331,14 @@ export function createPersonalityNags({store,emotion,initiative,show,idle,canCon
         signal.throwIfAborted();
         if(v?.question?.trim()&&!emptyFollowUp(v.question)){
           const mood=emotion?.expression().word??v.mood;
-          if(!v.evaluation||!mood||!questionText(v.question))throw Error('没有取得可用的念叨问题');
-          if(/^[1-5]$/u.test(v.score)&&source.source!=='diary')source.priority=Number(v.score);
-          const checked=await prepareQuestion(source,v.question,signal,v.evidence);
-          if(checked==='resolved')return {detail:'已用本机知识核对这项疑点'};
-          if(checked==='deferred')return {deferred:true};
-          if(enqueue(reading?{...source,localQuestionEvidence:v.evidence}:source,{prompt:v.question,evaluation:v.evaluation,mood}))return {detail:'已新增 1 个待确认问题'};
+          const question=questionText(v.question);
+          if(v.evaluation&&mood&&question){
+            if(/^[1-5]$/u.test(v.score)&&source.source!=='diary')source.priority=Number(v.score);
+            const checked=await prepareQuestion(source,question,signal,v.evidence);
+            if(checked==='resolved')return {detail:'已用本机知识核对这项疑点'};
+            if(checked==='deferred')return {deferred:true};
+            if(enqueue(reading?{...source,localQuestionEvidence:v.evidence}:source,{prompt:question,evaluation:v.evaluation,mood}))return {detail:'已新增 1 个待确认问题'};
+          }
         }
       }
       if(pending())return {detail:remind()};

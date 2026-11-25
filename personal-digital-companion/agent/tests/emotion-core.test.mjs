@@ -93,3 +93,32 @@ test('归档补读只计独立图像终态、一次最终任务和一次完整�
   try{await emotions.recover();await emotions.recover();assert.equal(emotions.store.snapshot().grade,-2);
     assert.equal(emotions.store.pending().key,'chat/turn');}finally{await emotions.close();}
 });
+test('高优让位时完成当前情绪复盘后再停下，不新开下一条，恢复后继续',async t=>{
+  const profile=fixture(t),at=Date.now();
+  let calls=0,aborted=0,firstStarted=Promise.withResolvers(),finishFirst=Promise.withResolvers();
+  const emotions=createEmotionService({profile,now:()=>at,skill:async()=>({localAi:{assess:'a',assessment:'b'}}),
+    diary:{emotionalHistory:()=>({pages:[],nags:[]})},
+    model:{memory:async(_s,_i,_schema,signal)=>{
+      calls++;
+      signal.addEventListener('abort',()=>{aborted++;},{once:true});
+      if(calls===1){firstStarted.resolve();await finishFirst.promise;}
+      return assessment;
+    }}});
+  try{
+    emotions.accept({kind:'chat',at,key:'chat/1',user:'你好一',reply:'收到一'});
+    emotions.accept({kind:'chat',at,key:'chat/2',user:'你好二',reply:'收到二'});
+    const first=emotions.drain();
+    await firstStarted.promise;
+    emotions.interrupt(false);
+    finishFirst.resolve();
+    await first;
+    await new Promise(r=>setTimeout(r,250));
+    assert.equal(calls,1);
+    assert.equal(aborted,0);
+    assert.equal(emotions.store.pending().key,'chat/2');
+    emotions.clearYield();
+    await new Promise(r=>setTimeout(r,250));
+    assert.equal(calls,2);
+    assert.equal(emotions.store.pending(),undefined);
+  }finally{await emotions.close();}
+});

@@ -1,4 +1,6 @@
-export const taskLimitMs=Infinity;
+export const singleTimeoutCapMs=5*60_000;
+export const taskLimitMs=singleTimeoutCapMs;
+export const capTimeoutMs=(ms,fallback=30_000)=>Math.min(Number.isFinite(ms)&&ms>0?ms:fallback,singleTimeoutCapMs);
 export const roundPause=()=>Object.assign(Error('本轮 4B 执行预算已到，待下一轮继续'),{code:'LOCAL_AI_ROUND_PAUSED'});
 export const taskDiscard=()=>Object.assign(Error('单项任务累计执行已达上限，已丢弃'),{code:'LOCAL_AI_TASK_DISCARDED'});
 

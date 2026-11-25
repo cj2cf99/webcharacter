@@ -417,13 +417,85 @@ function renderPending(data,explicit){
   if(sections.length)pendingReceipt='';
   status.textContent=pendingReceipt||(data.questions?.length?'绯月有 '+data.questions.length+' 个问题等你回答。':sections.length?'可以先关闭，稍后再决定。':'没有待确认的事项。');
 }
+function formatReadableValue(value,indent=0,seen=new Set()){
+  if(typeof value==='string'){
+    const trimmed=value.trim();
+    if((trimmed.startsWith('{')&&trimmed.endsWith('}'))||(trimmed.startsWith('[')&&trimmed.endsWith(']'))){
+      try{
+        const parsed=JSON.parse(trimmed);
+        if(parsed&&typeof parsed==='object')return formatReadableValue(parsed,indent,seen);
+      }catch{/* 非有效 JSON 字符串直接按原文显示。 */}
+    }
+    return value;
+  }
+  if(value===null||typeof value!=='object')return String(value);
+  if(seen.has(value))return '[Circular]';
+  seen.add(value);
+  const pad='  '.repeat(indent),childPad='  '.repeat(indent+1);
+  try{
+    if(Array.isArray(value)){
+      if(!value.length)return '[]';
+      return value.map(item=>{
+        const formatted=formatReadableValue(item,indent+1,seen);
+        return formatted.includes('\n')?childPad+'-\n'+formatted.split('\n').map(line=>childPad+'  '+line).join('\n'):childPad+'- '+formatted;
+      }).join('\n');
+    }
+    const entries=Object.entries(value).filter(([,v])=>v!==undefined);
+    if(!entries.length)return '{}';
+    return entries.map(([key,val])=>{
+      const formatted=formatReadableValue(val,indent+1,seen);
+      if(formatted.includes('\n')){
+        const block=formatted.split('\n').map(line=>line.startsWith(childPad)?line:childPad+line).join('\n');
+        return pad+key+':\n'+block;
+      }
+      return pad+key+': '+formatted;
+    }).join('\n');
+  }finally{
+    seen.delete(value);
+  }
+}
 function jsonDetails(label,value){
   const details=element('details','');
   details.append(element('summary',label));
   details.ontoggle=()=>{
-    if(details.open&&details.childElementCount===1)details.append(element('pre',JSON.stringify(value,null,2)));
+    if(details.open&&details.childElementCount===1)details.append(element('pre',formatReadableValue(value)));
   };
   return details;
+}
+function messageContentText(content){
+  if(typeof content==='string')return formatReadableValue(content);
+  if(Array.isArray(content))return content.map(part=>part?.type==='text'?formatReadableValue(part.text):'[媒体内容]').filter(Boolean).join('\n');
+  return content==null?'':formatReadableValue(content);
+}
+function formatDeepSeekInput(input){
+  if(!input||typeof input!=='object')return formatReadableValue(input??'');
+  const lines=[];
+  const meta=[input.model&&'模型：'+input.model,input.reasoning_effort&&'思考：'+input.reasoning_effort].filter(Boolean);
+  if(meta.length)lines.push(meta.join(' · '));
+  if(Array.isArray(input.messages)){
+    for(const msg of input.messages){
+      lines.push('【'+(msg?.role??'message')+'】\n'+messageContentText(msg?.content));
+    }
+    return lines.join('\n\n');
+  }
+  return formatReadableValue(input);
+}
+function formatDeepSeekOutput(output,error){
+  if(output===undefined)return error??'暂无响应正文';
+  if(typeof output==='string')return formatReadableValue(output);
+  if(!output||typeof output!=='object')return String(output);
+  const parts=[];
+  if(typeof output.content==='string'){
+    parts.push(formatReadableValue(output.content));
+  }else if(output.message!==undefined){
+    parts.push(formatReadableValue(output.message));
+  }else{
+    parts.push(formatReadableValue(output));
+  }
+  const meta=[output.finishReason&&'结束：'+output.finishReason,output.model&&'模型：'+output.model,
+    Number.isFinite(output.usage?.total_tokens)&&'tokens：'+output.usage.total_tokens].filter(Boolean);
+  if(meta.length)parts.push(meta.join(' · '));
+  return parts.join('\n\n');
 }
 function showSnapshot(container,data){
   const {input,output}=data;
@@ -433,9 +505,9 @@ function showSnapshot(container,data){
   };
   if(data.provider==='DeepSeek'){
     section('响应总时长',Number.isFinite(data.durationMs)?data.durationMs+' ms':'尚未收到结束回执');
-    section('请求输入',JSON.stringify(input,null,2));
-    section('响应输出',output===undefined?(data.error??'暂无响应正文'):
-      typeof output==='string'?output:JSON.stringify(output,null,2));
+    section('请求输入',formatDeepSeekInput(input));
+    section('响应输出',formatDeepSeekOutput(output,data.error));
+    container.append(jsonDetails('原始 JSON',data));
     return;
   }
   if(output?.failure)section('调用失败',output.failure.message||output.failure.code);
@@ -444,7 +516,7 @@ function showSnapshot(container,data){
     if(input?.skill?.name==='emotion-appraisal'&&value?.status){
       const labels={keep:'保留原欲求',release:'放下原欲求',satisfied:'原欲求已满足'};
       section('模型判断',[labels[value.status]??value.status,value.quote&&'证据：'+value.quote,value.line].filter(Boolean).join('\n'));
-    }else section('模型回执',typeof value==='string'?value:JSON.stringify(value,null,2));
+    }else section('模型回执',formatReadableValue(value));
   }
   if(input){
     let material=input.text;
@@ -515,7 +587,7 @@ function logRow(line){
           summary.lastChild.textContent=' 快照读取失败，重新展开可重试';
         }
       };
-    }else more.append(element('pre',JSON.stringify(detail,null,2)));
+    }else more.append(element('pre',formatReadableValue(detail)));
     row.append(more);
   }
   return row;

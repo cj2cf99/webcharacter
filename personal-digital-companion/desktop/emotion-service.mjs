@@ -26,7 +26,7 @@ export function weightedHistory(records){
 }
 export function createEmotionService({profile,model,diary,memory,topics,now=Date.now,skill=readInteractionSkill,log}){
   const store=createEmotionStore(profile,{now}),deferred=new Map();
-  let job,timer,controller,closed=false,paused=false,recovering;
+  let job,timer,controller,closed=false,paused=false,yielded=false,recovering;
   const warn=(stage,error)=>{void log?.({direction:'local',route:'绯月情绪',stage,error});};
   const pending=at=>store.pending([...deferred].filter(([,after])=>after>at).map(([id])=>id));
   function expression(){const {word,grade,line,desire}=store.snapshot();return {word,grade,line,desire:desire?.want};}
@@ -34,6 +34,7 @@ export function createEmotionService({profile,model,diary,memory,topics,now=Date
     if(closed)return;
     try{
       if(store.accept({...event,user:cleanMemory(event.user),reply:cleanMemory(event.reply),title:cleanMemory(event.title)})){
+        yielded=false;
         if(timer){clearTimeout(timer);timer=null;}
         wake();
       }
@@ -57,11 +58,11 @@ export function createEmotionService({profile,model,diary,memory,topics,now=Date
     }
   }
   function wake(delay=150){
-    if(paused||closed||timer||job)return;
+    if(paused||closed||yielded||timer||job)return;
     timer=setTimeout(()=>{timer=null;void drain();},delay);timer.unref?.();
   }
   function drain(){
-    if(paused||closed||job)return job;
+    if(paused||closed||yielded||job)return job;
     controller=new AbortController();const {signal}=controller;
     let retry=false,eventId;
     job=(async()=>{
@@ -113,7 +114,7 @@ export function createEmotionService({profile,model,diary,memory,topics,now=Date
       }
     }).finally(()=>{
       job=null;controller=null;
-      if(closed||paused)return;
+      if(closed||paused||yielded)return;
       const at=now();
       if(pending(at))wake(retry?30000:200);
       else{
@@ -140,8 +141,13 @@ export function createEmotionService({profile,model,diary,memory,topics,now=Date
     })().catch(()=>warn('部分归档待补读')).finally(()=>{recovering=null;});
     return recovering;
   }
-  return {store,expression,feedback,accept,chat,taskRows,drain,recover,wake,interrupt:()=>controller?.abort(),
+  return {store,expression,feedback,accept,chat,taskRows,drain,recover,wake,
+    interrupt(immediate=false){
+      if(immediate){controller?.abort();return;}
+      yielded=true;if(timer){clearTimeout(timer);timer=null;}
+    },
+    clearYield(){yielded=false;wake();},
     async pause(){paused=true;clearTimeout(timer);timer=null;controller?.abort();await job;},
-    resume(){paused=false;for(const [id,after] of deferred)if(after===Infinity)deferred.delete(id);wake();},
+    resume(){paused=false;yielded=false;for(const [id,after] of deferred)if(after===Infinity)deferred.delete(id);wake();},
     async close(){closed=true;clearTimeout(timer);controller?.abort();await Promise.allSettled([job,recovering]);store.close();}};
 }

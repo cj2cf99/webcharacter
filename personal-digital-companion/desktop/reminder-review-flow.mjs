@@ -1,4 +1,4 @@
-import {reminderReviewActions,recordPlannerHours,validPlannerHours} from '../agent/host/reminder-review.mjs';
+import {reminderReviewActions,reminderReviewBatchLimit,recordPlannerHours,validPlannerHours} from '../agent/host/reminder-review.mjs';
 import {isSubmissionId} from '../agent/tasks/submissions.mjs';
 import {plannerHoursType} from '../agent/tasks/planner-hours.mjs';
 
@@ -48,10 +48,37 @@ export function createReminderReviewFlow({request, canStart = () => true, waitFo
 
   async function reconcile() {
     if (!pendingChecks.size) return;
+    const statusMap = new Map();
+    const reminderChecks = [];
+    for (const item of report.results) {
+      const check = pendingChecks.get(item.id);
+      if (check && item.action !== recordPlannerHours) reminderChecks.push(item.id);
+    }
+    if (reminderChecks.length > 1) {
+      for (let i = 0; i < reminderChecks.length; i += reminderReviewBatchLimit) {
+        const ids = reminderChecks.slice(i, i + reminderReviewBatchLimit);
+        try {
+          const payload = await call(path + '/batch', {ids});
+          if (Array.isArray(payload?.items)) {
+            for (const row of payload.items) {
+              if (row && !row.error && row.id != null) statusMap.set(row.id, row);
+            }
+          }
+        } catch (error) {
+          if (![404, 405].includes(error?.status)) continue;
+          for (const id of ids) {
+            const row = await call(path + '/' + id).catch(() => null);
+            if (row) statusMap.set(id, row);
+          }
+        }
+      }
+    }
     const results = await Promise.all(report.results.map(async item => {
       const check = pendingChecks.get(item.id);
       if (!check) return item;
-      const result = await verify(check.row, item.action, check.tomorrow, item.actualHours, check.taskId).catch(() => null);
+      const result = item.action !== recordPlannerHours && statusMap.has(item.id)
+        ? verifyStatus(check.row, item.action, check.tomorrow, statusMap.get(item.id))
+        : await verify(check.row, item.action, check.tomorrow, item.actualHours, check.taskId).catch(() => null);
       if (!result) return item;
       note(check.key, check.row, item.action, result.result, outcomeDetail(result));
       pendingChecks.delete(item.id);
@@ -78,12 +105,8 @@ export function createReminderReviewFlow({request, canStart = () => true, waitFo
     return task.task_id;
   }
 
-  async function verify(row, action, tomorrow, actualHours, taskId) {
-    if (action === recordPlannerHours) {
-      return plannerResult(await call('/api/tasks/' + taskId + '/receipt', {}), row, actualHours);
-    }
-    const result = await call(path + '/' + row.id);
-    if (!row.identity || result.identity !== row.identity) return null;
+  function verifyStatus(row, action, tomorrow, result) {
+    if (!row.identity || result?.identity !== row.identity) return null;
     if (action === 'tomorrow' && result.finished === false && result.deadline === tomorrow + row.deadline.slice(10)) {
       return {result: 'moved', deadline: result.deadline};
     }
@@ -93,6 +116,14 @@ export function createReminderReviewFlow({request, canStart = () => true, waitFo
       return {result: 'completed', next: row.recurrence ? result.next.deadline : null};
     }
     return null;
+  }
+
+  async function verify(row, action, tomorrow, actualHours, taskId) {
+    if (action === recordPlannerHours) {
+      return plannerResult(await call('/api/tasks/' + taskId + '/receipt', {}), row, actualHours);
+    }
+    const result = await call(path + '/' + row.id);
+    return verifyStatus(row, action, tomorrow, result);
   }
 
   async function apply(choices) {

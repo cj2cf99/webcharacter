@@ -9,7 +9,7 @@ export const sameQuestion=(a,b)=>typeof a==='string'&&questionBody(a).trimEnd()=
 export const questionText=value=>{
   const text=typeof value==='string'?value.trim():'';
   const body=questionBody(text);
-  if(!body||emptyFollowUp(text)||/[\r\n？?]/u.test(body))return '';
+  if(!body||emptyFollowUp(text)||/[\r\n]/u.test(body))return '';
   return text;
 };
 

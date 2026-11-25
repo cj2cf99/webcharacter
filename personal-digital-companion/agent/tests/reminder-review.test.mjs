@@ -164,3 +164,44 @@ test('执行下一批保留前批待核对结果，补查成功时更新且不�
   assert.equal(verified.report.results.find(row => row.id === 1)?.earlier, true);
   assert.deepEqual(written, [1, 2]);
 });
+
+test('批量核对接口每次最多 7 件，reconcile 自动按 7 件分批查询', async t => {
+  const {db, sqlite} = (() => { const fixture = openTestDatabase(); t.after(fixture.close); return {db: fixture.DB, sqlite: fixture.sqlite}; })();
+  sqlite.exec(`CREATE TABLE reminders(seq INTEGER,title,content,deadline,level,regDatetime,isFinished,recurrence,recurrenceNextSeq,planner_dispatch_id);
+    CREATE TABLE reminder_links(target_todo_id);`);
+  for (let i = 1; i <= 9; i++) {
+    sqlite.exec(`INSERT INTO reminders VALUES (${i},'提醒${i}','','${tomorrow}','中','r${i}',0,NULL,NULL,NULL);`);
+  }
+  const service = createReminderReview({db, visible: () => db, getDates: () => ({today, tomorrow}), present: () => ({}),
+    memberDays: () => [], mutate: () => Response.json({ok: true})});
+  const host = {reviewReminders: service.list, reviewReminderStatus: service.status, reviewReminderStatuses: service.batchStatus};
+  const tooMany = await handleReminderReview(
+    new Request('https://api.test/api/reminder-review/batch', {method: 'POST', body: JSON.stringify({ids: [1, 2, 3, 4, 5, 6, 7, 8]})}),
+    host, '/api/reminder-review/batch');
+  assert.equal(tooMany.status, 400);
+
+  const okBatch = await handleReminderReview(
+    new Request('https://api.test/api/reminder-review/batch', {method: 'POST', body: JSON.stringify({ids: [1, 2, 3, 4, 5, 6, 7]})}),
+    host, '/api/reminder-review/batch');
+  assert.equal(okBatch.status, 200);
+  assert.equal((await okBatch.json()).items.length, 7);
+
+  const items = Array.from({length: 9}, (_, idx) => ({id: idx + 1, title: 'T' + (idx + 1), deadline: today, identity: 'row-' + (idx + 1), version: valid.version}));
+  const batchCalls = [];
+  let moved = false;
+  const flow = createReminderReviewFlow({async request(path, options) {
+    if (path.endsWith('review')) return Response.json({today, tomorrow, items: moved ? [] : items});
+    if (path.endsWith('/batch')) {
+      const body = JSON.parse(options.body);
+      batchCalls.push(body.ids);
+      return Response.json({items: body.ids.map(id => ({id, identity: 'row-' + id, finished: false, deadline: tomorrow}))});
+    }
+    if (options.method === 'POST') { moved = true; return Response.json({accepted: true}); }
+    throw Error('回读暂不可用');
+  }});
+  await flow.load();
+  await flow.apply(items.map(row => ({id: row.id, action: 'tomorrow'})));
+  const refreshed = await flow.load();
+  assert.deepEqual(batchCalls, [[1, 2, 3, 4, 5, 6, 7], [8, 9]]);
+  assert.equal(refreshed.report.results.filter(r => r.result === 'moved').length, 9);
+});
