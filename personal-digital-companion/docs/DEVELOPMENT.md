@@ -1,3 +1,13 @@
+## 本机借用接口 /v1/borrow（2026-11-25 JST · 开发完成，未部署）
+
+本机 REST 升到 v8，新增 `POST /v1/borrow` 与 `GET /v1/borrow/:id`，让动画生成器等本机程序借用绯月的 AI、ComfyUI 与已登记 CLI，密钥和模型留在绯月。`desktop/borrow.mjs` 校验输入、同编号只执行一次、借用任务之间逐个执行，结果只留内存（最近 30 个）。三个通道：`ai` 调 `requestGeminiImage`（新增可选 `aspectRatio`，写入 `generationConfig.imageConfig`）；`comfy` 调 `image-tasks.mjs` 新增的 `localUpscale`（沿用图像 skill 的 upscale 工作流，ComfyUI 未运行时由 `comfy_job.py` 自动拉起）；`cli` 只允许登记的只读 `python-version`。借用与生图同属并行工作，不占正式名额。该路由请求体上限 30MB，其余路由仍为 8KB。说明与手册见 [LOCAL_GARDEN_API.md](LOCAL_GARDEN_API.md#v8本机借用接口2026-11-25-jst开发版)。
+
+## 菜单「动画生成器」入口（2026-11-25 JST · 开发完成，未部署）
+
+右键与托盘菜单新增「动画生成器 ▸ 切图校准 / Gemini 生图 / GIF」，位于「任务」之后。点击时 `desktop/animation-maker.mjs` 先查 `http://127.0.0.1:8766/api/status`；服务未运行则以独立非沙盒进程 `node G:/selftool/webmcreator/server.mjs` 拉起（detached、清除 `ELECTRON_RUN_AS_NODE`，不随绯月退出），最多等 5 秒，再用系统浏览器打开对应页签。连点只启动一次；目录缺失或超时用消息框说明。目录与地址可用 `FEIYUE_WEBMCREATOR_DIR`、`FEIYUE_WEBMCREATOR_URL` 覆盖。长时间处理全在该服务进程中，不占绯月进程。项目本体与需求见 `G:/selftool/webmcreator`。
+
+验证：`node --test agent/tests/animation-maker.test.mjs`（3 项）；`node tools/build-desktop.mjs` 后 `node tools/test-desktop-shell.mjs` 通过（含新菜单标签断言）；隔离 Electron `tools/test-menu-popup-electron.mjs` 通过（自绘菜单浅深色、展开与点击）；真实拉起：在空闲端口用实际 `spawn` 启动服务、两次打开只启动一次、启动器退出后服务仍在运行。借用接口见下一节。正式安装版未更新。
+
 ## 安装版与 main 对齐（2026-11-25 JST · 已安装并登记）
 
 整树比对后以 `main` 为准补齐安装版；`main` 之前去掉的语音模型备用路径已恢复，安装版独有的文档归档到 `docs/archive/installed-docs-20261125/`。积压补记经用户确认随本次启用。18:22 重启生效，花园版本 34.7。以后发布从已推送的 `main` 取文件，装完做一次整树比对。见[发布前审核](reviews/ALIGN_MAIN_RELEASE_REVIEW_2026-11-25.md)。

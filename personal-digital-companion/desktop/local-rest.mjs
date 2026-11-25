@@ -7,6 +7,7 @@ import {gardenRepo,loadPackage} from './garden-backend.mjs';
 import {firstUse} from './garden-guide.mjs';
 import {readSkillDirectory} from './interaction-skills.mjs';
 import {normalizeDeadline} from '../agent/tasks/deadline.mjs';
+import {CLI_COMMANDS} from './borrow.mjs';
 
 export const host='127.0.0.1',port=8765;
 const tokenFile='local-api.token';
@@ -30,9 +31,13 @@ const routes=[
     body:{id:'稳定编号，同花园批次格式',title:'复盘 PE Band 同步',content:'可选，保留提醒正文原文',deadline:'2026-12-07T09:30+09:00'},response:'{ existing: boolean, reminder: Reminder }'},
   {method:'GET',path:'/v1/reminders/:id',summary:'按原编号查询提醒登记。done 表示取得既有提醒记录编号，找不到返回 404。任何状态都不返回正文。',response:'Reminder'},
   {method:'POST',path:'/v1/reminders/:id/retry',summary:'恢复 blocked 提醒并核对原登记，沿用原编号和正文，无需提交正文。',response:'Reminder'},
+  {method:'POST',path:'/v1/borrow',summary:'本机程序借用绯月的 AI、ComfyUI 或已登记 CLI。与生图同属并行工作，不占正式名额；借用任务之间逐个执行。新建 202，同编号重交 200 返回原任务。请求体上限 30MB。',
+    body:{id:'调用方生成的稳定编号',channel:'ai | comfy | cli',kind:'ai：gemini-image',prompt:'ai：提示词 1～4000 字',images:'ai：可选，最多 4 张 [{mime,base64}]',aspectRatio:'ai：可选，如 2:3',workflow:'comfy：upscale',image:'comfy：{mime,base64}',command:'cli：已登记命令 ID'},
+    response:'{ existing: boolean, job: BorrowJob }'},
+  {method:'GET',path:'/v1/borrow/:id',summary:'按原编号查询借用任务。结果只留在内存（最近 30 个），重启后返回 404，需按原内容重交。',response:'BorrowJob'},
 ];
 export function infoGuide(address,repo=gardenRepo){
-  return {version:7,baseURL:address,firstUse:firstUse(repo,address),auth:'除本说明外均使用 Authorization: Bearer <token>；从已独立核实的 instance.profile 下读取 '+tokenFile+'，勿打印或提交令牌。',
+  return {version:8,baseURL:address,firstUse:firstUse(repo,address),auth:'除本说明外均使用 Authorization: Bearer <token>；从已独立核实的 instance.profile 下读取 '+tokenFile+'，勿打印或提交令牌。',
     contentType:'application/json',routes:routes.map(r=>({auth:true,...r})),
     skillDirectory:{method:'GET',path:'/v1/skills',auth:true,usage:'技能描述和调用示例来自总纲。workflow 的 entry、steps、exit 表示当前对话转录流程。按每项 call 说明通过相应入口调用。'},
     prepare:'依次执行 firstUse.commands 中的 sync、inspect、prepare，使用对应 cwd 与 args。制单只在调用侧生成 registration.json、逐步 SQL 和 reviewHash。先向用户展示归属、前后值、版本、实际结果和无需更新项，取得明确确认；内容改变须重新展示。',
@@ -53,6 +58,9 @@ export function infoGuide(address,repo=gardenRepo){
     reminder:{id:'调用方生成并保存的稳定编号',title:'标题',deadline:'东京时间 YYYY-MM-DDTHH:mm+09:00',state:['queued','running','blocked','done'],
       recordId:'done 时为既有提醒记录编号，否则为 null',error:'暂停原因或 null',created:'UTC ISO',finished:'取得登记回执的 UTC ISO 或 null',
       retry:'请求结果未知时先 GET 原编号。404 才按原内容重交。blocked 可调用原编号的 retry，云端回执不明时核对原登记。正文只用于登记，完成后清除本地队列副本。'},
+    borrow:{state:['queued','running','done','failed'],job:'{ id, channel, state, created, started, finished, error, result, queue? }',
+      result:'ai / comfy：{ image: { mime, base64, width?, height? } }；cli：{ stdout }',commands:Object.keys(CLI_COMMANDS),
+      note:'密钥与模型都留在绯月；调用方只提交输入并按编号轮询。'},
     retry:'202 代表已持久入队，200 为查询、重复提交或恢复回执。超时先按 id 查询。blocked 保留现场；基线变化先查实际状态，只对剩余变更重新制单确认。done 表示最终回读一致，复盘已写入。错误体 {error}；400 参数，401 鉴权，403 来源，404 未找到，409 清单或状态冲突，413 过大，415 正文格式，429 本地待处理已满（稍后按同一编号重交）。',
   };
 }
@@ -65,10 +73,10 @@ function credential(profile){
   return Buffer.from('Bearer '+token);
 }
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
-async function bodyOf(req){
+async function bodyOf(req,limit=8192){
   if(req.headers['content-type']?.split(';')[0].trim()!=='application/json')fail(415,'请提交 JSON');
   let size=0;const parts=[];
-  for await(const chunk of req){size+=chunk.length;if(size>8192)fail(413,'请求体过大');parts.push(chunk);}
+  for await(const chunk of req){size+=chunk.length;if(size>limit)fail(413,'请求体过大');parts.push(chunk);}
   try{const v=JSON.parse(Buffer.concat(parts));if(v&&typeof v==='object'&&!Array.isArray(v))return v;}catch{}
   fail(400,'JSON 请求体无效');
 }
@@ -82,7 +90,7 @@ function reminderInput(input){
   try{normalizeDeadline(deadline);}catch{fail(400,'提醒日期或时分无效');}
   return {id,title:title.trim(),content,deadline};
 }
-export async function openLocalREST({profile,pool,listenPort=port,repo=gardenRepo,load=input=>loadPackage(input,repo)}){
+export async function openLocalREST({profile,pool,borrow,listenPort=port,repo=gardenRepo,load=input=>loadPackage(input,repo)}){
   const expected=credential(profile);
   const instance={pid:process.pid,started:new Date().toISOString(),profile};
   const server=createServer({requestTimeout:15000,headersTimeout:10000},async(req,res)=>{
@@ -103,6 +111,11 @@ export async function openLocalREST({profile,pool,listenPort=port,repo=gardenRep
         return reply(200,directory);
       }
       const id=parts[3];
+      if(parts[2]==='borrow'){
+        if(!borrow)fail(503,'借用接口暂不可用');
+        if(!id){const result=borrow.submit(await bodyOf(req,30*1024*1024));return reply(result.existing?200:202,result);}
+        const job=borrow.get(id);if(!job)fail(404,'借用任务不存在');return reply(200,job);
+      }
       if(parts[2]==='registration-turns'){
         const {draftHash,reviewHash,poll,continues,unsealedOnly}=await bodyOf(req);
         if(typeof draftHash!=='string'||!(/^[a-f0-9]{64}$/).test(draftHash)||

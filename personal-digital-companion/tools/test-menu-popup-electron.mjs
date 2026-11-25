@@ -40,7 +40,7 @@ async function main(){
       electron.nativeTheme.themeSource=theme;
       await open();
       const labels=await js("[...document.querySelectorAll('#items > .item .label')].map(n=>n.textContent)");
-      assert.deepEqual(labels,['问绯月','提醒（3 条未读）','提醒检查 · 待执行','今日任务','三地天气','本地复盘','阅读与学习','任务','桌宠动作','设置与维护']);
+      assert.deepEqual(labels,['问绯月','提醒（3 条未读）','提醒检查 · 待执行','今日任务','三地天气','本地复盘','阅读与学习','任务','动画生成器','桌宠动作','设置与维护']);
       assert.equal(await js("document.querySelectorAll('.group[aria-expanded=true]').length"),0,'重开菜单时所有分组均应折叠');
       const before=page().getBounds();
       assert(before.y+before.height<=area.y+area.height&&before.x+before.width<=area.x+area.width,'菜单超出工作区');

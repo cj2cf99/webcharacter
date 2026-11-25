@@ -28,6 +28,28 @@ export async function hasLocalImageBackend(root){
 }
 
 const extensions={'image/png':'png','image/jpeg':'jpg','image/webp':'webp'};
+
+// 借用接口用：单张图本地 ComfyUI 高清放大（4× NMKD），沿用图像 skill 的版本与工作流，返回结果字节。
+export async function localUpscale({root,profile,image,runPython=python}){
+  const cli=resolve(root,'workflows/comfyui/image_chain.py'),waitCli=resolve(root,'../tools/comfy_job.py');
+  const skill=await runPython(cli,['describe','--profile',profile]);
+  if(!skill.version)throw Error(skill.error??'无法读取图像 skill。');
+  const dir=join(profile,'image-tasks');
+  await mkdir(dir,{recursive:true});
+  const temp=await mkdtemp(join(dir,'borrow-'));
+  let row;
+  try{
+    const path=join(temp,'0.'+(extensions[image.mime]??'png'));
+    await writeFile(path,image.bytes);
+    const original='高清放大';
+    row=await runPython(cli,['submit','--version',skill.version,'--workflow-version',skill.workflowVersion,'--image',path],{original,steps:[{op:'upscale',quote:original,refs:[]}]});
+  }finally{await rm(temp,{recursive:true,force:true});}
+  if(row.state!=='queued')throw Error(row.error??'高清放大提交失败');
+  const done=await runPython(waitCli,['wait',row.localJob??row.job]);
+  if(done.state!=='done')throw Error(done.error??'高清放大失败');
+  const ext=String(done.output).split('.').pop().toLowerCase();
+  return {mime:mimes[ext]??'image/png',bytes:await readFile(done.output),width:done.width,height:done.height};
+}
 const mimes={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp'};
 
 export function createImageTasks({root,profile,interactionWork,onChange,onFinish,archive,log,runPython=python,generateImage=requestGeminiImage,geminiEnabled=isGeminiImageConfigured}){

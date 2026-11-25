@@ -179,7 +179,8 @@ ipcMain.emit('desktop:sound-ready',event);assert.equal(win.sent.at(-1)[1].enable
 ipcMain.emit('desktop:sound-change',event,{enabled:false,volume:23});assert.deepEqual(JSON.parse(readFileSync(join(profile,'sound-settings.json'),'utf8')),normalizeSound({enabled:false,volume:23}));
 ipcMain.emit('desktop:sound-change',event,{enabled:true,volume:999});ipcMain.emit('desktop:sound-ready',event);assert.equal(win.sent.at(-1)[1].volume,23);
 const labels=items=>items.filter(item=>item.type!=='separator').map(item=>item.label);
-assert.deepEqual(labels(tray.menu),['问绯月','今日任务','三地天气','本地复盘','阅读与学习','任务','桌宠动作','设置与维护']);
+assert.deepEqual(labels(tray.menu),['问绯月','今日任务','三地天气','本地复盘','阅读与学习','任务','动画生成器','桌宠动作','设置与维护']);
+assert.deepEqual(labels(tray.menu.find(item=>item.label==='动画生成器').submenu),['切图校准','Gemini 生图','GIF']);
 win.webContents.emit('context-menu');assert.equal(tray.openedMenu,tray.menu,'角色右键与托盘使用同一菜单');
 assert.deepEqual(labels(tray.menu.find(item=>item.label==='任务').submenu),['看绯月写日记','补写本机任务执行评价','绯月任务管理','中断任务与补传','任务日志']);
 const settingsLabels=labels(tray.menu.find(item=>item.label==='设置与维护').submenu);
@@ -456,7 +457,7 @@ if(testGarden){
   const headers={Authorization:'Bearer '+readFileSync(join(profile,'local-api.token'),'utf8'),'Content-Type':'application/json'};
   const base=result.localAPIAddress;
   const guide=await (await fetch(base+'/infoguide')).json();
-  assert.equal(guide.instance.profile,profile);assert.match(guide.batch.steps,/checking/);assert.equal(guide.version,7);assert.match(guide.workStates.formal,/上限 20/);
+  assert.equal(guide.instance.profile,profile);assert.match(guide.batch.steps,/checking/);assert.equal(guide.version,8);assert.match(guide.workStates.formal,/上限 20/);
   assert.ok(guide.routes.some(r=>r.method==='POST'&&r.path==='/v1/reminders'));
   const beforeBatch=win.sent.length,beforeThought=thoughtHistory.length;
   const response=await fetch(base+'/v1/batches',{method:'POST',headers,body:JSON.stringify({id:gardenPlan.id,reviewHash:hash(canonical(gardenPlan)),commit:'1'.repeat(40),userConfirmed:true})});

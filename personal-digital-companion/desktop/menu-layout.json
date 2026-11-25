@@ -22,6 +22,11 @@
     "-",
     {"action":"restoreTerminal","label":"恢复本机任务终端 ID","icon":"🛠"}
   ]},
+  {"label":"动画生成器","icon":"🎬","items":[
+    {"action":"animationCrop","label":"切图校准","icon":"✂"},
+    {"action":"animationGemini","label":"Gemini 生图","icon":"✨"},
+    {"action":"animationGif","label":"GIF","icon":"🎞"}
+  ]},
   {"label":"桌宠动作","icon":"🎀","items":[
     {"action":"visibility","icon":"👁"},
     {"action":"work","icon":"💼"},

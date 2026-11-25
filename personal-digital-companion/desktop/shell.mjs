@@ -6,7 +6,8 @@ import {screenPosture} from './screen-posture.mjs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {dirname,resolve} from 'node:path';
 import {createInteractionWork} from './interaction-work.mjs';
-import {isBandaoConfigured,createVision,setCloudTaskAudit,setCloudFallbackLog,createLocalAi,createPrivateModel,desktopModelPath,readGpuLoad} from './ai-gateway.mjs';
+import {createAnimationMaker} from './animation-maker.mjs';
+import {requestGeminiImage,isBandaoConfigured,createVision,setCloudTaskAudit,setCloudFallbackLog,createLocalAi,createPrivateModel,desktopModelPath,readGpuLoad} from './ai-gateway.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
 import {readFile,stat} from 'node:fs/promises';
@@ -27,7 +28,8 @@ import {createLocalTaskPool} from './local-task-pool.mjs';
 import {remoteGarden} from './garden-backend.mjs';
 import {openLocalREST} from './local-rest.mjs';
 import {parseDeviceBinding,restoreDeviceIdentity} from '../agent/devices/identity.mjs';
-import {hasLocalImageBackend} from './image-tasks.mjs';
+import {hasLocalImageBackend,localUpscale} from './image-tasks.mjs';
+import {createBorrow} from './borrow.mjs';
 import {createMemoryArchive} from './memory-archive.mjs';
 import {migrateMemory} from './migrate-memory.mjs';
 import {attachScenePanel} from './scene-panel.mjs';
@@ -1077,6 +1079,13 @@ export async function startDesktop(electron,options={}){
       warnLiveUpdate('绯月菜单',error);shown?.emit?.('menu-will-close');tray?.popUpContextMenu(shown);
     });
   }
+  // 动画生成器是独立本机网页服务；菜单只负责拉起服务并用系统浏览器打开对应页签。
+  const animationMaker=createAnimationMaker({openExternal:url=>electron.shell.openExternal(url)});
+  function openAnimationMaker(tab){
+    void animationMaker.open(tab).catch(error=>{
+      if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'动画生成器',message:'动画生成器没能打开。',detail:error.message,buttons:['确定']}).catch(()=>{});
+    });
+  }
   function menu(candidate=layout){
     const attachedCommand=click=>({enabled:windowsReady,click});
     const actions={
@@ -1115,6 +1124,9 @@ export async function startDesktop(electron,options={}){
       restoreTerminal:electron.dialog?.showOpenDialog&&{click:()=>taskNotice(restoreLocalTerminal())},
       review:{click:()=>taskNotice(screenQuestion.openReview())},
       knowledge:{click:()=>taskNotice(knowledge.open())},
+      animationCrop:{click:()=>openAnimationMaker('crop')},
+      animationGemini:{click:()=>openAnimationMaker('gemini')},
+      animationGif:{click:()=>openAnimationMaker('gif')},
       notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
       pendingCheck:checks.pending&&{click:()=>taskNotice(screenQuestion.openReview('checks'))},
       pollSettings:{click:()=>taskNotice(pollSettings.open())},
@@ -1407,7 +1419,9 @@ export async function startDesktop(electron,options={}){
         hasRoom:()=>formalRoom(),
         queueInfo:()=>({used:formalUsed(),limit:FORMAL_LIMIT,tasks:tasks.formalCount?.()??0,
           running:localPool?.active?.title??((tasks.executingCount?.()??0)?taskThought?.title??'本机任务':null)})});
-      localREST=await openLocalREST({profile,pool:localPool,...options.localAPI});
+      // 借用接口：动画生成器等本机程序借用 Gemini、ComfyUI 高清放大与已登记 CLI
+      const borrow=createBorrow({gemini:input=>requestGeminiImage(input),upscale:image=>localUpscale({root,profile,image})});
+      localREST=await openLocalREST({profile,pool:localPool,borrow,...options.localAPI});
       localPool.start();
     }catch(error){
       await closeLocalAPI();

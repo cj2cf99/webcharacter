@@ -133,6 +133,18 @@ Invoke-RestMethod "$base/v1/batches/$batchId/ack" -Method Post -Headers $headers
 
 本机 SQLite 在首次启动时建立独立的提醒请求表。花园表、原路由和旧批次回执沿用原有格式。两类任务共享 20 个名额及执行顺序。既有云端提醒模板、业务表、主站代码和提醒检查频率保持。正式工作队列及提醒业务的设计依据见 [正式工作队列](FORMAL_WORK_QUEUE.md) 和 [登记链路](RECORDING_CHAIN_RELEASE_DESIGN.md)。
 
+## v8：本机借用接口（2026-11-25 JST，开发版）
+
+让本机其他程序（首个调用方是动画生成器 `G:/selftool/webmcreator`）借用绯月的 AI、ComfyUI 与已登记 CLI。密钥、模型和工作流都留在绯月，调用方只提交输入并按编号轮询。借用与生图一样是并行工作，不占正式工作名额，不等正式工作空闲；借用任务之间按到达顺序逐个执行。
+
+- `POST /v1/borrow`：新建 202 `{existing:false, job}`，同编号重交 200 返回原任务，同编号换通道 409。请求体上限 30MB，图片单张不超过 20MB。
+  - `channel:'ai'`：`kind:'gemini-image'`、`prompt`（1～4000 字）、可选 `images`（最多 4 张 `{mime, base64}`）、可选 `aspectRatio`（如 `2:3`，传给 Gemini `imageConfig`）。
+  - `channel:'comfy'`：`workflow:'upscale'`、`image:{mime, base64}`，走本机图像 skill 的 4× NMKD 放大。
+  - `channel:'cli'`：`command` 只能是已登记命令，目前只有只读的 `python-version`。
+- `GET /v1/borrow/:id`：返回 `{id, channel, state: queued|running|done|failed, created, started, finished, error, result, queue?}`。`result` 对 ai/comfy 为 `{image:{mime, base64, width?, height?}}`，对 cli 为 `{stdout}`。
+- 结果只留在内存，最多保留最近 30 个；绯月重启后查询返回 404，需按原内容重交。
+- 编号格式同花园批次。鉴权、来源限制与其他路由相同。
+
 ## 正式安装验收后的全局说明条款
 
 待更新位置为 `C:/Users/asura/.codex/AGENTS.md` 和 `C:/Users/asura/.claude/CLAUDE.md`。本次开发阶段自动审批因正式安装、受控重启和验收尚未完成而拒绝写入。实际切换时在两份文件追加以下条款，并在本次发布纪要记录执行情况。

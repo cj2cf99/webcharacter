@@ -455,7 +455,7 @@ export const isGeminiImageConfigured=()=>Boolean(process.env[keyName]?.trim());
 
 const fail=(code,message)=>Object.assign(Error(message??code),{code});
 
-export async function requestGeminiImage({prompt,images=[],signal,timeoutMs=120_000,fetcher=fetch,key=process.env[keyName],model=geminiImageModel}){
+export async function requestGeminiImage({prompt,images=[],aspectRatio,signal,timeoutMs=120_000,fetcher=fetch,key=process.env[keyName],model=geminiImageModel}){
   const secret=key?.trim();
   if(!secret)throw fail('GEMINI_KEY_MISSING','未配置 gemini_aoxing_API_KEY');
   const deadline=AbortSignal.timeout(capTimeoutMs(timeoutMs,120_000));
@@ -465,7 +465,7 @@ export async function requestGeminiImage({prompt,images=[],signal,timeoutMs=120_
     response=await fetcher('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent',{
       method:'POST',redirect:'error',signal:active,headers:{'x-goog-api-key':secret,'content-type':'application/json'},
       body:JSON.stringify({contents:[{parts:[{text:prompt},...images.map(image=>({inlineData:{mimeType:image.mime,data:Buffer.from(image.bytes).toString('base64')}}))]}],
-        generationConfig:{responseModalities:['IMAGE','TEXT']}})});
+        generationConfig:{responseModalities:['IMAGE','TEXT'],...(aspectRatio?{imageConfig:{aspectRatio}}:{})}})});
     raw=await response.text();
   }catch{
     signal?.throwIfAborted();
