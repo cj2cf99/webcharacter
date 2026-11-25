@@ -7,7 +7,7 @@
 - [ai-gateway.mjs](../desktop/ai-gateway.mjs) 在本机后端为 AGY CLI 时用 `withOnDevice` 另配一份本机 4B，首次使用才装载，空闲 5 分钟卸载。`analyze` 的 `hint:'direct'`、`preheatConversation('direct')` 和带 `onDevice` 的 `memory` 走这份模型；`ai-workflow-model` 对 `onDevice` 任务不走半岛。让出显卡、恢复和关闭时两边一起处理。
 - 调用方用 `onDevice` 标出直连任务：对话线回复、知识核对、情绪评价、含直连发言的转录批次。
 - 直连记录用 `direct` 或发言的 `mode:'direct'` 识别，对话线归档回复补上 `direct`。其他对话的上下文、专题检索、手记关联查找、引用上一句、引用提醒和情绪素材读取时跳过。
-- 直连对话线不做历史摘要，只带 1600 字内的最近原话。
+- 直连对话线不做历史摘要，只带 1600 字内的最近原话；模型选「结束」按「回应」处理，对话只由用户结束。
 - 总控 `feiyue-interaction` 正文不再拼进 `instruction`，模型指令只含子技能。旧的 `think` 分支和重启前的模型调用已删除。
 
 ## DeepSeek 手记悬念上限

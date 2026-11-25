@@ -172,6 +172,8 @@ export function createThreadReplies({store,model,cloud,deepseekReply,activeQuest
           use?instruction+' 逐条处理最新发言，优先保留该发言对应的本机核对结论。':instruction,schema,signal,
           {...settings,aiPrivate:privateKnowledge,aiReview,aiStrictReview:aiReview});
           if(!result?.reply?.trim()||!nextStep.enum.includes(result.next))throw Error('本机回复格式无效');
+          // 本机小模型常在闲聊中途选「结束」；直连对话只由用户结束。
+          if(direct&&result.next==='结束')result={...result,next:'回应'};
         }catch(error){
           signal.throwIfAborted();
           void log?.({direction:'local',route:'对话线',stage:'本机回复未完成',turn_id:ids[0],error:error.code??error.name});

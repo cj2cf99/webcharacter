@@ -77,6 +77,20 @@ test('直连对话线交本机回复；原话不进入之后普通发言的模�
   assert.equal(store.archiveTurns(today).filter(turn=>turn.direct).length,1);
 });
 
+test('本机模型在直连里选结束不会关掉对话线，用户仍可结束',async t=>{
+  const root=mkdtempSync(join(tmpdir(),'direct-end-'));
+  const store=createConversationThreads(root,codec);
+  const replies=createThreadReplies({store,model:{memory:async()=>({reply:'那早点睡。',next:'结束'})}});
+  t.after(async()=>{await replies.close();store.close();rmSync(root,{recursive:true,force:true});});
+  const line=store.create({kind:'ordinary'});
+  store.submit(line.id,{text:'好困啊',mode:'direct',organize:false});
+  await replies.run(line.id,{foreground:true});
+  assert.equal(store.get(line.id).pending,0);
+  assert.equal(store.get(line.id).closed,null);
+  store.submit(line.id,{text:'结束这条对话',mode:'direct',organize:false});
+  assert.notEqual(store.get(line.id).closed,null);
+});
+
 test('直连情绪事件不作为之后主动行动的素材',t=>{
   const root=mkdtempSync(join(tmpdir(),'direct-emotion-'));
   const store=createEmotionStore(root);
