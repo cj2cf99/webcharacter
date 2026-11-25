@@ -1,5 +1,12 @@
 # WebCharacter 开发指南
 
+2026-11-25 JST，绯月开发版已完成「新闻周 / 日热点版面与话题概括」全部开发与本地自审：
+- 快照排名与生命周期（[news-board.mjs](../personal-digital-companion/desktop/news-board.mjs)）：周榜（7 日窗口，24h 重算）与日榜（36h 窗口，8h 重算）快照存入 `news_boards`，新增 `news_topics` 表管理在榜、48h 折叠、120h 中断生命周期，按报道 URL 去重计数。
+- 本机 AGY 话题文案与 v2-3 提示词（[news-editorial.mjs](../personal-digital-companion/desktop/news-editorial.mjs)、[news-editor.mjs](../personal-digital-companion/desktop/news-editor.mjs)、`skills/news-editorial/source/` 发布 `v2-3`）：新增 `topic` / `reportBrief` 阶段（`aiLocalOnly: true` 固定走本机、排在社论查询之前、带校验与 1 次 feedback 重试），`title` 收紧至 12–32 字并拆成 `main`（冻结）+ `latest`（只审 `latest`），`summary` 支持 `corrections` 纠错。
+- 节点定稿与旧闻维持（[news-history.mjs](../personal-digital-companion/desktop/news-history.mjs)）：新增迁移 6 写入 `node.fixed` 与冻结 `event.main`，纠错保留原文 `was` 并在详情页显示「已更正」。
+- 左周右日热点面板（[news-panel.html](../personal-digital-companion/desktop/news-panel.html)、[news-panel-ui.mjs](../personal-digital-companion/desktop/news-panel-ui.mjs)、[news-editorial.css](../personal-digital-companion/desktop/news-editorial.css)）：顶部左周右日 5 块热力图（`cqmin` 字号自适应、窄块折行、重排倒计时环），下方双栏实时热度榜（5 行 2 列、默认前 10、展开/收起、最多 30 个折叠话题）。
+- 验证：`news-editorial.test.mjs`（5/5）与 `news-briefing.test.mjs`（20/20）在清空 `bandao_api_key` 下通过；隔离 Electron 实测 `news-panel.html` 1100px/420px 无报错、无横向溢出、单块面积 ≤ 50%、「已更正」徽标正常。尚未提交或部署。
+
 2026-11-25 JST，绯月开发版已优化「闲时·写日记」的收尾耗时与进度体验：在草稿同步、悬念核对和入册阶段全面补充 `done/total` 计数，消除了头顶气泡无终点流动的假死感；新增悬念关键词提取与相关性粗筛排序，优先核对最高匹配事实并自动跳过完全无关事实的大模型调用。详见[手记收尾细化进度与悬念初筛加速](../personal-digital-companion/docs/DEVELOPMENT.md#手记收尾细化进度与悬念初筛加速2026-11-25-jst)。
 
 2026-11-24 JST，绯月开发版已打通本地 AGY CLI 替代本地推理模型，在启动时自动优先检测并使用 AGY CLI，显存占用归零，解决显卡不足问题。在右键菜单「设置与维护」中新增「测试 AGY CLI 推理（⚡）」测试模块，可直接执行人设对话与结构化抽取实测并查看弹窗报告。详见[本机接入 AGY CLI 替代本地推理](../personal-digital-companion/docs/DEVELOPMENT.md#本机接入-agy-cli-替代本地推理与菜单测试模块2026-11-24-jst)。

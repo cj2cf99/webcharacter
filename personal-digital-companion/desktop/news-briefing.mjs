@@ -134,7 +134,8 @@ export function createNewsBriefing(db, now, notify, fetchNews=fetchNewsBriefing,
     if(!items.length)return {state:'answer',text:'最近七天暂无新闻。'};
     const sources = [];
     const entry=boards?.全部;
-    const featured=entry?[...entry.hot,...entry.key].map(id=>items.find(row=>row.id===id)):items;
+    const featured=entry?[...new Set([...(entry.week??[]).map(([id])=>id),...(entry.day??[]).map(([id])=>id)])]
+      .map(id=>items.find(row=>row.id===id)).filter(Boolean):items;
     const stories=featured.map(row=>{
       const detail=history.get(row.id);
       const citations=detail.reports.map(report=>{
@@ -213,11 +214,14 @@ export function createNewsBriefing(db, now, notify, fetchNews=fetchNewsBriefing,
     const detail = failed.length?'；暂时未能读取'+failed.join('、'):'';
     return (fresh.length?'已收录 '+fresh.length+' 条新报道':'本次未收录新报道')+detail+archived;
   }
-  return {latest, edition, feed:history.list, event:history.get, saveChinese, poll, last:()=>read.get()?.lastCheck,
+  return {latest, edition, feed:()=>history.list(Boolean(editorial)), event:history.get, saveChinese, poll, last:()=>read.get()?.lastCheck,
     editorialStep:editorial&&(async signal=>{
-      const result=await editorial.step(history.list(true),history.get,signal);
+      const result=await editorial.step(history.list(true),history.get,signal,{
+        getTopic:history.getTopic,saveTopic:history.saveTopic,saveNodeBrief:history.saveNodeBrief,
+        saveTitle:history.saveTitle,applyCorrections:history.applyCorrections
+      });
       signal.throwIfAborted();
-      if(/^(?:核验新闻标题|汇总新闻事实|合并社论风向)/u.test(result))notify([]);
+      if(/^(?:核验新闻标题|汇总新闻事实|合并社论风向|生成话题提要|生成报道极简述)/u.test(result))notify([]);
       return result;
     }),
     editorialHistory:id=>editorial?.history(id)??[]};

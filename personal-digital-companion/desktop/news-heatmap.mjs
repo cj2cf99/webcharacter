@@ -55,9 +55,25 @@ function fitTitle(card,{width,height}) {
   const available=height-parseFloat(style.paddingTop)-parseFloat(style.paddingBottom);
   const showCount=width>=42 && (flat?available>=Math.max(countLine,line):available>=countLine+gap+line);
   card.classList.toggle('heat-title-only',!showCount);
-  const lead=card.querySelector('.event-lead').getBoundingClientRect().height;
-  const overhead=(showCount&&!flat?countLine+gap:0)+(lead?lead+gap:0);
-  const lines=Math.max(0,Math.floor((available-overhead+.05)/line));
+  const leadEl=card.querySelector('.event-lead');
+  const olderEl=leadEl?.querySelector('.tile-line.older');
+  if(olderEl)olderEl.hidden=false;
+  if(leadEl)leadEl.classList.remove('heat-lead-hidden');
+  const countCost=showCount&&!flat?countLine+gap:0;
+  const calcLines=()=>{
+    const lead=leadEl?leadEl.getBoundingClientRect().height:0;
+    const overhead=countCost+(lead?lead+gap:0);
+    return Math.max(0,Math.floor((available-overhead+.05)/line));
+  };
+  let lines=calcLines();
+  if(lines<1&&olderEl){
+    olderEl.hidden=true;
+    lines=calcLines();
+  }
+  if(lines<1&&leadEl){
+    leadEl.classList.add('heat-lead-hidden');
+    lines=calcLines();
+  }
   card.classList.toggle('heat-no-line',!lines||width<27);
   card.style.setProperty('--title-lines',String(Math.max(1,lines)));
 }

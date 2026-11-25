@@ -62,14 +62,14 @@ export function attachNewsPanel(electron,{root,bundle,checks,model,compile,readI
     },
     detail(event){
       contextWork?.abort();
-      const {id,topic,at,title,latest,timeKind,nodes,reports,paragraphs}=event;
+      const {id,topic,at,title,latest,timeKind,nodes,reports,paragraphs,was}=event;
       const context=contexts.get(id);
       const recent=nodes.at(-1);
-      return {id,topic,at,title,latest,timeKind,paragraphs:context?[context,...paragraphs]:paragraphs,
+      return {id,topic,at,title,latest,timeKind,was,paragraphs:context?[context,...paragraphs]:paragraphs,
         coverageFrom:reports.at(-1).publishedAt,coverageTo:reports[0].publishedAt,
         hasImage:Boolean(imageReport(event)),canEnrich:Boolean(compile&&!contexts.has(id)&&
           (recent.evidence.length<50 || (recent.reports.length>1&&recent.excerpts.join('').length<80))),
-        nodes:nodes.map(node=>({at:node.at,timeKind:node.timeKind,title:node.title,evidence:node.evidence,
+        nodes:nodes.map(node=>({at:node.at,timeKind:node.timeKind,title:node.title,evidence:node.evidence,was:node.was,
           reports:node.reports.map(publicReport)})),
         reports:reports.map(({url,title,source,publishedAt})=>({url,title,source,publishedAt}))};
     },

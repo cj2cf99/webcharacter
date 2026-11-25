@@ -2,18 +2,25 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {readInteractionSkill} from './interaction-skills.mjs';
-import {plannedNewsUpdate,supportedNewsTitle} from './news-editor.mjs';
+import {plannedNewsUpdate,supportedNewsTitle,supportedReportBriefs,supportedTopicCopy} from './news-editor.mjs';
 
 const run=promisify(execFile);
 const script=fileURLToPath(new URL('../workflows/comfyui/news_social.py',import.meta.url));
+const hour=3600000;
 const day=86400000;
 const titlePolicy=2;
 const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',dateStyle:'short'});
 const asText={type:'string'};
 const asList={type:'array',items:asText};
 const shape=properties=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
-const schemas={title:shape({title:asText}),reviewTitle:shape({accept:{enum:['yes','no']},reason:{type:'string',maxLength:36}}),
-  keywords:shape({groups:{...asList,minItems:1,maxItems:3}})};
+const schemas={
+  title:shape({main:asText,latest:asText}),
+  titleLatest:shape({latest:asText}),
+  reviewTitle:shape({accept:{enum:['yes','no']},reason:{type:'string',maxLength:36}}),
+  keywords:shape({groups:{...asList,minItems:1,maxItems:3}}),
+  topic:shape({day:asText,center:asText,brief:asText}),
+  reportBrief:shape({briefs:{...asList,minItems:1,maxItems:2}})
+};
 export const newsWindSchema=refs=>shape({
   refs:{type:'array',items:{enum:refs},minItems:1,maxItems:4},
   title:{type:'string',maxLength:48},summary:{type:'string',maxLength:150},change:{type:'string',maxLength:60}
@@ -50,7 +57,7 @@ export function newsTitleFeedback(latest) {
 }
 
 const phaseName={title:'拟新闻标题',reviewTitle:'核验新闻标题',summary:'汇总新闻事实',keywords:'提取社论关键词',
-  X:'查 X',Reddit:'查 Reddit',wind:'合并社论风向'};
+  X:'查 X',Reddit:'查 Reddit',wind:'合并社论风向',topic:'生成话题提要',reportBrief:'生成报道极简述'};
 const platforms=['X','Reddit'];
 const viewpoint=/\b(?:opinion|why |i think|my stocks|fears|bottleneck|are we witnessing)\b|有观点|担忧|质疑/iu;
 const sampleRows=data=>platforms.flatMap(platform=>{
@@ -107,21 +114,120 @@ export function createNewsEditorial(db,{now,model,compile,skill=()=>readInteract
     remove.run(duplicate);
   }
   let busy=false;
-  async function step({boards,items},getEvent,signal) {
+  async function runTopicStage(id,details,topicRow,selectedSkill,signal,callbacks) {
+    if(!model?.memory||!selectedSkill?.localAi?.topic)return null;
+    const evidence=newsTitleEvidence(details);
+    const current=evidence.at(-1);
+    const timeline=evidence.slice(0,-1).map(({text,...row})=>row);
+    const baseInput={main:details.main??details.title,latest:current,...(timeline.length?{timeline}:{})};
+    let feedback='';
+    for(let attempt=0;attempt<2;attempt++) {
+      const input=feedback?{...baseInput,feedback}:baseInput;
+      const result=await model.memory(JSON.stringify(input),selectedSkill.localAi.topic,schemas.topic,signal,{
+        name:'news-editorial',version:selectedSkill.version,stage:'topic',aiLocalOnly:true,aiPriority:2,maxTokens:180
+      }).catch(error=>{
+        signal.throwIfAborted();
+        if(error.code==='LOCAL_AI_ROUND_PAUSED')throw error;
+        return null;
+      });
+      signal.throwIfAborted();
+      if(!result)return null;
+      const checked=supportedTopicCopy(result);
+      if(checked.ok) {
+        callbacks?.saveTopic?.(id,{
+          basis:String(details.at),
+          day:checked.day,
+          center:topicRow?.center?topicRow.center:checked.center
+        });
+        callbacks?.saveNodeBrief?.(id,details.at,checked.brief);
+        return phaseName.topic+' · '+details.title;
+      }
+      feedback=checked.reason;
+    }
+    return null;
+  }
+
+  async function runReportBriefStage(id,details,topicRow,selectedSkill,signal,callbacks) {
+    if(!model?.memory||!selectedSkill?.localAi?.reportBrief)return null;
+    const latestTwo=details.reports.slice(0,2);
+    const existing=new Map(topicRow?.reports??[]);
+    const missing=latestTwo.filter(r=>!existing.has(r.url));
+    if(!missing.length)return null;
+    const baseInput={reports:missing.map(r=>({title:r.chinese?.title||r.title,excerpt:(r.chinese?.excerpt||r.excerpt||'').slice(0,180)}))};
+    let feedback='';
+    for(let attempt=0;attempt<2;attempt++) {
+      const input=feedback?{...baseInput,feedback}:baseInput;
+      const result=await model.memory(JSON.stringify(input),selectedSkill.localAi.reportBrief,schemas.reportBrief,signal,{
+        name:'news-editorial',version:selectedSkill.version,stage:'reportBrief',aiLocalOnly:true,aiPriority:2,maxTokens:140
+      }).catch(error=>{
+        signal.throwIfAborted();
+        if(error.code==='LOCAL_AI_ROUND_PAUSED')throw error;
+        return null;
+      });
+      signal.throwIfAborted();
+      if(!result)return null;
+      const checked=supportedReportBriefs(result.briefs,missing.length);
+      if(checked.ok) {
+        missing.forEach((r,i)=>existing.set(r.url,checked.briefs[i]));
+        const nextReports=latestTwo.filter(r=>existing.has(r.url)).map(r=>[r.url,existing.get(r.url)]);
+        callbacks?.saveTopic?.(id,{reports:nextReports});
+        return phaseName.reportBrief+' · '+details.title;
+      }
+      feedback=checked.reason;
+    }
+    return null;
+  }
+
+  async function step({boards,items},getEvent,signal,callbacks={}) {
     if(busy)return '本轮编辑正在推进';
     busy=true;
     try {
-      const members=[...new Set(Object.values(boards).flatMap(board=>[...board.hot,...board.key]))];
-      const active=new Set(Object.values(boards).flatMap(board=>[...board.hot,...board.key].filter(id=>!board.quiet.includes(id))));
-      const hot=new Set(Object.values(boards).flatMap(board=>board.hot));
+      const boardIds=b=>[...(b?.week??[]).map(([id])=>id),...(b?.day??[]).map(([id])=>id)];
+      const dayTopIds=[...new Set(Object.values(boards).flatMap(b=>(b?.day??[]).map(([id])=>id)))];
+      const members=[...new Set(Object.values(boards).flatMap(boardIds))];
       const indexed=new Map(items.map(item=>[item.id,item]));
+      const active=new Set(members.filter(id=>{
+        const item=indexed.get(id);
+        return item&&(now()-item.at)<48*hour;
+      }));
+      const hot=new Set(members);
       const queried=data=>Object.keys(data.samples??{}).length>0;
       const ongoing=members.flatMap(id=>byTopic.all(id).map(unpack)
         .filter(row=>!['done','failed'].includes(row.phase)&&!(row.data.waitUntil>now())&&
           (queried(row.data)||row.data.titlePolicy===titlePolicy&&row.revision===indexed.get(id)?.at))
         .map(row=>({item:indexed.get(id),row})));
+      const ongoingNonSocial=ongoing.find(entry=>['title','reviewTitle','summary'].includes(entry.row.phase));
+      const pendingTopicWork=async()=>{
+        if(!model?.memory||!callbacks?.getTopic)return null;
+        const selectedSkill=await skill();
+        signal.throwIfAborted();
+        for(const id of members) {
+          const details=getEvent(id);
+          if(!details)continue;
+          const topicRow=callbacks.getTopic(id);
+          if(!topicRow||topicRow.basis!==String(details.at)) {
+            const msg=await runTopicStage(id,details,topicRow,selectedSkill,signal,callbacks);
+            if(msg)return msg;
+          }
+        }
+        for(const id of dayTopIds) {
+          const details=getEvent(id);
+          if(!details)continue;
+          const topicRow=callbacks.getTopic(id);
+          const existing=new Map(topicRow?.reports??[]);
+          if(details.reports.slice(0,2).some(r=>!existing.has(r.url))) {
+            const msg=await runReportBriefStage(id,details,topicRow,selectedSkill,signal,callbacks);
+            if(msg)return msg;
+          }
+        }
+        return null;
+      };
+      if(!ongoingNonSocial) {
+        const topicMsg=await pendingTopicWork();
+        if(topicMsg)return topicMsg;
+      }
       const current=[...active].map(id=>indexed.get(id)).filter(Boolean);
-      const pending=ongoing[0];
+      const pending=ongoingNonSocial??ongoing[0];
       const target=pending??current.filter(item=>hot.has(item.id)).concat(current.filter(item=>!hot.has(item.id)))
         .map(item=>({item,row:get.get(item.id,item.at)})).find(({row})=>!row||unpack(row).data.titlePolicy!==titlePolicy);
       if(!target)return '榜单编辑与社论风向已更新';
@@ -134,7 +240,7 @@ export function createNewsEditorial(db,{now,model,compile,skill=()=>readInteract
       const selectedSkill=existing?null:await skill();
       signal.throwIfAborted();
       const data=existing?.data??{version:selectedSkill.version,titlePolicy,prompts:selectedSkill.localAi,
-        main:details.title,evidence:newsTitleEvidence(details),
+        main:details.main??details.title,frozenMain:details.main||'',evidence:newsTitleEvidence(details),
         previousTitle:byTopic.all(id).map(unpack).find(row=>row.data.titlePolicy===titlePolicy&&row.data.acceptedTitle)?.data.acceptedTitle,
         olderWind:previous?winds(previous):[],social:hot.has(id)&&!(previous&&winds(previous).length),attempts:0};
       const phase=existing?.phase??'title';
@@ -150,9 +256,9 @@ export function createNewsEditorial(db,{now,model,compile,skill=()=>readInteract
       };
       const currentEvidence=data.evidence.at(-1);
       const timeline=data.evidence.slice(0,-1).map(({text,...row})=>row);
-      const titleInput={main:data.main??details.title,latest:currentEvidence,...(timeline.length?{timeline}:{})};
-      const input=phase==='title'?{...titleInput,previousTitle:data.previousTitle,feedback:data.feedback}:
-        phase==='reviewTitle'?{...titleInput,draft:data.draft}:
+      const titleInput={main:data.frozenMain||data.main||details.title,latest:currentEvidence,...(timeline.length?{timeline}:{})};
+      const input=phase==='title'?{...titleInput,hasMain:Boolean(data.frozenMain),previousTitle:data.previousTitle,feedback:data.feedback}:
+        phase==='reviewTitle'?{...titleInput,draft:data.draftLatest||data.draft}:
         {title:data.acceptedTitle??details.title,evidence:data.evidence};
       function infer(value,schema=schemas[phase]) {
         if(!data.prompts?.[phase])throw Error('编辑技能缺少阶段 '+phase);
@@ -164,13 +270,19 @@ export function createNewsEditorial(db,{now,model,compile,skill=()=>readInteract
       try {
         if(phase==='title'){
           if(!model?.memory){persist('summary');return '标题采用原有可核验进展';}
-          const draft=(await infer(input))?.title?.trim().replace(/。$/u,'');
+          const titleSchema=data.frozenMain?schemas.titleLatest:schemas.title;
+          const out=await infer(input,titleSchema);
           signal.throwIfAborted();
+          const rawMain=(data.frozenMain||out?.main||'').trim().replace(/。$/u,'');
+          const rawLatest=(out?.latest||'').trim().replace(/。$/u,'');
+          const draft=(out?.title?.trim().replace(/。$/u,''))||(rawMain&&rawLatest&&rawMain!==rawLatest?rawMain+'，'+rawLatest:rawMain||rawLatest);
           if(!supportedNewsTitle(draft,data.evidence,data.main)){
             data.feedback=newsTitleFeedback(currentEvidence);
             throw Error('标题缺少有效格式或数据依据');
           }
           data.draft=draft;
+          if(rawMain)data.draftMain=rawMain;
+          if(rawLatest)data.draftLatest=rawLatest;
           persist('reviewTitle');
         } else if(phase==='reviewTitle'){
           const review=await infer(input);
@@ -178,7 +290,10 @@ export function createNewsEditorial(db,{now,model,compile,skill=()=>readInteract
           if(!['yes','no'].includes(review?.accept))throw Error('标题复核缺少结论');
           data.review=review;
           const accepted=acceptedNewsReview(review);
-          if(accepted)data.acceptedTitle=data.draft;
+          if(accepted) {
+            data.acceptedTitle=data.draft;
+            callbacks?.saveTitle?.(id,{main:data.draftMain||data.frozenMain,latest:data.draftLatest||''});
+          }
           if(!accepted&&!data.reviewRetried){
             data.reviewRetried=true;
             data.feedback=review.reason;
@@ -187,9 +302,13 @@ export function createNewsEditorial(db,{now,model,compile,skill=()=>readInteract
         } else if(phase==='summary'){
           if(compile&&details.at===revision){
             const value=await compile(details,signal,{name:'news-editorial',stage:phase,version:data.version,
-              aiCheckpoint:checkpoint,prompt:data.prompts?.summary});
+              aiCheckpoint:checkpoint,prompt:data.prompts?.summary,withCorrections:true});
             signal.throwIfAborted();
-            if(value)data.summary=value;
+            if(typeof value==='string'&&value)data.summary=value;
+            else if(value&&typeof value==='object') {
+              if(value.summary)data.summary=value.summary;
+              if(Array.isArray(value.corrections)&&value.corrections.length)callbacks?.applyCorrections?.(id,value.corrections);
+            }
           }
           persist(data.social?'keywords':'done');
         } else if(phase==='keywords'){

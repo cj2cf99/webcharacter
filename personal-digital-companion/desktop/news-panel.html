@@ -44,23 +44,34 @@
             <p id="count"></p>
           </div>
           <div id="status" class="notice" role="status" hidden></div>
-          <div id="heat-key" class="heatmap-legend" hidden><span>周内热点</span><span>其他重点新闻</span><small>面积按报道数分配 · 单块上限 50%</small></div>
-          <div id="digest-columns">
-          <section class="digest" aria-labelledby="hot-heading" hidden>
-            <h4 id="hot-heading">周内热点</h4>
-            <div id="hot-list" class="event-grid"></div>
-          </section>
-          <section class="digest" aria-labelledby="key-heading" hidden>
-            <h4 id="key-heading">其他重点新闻</h4>
-            <div id="key-list" class="event-grid"></div>
-          </section>
+          <div id="hot-top" class="hot-top" hidden>
+            <section class="hot-half week" aria-labelledby="week-h">
+              <h4 id="week-h"><b>周</b>七日热点 <time id="week-at"></time></h4>
+              <div id="week-map" data-heatmap></div>
+            </section>
+            <section class="hot-half day" aria-labelledby="day-h">
+              <h4 id="day-h"><b>日</b>36 小时热点 <time id="day-at"></time></h4>
+              <div id="day-map" data-heatmap></div>
+            </section>
           </div>
-          <details id="quiet-board" class="quiet-board" hidden>
-            <summary><span class="fy-caret" aria-hidden="true">›</span> 暂未更新 <span id="quiet-count"></span></summary>
-            <div id="quiet-list" class="event-grid"></div>
-          </details>
-          <div id="event-list" class="event-grid" hidden></div>
-          <button id="more-events" type="button" class="paper-button" aria-controls="event-list" aria-expanded="false" hidden>显示更多新闻</button>
+          <div id="hot-rest" class="hot-rest" hidden>
+            <section aria-labelledby="rest-week-h">
+              <h4 id="rest-week-h" class="rest-head week">按周热度</h4>
+              <div id="rest-week" class="rest-list"></div>
+              <div class="rest-foot">
+                <button type="button" class="paper-button more" data-for="rest-week" hidden>展开</button>
+                <button type="button" class="paper-button less" data-for="rest-week" hidden>收起 ▴</button>
+              </div>
+            </section>
+            <section aria-labelledby="rest-day-h">
+              <h4 id="rest-day-h" class="rest-head day">按日热度</h4>
+              <div id="rest-day" class="rest-list"></div>
+              <div class="rest-foot">
+                <button type="button" class="paper-button more" data-for="rest-day" hidden>展开</button>
+                <button type="button" class="paper-button less" data-for="rest-day" hidden>收起 ▴</button>
+              </div>
+            </section>
+          </div>
           <div class="back-top-slot">
             <button id="overview-top" type="button" class="back-top" aria-label="回到总览顶部" hidden>↑ 回到顶部</button>
           </div>

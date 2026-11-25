@@ -19,6 +19,32 @@ const originalTitle = report => cleanNewsTitle(report.title);
 const trimmed = (text, limit) => [...text].length<=limit ? text : [...text].slice(0,limit-1).join('')+'…';
 const archivedSourceKey = url => 'archive:'+createHash('sha256').update(url).digest('hex');
 
+// 综合早报、隔夜要闻一类汇总稿只作来源，不单独推进事件，也不拿来当标题。
+const roundup=/^[【\[]?(?:\d{1,2}月\d{1,2}日)?\s*(?:早报|晚报|午报|早间要闻|晚间要闻|隔夜要闻|要闻汇总|盘前必读|收评|午评|一周回顾|一周看天下|一周要闻|周报)[】\]：:\s|｜丨]/u;
+export const isRoundup = report => roundup.test((report.title||'').normalize('NFKC').trim());
+// 汇总稿排到后面，标题和提要优先取具体报道。
+const leadFirst = reports => [...reports.filter(report=>!isRoundup(report)),...reports.filter(isRoundup)];
+
+// 标题相似度：去掉栏目包装、媒体后缀、话题标签和「提供者」署名后，比较两字片段的 Dice 系数。
+const titleCore = title => cleanNewsTitle(title).normalize('NFKC')
+  .replace(/^[^|｜:：丨]{0,12}(?:异动|讯号|快讯|简讯|速递|要闻)\s*[|｜:：丨]\s*/u,'')
+  .replace(/#[^#]+#/gu,'').replace(/提供者.*$/u,'')
+  .replace(/\s*(?:[-_|｜]+|--)\s*[^-_|｜]{1,20}$/u,'').replace(/[^\p{L}\p{N}]/gu,'').toLowerCase();
+function titleGrams(report) {
+  const text=titleCore(report.chinese?.title||report.title||''), grams=new Set();
+  for (let i=0;i+1<text.length;i++) grams.add(text.slice(i,i+2));
+  return grams;
+}
+export function titleSimilarity(a,b) {
+  const left=titleGrams(a), right=titleGrams(b);
+  if (!left.size || !right.size) return 0;
+  let shared=0;
+  for (const gram of left) if (right.has(gram)) shared++;
+  return 2*shared/(left.size+right.size);
+}
+// 实测正式库：0.55 以上基本是同一事件的不同写法，0.8 以上是同一则消息的转载。
+const sameEventSimilarity=0.55, sameNodeSimilarity=0.8;
+
 function timestamp(report) {
   // 只采用标题开头的明确日期，避免把正文回顾或预告当作最新进展。
   const title=report.title.normalize('NFKC');
@@ -131,7 +157,9 @@ function combinedExcerpts(reports) {
 export function newsDetails(event, brief) {
   const issuer=event.nodes.some(node=>node.stage)?listedIssuer(event.nodes.flatMap(node=>node.reports)):null;
   const nodes=event.nodes.map(node=>{
-    const grouped=brief(node.reports);
+    const excerpts=combinedExcerpts(node.reports);
+    if(node.fixed)return {...node,title:node.fixed.title,evidence:node.fixed.evidence,excerpts};
+    const grouped=brief(leadFirst(node.reports));
     const primary=grouped[0];
     const subject=issuer&&issuer[0].toUpperCase()+issuer.slice(1);
     const recognized=progressHeadline({...event,nodes:[node]},null);
@@ -141,9 +169,8 @@ export function newsDetails(event, brief) {
       selloff:primary?.headline||'美股下挫，科技板块承压',
       second:subject+'上市次日回落'
     })[node.stage];
-    const title=stageTitle||recognized||primary?.headline||titleOf(node.reports[0]);
+    const title=stageTitle||recognized||primary?.headline||titleOf(leadFirst(node.reports)[0]);
     const digest=primary?.headline?primary.summary:'';
-    const excerpts=combinedExcerpts(node.reports);
     const evidence=/仍待独立核实/u.test(recognized)
       ?'现有报道保留在下方，收录材料中尚无可独立核实的正式公告。'
       :[digest,...excerpts].filter(Boolean).join(' ');
@@ -155,7 +182,9 @@ export function newsDetails(event, brief) {
     const stamp=node.timeKind==='报道时间'?'首见 '+tokyo.format(node.at)+' JST':tokyoDay(node.at)+' JST';
     return stamp+' · '+node.title.replace(/[。！!？?]+$/u,'')+'。'+node.evidence;
   });
-  return {...event,title:progressHeadline(event,issuer)||latest.title,latest:latest.title,timeKind:latest.timeKind,paragraphs,nodes,reports};
+  const fallbackTitle=progressHeadline(event,issuer)||latest.title;
+  const twoPart=event.main?(event.latest&&event.latest!==event.main?event.main+'，'+event.latest:event.main):fallbackTitle;
+  return {...event,title:twoPart,latest:latest.title,timeKind:latest.timeKind,paragraphs,nodes,reports};
 }
 
 function validSummary(text) {
@@ -250,12 +279,20 @@ export function createNewsHistory(db,{now,archiveDir,sameReport,brief,compile,de
   const eventDetails=event=>{
     const details=newsDetails(event,brief);
     if(editorial){
-      details.title=editorial.title(event.id,event.at)??details.title;
+      if(!event.main)details.title=editorial.title(event.id,event.at)??details.title;
       const summary=editorial.summary(event.id,event.at);
       if(summary)details.paragraphs=[summary];
     }
     return details;
   };
+  function finalizeNodes(event) {
+    if(event.nodes.every(node=>node.fixed))return event;
+    const details=newsDetails(event,brief);
+    event.nodes.forEach((node,index)=>{
+      if(!node.fixed)node.fixed={title:details.nodes[index].title,evidence:details.nodes[index].evidence};
+    });
+    return event;
+  }
   const expired=(event,at)=>newsTopicAge(event.at,event.nodes.at(-1).timeKind,at)>=7*day;
   const archiveRows=at=>editorial?old.all(at-7*day+1).filter(row=>expired(read(row),at)):old.all(newsWindowStart(at));
   const hasReport=url=>Boolean(source.get(url)||source.get(archivedSourceKey(url)));
@@ -295,7 +332,7 @@ export function createNewsHistory(db,{now,archiveDir,sameReport,brief,compile,de
   }
 
   // 单节点重复稿可以合并。已有时间线保留，由正常收录逐步补充来源。
-  function reconcile(active,touched,changes) {
+  function reconcile(active,touched,changes,fresh=new Set()) {
     const removed=new Set();
     function combine(event,duplicate,newProgress) {
       if(boards?.holds(duplicate.id)&&!boards.holds(event.id)){
@@ -352,6 +389,34 @@ export function createNewsHistory(db,{now,archiveDir,sameReport,brief,compile,de
       event.nodes.push(...candidate.nodes);
       event.at=candidate.at;
       combine(event,candidate,true);
+    }
+    // 规则都没认出的单节点新事件，按标题相似度并入两天内同类的已有事件。
+    // 只处理 fresh 里的事件，已刊出的历史不因规则升级而重排。行情稿模板化，只按转载合并。
+    for (const candidate of active.filter(event=>fresh.has(event.id)&&!removed.has(event.id)&&event.nodes.length===1)
+      .sort((a,b)=>a.at-b.at)) {
+      const reports=candidate.nodes[0].reports, market=family(candidate.topic)==='市场';
+      let best=null;
+      for (const event of active) {
+        if (event===candidate || removed.has(event.id) || family(event.topic)!==family(candidate.topic) ||
+            Math.abs(event.at-candidate.at)>2*day) continue;
+        for (const node of event.nodes) for (const prior of node.reports) for (const report of reports) {
+          const score=titleSimilarity(prior,report);
+          if (score>(best?.score??0)) best={event,node,score};
+        }
+      }
+      if (!best || best.score<(market?sameNodeSimilarity:sameEventSimilarity)) continue;
+      const {event,node}=best;
+      // 转载、12 小时内的改写和汇总稿补进最像的节点；隔得更久的相似报道作为新的进展节点。
+      const sameNode=best.score>=sameNodeSimilarity || reports.every(isRoundup) ||
+        Math.abs(candidate.nodes[0].at-node.at)<=day/2;
+      if (sameNode) node.reports.push(...reports);
+      else {
+        event.nodes.push(candidate.nodes[0]);
+        event.nodes.sort((a,b)=>a.at-b.at);
+      }
+      const advanced=event.at<event.nodes.at(-1).at;
+      event.at=event.nodes.at(-1).at;
+      combine(event,candidate,advanced);
     }
     if(!editorial)return;
     // 明确地点、动作或当事主体后，保留已有榜单编号，把同一次进展的来源放回同一个节点。
@@ -438,7 +503,7 @@ export function createNewsHistory(db,{now,archiveDir,sameReport,brief,compile,de
     const start=editorial?at-8*day:newsWindowStart(at);
     const active=matching.all(Math.min(start,...items.map(row=>row.publishedAt))).map(read)
       .filter(event=>!editorial||!expired(event,at));
-    const changes=new Map(), touched=new Map();
+    const changes=new Map(), touched=new Map(), fresh=new Set();
     for (const row of [...items].sort((a,b)=>a.publishedAt-b.publishedAt)) {
       if (!newsSourceUrl(row.url) || typeof row.title!=='string' ||
           typeof row.topic!=='string' || !Number.isFinite(row.publishedAt) || hasReport(row.url)) continue;
@@ -452,14 +517,18 @@ export function createNewsHistory(db,{now,archiveDir,sameReport,brief,compile,de
       if (!event) {
         event={id:randomUUID(),topic:row.topic,at:row.publishedAt,nodes:[]};
         active.push(event);
+        fresh.add(event.id);
       }
       if (addReport(event,row,match?.node)) changes.set(event.id,event);
       else updateMarket(event,match.node);
       touched.set(event.id,event);
       remember.run(row.url,event.id);
     }
-    if (touched.size) reconcile(active,touched,changes);
-    for (const event of touched.values()) save.run(event.id,event.at,JSON.stringify(event));
+    if (touched.size) reconcile(active,touched,changes,fresh);
+    for (const event of touched.values()) {
+      finalizeNodes(event);
+      save.run(event.id,event.at,JSON.stringify(event));
+    }
     return [...changes.values()].map(eventDetails).sort((a,b)=>b.at-a.at);
   }
 
@@ -490,24 +559,69 @@ export function createNewsHistory(db,{now,archiveDir,sameReport,brief,compile,de
         for(const event of touched.values())save.run(event.id,event.at,JSON.stringify(event));
         db.exec('INSERT INTO news_history_migration VALUES(4)');
       }
+      // 2026-11-25 用户确认：现存七日内的单节点事件按标题相似度一次性重并，之后只处理新收录。
+      if(!db.prepare('SELECT 1 FROM news_history_migration WHERE id=5').get()){
+        const at=now(),touched=new Map();
+        const recent=matching.all(editorial?at-8*day:newsWindowStart(at)).map(read)
+          .filter(event=>event.at<=at&&(!editorial||!expired(event,at)));
+        reconcile(recent,touched,new Map(),new Set(recent.filter(event=>event.nodes.length===1).map(event=>event.id)));
+        for(const event of touched.values())save.run(event.id,event.at,JSON.stringify(event));
+        db.exec('INSERT INTO news_history_migration VALUES(5)');
+      }
+      // 迁移 6：节点定稿并冻结现有整句标题作为 main，不重新生成。
+      if(!db.prepare('SELECT 1 FROM news_history_migration WHERE id=6').get()){
+        const at=now();
+        const recent=matching.all(editorial?at-8*day:newsWindowStart(at)).map(read)
+          .filter(event=>event.at<=at&&(!editorial||!expired(event,at)));
+        for(const event of recent){
+          const prev=JSON.stringify(event);
+          finalizeNodes(event);
+          if(!event.main){
+            const current=eventDetails(event).title;
+            if(current)event.main=current;
+          }
+          if(JSON.stringify(event)!==prev)save.run(event.id,event.at,JSON.stringify(event));
+        }
+        db.exec('INSERT INTO news_history_migration VALUES(6)');
+      }
       db.exec('COMMIT');
     } catch(error) {db.exec('ROLLBACK');throw error;}
   }
 
   function list(persist=false) {
-    const at=now(), from=newsWindowStart(at);
+    const at=now(), from=newsWindowStart(at), dayFrom=at-36*3600000;
+    const topicsMap=boards?.allTopics?.();
     const items=matching.all(editorial?at-8*day:from).map(read)
       .filter(event=>event.at<=at&&(!editorial||!expired(event,at))).map(event=>{
-        const latest=event.nodes.at(-1), report=latest.reports[0];
-        const group=brief(latest.reports)[0];
+        const latest=event.nodes.at(-1), report=leadFirst(latest.reports)[0];
+        const group=brief(leadFirst(latest.reports))[0];
         const issuer=event.nodes.some(node=>node.stage)?listedIssuer(event.nodes.flatMap(node=>node.reports)):null;
         const main=progressHeadline(event,issuer);
         const fallback=main||group?.headline||titleOf(report);
-        const title=editorial?.title(event.id,event.at)??fallback;
+        const twoPart=event.main?(event.latest&&event.latest!==event.main?event.main+'，'+event.latest:event.main):null;
+        const title=twoPart??editorial?.title(event.id,event.at)??fallback;
         const reports=event.nodes.flatMap(node=>node.reports);
-        const weekly=reports.filter(report=>report.publishedAt>=from);
+        const weekFrom=editorial?at-7*day:from;
+        const weekly=reports.filter(report=>report.publishedAt>=weekFrom&&report.publishedAt<=at);
+        const daily=reports.filter(report=>report.publishedAt>=dayFrom&&report.publishedAt<=at);
+        const weekHeat=new Set(weekly.map(r=>r.url)).size;
+        const dayHeat=new Set(daily.map(r=>r.url)).size;
+        const age=newsTopicAge(event.at,latest.timeKind,at);
+        const topicRow=topicsMap?.get(event.id);
+        const reportBriefs=new Map(topicRow?.reports??[]);
+        const details=event.nodes.some(n=>!n.fixed)?newsDetails(event,brief):null;
+        const weekLines=event.nodes.slice(-2).reverse().map((node,idx)=>{
+          const fallbackNodeTitle=node.fixed?.title??details?.nodes[event.nodes.length-1-idx]?.title??titleOf(leadFirst(node.reports)[0]);
+          return [node.brief||fallbackNodeTitle,node.at];
+        });
+        const sortedReports=[...reports].sort((a,b)=>b.publishedAt-a.publishedAt);
+        const dayLines=sortedReports.slice(0,2).map(r=>[reportBriefs.get(r.url)||titleOf(r),r.publishedAt]);
         return {id:event.id,topic:event.topic,at:event.at,timeKind:latest.timeKind,title,
-          ...(editorial?{reportCount:reports.length,hasPhoto:reports.some(row=>row.imageUrl)}:{}),
+          main:event.main||'',latestText:event.latest||'',
+          weekHeat,dayHeat,age,
+          isTopic:Boolean(topicRow),center:topicRow?.center||'',dayText:topicRow?.day||'',
+          weekLines,dayLines,
+          ...(editorial?{reportCount:weekHeat,hasPhoto:reports.some(row=>row.imageUrl)}:{}),
           days:new Set(weekly.map(report=>tokyoDay(report.publishedAt))).size,
           publishers:new Set(weekly.map(report=>report.source).filter(Boolean)).size,
           importance:Math.max(newsImportance(title),...reports.map(report=>newsImportance(report.title))),
@@ -515,8 +629,18 @@ export function createNewsHistory(db,{now,archiveDir,sameReport,brief,compile,de
             group?.summary||latest.reports.map(excerpt).find(Boolean)||title,100),
           titleUrl:title!==fallback||main||group?.headline||report.chinese?.title?'':report.url,titleLang:report.lang};
       });
+    const builtBoards=boards?boards.build(items,at,persist):undefined;
+    if(builtBoards&&persist) {
+      const freshTopics=boards.allTopics();
+      for(const item of items) {
+        const row=freshTopics.get(item.id);
+        item.isTopic=Boolean(row);
+        item.center=row?.center||'';
+        item.dayText=row?.day||'';
+      }
+    }
     return {at,from,pendingArchive:editorial?archiveRows(at).length:countOld.get(from).total,items,
-      ...(boards?{boards:boards.build(items,at,persist)}:{})};
+      ...(builtBoards?{boards:builtBoards}:{})};
   }
 
   function saveChinese(url,field,original,value) {
@@ -560,6 +684,7 @@ export function createNewsHistory(db,{now,archiveDir,sameReport,brief,compile,de
           for (const report of details.reports) rememberArchived.run(archivedSourceKey(report.url));
           deleteUrls.run(row.id);
           editorial?.remove(row.id);
+          boards?.removeTopic(row.id);
           drop.run(row.id);
           saved++;
         }
@@ -568,10 +693,51 @@ export function createNewsHistory(db,{now,archiveDir,sameReport,brief,compile,de
     }
     return {saved,pending:editorial?archiveRows(at).length:countOld.get(newsWindowStart(at)).total,failed};
   }
-  return {ingest,migrate,list,saveChinese,archive,hasReport,get:id=>{
+  function saveNodeBrief(id,nodeAt,briefText) {
     const event=read(get.get(id));
-    return event&&eventDetails(event);
-  }};
+    if(!event)return;
+    const node=event.nodes.find(n=>n.at===nodeAt)||event.nodes.at(-1);
+    if(!node||node.brief)return;
+    node.brief=briefText;
+    save.run(event.id,event.at,JSON.stringify(event));
+  }
+  function saveTitle(id,{main,latest}) {
+    const event=read(get.get(id));
+    if(!event)return;
+    if(main&&!event.main)event.main=main;
+    if(latest!==undefined)event.latest=latest;
+    save.run(event.id,event.at,JSON.stringify(event));
+  }
+  function applyCorrections(id,corrections) {
+    const event=read(get.get(id));
+    if(!event||!Array.isArray(corrections))return;
+    let changed=false;
+    for(const {index,field,text} of corrections) {
+      if(!text||!['title','evidence','main'].includes(field))continue;
+      if(field==='main') {
+        if(event.main&&event.main!==text){event.was=event.was||event.main;event.main=text;changed=true;}
+        continue;
+      }
+      const node=event.nodes[index];
+      if(!node)continue;
+      finalizeNodes(event);
+      const oldVal=node.fixed?.[field];
+      if(oldVal&&oldVal!==text){
+        node.was={...node.was,[field]:oldVal};
+        node.fixed[field]=text;
+        changed=true;
+      }
+    }
+    if(changed)save.run(event.id,event.at,JSON.stringify(event));
+  }
+  return {ingest,migrate,list,saveChinese,archive,hasReport,
+    saveNodeBrief,saveTitle,applyCorrections,
+    getTopic:id=>boards?.getTopic(id)??null,
+    saveTopic:(id,patch)=>boards?.saveTopic(id,patch),
+    get:id=>{
+      const event=read(get.get(id));
+      return event&&eventDetails(event);
+    }};
 }
 
 export function newsSourceUrl(value) {

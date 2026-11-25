@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>绯月 · 周/日热点版面预览</title>
+  <!-- 直接引用桌面面板的真实样式，预览只追加本次新增的部分 -->
+  <link rel="stylesheet" href="styles/feiyue-surface.css">
+  <link rel="stylesheet" href="styles/news-panel.css">
+  <link rel="stylesheet" href="styles/news-weekly.css">
+  <link rel="stylesheet" href="styles/news-editorial.css">
+  <link rel="stylesheet" href="news-hot.css">
+  <script src="real-data.js"></script>
+  <script src="heatmap.js"></script>
+  <script src="news-hot.js" defer></script>
+</head>
+<body class="v-a">
+  <div id="proto-bar" aria-label="预览控制（仅原型）">
+    <button type="button" id="theme" aria-pressed="false">深色</button>
+    <button type="button" id="narrow" aria-pressed="false">窄窗</button>
+    <i></i>
+    <button type="button" id="tick8">时钟 +8h</button>
+    <span id="clock"></span>
+  </div>
+  <header class="fy-titlebar">
+    <div class="fy-caption"><h1>新闻简报</h1></div>
+    <button id="refresh" class="fy-icon" type="button" aria-label="刷新简报" title="刷新简报"><span aria-hidden="true">↻</span></button>
+  </header>
+  <main class="fy-scroll">
+    <div class="page">
+      <header class="mast">
+        <div class="nameplate">
+          <h2>绯月<span>七日新闻</span></h2>
+          <p id="edition">东京时间 JST</p>
+        </div>
+        <div class="engraving" aria-hidden="true"></div>
+      </header>
+      <div class="folio">
+        <nav id="filters" aria-label="新闻栏目">
+          <button type="button" aria-pressed="true">全部</button>
+          <button type="button" aria-pressed="false">社会</button>
+          <button type="button" aria-pressed="false">科技</button>
+          <button type="button" aria-pressed="false">市场</button>
+        </nav>
+        <div class="folio-actions">
+          <button type="button" class="paper-button">本地归档 ↗</button>
+        </div>
+      </div>
+      <section class="overview" aria-label="热点">
+        <div class="hot-top">
+          <section class="hot-half week" aria-labelledby="week-h">
+            <h4 id="week-h"><b>周</b>七日热点 <time id="week-at"></time></h4>
+            <div id="week-map" data-heatmap></div>
+          </section>
+          <section class="hot-half day" aria-labelledby="day-h">
+            <h4 id="day-h"><b>日</b>36 小时热点 <time id="day-at"></time></h4>
+            <div id="day-map" data-heatmap></div>
+          </section>
+        </div>
+        <div class="hot-rest">
+          <section aria-labelledby="rest-week-h">
+            <h4 id="rest-week-h" class="rest-head week">按周热度</h4>
+            <div id="rest-week" class="rest-list"></div>
+            <div class="rest-foot"><button type="button" class="paper-button more" data-for="rest-week">展开</button><button type="button" class="paper-button less" data-for="rest-week" hidden>收起 ▴</button></div>
+          </section>
+          <section aria-labelledby="rest-day-h">
+            <h4 id="rest-day-h" class="rest-head day">按日热度</h4>
+            <div id="rest-day" class="rest-list"></div>
+            <div class="rest-foot"><button type="button" class="paper-button more" data-for="rest-day">展开</button><button type="button" class="paper-button less" data-for="rest-day" hidden>收起 ▴</button></div>
+          </section>
+        </div>
+        <p class="proto-note">原型：数据为虚构；话题文案示意 AGY 产出。块面积按快照热度，日榜满 8h、周榜满 24h 才重排。</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

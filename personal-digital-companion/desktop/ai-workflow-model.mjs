@@ -228,13 +228,13 @@ export function createAiWorkflowModel({model,assistant,file,log,safeStorage,onBu
   }
   const queue=createAiRequestQueue({file,resumeInput,log,safeStorage,kindFor,onBusy,executionPolicy,reportsInference:true,laneFor:input=>queueLane(laneFor(input)),execute,interpret:interpretStep});
   async function memory(text,instruction,schema,signal,options={}){
-    const {aiReview=false,aiCheckpoint,aiPriority=1,aiCurrentPriority,aiDeferred=false,aiKeep,aiFallback,aiBudget:_,aiPrivate=false,aiManual=false,aiProgress,...skill}=options;
+    const {aiReview=false,aiCheckpoint,aiPriority=1,aiCurrentPriority,aiDeferred=false,aiKeep,aiFallback,aiBudget:_,aiPrivate=false,aiLocalOnly=false,aiManual=false,aiProgress,...skill}=options;
     let input={phase:'simple',text,instruction,schema,skill,keep:aiKeep,fallback:aiFallback,background:!aiPrivate&&(aiManual||aiPriority<6)};
     // 判断、复核和短评留本机 4B；私密任务留本机；其余交给半岛云端单次完成。
     const kind=kindFor(input);
     // 补行动评价、来源补评连着来：全部留在本机后端同一个批处理会话里单次完成，不在云端和本机之间来回切换。
     const backfill=isDiaryReview(skill);
-    input.cloud=!backfill&&routesToCloud({kind,private:aiPrivate,short:aiReview&&shortRating(input)});
+    input.cloud=!backfill&&!aiLocalOnly&&routesToCloud({kind,private:aiPrivate,short:aiReview&&shortRating(input)});
     if(aiReview&&kind!=='judgment'&&!input.cloud&&!backfill)input.phase='draft';
     if(input.phase==='simple')input.skill={...skill,aiKind:kind,...(backfill?{aiSingleAttempt:true,aiBatch:true}:{})};
     if(aiPrivate){
