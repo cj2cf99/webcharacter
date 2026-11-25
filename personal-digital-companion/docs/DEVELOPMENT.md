@@ -3,6 +3,12 @@
 - **问题与改动**：Windows 系统截图（`Win+Shift+S`）弹出的全屏遮罩原会被 `fullscreenDisplays()` 误判为全屏应用，导致绯月瞬间避让闪现。现于 `desktop/watch-windows.ps1` 增加 `overlay` 字段，通过 `OpenProcess(QueryLimitedInfo)` + `QueryFullProcessImageName`（单次枚举内缓存 PID）识别 `ScreenClippingHost` 及带 `TopMost`/`ToolWindow` 样式的 `SnippingTool` 遮罩，置 `overlay=true`、`eligible=false`；`desktop/movement.mjs` 的 `fullscreenDisplays()` 跳过 `window.overlay` 窗口，使纯截屏遮罩不触发避让，而遮罩后方确有真实全屏应用时继续避让。
 - **验证与部署**：`movement.mjs` 语法校验、4 组全屏遮罩边界断言、`tools/test-walk.mjs`、`watch-windows.ps1` 实机编译运行及 C# `IsScreenshotOverlay` 6 项反射断言全部通过。已于 2026-11-25 14:23 JST 完成正式版 2 文件原子替换（备份至 `output/install-backup-screenshot-overlay-20261125/`），14:25 JST 受控重启（PID `28832`，后续运行实例 PID `38852`）；花园批次 `feiyue-screenshot-overlay-20261125` 于 15:39 JST 完成（版本 `34.2 → 34.3`，修订 `184 → 186`，部署 #113 / 明细 #197 / Bug #33 `open`）。真机 `Win+Shift+S` 效果待用户确认；发布回执见 [RELEASE_REVIEW.md](../RELEASE_REVIEW.md)。
 
+## 清单生成即结束对话（2026-11-25 JST · 开发完成，部署已确认、尚未安装）
+
+问题：12:20 版只结束「待确认」线，普通聊天里生成后只留言，用户看到对话仍停着。改动：`conversation-threads.notice` 带收尾语即结束任何打开的线；`conversation-transcription` 生成完成或整张放弃一律视为了结，去掉“同线另有卡”的查询和提醒卡的 `origin` 摘要字段，缺项留言改为另开对话补登记。失败、停止、未完成和登记前缺项仍保持打开。无 SQLite 结构迁移。
+
+验证（清掉云端密钥并让 AGY 视为未安装）：基线 `ff4ff2a` 全量 585 项，574 通过、3 跳过、8 失败；改动版全量 584 项，572 通过、3 跳过、9 失败，多出的 1 项是仍按旧返回值写的断言，修正后对话线、整理提示、直连与收尾测试 38 项通过。界面代码未改，未跑 Electron 巡检；未用真实模型和真实资料实测。
+
 ## 直连只走本机与旧思索分支清理（2026-11-25 JST · 已安装并登记）
 
 问题：AGY CLI 成为本机后端后，直连内容会离开本机。现行界面的直连发言走对话线，按代码被当作普通任务发给半岛；非对话线路径、知识核对和旧批次整理发给 AGY；同一条线之后的普通发言还会带上直连原话作历史。上一次核查只指出了 AGY 一路。

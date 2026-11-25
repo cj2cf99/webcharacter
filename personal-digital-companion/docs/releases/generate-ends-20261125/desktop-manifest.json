@@ -1,0 +1,15 @@
+{
+ "target": "G:\\selftool\\.release-feiyue-handbook-desktop-20261120\\personal-digital-companion",
+ "files": [
+  {
+   "path": "desktop/conversation-threads.mjs",
+   "baseline": "3A1378BFFDA364AC9459202A6FDFBC1359A84EDDDFBD4AC9601680798E197B14",
+   "candidate": "3A363214D4FA0C52BA1E75D5A833AF180A0504ED8DD9D182E550C072B7184838"
+  },
+  {
+   "path": "desktop/conversation-transcription.mjs",
+   "baseline": "845506D8FCAA805930C4C6D8EA9504B593444EC1C609DFED0B53BA7BC4A727B6",
+   "candidate": "E5B402EEC750515C90A7BA4E4B4FF0562D7433CDAD4F0208FAB6CE7DE0502D88"
+  }
+ ]
+}
