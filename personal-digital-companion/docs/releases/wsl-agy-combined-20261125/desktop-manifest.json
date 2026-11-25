@@ -1,0 +1,81 @@
+{
+  "id": "feiyue-wsl-agy-combined-20261125",
+  "createdAt": "2026-11-25T17:41:00+09:00",
+  "sourceCommit": "1b759fe76957a26de6f1d3f4818c4151bcfffe49",
+  "targetRoot": "G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion",
+  "baselineInstancePid": 15156,
+  "items": [
+    {
+      "file": "desktop/agy-cli-client.mjs",
+      "action": "replace",
+      "baselineSha256": "FC439AF7C3102BD3ABD1E077D70E3675E8AED37FD6DEE7475F2ECF28ABCD6508",
+      "candidateSha256": "2010A7DEC9EFBE6E33B9C87753F5CF302A67C14C1134B4ADD498E82EE614DE35"
+    },
+    {
+      "file": "desktop/agy-local-model.mjs",
+      "action": "replace",
+      "baselineSha256": "1741BED1C77E9B28E1E48EA9D01DF170F0E80F0B24BC942DB5F78CA3F8AE9C7F",
+      "candidateSha256": "82E3D74B264BB7BA4E1FF264AC2D9A0476E03FE151AA2923F4ED80BA0CF2BD46"
+    },
+    {
+      "file": "desktop/ai-gateway.mjs",
+      "action": "replace",
+      "baselineSha256": "B6F7E7FC31AC4B78836CB54F5F1DC51D2A93A267BFD38FBB1518ACDB201D2DEE",
+      "candidateSha256": "45600096C61D7D49D9F5EA0E1830CD9253B4397009923CE3A57199022DC78C2E"
+    },
+    {
+      "file": "desktop/vision-client.mjs",
+      "action": "add",
+      "baselineSha256": null,
+      "candidateSha256": "073F9514469B8A5FB02196DE020B7FCFD97ABAE90DDD88C2885DB9316533C9D2"
+    },
+    {
+      "file": "desktop/conversation-threads.mjs",
+      "action": "replace",
+      "baselineSha256": "3A1378BFFDA364AC9459202A6FDFBC1359A84EDDDFBD4AC9601680798E197B14",
+      "candidateSha256": "3A363214D4FA0C52BA1E75D5A833AF180A0504ED8DD9D182E550C072B7184838"
+    },
+    {
+      "file": "desktop/conversation-transcription.mjs",
+      "action": "replace",
+      "baselineSha256": "845506D8FCAA805930C4C6D8EA9504B593444EC1C609DFED0B53BA7BC4A727B6",
+      "candidateSha256": "E5B402EEC750515C90A7BA4E4B4FF0562D7433CDAD4F0208FAB6CE7DE0502D88"
+    },
+    {
+      "file": "desktop/interaction-work.mjs",
+      "action": "replace",
+      "baselineSha256": "482D7D76EC73CC2C4CDC93764136E1BE72DB858E20E8B5FDA5C3F47A9E46969E",
+      "candidateSha256": "426FC038E6E5663950C4947B7EA7559933441BB6FD4073619A7505960DD6B026"
+    },
+    {
+      "file": "desktop/menu-layout.json",
+      "action": "replace",
+      "baselineSha256": "2677AC65C7D74834F6CFF8AA6E7F014ADAB3D5A9F9D5998206956A6ADBDD4D4C",
+      "candidateSha256": "53FE6220E35791DAD4DC5087E85463445FFAB7461529923B9F54682D3FD07A70"
+    },
+    {
+      "file": "desktop/scene-curiosity.mjs",
+      "action": "replace",
+      "baselineSha256": "B03272DF3D85177F3254DBB6678C6BBA834627E02E9880123CF3B07A7D5DC987",
+      "candidateSha256": "27FB134A5CACDB455AFA783A8E475A2A9F42EB3C19146400C48C72B31E0DA446"
+    },
+    {
+      "file": "desktop/screen-question-client.mjs",
+      "action": "replace",
+      "baselineSha256": "116251125A514C391419BAD77AF5DF45F8BD8FC4BF1780A2D258817D702253E5",
+      "candidateSha256": "DCABE7FC90E4912CADB03634D1FAD6FFF9E0BA749179E9B86716726C65FDDE32"
+    },
+    {
+      "file": "desktop/screen-question-host.mjs",
+      "action": "replace",
+      "baselineSha256": "23B2AEC1EA4A1EB72EAFDCEF472F1E7650028C36DA2763B82EF157ADDBAC341B",
+      "candidateSha256": "6A4A4EF0A3276BEF5F06E493E29B0AFE17558F4C3D7F60FE90E31E1E42014F26"
+    },
+    {
+      "file": "desktop/shell.mjs",
+      "action": "replace",
+      "baselineSha256": "E60F9888F21B57B0CF53A492890069500BB816F21D37117164847FC7C46875DF",
+      "candidateSha256": "EA33EB7C78CD8FA90CF7BBEF0C5EBF301832C65E0F360C8A52D62F16D78A6087"
+    }
+  ]
+}

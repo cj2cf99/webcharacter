@@ -1,3 +1,68 @@
+## 2026-11-25 WSL2 独立 AGY CLI、20 分钟熔断、即用即预热、AGY 识图与清单生成收尾 · 绯月 Windows 正式安装版 · 已部署（线上效果待用户确认）
+
+状态：**已于 2026-11-25 17:42 JST 完成 12 文件原子安装并受控重启（PID `11232`，WSL2 `agy-wsl` 启动即自动预热就绪），花园登记已于 17:46 JST 完成回读并取回确认（`34.4 → 34.5`，修订 `189 → 190`）**。发布前 2 轮自审通过，见 [COMBINED_DEPLOY_SELF_REVIEW_2026-11-25.md](docs/reviews/COMBINED_DEPLOY_SELF_REVIEW_2026-11-25.md)。真实桌面 UI 与多屏截图效果由用户手动确认。第三方审核：无。
+
+### 安装、重启与花园登记回执
+- 基线复核：11 个已有目标文件 SHA-256 100% 匹配基线，`vision-client.mjs` 原不存在（`BASELINE_VERIFIED: 12/12`）。
+- 备份路径：`G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/install-backup-wsl-agy-combined-20261125/`（11 个原文件）。
+- 原子替换与校验：12/12 文件原子替换并复核 SHA-256 与语法校验全部通过（`INSTALL_AND_SYNTAX_VERIFIED: 12/12`）。
+- 受控重启与实例核验：结束旧进程 PID `15156` 后启动正式安装目录新进程 PID `11232`；`Get-NetTCPConnection -LocalPort 8765`、`Win32_Process` 与 `http://127.0.0.1:8765/infoguide` 核对一致（`pid=11232`，`started=2026-11-25T08:42:48.561Z` / `17:42:48 JST`，资料目录不变）；受理登记时运行实例 PID `27632` 在线。
+- WSL2 预热验收：重启后立即确认 `agy-wsl` 内已自动拉起待命进程 `/home/agy/.local/bin/agy -p --input-format stream-json --output-format stream-json --model gemini-3.8-flash-low`。
+- 花园登记：用户确认“确认登记”。批次 `feiyue-wsl-agy-combined-20261125`，登记包提交 `419aad622d8759528cf3cc2b86556ebf01b79c23`（`G:/cloudflare/myapp`，本地提交，未推送），确认摘要 `ffa57df101459a6bde1b4fc954e9c75a5c42d7796029cca28cc709d2e5934307`。于 `17:45:57 JST` 入队、`17:46:13 JST` 步骤核验 `verified`、`17:46:19 JST` 状态 `done`、`17:46:21 JST` 完成 `ack`：修订 `189 → 190`、部署 `#115` / 明细 `#199`、「网页角色组件 → 绯月（桌面精灵）」版本 `34.4 → 34.5`。纯登记元数据，未做数据库备份。
+- 真机桌面 UI/多屏截图效果：待用户在桌面实际操作确认。
+
+### 需求与验收
+1. **WSL2 独立 AGY CLI 与 E 盘集中存放**：将本地 `agy` CLI 迁入独立 WSL2 容器 `agy-wsl`（虚拟盘 `E:\wsl-agy\distro\ext4.vhdx`，工作与识图临时目录集中于 `E:\wsl-agy\temp`），进程回收先 `stdin.end()` 后 6 秒兜底强杀，零残留孤儿进程。
+2. **`RESOURCE_EXHAUSTED` 20 分钟全局熔断**：任意 AGY 路径报 `RESOURCE_EXHAUSTED` 后 20 分钟内内部直接跳过 `agy` CLI（对话/任务/批处理/识图均零访问、识图不写临时图、按访问失败走半岛或云端视觉兜底、跳过态不写 AGY 错误日志），期满自动恢复。
+3. **启动即预热与即用即预热**：启动后立刻预热首个进程（不用等对话到来），新对话会话与任务共用预热槽，一次预热结束后一旦开始使用立刻预热下一条。
+4. **截图/多图附件/此刻所想识图改走 AGY CLI 与菜单更新**：新增 `desktop/vision-client.mjs`，多屏截图（鼠标屏优先）、附件图片及此刻所想看屏经 `createVision()` 优先走本机 AGY CLI，失败按需回退 Gemini 云端视觉；右键维护菜单更新为多屏截图内容确认测试。
+5. **清单生成即结束对话**：清单生成完成或整张放弃后，绯月留言加收尾语并结束原对话线（普通聊天与「待确认」线一致）。
+6. **保留直连只走本机分流**：完整保留 `withOnDevice` 直连本机分流，并修复 `ai-gateway.mjs` 的 `nativeFetch` 拦截判断。
+
+### 目标与基线
+- 目标：`G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`
+- 源码 Git 基线：`origin/main` / `codex/workspace-checkpoint-20261120` @ `1b759fe76957a26de6f1d3f4818c4151bcfffe49`
+- 安装基线：运行实例 PID `15156`（`2026-11-25 16:42:30 JST` 启动，应用目录与资料目录已独立核实）；11 个待替换文件经逐字节 UTF-8 比对全部等于 `2d5ba51`，新增 1 个文件 `desktop/vision-client.mjs`。
+- 完整基线与候选 SHA-256 清单见 [desktop-manifest.json](docs/releases/wsl-agy-combined-20261125/desktop-manifest.json)。
+
+### 文件与前后行为（共 12 个 `desktop/` 文件）
+| 文件（`desktop/`） | 变更类型 | 主要前后行为变化 |
+| --- | --- | --- |
+| `agy-cli-client.mjs` | 替换 | 由 Windows `agy.exe` + `%TEMP%/feiyue-agy` 改为优先走 WSL2 `agy-wsl` + `E:\wsl-agy\temp`；`stopChild` 6 秒优雅退出；新增 20 分钟 `RESOURCE_EXHAUSTED` 全局熔断；新增 `claimStandby` 一次预热结束后即用即预热并供对话会话复用。 |
+| `agy-local-model.mjs` | 替换 | 新增半岛兜底与 20 分钟熔断联动（熔断跳过不记 AGY 错误日志，首次触发保留 1 条触发日志）；`start()` 入口立即预热首个进程。 |
+| `ai-gateway.mjs` | 替换 | 接入 `createVision()` / `agyVision()`（含 20 分钟熔断零落盘跳过与前置校验）、半岛兜底、`nativeFetch` 修复；完整保留 `withOnDevice` 直连本机分流。 |
+| `vision-client.mjs` | 新增 | 公用图像编码、多屏抓取与 AGY CLI 识图客户端。 |
+| `conversation-threads.mjs` | 替换 | 带收尾语 `closing` 即结束任何打开的对话线（普通聊天与待确认一致）。 |
+| `conversation-transcription.mjs` | 替换 | 清单生成完成或整张放弃即了结对话线，统一缺项留言。 |
+| `interaction-work.mjs` | 替换 | 配合公用视觉链路调整。 |
+| `menu-layout.json` | 替换 | 维护菜单测试项更新为 `multiScreenTest`。 |
+| `scene-curiosity.mjs` | 替换 | 「此刻所想」看屏改走公用 AGY 视觉单次结构化识读。 |
+| `screen-question-client.mjs` | 替换 | 截图与多附件识图客户端适配。 |
+| `screen-question-host.mjs` | 替换 | 截图与多附件识图宿主接线及 `testScreenQuestion` 菜单诊断。 |
+| `shell.mjs` | 替换 | 视觉入口切为 `createVision()`，维护菜单接入 `runMultiScreenVisionTest()`。 |
+
+### 数据库与配置兼容性影响
+无 SQLite 结构迁移，无密钥、令牌或既有 profile 资料目录变更。纯代码更新，按个人发布备份规则无需业务库备份。依赖本机已就绪的 WSL2 发行版 `agy-wsl` 与 `E:\wsl-agy\temp`（缺失时自动回退本地路径或既有兜底）。
+
+### 实测命令与结果
+- 语法与正式安装目录上下文 109 条相对 `import` + 11 处旧文件反向引用校验：全部通过（12/12 `CHECK_OK`）。
+- 9 组自动化单测（`agy-bandao-fallback`、`agy-cli`、`agy-standby`、`ai-gateway-guard`、`cloud-lane`、`desktop-screen-question`、`scene-curiosity`、`thread-confirm-settle`、`thread-ready-notice`）：58/58 通过（`1.92s`）。
+- `node tools/test-desktop-shell.mjs`（7/7 `PASS`）与 `node tools/build-desktop.mjs`：全部通过。
+- 真机 WSL2 端到端验证：启动即预热 → 首轮对话复用预热进程（`3815ms`）→ 立刻后台预热下一条 → 识图读取临时 PNG → 关闭后零残留进程、临时目录清空。
+- 未完成验证：正式安装版重启后的真实桌面多屏截图与 UI 目视确认（安装重启后由用户在桌面实测）。
+
+### 风险、部署步骤与恢复方案
+- 风险：重启期间中断当前运行中的桌宠空闲整理；WSL2 休眠后首次冷启待命约需 4–5 秒（启动即预热可覆盖）。
+- 部署步骤：
+  1. 复核正式安装目录 11 个已有文件 SHA-256 与基线一致、`vision-client.mjs` 尚不存在；
+  2. 备份 11 个原文件至 `G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion/output/install-backup-wsl-agy-combined-20261125/`；
+  3. 逐个原子写入并复核 12/12 候选 SHA-256 与安装目录语法校验；
+  4. 受控结束旧进程 PID `15156` 并从正式安装目录启动新进程，独立核实新进程 PID、启动时间与 `http://127.0.0.1:8765/infoguide`；
+  5. 基于真实安装验收结果制备花园登记清单（`feiyue-wsl-agy-combined-20261125`，预计 `34.4 → 34.5`，修订 189 起），展示给用户确认后再提交 `/v1/batches`。
+- 恢复方案：将备份目录的 11 个原文件覆盖回正式安装 `desktop/`，删除新增的 `desktop/vision-client.mjs`，重启绯月即可回滚。
+
+---
+
 ## 2026-11-25 清单生成即结束对话 · 绯月 Windows 正式安装版 · 已确认，待安装
 
 状态：用户已确认“确认部署并登记”，**尚未安装、重启或登记**。第三方审核：无。
