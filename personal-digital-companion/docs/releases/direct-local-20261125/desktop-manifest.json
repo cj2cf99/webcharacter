@@ -1,0 +1,108 @@
+{
+  "target": "G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion",
+  "sourceCommit": "3b20e1d93e93c12b4f4d50a4a3c9d62b98b00015",
+  "files": [
+    {
+      "path": "desktop/ai-gateway.mjs",
+      "baseline": "74f73ba8dfea3854dffbe1944ac62fa823e8c0e6eb512c386c8928c6d0ac007e",
+      "candidate": "b6f7e7fc31ac4b78836cb54f5f1dc51d2a93a267bfd38fbb1518acdb201d2dee",
+      "how": "分支版本"
+    },
+    {
+      "path": "desktop/ai-workflow-model.mjs",
+      "baseline": "3e8d4169b145c80f02268c7da4076259d019923de366a9388f4fb083cd0725e3",
+      "candidate": "5e61fd2c719730581853465dacdfed1823cf0699800c36b8f9bde55fdca883bb",
+      "how": "分支版本"
+    },
+    {
+      "path": "desktop/conversation-thread-reference.mjs",
+      "baseline": "664bb6e93c100e647f01d3f26ddf668eac99ce6de7be4dc879141ce4d69d0dcc",
+      "candidate": "fba4dce9d805fcecb25cf4cda6fc75967f71501d96f08e2d6a9b0e21c478861c",
+      "how": "分支版本"
+    },
+    {
+      "path": "desktop/conversation-thread-replies.mjs",
+      "baseline": "e578bdcd87c78c0b9b3043a1c694168b65a0d4696f2df382690287b5ec1bb527",
+      "candidate": "9b703c17387021c5894066c4b6217fc71d38db9227c5c51e10df567ec1a3544d",
+      "how": "分支版本"
+    },
+    {
+      "path": "desktop/conversation-threads.mjs",
+      "baseline": "94bba3e7b63f517cbb81a00b0d4c6d0ea4af52f8459c0c9f2a82247494bdb752",
+      "candidate": "3a1378bffda364ac9459202a6fdfbc1359a84edddfbd4ac9601680798e197b14",
+      "how": "分支版本"
+    },
+    {
+      "path": "desktop/conversation-transcription.mjs",
+      "baseline": "e8c861cd90ab944ccb7e33239eaf4edf7b0609f430ae13d514c66c62b7a586a0",
+      "candidate": "845506d8fcaa805930c4c6d8ea9504b593444ec1c609dfed0b53ba7bc4a727b6",
+      "how": "分支版本"
+    },
+    {
+      "path": "desktop/emotion-core.mjs",
+      "baseline": "3a6596b505ff3aca8364c12c441bc95de44603b0f7c0697b375a65b3ee42ac67",
+      "candidate": "60df67fdf4345cdaed5a8b1cbd16c03a3c37d2d33bdc5fcd6aa902383e9e2529",
+      "how": "分支版本"
+    },
+    {
+      "path": "desktop/emotion-service.mjs",
+      "baseline": "8005933093efcf6d7a69b91d8ae31e8ea37e06f1b785ddc6719e7a5d937835c9",
+      "candidate": "b61271fdf1d4a8daf48b6efd9c04f02c5878d971968b91b6579b41ce49867f3a",
+      "how": "分支版本"
+    },
+    {
+      "path": "desktop/knowledge-runtime.mjs",
+      "baseline": "da0033f7c6042d7d3b26f5542e18f4baa73dcdb4795ad1af88d31f063f1175e8",
+      "candidate": "3fd7188ced132e1fb4289e82ae14f47611f540712310ad5aa2f6830202248ee8",
+      "how": "分支版本"
+    },
+    {
+      "path": "desktop/personality-diary.mjs",
+      "baseline": "b2e834bada748cbfd977226fd3941011ac5a2399e0941be9d9b7fb42aa797682",
+      "candidate": "92253f60eb73f6f07625fba917393a74df65941fee1f576d005b462235b3e6dd",
+      "how": "安装版插入两行"
+    },
+    {
+      "path": "desktop/screen-question-host.mjs",
+      "baseline": "d72722aa92ac4e99a06483af203d4126a7f647d8679270f3c34e5327a067a4b9",
+      "candidate": "23b2aec1ea4a1eb72eafdcef472f1e7650028c36da2763b82ef157addbac341b",
+      "how": "分支版本"
+    },
+    {
+      "path": "desktop/topic-memory.mjs",
+      "baseline": "bb53e038a0256cd180e1f383b7dec339203a0969e5606845d778562a562bf053",
+      "candidate": "2ec493fe657e610a0acf737b072526cad0dbb26c95ac9338699b0be2eaf22799",
+      "how": "分支版本"
+    },
+    {
+      "path": "skills/catalog.py",
+      "baseline": "f5083557c082199d0b609ec4e29e6951d4272ff788c49f43338dc12834249c79",
+      "candidate": "70c36f93179ec4d7f13bd79d1f802106fc7cea4de6da8b7fc8db869b76bfc883",
+      "how": "分支版本"
+    },
+    {
+      "path": "skills/feiyue-interaction/source/SKILL.md",
+      "baseline": "29b52bb21127136f88cd49000ccc4c2fa7f7c44d431c3a97a806c67832e195cc",
+      "candidate": "d00a9b1cac510bb94e7fb47b7d432a508f84538450eed422fd90ca06728f6aa1",
+      "how": "分支版本"
+    },
+    {
+      "path": "skills/feiyue-interaction/versions/feiyue-interaction-v3-4/SKILL.md",
+      "baseline": null,
+      "candidate": "967a9c11ac0533e56d236547ca57cbda3cc5c1d58fa2e48c2566c9e1af9ff69d",
+      "how": "新增"
+    },
+    {
+      "path": "skills/feiyue-interaction/versions/feiyue-interaction-v3-4/routes.json",
+      "baseline": null,
+      "candidate": "ca4d037c95b00018251febe12eeb5ad4d8e45b08c3a6e2996794039cc4d7db7d",
+      "how": "新增"
+    },
+    {
+      "path": "skills/feiyue-interaction/latest.json",
+      "baseline": "2da7a28d10b7091d3bcfaeec69a8dbab87db0ce2ffe20696de9fced9cb3f3165",
+      "candidate": "4fcd45075eee43e6d871f6a900c535d0bfb1a5485edcc9b7e2483204a7485763",
+      "how": "分支版本"
+    }
+  ]
+}
