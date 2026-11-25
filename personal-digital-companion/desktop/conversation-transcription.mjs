@@ -683,12 +683,12 @@ function confirmationNotice(job){
   const skipped=rows.filter(row=>selected.has(row.id)&&statuses.get(row.id)==='SKIPPED');
   const left=rows.filter(row=>!selected.has(row.id));
   const dropped=left.filter(row=>!row.missing.length),incomplete=left.filter(row=>row.missing.length);
-  return {final:!incomplete.length,text:[
+  return {final:true,text:[
     selected.size>skipped.length?'已登记 '+(selected.size-skipped.length)+' 项。':'',
     skipped.length?'登记时跳过了：'+itemList(skipped)+'。':'',
     dropped.length?'这些没生成：'+itemList(dropped)+'。':'',
     incomplete.length?'缺信息没生成：'+itemList(incomplete,row=>itemName(row)+'（缺 '+
-      clip(row.missing.map(key=>missingLabels[key]??key).join('、'),30)+'）')+'。要登记的话，把这一条完整再说一遍。':'',
+      clip(row.missing.map(key=>missingLabels[key]??key).join('、'),30)+'）')+'。要登记的话，另开一条对话完整说一遍。':'',
   ].join('')};
 }
 
@@ -736,7 +736,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
   const save=(job,state)=>{
     const {id,at,state:prior,...data}=job;
     const summary={stage:job.stage,durationMs:job.durationMs,count:job.result?.rows.length??0,yieldedAt:job.yieldedAt,
-      needsReview:job.needsReview,thread:job.line?.thread,origin:job.thread,cleanupAt:job.cleanupAt};
+      needsReview:job.needsReview,thread:job.line?.thread,cleanupAt:job.cleanupAt};
     write.run(id,state,at,safeStorage.encryptString(JSON.stringify(data)),JSON.stringify(summary));job.state=state;
   };
   const waiting=db.prepare(`SELECT * FROM transcriptions WHERE state IN ('queued','approved')
@@ -748,17 +748,12 @@ export function createConversationTranscription({profile,safeStorage,model,regis
   function cancelInference(){
     for(const worker of workers.values())worker.inference?.abort();
   }
-  const otherCards=db.prepare(`SELECT 1 FROM transcriptions WHERE id<>?
-    AND state IN ('queued','running','ready','approved','submitting','submit-pending')
-    AND (json_extract(summary,'$.thread')=? OR json_extract(summary,'$.origin')=?) LIMIT 1`);
   let timer=null,closed=false,threadFinished=()=>{},threadReady=()=>{},threadSettled=()=>{};
   function settle(job){
     const thread=job.line?.thread??job.thread;
     if(!thread)return;
-    try{
-      const note=confirmationNotice(job);
-      threadSettled({...note,thread,id:job.id,final:note.final===true&&!otherCards.get(job.id,thread,thread)});
-    }catch{/* 确认结果已保存在任务管理。 */}
+    try{threadSettled({...confirmationNotice(job),thread,id:job.id});}
+    catch{/* 确认结果已保存在任务管理。 */}
   }
   for(const row of db.prepare("SELECT * FROM transcriptions WHERE state IN ('open','running','submitting')").all()){
     const job=decode(row);
