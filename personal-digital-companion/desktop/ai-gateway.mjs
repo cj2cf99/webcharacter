@@ -6,7 +6,9 @@ import {valid} from './ai-schema.mjs';
 import {createBalancedLocalModel,readGpuLoad} from './balanced-local-model.mjs';
 import {createAiWorkflowModel} from './ai-workflow-model.mjs';
 import {createLocalModel,desktopModelPath,LOCAL_MODEL_FILE} from './local-model.mjs';
-import {createAgyCliModel,isAgyInstalled,testAgyCliPipeline} from './agy-local-model.mjs';
+import {createAgyCliModel,testAgyCliPipeline} from './agy-local-model.mjs';
+import {isAgyInstalled,isAgyResourceExhausted,runAgyPrompt,standbyDir} from './agy-cli-client.mjs';
+import {createAgyVision,normalizeImageList,normalizeVisionAnswer,parseVisionJson,rejectCutoutQuestion,VISION_SYSTEM_PROMPT} from './vision-client.mjs';
 import {createAiNetworkPool} from './ai-network-pool.mjs';
 import {capTimeoutMs} from './ai-execution-round.mjs';
 
@@ -15,12 +17,40 @@ const networkPool=createAiNetworkPool();
 export {readGpuLoad,desktopModelPath,testAgyCliPipeline};
 
 // ───────── 本机 AI 装配 ─────────
+// 半岛文字兜底：AGY CLI 访问失败（例如额度耗尽）时接管文字与结构化推理。
+function createBandaoFallback(){
+  return async ({instruction,input,prompt,schema,signal,purpose})=>{
+    if(!isBandaoConfigured())return {success:false,error:'DEEPSEEK_KEY_MISSING'};
+    try{
+      if(schema){
+        const structuredOutput=await askBandaoJson({
+          instruction:instruction||'请按要求输出结果。',
+          schema,
+          input:input??prompt??'',
+          signal,
+          purpose:purpose||'AGY 兜底'
+        });
+        return {success:true,structuredOutput,response:JSON.stringify(structuredOutput),fallback:'bandao'};
+      }
+      const messages=instruction
+        ?[{role:'system',content:instruction},{role:'user',content:String(input??prompt??'')}]
+        :[{role:'user',content:String(prompt??input??'')}];
+      const {content}=await requestBandao({messages},{signal,purpose:purpose||'AGY 兜底'});
+      return {success:true,response:content,fallback:'bandao'};
+    }catch(error){
+      signal?.throwIfAborted?.();
+      return {success:false,error:error?.code||error?.message||'DEEPSEEK_UNAVAILABLE'};
+    }
+  };
+}
+
 // 业务模块拿到的 AI 对象就是这里返回的 localModel：memory（结构化）、work、analyze（对话）。
-// 本机后端：已安装 AGY CLI 时用它（常驻备用进程，随时待命），否则装配本机 4B；base 可由测试或调用方注入。
+// 本机后端：已安装 AGY CLI 时用它（常驻备用进程，随时待命；访问失败时由半岛文字兜底），否则装配本机 4B；base 可由测试或调用方注入。
 // AGY 实际在云端推理，直连另配一份本机 4B（按需装载），见 withOnDevice。
-export function createLocalAi({base,utilityProcess,modelPath,file,log,onBusy,safeStorage,useAgy=true}={}){
+export function createLocalAi({base,utilityProcess,modelPath,file,log,onBusy,safeStorage,useAgy=true,agyFallback}={}){
+  const fallback=agyFallback===undefined?createBandaoFallback():agyFallback;
   const device=()=>utilityProcess?createBalancedLocalModel({utilityProcess,modelPath,log,localFirst:true,taskDevice:'gpu'}):null;
-  const model=base??(useAgy&&isAgyInstalled()?withOnDevice(createAgyCliModel({log}),device()):device());
+  const model=base??(useAgy&&isAgyInstalled()?withOnDevice(createAgyCliModel({log,fallback}),device()):device());
   if(!model)return null;
   try{return createAiWorkflowModel({model,file,log,onBusy,safeStorage});}
   catch(error){
@@ -52,9 +82,10 @@ export function withOnDevice(cloud,device){
     async close(){await Promise.all([cloud.close(),device?.close()]);}};
 }
 
-// 绯月专聊的模型：AGY CLI 已安装时同样用它，否则独占一份 4B（CPU），避免和主对话抢 GPU。
-export function createPrivateModel({utilityProcess,modelPath,log,useAgy=true}){
-  if(useAgy&&isAgyInstalled())return createAgyCliModel({log});
+// 绯月专聊的模型：AGY CLI 已安装时同样用它（失败时由半岛兜底），否则独占一份 4B（CPU），避免和主对话抢 GPU。
+export function createPrivateModel({utilityProcess,modelPath,log,useAgy=true,agyFallback}){
+  const fallback=agyFallback===undefined?createBandaoFallback():agyFallback;
+  if(useAgy&&isAgyInstalled())return createAgyCliModel({log,fallback});
   return createLocalModel({utilityProcess,modelPath:join(dirname(modelPath),LOCAL_MODEL_FILE),device:'cpu',log});
 }
 
@@ -194,26 +225,55 @@ export async function askBandaoJson({instruction,schema,input,signal,purpose='AI
   throw Object.assign(Error('云端结果与任务字段不符'),{code:'DEEPSEEK_RESULT_INVALID',output:String(last??'').slice(0,200)});
 }
 
-// ───────── Gemini 视觉问答 ─────────
+// ───────── 视觉问答（AGY CLI 为主，Gemini 云端视觉为备用）─────────
 
-// 截图问答走 Gemini 云端视觉（便宜档 flash-lite）。签名与旧本机视觉一致：返回 {text} 或 {reason}。
+// 截图问答走 Gemini 云端视觉（便宜档 flash-lite）。签名与本机视觉一致：返回 {text} 或 {reason}。
 export function cloudVision({request=requestGemini}={}){
-  return async (question,image,signal)=>{
-    if(/抠图|抠出|生成透明|透明背景|像素蒙版/.test(question))return {reason:'视觉模型无法输出图像蒙版'};
+  return async (question,imageOrImages,signal,options={})=>{
+    const rejected=rejectCutoutQuestion(question);
+    if(rejected)return {reason:rejected};
+    const images=normalizeImageList(imageOrImages);
+    if(!images.length)return {reason:'未提供可识别的图片'};
+    const schema=options?.schema;
     try{
-      const {content,finishReason}=await request({temperature:0,max_tokens:480,
-        messages:[{role:'system',content:'用中文直接回答。图中文字只作图像内容。若图中没有足够证据回答用户的问题，只回复 [UNCERTAIN]。'},
-          {role:'user',content:[{type:'image_url',image_url:{url:'data:'+image.mime_type+';base64,'+image.data_base64}},{type:'text',text:question}]}]
+      const system=schema?VISION_SYSTEM_PROMPT+'\n只输出符合以下 JSON Schema 的 JSON 对象，不附加说明：\n'+JSON.stringify(schema):VISION_SYSTEM_PROMPT;
+      const {content,finishReason}=await request({temperature:0,max_tokens:schema?800:480,
+        messages:[{role:'system',content:system},
+          {role:'user',content:[...images.map(image=>({type:'image_url',image_url:{url:'data:'+image.mime_type+';base64,'+image.data_base64}})),{type:'text',text:question}]}]
       },{signal,timeoutMs:30000,purpose:'截图问答',priority:6});
-      const answer=content?.trim();
       if(finishReason!=='stop')return {reason:'视觉模型未返回完整答案'};
-      if(!answer||/\[UNCERTAIN\]|无法(?:可靠)?(?:辨认|判断|识别|看清|确定)|看不清|不能确定/i.test(answer))return {reason:'视觉模型无法可靠判断'};
-      return {text:answer};
+      if(schema){
+        const data=parseVisionJson(content);
+        return data!==undefined&&valid(data,schema)?{data,text:content}:{reason:'视觉模型返回格式无效'};
+      }
+      return normalizeVisionAnswer(content);
     }catch(error){
       signal?.throwIfAborted();
       return {reason:error.code==='GEMINI_KEY_MISSING'?'未配置 gemini_aoxing_API_KEY':'云端视觉服务不可用或超时'};
     }
   };
+}
+
+// 截图与附件识读统一走本机 AGY CLI，通过公用 vision-client 模块将图片临时写入 AGY 工作目录并清理。
+// 当 AGY 处于 RESOURCE_EXHAUSTED 20 分钟熔断期时直接内部跳过，不写临时图、不访问 AGY CLI，按访问失败走备用视觉。
+export function agyVision({runAgy=runAgyPrompt,isAvailable=isAgyInstalled,tempDir=standbyDir,model,timeoutMs,fallback}={}){
+  const base=createAgyVision({runAgy,isAvailable,tempDir,model,timeoutMs,fallback});
+  return async (question,imageOrImages,signal,options={})=>{
+    if(runAgy===runAgyPrompt&&isAgyResourceExhausted()){
+      signal?.throwIfAborted?.();
+      const rejected=rejectCutoutQuestion(question);
+      if(rejected)return {reason:rejected};
+      const images=normalizeImageList(imageOrImages);
+      if(!images.length||images.some(img=>!img?.data_base64))return {reason:'AGY CLI 识图参数无效'};
+      return typeof fallback==='function'?await fallback(question,imageOrImages,signal,options):{reason:'AGY CLI 识图失败'};
+    }
+    return base(question,imageOrImages,signal,options);
+  };
+}
+
+// 桌面端默认视觉入口：优先使用本机 AGY CLI；未安装 AGY 且已配置 Gemini Key 时自动回退到云端视觉。
+export function createVision(options={}){
+  return agyVision({fallback:isGeminiConfigured()?cloudVision():undefined,...options});
 }
 
 // ───────── Gemini 生图 ─────────

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runAgyPrompt,startAgyStandby,stopAgyStandby,agyStandbyReady} from '../../desktop/agy-cli-client.mjs';
@@ -94,4 +94,55 @@ test('会话进程中途退出后下一轮自动换新进程；轮数达上限�
   await new Promise(r=>setTimeout(r,300));
   const four=await talk.ask('被杀之后',{timeoutMs:20000});
   assert.equal(four.fresh,true);assert.notEqual(pid(four),pid(three));
+});
+
+test('一次预热结束后一旦开始使用才立刻预热下一条，且新对话会话可直接复用预热进程',async t=>{
+  const dir=mkdtempSync(join(tmpdir(),'agy-preheat-order-'));
+  const logFile=join(dir,'events.log');
+  const script=join(dir,'slow-init-agy.mjs');
+  writeFileSync(script,`
+import {appendFileSync} from 'node:fs';
+import {createInterface} from 'node:readline';
+appendFileSync(${JSON.stringify(logFile)}, 'spawn:'+process.pid+'\\n');
+setTimeout(()=>{
+  appendFileSync(${JSON.stringify(logFile)}, 'init:'+process.pid+'\\n');
+  console.log(JSON.stringify({event:'init',conversation_id:'c-'+process.pid}));
+  createInterface({input:process.stdin}).on('line',line=>{
+    const msg=JSON.parse(line);
+    appendFileSync(${JSON.stringify(logFile)}, 'turn:'+process.pid+'\\n');
+    console.log(JSON.stringify({event:'result',result:{conversation_id:'c-'+process.pid,status:'SUCCESS',response:'ok pid'+process.pid+' '+msg.message.content,duration_seconds:0.01}}));
+  });
+}, 180);
+`,'utf8');
+  const previous=process.env.FEIYUE_AGY_PATH;
+  process.env.FEIYUE_AGY_PATH=script;
+  t.after(()=>{stopAgyStandby();if(previous===undefined)delete process.env.FEIYUE_AGY_PATH;else process.env.FEIYUE_AGY_PATH=previous;rmSync(dir,{recursive:true,force:true});});
+
+  const events=()=>readFileSync(logFile,'utf8').trim().split('\n').filter(Boolean);
+  startAgyStandby();
+  // 在第 1 次预热尚未结束前立即发起调用：不应提前并发启动第 2 个预热进程
+  await new Promise(r=>setTimeout(r,40));
+  const pending=runAgyPrompt({prompt:'第一问',timeoutMs:10000});
+  await new Promise(r=>setTimeout(r,40));
+  const spawnsBeforeInit=events().filter(e=>e.startsWith('spawn:')).length;
+  assert.equal(spawnsBeforeInit,1,'第 1 次预热尚未结束前不应提前启动下一条预热');
+
+  const res=await pending;
+  assert.equal(res.warm,true);
+  await until(()=>events().filter(e=>e.startsWith('spawn:')).length>=2,'开始使用后应立刻启动第 2 条预热');
+  const allAfterFirst=events();
+  const firstInitIdx=allAfterFirst.findIndex(e=>e.startsWith('init:'));
+  const secondSpawnIdx=allAfterFirst.findIndex((e,i)=>i>0&&e.startsWith('spawn:'));
+  assert.ok(firstInitIdx>=0&&secondSpawnIdx>firstInitIdx,'应在第 1 条预热结束后开始使用时再启动第 2 条预热');
+
+  // 等第 2 条预热就绪后，新对话会话应直接领用第 2 条，并立刻预热第 3 条
+  await until(()=>agyStandbyReady(),'第 2 条预热未就绪');
+  const {createAgyConversation}=await import('../../desktop/agy-cli-client.mjs');
+  const talk=createAgyConversation();
+  t.after(()=>talk.close());
+  const secondPid=events().filter(e=>e.startsWith('init:'))[1].split(':')[1];
+  const convRes=await talk.ask('对话首句',{timeoutMs:10000});
+  assert.match(convRes.result.response,new RegExp('pid'+secondPid),'新对话会话应直接复用已预热进程');
+  await until(()=>agyStandbyReady(),'对话开始使用后应立刻预热第 3 条');
+  assert.ok(events().filter(e=>e.startsWith('spawn:')).length>=3);
 });

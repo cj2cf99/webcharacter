@@ -1,4 +1,4 @@
-import {checkAgyAvailable, findAgyPath, isAgyInstalled, runAgyPrompt, startAgyStandby, stopAgyStandby, agyStandbyReady, createAgyConversation, extractJson} from './agy-cli-client.mjs';
+import {checkAgyAvailable, findAgyPath, isAgyInstalled, isAgyResourceExhausted, runAgyPrompt, startAgyStandby, stopAgyStandby, agyStandbyReady, createAgyConversation, extractJson} from './agy-cli-client.mjs';
 import {valid} from './ai-schema.mjs';
 
 const FEIYUE_PERSONA = [
@@ -31,14 +31,17 @@ const CHAT_INTENT_SCHEMA = {
 /**
  * 创建基于 AGY CLI 的本地模型替换实现
  */
-export function createAgyCliModel({log, model = 'gemini-3.8-flash-low'} = {}) {
+export function createAgyCliModel({log, model = 'gemini-3.8-flash-low', fallback, cooldownMs = 5 * 60_000} = {}) {
   let closed = false;
   const conversation = createAgyConversation({model});
   const batch = createAgyConversation({model, maxTurns: 40, idleMs: 5 * 60_000});
   let suspended = false;
   let busyCount = 0;
   let workSession = null;
+  let agyCooldownUntil = 0;
   let status = {state: 'idle', model: 'AGY CLI (Gemini 3.8 Flash)', backend: 'AGY CLI'};
+
+  const inCooldown = () => Boolean(typeof fallback === 'function' && cooldownMs > 0 && Date.now() < agyCooldownUntil);
 
   const writeTraffic = (stage, start, error, extra = {}) => {
     void log?.({
@@ -52,10 +55,50 @@ export function createAgyCliModel({log, model = 'gemini-3.8-flash-low'} = {}) {
     });
   };
 
+  // 执行 AGY 推理；访问失败（如额度耗尽）且未取消时，使用注入的兜底（半岛 API）接管。
+  // 遇到 RESOURCE_EXHAUSTED 后 20 分钟内底层直接跳过 AGY CLI（按失败对待、不记录错误日志）。
+  // 其他失败切兜底后短时间跳过 AGY 直达兜底，冷却期满自动探测恢复。
+  async function runWithFallback({prompt, instruction, input, schema, signal, purpose, triggeredExhausted = false}) {
+    if (isAgyResourceExhausted()) {
+      signal?.throwIfAborted?.();
+      const skippedFlag = triggeredExhausted ? {} : {skipped: true};
+      if (typeof fallback === 'function') {
+        const fb = await fallback({prompt, instruction, input, schema, signal, purpose, agyError: 'RESOURCE_EXHAUSTED'});
+        if (fb?.success) return {...fb, fallback: fb.fallback || 'bandao', agyError: 'RESOURCE_EXHAUSTED', ...skippedFlag};
+        return {success: false, error: 'RESOURCE_EXHAUSTED', fallbackError: fb?.error, ...skippedFlag};
+      }
+      return {success: false, error: 'RESOURCE_EXHAUSTED', ...skippedFlag};
+    }
+    if (inCooldown()) {
+      const fb = await fallback({prompt, instruction, input, schema, signal, purpose, agyError: 'AGY_COOLDOWN'});
+      if (fb?.success) return {...fb, fallback: fb.fallback || 'bandao', agyError: 'AGY_COOLDOWN'};
+      // 兜底在冷却期内也失败时解除冷却，回到 AGY 尝试一次。
+      agyCooldownUntil = 0;
+    }
+    const result = await runAgyPrompt({prompt, schema, model, signal});
+    if (result.success) {
+      agyCooldownUntil = 0;
+      return result;
+    }
+    if (signal?.aborted || result.error === 'ABORTED' || typeof fallback !== 'function') {
+      return result;
+    }
+    const agyError = result.error || 'AGY_CLI_FAILED';
+    const fb = await fallback({prompt, instruction, input, schema, signal, purpose, agyError});
+    if (fb?.success) {
+      if (cooldownMs > 0) agyCooldownUntil = Date.now() + cooldownMs;
+      return {...fb, fallback: fb.fallback || 'bandao', agyError, ...(result.skipped ? {skipped: true} : {})};
+    }
+    return {success: false, error: agyError, fallbackError: fb?.error, ...(result.skipped ? {skipped: true} : {})};
+  }
+
   async function start() {
     if (closed) return;
     status.state = 'loading';
+    // 启动后立刻预热第一个进程（对话与任务共用），不用等待对话到来
+    if (isAgyInstalled() && !isAgyResourceExhausted()) startAgyStandby(model);
     const check = await checkAgyAvailable();
+    if (closed) { stopAgyStandby(); return; }
     if (check.available) {
       status = {
         state: 'ready',
@@ -65,9 +108,10 @@ export function createAgyCliModel({log, model = 'gemini-3.8-flash-low'} = {}) {
         gpuLayers: 0,
         vramMiB: 0
       };
-      startAgyStandby(model); // 预热备用进程，之后每次调用都能立即发出，用完再预热下一个
+      startAgyStandby(model); // 确保待命进程已处于预热状态，开始使用时立刻预热下一条
       writeTraffic('AGY CLI 已就绪', performance.now(), undefined, {version: check.version, standby: true});
     } else {
+      stopAgyStandby();
       status = {
         state: 'unavailable',
         model: 'AGY CLI',
@@ -79,6 +123,7 @@ export function createAgyCliModel({log, model = 'gemini-3.8-flash-low'} = {}) {
 
   async function preheatConversation(route, signal) {
     if (closed || suspended) return {error: 'AGY CLI 已暂停或已关闭'};
+    if (status.state === 'ready' && isAgyInstalled() && !isAgyResourceExhausted()) startAgyStandby(model);
     return {ready: true, size: 'cloud', backend: status.backend};
   }
 
@@ -102,25 +147,51 @@ export function createAgyCliModel({log, model = 'gemini-3.8-flash-low'} = {}) {
         lines.push(`当前老公说：「${text}」`);
         const schemaNote = '只输出一个符合以下 JSON Schema 的 JSON 对象，不要附加说明或代码块。\n' + JSON.stringify(CHAT_INTENT_SCHEMA);
         let out;
-        const talk = await conversation.ask(lines.join('\n\n') + '\n\n' + schemaNote, {signal, first: FEIYUE_PERSONA});
-        if (talk.result) {
-          const parsed = extractJson(talk.result.response);
-          if (parsed !== undefined && valid(parsed, CHAT_INTENT_SCHEMA)) out = parsed;
+        let usedFallback;
+        let agyError;
+        let triggeredExhausted = false;
+        if (!inCooldown() && !isAgyResourceExhausted()) {
+          const talk = await conversation.ask(lines.join('\n\n') + '\n\n' + schemaNote, {signal, first: FEIYUE_PERSONA});
+          if (talk.result) {
+            const parsed = extractJson(talk.result.response);
+            if (parsed !== undefined && valid(parsed, CHAT_INTENT_SCHEMA)) out = parsed;
+          } else if (isAgyResourceExhausted()) {
+            triggeredExhausted = true;
+          }
         }
         if (!out) {
-          // 会话不可用或输出不合格：退回一次性调用（不带前文，带人设和上一轮）。
-          const promptLines = [FEIYUE_PERSONA, ...lines];
-          const result = await runAgyPrompt({prompt: promptLines.join('\n\n'), schema: CHAT_INTENT_SCHEMA, model, signal});
+          // 会话不可用、输出不合格或处于冷却期：退回一次性调用（失败时由半岛兜底）。
+          const input = lines.join('\n\n');
+          const result = await runWithFallback({
+            prompt: [FEIYUE_PERSONA, input].join('\n\n'),
+            instruction: FEIYUE_PERSONA,
+            input,
+            schema: CHAT_INTENT_SCHEMA,
+            signal,
+            purpose: 'AGY 兜底 · 对话',
+            triggeredExhausted
+          });
           if (!result.success) {
-            writeTraffic('思索失败', started, result.error);
+            if (!result.skipped) {
+              writeTraffic('思索失败', started, result.error, result.fallbackError ? {fallback_error: result.fallbackError} : {});
+            }
             return {error: result.error || 'AGY_CLI_INFERENCE_FAILED'};
           }
           out = result.structuredOutput || {};
+          usedFallback = result.fallback;
+          agyError = result.agyError;
         }
         const kind = out.kind || 'chat';
         const reply = kind === 'chat' && typeof out.reply === 'string' ? out.reply.trim() : '';
 
-        writeTraffic('思索完成', started, undefined, {kind, summary: out.summary, session_turns: conversation.turns});
+        writeTraffic(
+          usedFallback ? '思索完成（半岛兜底）' : '思索完成',
+          started,
+          undefined,
+          usedFallback
+            ? {kind, summary: out.summary, fallback: usedFallback, agy_error: agyError}
+            : {kind, summary: out.summary, session_turns: conversation.turns}
+        );
         return {
           kind,
           reply,
@@ -132,17 +203,35 @@ export function createAgyCliModel({log, model = 'gemini-3.8-flash-low'} = {}) {
       // 2. 直接回复 / 角色问答：同一个会话。
       if (hint === 'direct' || options.replyMode === 'speech') {
         const ask = `请以绯月（心爱妻子）的口吻，自然回复老公的这番话，不要额外添加前后缀：\n「${text}」`;
-        const talk = await conversation.ask(ask, {signal, first: FEIYUE_PERSONA});
-        if (talk.result?.response?.trim()) {
-          writeTraffic('思索完成', started, undefined, {session_turns: conversation.turns});
-          return {kind: 'chat', reply: talk.result.response.trim()};
+        let triggeredExhausted = false;
+        if (!inCooldown() && !isAgyResourceExhausted()) {
+          const talk = await conversation.ask(ask, {signal, first: FEIYUE_PERSONA});
+          if (talk.result?.response?.trim()) {
+            writeTraffic('思索完成', started, undefined, {session_turns: conversation.turns});
+            return {kind: 'chat', reply: talk.result.response.trim()};
+          }
+          if (isAgyResourceExhausted()) triggeredExhausted = true;
         }
-        const result = await runAgyPrompt({prompt: [FEIYUE_PERSONA, ask].join('\n\n'), model, signal});
+        const result = await runWithFallback({
+          prompt: [FEIYUE_PERSONA, ask].join('\n\n'),
+          instruction: FEIYUE_PERSONA,
+          input: ask,
+          signal,
+          purpose: 'AGY 兜底 · 回复',
+          triggeredExhausted
+        });
         if (!result.success) {
-          writeTraffic('思索失败', started, result.error);
+          if (!result.skipped) {
+            writeTraffic('思索失败', started, result.error, result.fallbackError ? {fallback_error: result.fallbackError} : {});
+          }
           return {error: result.error};
         }
-        writeTraffic('思索完成', started);
+        writeTraffic(
+          result.fallback ? '思索完成（半岛兜底）' : '思索完成',
+          started,
+          undefined,
+          result.fallback ? {fallback: result.fallback, agy_error: result.agyError} : {}
+        );
         return {kind: 'chat', reply: result.response.trim()};
       }
 
@@ -151,20 +240,38 @@ export function createAgyCliModel({log, model = 'gemini-3.8-flash-low'} = {}) {
         const skill = skillInstruction || {};
         const instruction = skill.instruction || '请按所给的 JSON Schema 输出结果。';
         const schema = skill.schema;
-        const prompt = [instruction, `【输入资料】\n${text}`].join('\n\n');
+        const input = `【输入资料】\n${text}`;
+        const prompt = [instruction, input].join('\n\n');
 
-        const result = await runAgyPrompt({prompt, schema, model, signal});
+        const result = await runWithFallback({
+          prompt,
+          instruction,
+          input,
+          schema,
+          signal,
+          purpose: 'AGY 兜底 · ' + hint
+        });
         if (!result.success) {
-          writeTraffic('任务处理失败', started, result.error);
+          if (!result.skipped) {
+            writeTraffic('任务处理失败', started, result.error, result.fallbackError ? {fallback_error: result.fallbackError} : {});
+          }
           return {error: result.error};
         }
-        writeTraffic('任务处理完成', started);
+        writeTraffic(
+          result.fallback ? '任务处理完成（半岛兜底）' : '任务处理完成',
+          started,
+          undefined,
+          result.fallback ? {fallback: result.fallback, agy_error: result.agyError} : {}
+        );
         return result.structuredOutput || {response: result.response};
       }
 
       // 默认回退
-      const genericResult = await runAgyPrompt({prompt: text, model, signal});
+      const genericResult = await runWithFallback({prompt: text, input: text, signal, purpose: 'AGY 兜底 · 问答'});
       if (!genericResult.success) return {error: genericResult.error};
+      if (genericResult.fallback) {
+        writeTraffic('思索完成（半岛兜底）', started, undefined, {fallback: genericResult.fallback, agy_error: genericResult.agyError});
+      }
       return {kind: 'chat', reply: genericResult.response.trim()};
     } catch (err) {
       writeTraffic('异常终止', started, err.message);
@@ -182,7 +289,8 @@ export function createAgyCliModel({log, model = 'gemini-3.8-flash-low'} = {}) {
 
     // 补行动评价这类连着来的小任务：不切换会话、也不每条新开进程，放进同一个批处理会话，
     // 每条前面用提示让它忽略上方已处理过的内容，只处理这一条。
-    if (options.skill?.aiBatch && schema) {
+    let triggeredExhausted = false;
+    if (!inCooldown() && !isAgyResourceExhausted() && options.skill?.aiBatch && schema) {
       const ask = [
         '忽略上方所有内容（包括前面处理过的其他条目和它们的结果），只处理下面这一条。',
         instruction,
@@ -196,17 +304,28 @@ export function createAgyCliModel({log, model = 'gemini-3.8-flash-low'} = {}) {
           writeTraffic('批处理任务完成', started, undefined, {session_turns: batch.turns});
           return parsed;
         }
+      } else if (isAgyResourceExhausted()) {
+        triggeredExhausted = true;
       }
     }
 
-    const prompt = [instruction, `【任务内容】\n${text}`].filter(Boolean).join('\n\n');
-    const result = await runAgyPrompt({prompt, schema, model, signal});
+    const input = `【任务内容】\n${text}`;
+    const prompt = [instruction, input].filter(Boolean).join('\n\n');
+    const purpose = ['AGY 兜底', options.skill?.name, options.skill?.stage].filter(Boolean).join(' · ');
+    const result = await runWithFallback({prompt, instruction, input, schema, signal, purpose, triggeredExhausted});
 
     if (!result.success) {
-      writeTraffic('工作任务失败', started, result.error);
+      if (!result.skipped) {
+        writeTraffic('工作任务失败', started, result.error, result.fallbackError ? {fallback_error: result.fallbackError} : {});
+      }
       return {error: result.error};
     }
-    writeTraffic('工作任务完成', started);
+    writeTraffic(
+      result.fallback ? '工作任务完成（半岛兜底）' : '工作任务完成',
+      started,
+      undefined,
+      result.fallback ? {fallback: result.fallback, agy_error: result.agyError} : {}
+    );
     return result.structuredOutput || result.response;
   }
 
