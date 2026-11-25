@@ -234,7 +234,7 @@ export function createAiWorkflowModel({model,assistant,file,log,safeStorage,onBu
     const kind=kindFor(input);
     // 补行动评价、来源补评连着来：全部留在本机后端同一个批处理会话里单次完成，不在云端和本机之间来回切换。
     const backfill=isDiaryReview(skill);
-    input.cloud=!backfill&&!aiLocalOnly&&routesToCloud({kind,private:aiPrivate,short:aiReview&&shortRating(input)});
+    input.cloud=!backfill&&!aiLocalOnly&&!skill.onDevice&&routesToCloud({kind,private:aiPrivate,short:aiReview&&shortRating(input)});
     if(aiReview&&kind!=='judgment'&&!input.cloud&&!backfill)input.phase='draft';
     if(input.phase==='simple')input.skill={...skill,aiKind:kind,...(backfill?{aiSingleAttempt:true,aiBatch:true}:{})};
     if(aiPrivate){

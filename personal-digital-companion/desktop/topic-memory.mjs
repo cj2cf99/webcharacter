@@ -107,6 +107,7 @@ export function createTopicMemory({profile,memory,model,safeStorage,traffic,now=
       source('归档/'+day,async()=>{
         const turns=await memory.read(day),imageRefs=new Map();
         for(const r of turns){
+          if(r.direct)continue;
           if(r.report?.job&&r.report.serverTaskId)imageRefs.set(r.report.job,'task/'+r.report.serverTaskId);
           if(confirming&&!exclude&&!r.report&&r.question===question)continue;
           const ref=r.report?.job?(imageRefs.get(r.report.job)??'image/'+r.report.job):'chat/'+(r.interactionId??r.id);

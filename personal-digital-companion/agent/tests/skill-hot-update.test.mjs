@@ -92,7 +92,10 @@ test('总纲目录接口经鉴权读取调用范例，正在运行时可发布�
   assert.deepEqual(second.skills.find(row=>row.id===transcript).examples,['隔离调用示例']);
   assert.equal(second.skills.find(row=>row.id===first.router).source,'external');
   assert.ok(second.skills.every(row=>!Object.hasOwn(row,'body')&&!Object.hasOwn(row,'prompts')));
-  assert.match((await read('conversationTranscription')).instruction,/隔离总纲正文/u);
+  // 总纲新版记录到版本号，正文不拼进给模型的指令。
+  const selected=await read('conversationTranscription');
+  assert.match(selected.routerVersion,/@/u);
+  assert.doesNotMatch(selected.instruction,/隔离总纲正文/u);
 });
 
 test('外置步骤进入真实转录宿主，跨时隙及重开保持原版，下项使用更新版',async t=>{

@@ -17,14 +17,39 @@ export {readGpuLoad,desktopModelPath,testAgyCliPipeline};
 // ───────── 本机 AI 装配 ─────────
 // 业务模块拿到的 AI 对象就是这里返回的 localModel：memory（结构化）、work、analyze（对话）。
 // 本机后端：已安装 AGY CLI 时用它（常驻备用进程，随时待命），否则装配本机 4B；base 可由测试或调用方注入。
+// AGY 实际在云端推理，直连另配一份本机 4B（按需装载），见 withOnDevice。
 export function createLocalAi({base,utilityProcess,modelPath,file,log,onBusy,safeStorage,useAgy=true}={}){
-  const model=base??(useAgy&&isAgyInstalled()?createAgyCliModel({log}):utilityProcess?createBalancedLocalModel({utilityProcess,modelPath,log,localFirst:true,taskDevice:'gpu'}):null);
+  const device=()=>utilityProcess?createBalancedLocalModel({utilityProcess,modelPath,log,localFirst:true,taskDevice:'gpu'}):null;
+  const model=base??(useAgy&&isAgyInstalled()?withOnDevice(createAgyCliModel({log}),device()):device());
   if(!model)return null;
   try{return createAiWorkflowModel({model,file,log,onBusy,safeStorage});}
   catch(error){
     void log?.({direction:'local',route:'AI 询问池',stage:'本机队列暂不可用',error:error.code??error.name});
     return model;
   }
+}
+
+// 直连只走本机：hint 为 direct 的对话、带 onDevice 的任务和直连预热交给 device，其余照走 cloud。
+// 没有本机模型时报错，不回落到云端。
+export function withOnDevice(cloud,device){
+  const unavailable=()=>Object.assign(Error('直连需要本机模型，当前未就绪'),{code:'LOCAL_AI_NOT_READY'});
+  const local=()=>{if(!device)throw unavailable();return device;};
+  return {...cloud,
+    analyze:async(text,options={})=>options.hint!=='direct'?cloud.analyze(text,options):
+      device?device.analyze(text,options):{error:unavailable().code},
+    preheatConversation:async(route,signal)=>route!=='direct'?cloud.preheatConversation(route,signal):
+      device?device.preheatConversation(route,signal):{error:unavailable().message},
+    memory:async(text,instruction,schema,signal,skill,meter)=>
+      (skill?.onDevice?local():cloud).memory(text,instruction,schema,signal,skill,meter),
+    isBusy:()=>Boolean(cloud.isBusy?.()||device?.isBusy()),
+    // 让出显卡时两边一起停；任一边正忙就都不停。
+    async suspend(){
+      if(!await cloud.suspend())return false;
+      if(device&&!await device.suspend()){cloud.resume();return false;}
+      return true;
+    },
+    resume(){cloud.resume();device?.resume();},
+    async close(){await Promise.all([cloud.close(),device?.close()]);}};
 }
 
 // 绯月专聊的模型：AGY CLI 已安装时同样用它，否则独占一份 4B（CPU），避免和主对话抢 GPU。

@@ -53,5 +53,6 @@ test('同一句提前登记早餐，直连只回话，自动模式打开真实�
   const preview=await ask('auto',breakfast);
   assert.ok(preview.reviewId,JSON.stringify(preview));assert.deepEqual(plans,[breakfast]);
   assert.match((await ask('direct','确认登记')).text,/暖胃/);
-  assert.deepEqual(calls,['direct','registration','direct']);
+  // 登记直接进核对流程，只有两次直连用到模型对话。
+  assert.deepEqual(calls,['direct','direct']);
 });

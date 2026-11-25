@@ -46,7 +46,7 @@ export function createEmotionService({profile,model,diary,memory,topics,now=Date
   }
   function chat(turn){
     if(turn.state!=='answer'||turn.imageJob||turn.serverTaskId||turn.emotionSkip||turn.retry&&!turn.interactionId)return;
-    accept({kind:'chat',key:'chat/'+(turn.interactionId||turn.id),at:turn.answeredAt??turn.at,publicTerm:turn.publicTerm,user:turn.question,reply:turn.text,prior:turn.emotionPrior});
+    accept({kind:'chat',key:'chat/'+(turn.interactionId||turn.id),at:turn.answeredAt??turn.at,publicTerm:turn.publicTerm,user:turn.question,reply:turn.text,prior:turn.emotionPrior,onDevice:turn.direct===true});
     feedback(turn.inReplyToInitiative,/^(结束追问|不想再聊这个|这件事到此为止)[。！!]?$/u.test(turn.question?.trim())?'用户结束':'收到用户回应：'+(turn.interactionId??turn.id));
   }
   function taskRows(rows){
@@ -90,7 +90,8 @@ export function createEmotionService({profile,model,diary,memory,topics,now=Date
         '本次证据只有事实标题。登记、发布、整理等记录只证明标题明确记载的工作。核对标题具体完成了什么：若没有写明旧欲求所需的能力、对象或效果，quote 填空串，status 填 keep。delta 填 0，curiosity 留空。';
       const instruction=[appraisal.localAi.assess,eventRule,loop.localAi.assessment].join('\n\n');
       const a=await model.memory(emotionMaterials(context),instruction,desire?priorDesireAssessment:newDesireAssessment,signal,
-        {name:appraisal.skill,version:appraisal.version,stage:'情绪复盘',boundedOutput:true,backgroundBudget:true,maxTokens:384});
+        {name:appraisal.skill,version:appraisal.version,stage:'情绪复盘',boundedOutput:true,backgroundBudget:true,maxTokens:384,
+          ...(facts.onDevice?{onDevice:true}:{})});
       signal.throwIfAborted();
       if(![-1,0,1].includes(a.delta)||!['keep','release','satisfied'].includes(a.status)||!word(a.positive)||!word(a.negative)||
         !['line','quote','want','condition'].every(k=>typeof a[k]==='string'&&a[k].length<=180)||!a.line.trim()){
@@ -98,7 +99,7 @@ export function createEmotionService({profile,model,diary,memory,topics,now=Date
       }
       store.settle(e,a,{skill:appraisal.version,loop:loop.version,model:model.dualTaskWorkers?'Qwen3.5-4B':model.snapshot?.().model,context});
       deferred.delete(e.seq);
-      if(topics&&typeof a.curiosity==='string'&&a.curiosity.length>=2&&a.curiosity.length<=40&&facts.user.includes(a.curiosity)){
+      if(topics&&!facts.onDevice&&typeof a.curiosity==='string'&&a.curiosity.length>=2&&a.curiosity.length<=40&&facts.user.includes(a.curiosity)){
         try{await topics.remember(a.curiosity,e.key);}
         catch{warn('情绪评价已保存，该专题偏好未写入');}
       }

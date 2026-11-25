@@ -95,9 +95,10 @@ def route_skill(hint, group="hints", profile=None):
             return override["version"], override["body"], override
         return release, markdown_body((path / "SKILL.md").read_text(encoding="utf-8")), None
 
-    root_version, introduction, _ = content("feiyue-interaction", root_version, folder)
+    # 总控正文写给宿主和开发者，不拼进给模型的指令；这里只记录它的版本。
+    root_version = content("feiyue-interaction", root_version, folder)[0]
     version, body, override = content(skill, version, child)
-    instruction = introduction + "\n\n" + body
+    instruction = body
     selected = {"routerVersion": root_version, "skill": skill, "version": version, "content": body}
     if skill in routes.get("workRedrafts", {}):
         selected["workRedrafts"] = routes["workRedrafts"][skill]

@@ -50,14 +50,14 @@ export function createEmotionStore(profile,{now=Date.now,roll=()=>randomInt(1,8)
     }
     Object.assign(s,{grade,hold});
   }
-  function accept({key,at=now(),kind,user='',reply='',title='',publicTerm='',prior}){
+  function accept({key,at=now(),kind,user='',reply='',title='',publicTerm='',prior,onDevice=false}){
     if(!key||!Number.isFinite(at)||at<enabled||!['chat','work','gain','loss'].includes(kind))return false;
     return transaction(()=>{
       const s=snapshot(),id=prior===undefined&&s.desire?.at<=at?s.desire.id:prior;
       const delta={chat:0,work:-1,gain:1,loss:-1}[kind];
       const needs=kind==='chat'||Boolean(id);
       const added=write('INSERT OR IGNORE INTO events(key,at,kind,delta,prior,payload,status) VALUES(?,?,?,?,?,?,?)',
-        key,at,kind,delta,id??null,JSON.stringify({user:user.slice(0,480),reply:reply.slice(0,240),title:title.slice(0,180),publicTerm:publicTerm.slice(0,120)}),needs?'pending':'done');
+        key,at,kind,delta,id??null,JSON.stringify({user:user.slice(0,480),reply:reply.slice(0,240),title:title.slice(0,180),publicTerm:publicTerm.slice(0,120),...(onDevice?{onDevice:true}:{})}),needs?'pending':'done');
       if(!added.changes)return false;
       const old=s.grade;
       fold({at,seq:added.lastInsertRowid},s);
@@ -103,11 +103,12 @@ export function createEmotionStore(profile,{now=Date.now,roll=()=>randomInt(1,8)
   }
   function fact(ref){
     const e=one('SELECT at,kind,payload FROM events WHERE key=? AND payload IS NOT NULL',ref);
-    if(!e)return null;const f=JSON.parse(e.payload);return {ref,at:e.at,publicTerm:f.publicTerm,title:(f.user||f.title).slice(0,120)};
+    if(!e)return null;const f=JSON.parse(e.payload);
+    return f.onDevice?null:{ref,at:e.at,publicTerm:f.publicTerm,title:(f.user||f.title).slice(0,120)};
   }
   function recentFacts(limit=4){
     return db.prepare("SELECT key,at,kind,payload FROM events WHERE kind<>'reward' ORDER BY at DESC,seq DESC LIMIT ?").all(limit).map(e=>{
-      const f=JSON.parse(e.payload);return {ref:e.key,at:e.at,publicTerm:f.publicTerm,text:(f.user||f.title).slice(0,120)};
+      const f=JSON.parse(e.payload);return {ref:e.key,at:e.at,publicTerm:f.publicTerm,text:f.onDevice?'':(f.user||f.title).slice(0,120)};
     }).filter(f=>f.text);
   }
   function release(id){

@@ -63,7 +63,9 @@ test('直连只走本地文字对话，传递同模式上一轮，退出后恢�
   const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:'unused',
     localModel:{async analyze(text,options){calls.push({text,...options});return {kind:'chat',reply:'这一轮的回复'};}},
     transcription:{turn(_session,value){transcripts.push(value.text);},reply(){},seal(){}},
-    client:{forget(){},askText(){assert.fail('直连不应调用云端');}}});
+    client:{forget(){},async askText(text){
+      assert.equal(text,'你好','直连不应调用云端');return {state:'answer',text:'云端答复'};
+    }}});
   t.after(()=>host.close());await host.open();
   const submit=(text,mode,extra={})=>f.handlers.get('screen-qa:ask')(f.event(host.panel),{text,mode,...extra});
   const first=' 不去床上亲热吗\n';
@@ -79,11 +81,10 @@ test('直连只走本地文字对话，传递同模式上一轮，退出后恢�
   assert.equal(calls.at(-1).skillInstruction.name,'diary-writing');
   assert.deepEqual(calls[1].previous,{用户:first,绯月:'这一轮的回复'});
   assert.equal((await submit('截图','direct',{withScreen:true})).state,'error');
-  assert.equal((await submit('你好','auto')).state,'answer');
+  const direct=calls.length;
+  assert.equal((await submit('你好','auto')).text,'云端答复');
   assert.deepEqual(transcripts,['你好']);
-  assert.equal(calls.at(-1).hint,'auto');assert.equal(calls.at(-1).previous,undefined);
-  await submit('帮我判断这件事前后有矛盾吗','auto');
-  assert.equal(calls.at(-1).skillInstruction.name,'emotion-appraisal');
+  assert.equal(calls.length,direct,'自动模式不再先做本机思索');
 });
 
 test('两次真实措辞走登记技能，引用原文，先核对无日期草案，确认一次才写入',async t=>{
@@ -92,7 +93,7 @@ test('两次真实措辞走登记技能，引用原文，先核对无日期草�
   for(const q of [original,followup,'提醒我查看账单','关注 Qwen4 发布，作为事项提醒'])assert.equal(conversationRoute(q).kind,'registration',q);
   for(const q of ['不用提醒我','提醒怎么打开','如何设置提醒？','别把这条登记为提醒'])assert.equal(conversationRoute(q).kind,'question',q);
   for(const q of ['查一下今天的提醒','看看已设置的提醒','把周报提醒的日期改为明天'])assert.equal(conversationRoute(q).kind,'reminders',q);
-  const f=fixture(),plans=[],writes=[],skills=[],saved=new Map();
+  const f=fixture(),plans=[],writes=[],saved=new Map();
   const history={save:row=>saved.set(row.id,row),read:()=>[...saved.values()].reverse()};
   const registration={
     preview:async input=>{
@@ -104,7 +105,7 @@ test('两次真实措辞走登记技能，引用原文，先核对无日期草�
       writes.push({input,plan});return {chain:{nodes:[{current_task:{status:'COMPLETED',type:'reminders.create',params:plan.chain.nodes[0].params,result:{record_id:9}}}]}};
     }};
   const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',root:join(import.meta.dirname,'../..'),bundle:'unused',history,registration,
-    localModel:{analyze:async(_,{skillInstruction})=>{skills.push(skillInstruction.name);return {kind:'chat',reply:'已记入待办清单'};}}});
+    localModel:{analyze:()=>assert.fail('提醒登记直接进核对流程')}});
   t.after(()=>host.close());await host.open();
   const event=f.event(host.panel),ask=text=>f.handlers.get('screen-qa:ask')(event,{text});
   const decide=(id,approve)=>f.handlers.get('screen-qa:attachment-review')(event,{id,approve});
@@ -118,7 +119,6 @@ test('两次真实措辞走登记技能，引用原文，先核对无日期草�
   assert.ok(receipts.some(r=>r.text.includes('已登记')));assert.equal(writes.length,1);
   assert.equal(writes[0].plan,plans.at(-1).plan);
   assert.equal(Object.hasOwn(writes[0].plan.chain.nodes[0].params,'deadline'),false);
-  assert.deepEqual(skills,['record-submission','record-submission','record-submission']);
 });
 
 test('图像确定性步骤、附件角色与负面指令',()=>{
@@ -317,60 +317,19 @@ test('查询网络先搜公开资料，再用 AI 按来源整理；记忆入口�
   assert.match((await ask('发行版最新动向','web')).text,/AI 暂未整理.*原始摘要/s);
 });
 
-test('本地思索先于问答和任务，云端接收原文并分别记录耗时',async t=>{
-  const f=fixture(),events=[],logs=[];
-  const pause=()=>new Promise(resolve=>setTimeout(resolve,12));
-  let mode='chat';
-  const skills=[];
-  const model={async analyze(text,{hint,onProgress,skillInstruction}){
-    skills.push(skillInstruction);
-    events.push(['local',text,hint]);onProgress('本地思索 · 理解输入…');
-    await pause();
-    if(hint==='registration')onProgress('本地思索 · 复核 1/2…');
-    if(mode==='fail')return {error:'LOCAL_AI_TIMEOUT'};
-    if(mode==='task')return {kind:'task',reply:''};
-    return {kind:'chat',reply:'本地你好'};
-  }};
+test('自动问答直接走问答通道，不再先做本机思索；分段日志不含原文',async t=>{
+  const f=fixture(),asked=[],logs=[];
   const host=attachScreenQuestion(f.electron,{win:f.win,profile:'unused',history:f.history,bundle:'unused',root:join(import.meta.dirname,'../..'),
-    localModel:model,log:event=>logs.push(event),
-    client:{forget(){},async askText(text){events.push(['cloud',text]);await pause();return {state:'answer',text:'云端答复'};}},
-    registration:{async preview(text){events.push(['preview',text]);await pause();return {chain:{nodes:[{type:'diaries.create',target_device_id:null,params:{content:text}}]},pending:[]};},
-      submitReviewed:()=>assert.fail('等待独立确认')}
+    localModel:{analyze:()=>assert.fail('自动问答不应调用本机对话')},log:event=>logs.push(event),
+    client:{forget(){},async askText(text){asked.push(text);await new Promise(resolve=>setTimeout(resolve,12));return {state:'answer',text:'云端答复'};}}
   });
   t.after(()=>host.close());
   await host.open();
-  const panel=host.panel, e=f.event(panel);
-  const ask=(text,mode)=>f.handlers.get('screen-qa:ask')(e,{text,mode});
-  assert.equal((await ask('你好')).text,'本地你好');
-  assert.deepEqual(events,[['local','你好','auto']]);
-  assert.ok(logs[0].local_ms>0);
-  assert.equal(logs[0].cloud_ms,0);
-
-  const input='今天的记录';
-  assert.ok((await ask(input,'registration')).reviewId);
-  assert.deepEqual(events.slice(-2),[['local',input,'registration'],['preview',input]]);
-  assert.ok(panel.sent.some(([,state])=>state?.text?.includes('复核 1/2')));
-  assert.ok(logs[1].local_ms>0&&logs[1].cloud_ms>0);
-  assert.ok(logs[1].duration_ms>=logs[1].local_ms+logs[1].cloud_ms-1);
-  assert.equal(logs[1].operation,'随口登记');
-  assert.deepEqual(skills.map(skill=>[skill.name,skill.profile]),[
-    ['personal-conversation','conversation'],['record-submission','registration']
-  ]);
-  assert.match(skills[0].version,/^\d+\.\d$/u);
-  assert.ok(skills[0].draft && skills[0].response && !skills[0].review && !skills[0].rewrite && skills[1].draft);
-
-  mode='fail';
   const q='  罗马的历史是什么？  ';
-  assert.equal((await ask(q)).text,'云端答复');
-  assert.deepEqual(events.slice(-2),[['local',q,'auto'],['cloud',q]]);
-  assert.ok(logs[2].local_ms>0&&logs[2].cloud_ms>0);
-  assert.ok(panel.sent.some(([,state])=>state?.text?.includes('转交云端')));
+  assert.equal((await f.handlers.get('screen-qa:ask')(f.event(host.panel),{text:q})).text,'云端答复');
+  assert.deepEqual(asked,[q]);
+  const end=logs.find(entry=>entry.stage==='处理结束');
+  assert.equal(end.operation,'文字问答');
+  assert.equal(end.local_ms,0);
   assert.ok(!JSON.stringify(logs).includes(q),'分段日志不含用户原文');
-
-  mode='task';
-  const instruction='把桌面的临时窗口都收起来';
-  assert.equal((await ask(instruction)).text,'云端答复');
-  assert.deepEqual(events.slice(-2),[['local',instruction,'auto'],['cloud',instruction]]);
-  assert.equal(logs[3].operation,'用户指令');
-  assert.ok(logs[3].local_ms>0&&logs[3].cloud_ms>0);
 });

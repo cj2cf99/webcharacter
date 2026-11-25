@@ -441,6 +441,9 @@ function candidateSignature(row){
   return JSON.stringify([row.type,title?.replace(/^\[([^\]]*)\]绯月助记-.*$/u,'$1'),params,row.evidence.map(item=>item.quote).toSorted()]);
 }
 
+// 批次里只要有直连发言，整批只用本机模型。
+const onDevice=job=>[...job.turns,...(job.history??[])].some(turn=>turn.mode==='direct');
+
 async function transcribeThread(job,model,skill,save,rules,generateRemoteDraft,lifetime){
   const templates=skill.templates.templates;
   const [organizeCommand,classifyCommand,reviewCommand]=skill.workflow?.steps??[{run:'organize'},{run:'classify'}];
@@ -477,6 +480,7 @@ async function transcribeThread(job,model,skill,save,rules,generateRemoteDraft,l
         await model.memory(JSON.stringify({...attempt.input,...rules}),instruction,schema,signal,
         {name:skill.skill,version:skill.version,stage,aiPriority:4,aiRole:transcriptionRole(stage,attempt.input),boundedOutput:true,backgroundBudget:true,
           adaptiveOutput:stage,fullOutputBudget,maxTokens,aiPrivate:Boolean(rules)||skill.localAi?.policy?.localOnly===true,
+          ...(onDevice(job)?{onDevice:true}:{}),
           ...(generateRemoteDraft&&stage==='classify'?{aiSingleAttempt:true}:{})});
       if(!rules)call.raw=output;
       if(!output||output.error)throw Object.assign(Error(output?.error??'模型未返回结果'),{code:output?.error});
@@ -843,7 +847,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
         while(job.knowledgeThrough<job.turns.length){
           const turn=job.turns[job.knowledgeThrough];
           const checked=!turn.knowledgePrivate&&!isKnowledgeFeedback(turn.text)&&await knowledge.inspect({
-            text:turn.text,source:'message/'+turn.id,scope:'transcription',signal,priority:4});
+            text:turn.text,source:'message/'+turn.id,scope:'transcription',signal,priority:4,onDevice:turn.mode==='direct'});
           if(knowledgeReply(checked))throw Object.assign(Error(checked.answer),{code:'KNOWLEDGE_REVIEW_REQUIRED'});
           if(checked?.state==='apply')job.knowledge.push({sourceId:turn.id,rules:checked.rules.map(({id,revision})=>({id,revision}))});
           job.knowledgeThrough++;

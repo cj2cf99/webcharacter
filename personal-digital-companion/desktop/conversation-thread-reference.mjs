@@ -37,14 +37,14 @@ export function createThreadReference({store,archive,transcription}){
       const day=dateFrom(latest.text,latest.at)||state.day;
       const term=queryText(latest.text)||state.term;
       store.saveReference(id,{...state,day,term});
-      const sameLine=message=>message.who==='你'&&message.seq<state.before&&!message.reference&&
+      const sameLine=message=>message.who==='你'&&message.seq<state.before&&!message.reference&&message.mode!=='direct'&&
         (!day||tokyoDay(message.at)===day)&&(!term||queryText(message.text).includes(term));
       let matches=store.detail(id).messages.filter(sameLine);
       if(!matches.length){
         if(!day)return reply('大概是哪天聊的？我按那天找。');
         const legacy=await archive?.read?.(day)??[];
         signal.throwIfAborted();
-        matches=legacy.filter(row=>row.threadId===id&&typeof row.question==='string'&&
+        matches=legacy.filter(row=>row.threadId===id&&!row.direct&&typeof row.question==='string'&&
           (!term||queryText(row.question).includes(term))).map(row=>({id:row.id,at:row.at,text:row.question}));
       }
       if(matches.length!==1)return reply(matches.length?'找到了几条。能再给我一个关键词或更具体的时间吗？':'这条线还没找到对应的话。你记得原话里的关键词吗？');

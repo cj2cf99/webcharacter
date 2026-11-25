@@ -6,6 +6,8 @@ import {mayShareChatMessage,needsChatReview,recentChatRounds,reviewRejected} fro
 
 const compact=messages=>messages.map(({who,text,at})=>({发言者:who,原话:text,日期:tokyoDay(at)}));
 const historyLimit=3700;
+// 直连交给本机 4K 模型，原话留得更短。
+const directHistoryLimit=1600;
 const nextStep={enum:['回应','追问','结束']};
 const schema={type:'object',required:['reply','next'],additionalProperties:false,
   properties:{reply:{type:'string',minLength:1,maxLength:1400},next:nextStep}};
@@ -37,6 +39,12 @@ export function createThreadReplies({store,model,cloud,deepseekReply,activeQuest
       }
     }finally{cloudRunning=false;}
   }
+  // 直连发言，以及覆盖了直连发言的绯月回复。
+  function directMessages(messages){
+    const ids=new Set(messages.filter(message=>message.mode==='direct').map(message=>message.id));
+    for(const message of messages)if(message.covers?.some(id=>ids.has(id)))ids.add(message.id);
+    return ids;
+  }
   function modelCall(input,rules,format,signal,settings){
     if(!model?.memory)throw Error('本机模型尚未就绪');
     return model.memory(JSON.stringify(input),rules,format,signal,settings);
@@ -45,10 +53,17 @@ export function createThreadReplies({store,model,cloud,deepseekReply,activeQuest
     const line=store.detail(id);
     if(!line||line.rounds>100||line.closed!==null)return null;
     const latest=new Set(pending.map(message=>message.id));
-    let history=line.messages.filter(message=>!message.knowledgePrivate&&
+    const direct=pending[0].mode==='direct',fromDirect=directMessages(line.messages);
+    // 直连原话和它的回复不进入其他对话的上下文与摘要。
+    let history=line.messages.filter(message=>!message.knowledgePrivate&&(direct||!fromDirect.has(message.id))&&
       (message.who==='绯月'||message.seq<pending[0].seq)&&!latest.has(message.id));
     let summary;
-    if(history.reduce((length,message)=>length+message.text.length,0)>historyLimit){
+    if(direct){
+      // 直连不做摘要，只带本机装得下的最近原话。
+      let size=0,from=history.length;
+      while(from&&(size+=history[from-1].text.length)<=directHistoryLimit)from--;
+      history=history.slice(from);
+    }else if(history.reduce((length,message)=>length+message.text.length,0)>historyLimit){
       let rounds=0,index=history.length-1;
       for(;index>=0;index--)if(history[index].covers?.length&&++rounds>=3)break;
       const first=history[index]?.covers?.[0];
@@ -76,7 +91,8 @@ export function createThreadReplies({store,model,cloud,deepseekReply,activeQuest
       }
       history=history.slice(split);
     }
-    return {起因:line.origin||line.title||line.messages[0]?.text,来源:line.source,欲求:line.desire||'理解与你交流',
+    return {起因:line.origin||line.title||line.messages.find(message=>direct||!fromDirect.has(message.id))?.text,
+      来源:line.source,欲求:line.desire||'理解与你交流',
       目的:line.purpose,较早历史:summary,之前发言:compact(history),最新发言:compact(pending)};
   }
   async function answer(id,{foreground,override}){
@@ -100,8 +116,9 @@ export function createThreadReplies({store,model,cloud,deepseekReply,activeQuest
     const ids=pending.map(message=>message.id);
     const {signal}=lifecycle;
     const priority=()=>(engaged?engaged(id):foreground)?6:3;
+    const direct=pending[0].mode==='direct';
     const settings={aiPriority:priority(),aiCurrentPriority:priority,name:'conversation-thread',version:'1',stage:'对话回复',
-      boundedOutput:true,maxTokens:600,...(pending[0].mode==='direct'?{}:{aiTier:'4'})};
+      boundedOutput:true,maxTokens:600,...(direct?{onDevice:true}:{aiTier:'4'})};
     let result;
     if(line.rounds>=50){
       result={reply:closingMessage,next:'结束'};
@@ -119,7 +136,7 @@ export function createThreadReplies({store,model,cloud,deepseekReply,activeQuest
     }else if(pending[0].handled){
       result=await command?.(id,pending[0],signal);
     }else{
-      const quoted=await reference?.(id,pending,signal);
+      const quoted=direct?null:await reference?.(id,pending,signal);
       if(quoted)result=quoted;
       else if(line.kind==='question'){
         const input=await context(id,pending,signal,settings);
@@ -132,11 +149,12 @@ export function createThreadReplies({store,model,cloud,deepseekReply,activeQuest
         signal.throwIfAborted();
         if(!input)return false;
         const before=store.detail(id,12)?.messages?.filter(item=>item.seq<pending[0].seq);
-        const previous=before?.findLast(item=>item.who==='绯月');
+        const fromDirect=directMessages(before??[]);
+        const previous=before?.findLast(item=>item.who==='绯月'&&(direct||!fromDirect.has(item.id)));
         const knowledgeResults=[];
         for(const message of pending){
           const check=await knowledge?.inspect({text:message.text,source:'message/'+message.id,signal,direct:true,priority:priority(),
-            context:{来源:input.来源,之前发言:input.之前发言.slice(-4)},previous:previous&&{id:previous.id,text:previous.text}});
+            onDevice:direct,context:{来源:input.来源,之前发言:input.之前发言.slice(-4)},previous:previous&&{id:previous.id,text:previous.text}});
           if(check)knowledgeResults.push({message:message.id,...check});
         }
         const use=knowledgeResults.find(check=>knowledgeReply(check))??knowledgeResults.find(check=>check.state==='apply');

@@ -71,7 +71,7 @@ const knowledgeSignals=(message,condition)=>normalized(message).includes(normali
 const application=(answer,rows)=>({state:'apply',private:true,answer,rules:rows.map(({id,revision,kind,body})=>({id,revision,kind,body}))});
 
 export function createKnowledgeRuntime({store,model,beforeAccess=()=>{}}){
-  async function inspect({text,source,context,previous,scope='answer',signal,learn=true,direct=false,priority=6,judge=model}){
+  async function inspect({text,source,context,previous,scope='answer',signal,learn=true,direct=false,priority=6,judge=model,onDevice=false}){
     const input=length(text,4200);
     if(!input)return empty;
     const directive=direct&&explicitKnowledgeRule(input);
@@ -119,7 +119,7 @@ export function createKnowledgeRuntime({store,model,beforeAccess=()=>{}}){
           ...Object.fromEntries(Object.entries(body).filter(([field])=>!['source','related'].includes(field)))})),
         已知疑问与错因:[...groupByRef].map(([id,{kind,body}])=>({id,kind,title:body.title,aliases:body.aliases}))}),
       instruction,schema,signal,{aiPriority:priority,name:'knowledge-library',version:'1',stage:'核对适用知识',
-        boundedOutput:true,maxTokens:580,aiRole:'main',aiPrivate:true});
+        boundedOutput:true,maxTokens:580,aiRole:'main',aiPrivate:true,...(onDevice?{onDevice:true}:{})});
     }catch{signal?.throwIfAborted();}
     if(!decision||!schema.properties.state.enum.includes(decision.state))
       return found||scope==='active'||once?{state:'unavailable',private:true,answer:'本机暂时无法核对适用的知识，请稍后重试。'}:empty;

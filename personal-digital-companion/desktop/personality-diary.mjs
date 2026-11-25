@@ -415,7 +415,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     }
   }
   async function explanations(r,today,yesterday){
-    const turns=[...await memory.read(today),...await memory.read(yesterday)];
+    const turns=[...await memory.read(today),...await memory.read(yesterday)].filter(t=>!t.direct);
     const terms=[r.id,String(r.amount),r.merchant,r.description].filter(t=>t&&String(t).length>=2);
     if(!terms.length)return [];
     const history=rows('SELECT content FROM cleaned WHERE '+terms.map(()=>'instr(content,?)>0').join(' OR '),...terms);
@@ -447,7 +447,7 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
     }
     for(const day of (await memory.archiveDays?.()??[]).slice().sort().reverse().slice(0,maxDays)){
       signal.throwIfAborted();
-      for(const t of await memory.read(day))match('本机对话',day,[t.question,t.text].filter(Boolean).join('　'));
+      for(const t of await memory.read(day))if(!t.direct)match('本机对话',day,[t.question,t.text].filter(Boolean).join('　'));
       signal.throwIfAborted();
       for(const t of await memory.readTasks(day))match('本机任务',day,[t.title,t.action,t.detail].filter(Boolean).join('　'));
       if(['本机对话','本机任务'].every(k=>hits.get(k)?.length===3))break;

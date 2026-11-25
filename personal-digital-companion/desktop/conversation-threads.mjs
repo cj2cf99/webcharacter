@@ -195,7 +195,7 @@ export function createConversationThreads(profile,safeStorage,now=Date.now){
         const sources=reply.covers.map(id=>original.get(id,row.thread)).filter(Boolean).map(readMessage);
         if(sources.length!==reply.covers.length||sources.some(message=>message.knowledgePrivate))return [];
         return [{id:reply.id,threadId:row.thread,at:reply.at,answeredAt:reply.at,question:sources.map(message=>message.text).join('\n'),
-          text:reply.text,state:'answer',...(sources.some(message=>message.mode==='direct')?{localOnly:true}:{})}];
+          text:reply.text,state:'answer',...(sources.some(message=>message.mode==='direct')?{localOnly:true,direct:true}:{})}];
       });
     },
     recover:()=>db.prepare('SELECT id FROM conversation_lines WHERE pending>0 AND closed IS NULL AND rounds<=100 AND failure IS NULL').all(),
