@@ -1,3 +1,49 @@
+## 2026-11-25 菜单「动画生成器」入口与本机借用接口 v8 · 绯月 Windows 正式安装版 · 已部署并登记（菜单效果待用户确认）
+
+状态：**用户确认“部署并登记”后，于 2026-11-25 23:38 JST 完成 7 文件精准安装（替换 5、新增 2，前像备份至 `output/install-backup-animation-borrow-20261125/`，复制后逐个核对 SHA-256 一致）。旧进程 PID `31828` 正常结束请求 10 秒未退出后强制结束进程树，等待 5 秒确认无残留 Electron 且 8765 未监听，再以原启动命令（清除 `ELECTRON_RUN_AS_NODE`）独立拉起：新 PID `31352`，`instance.started` 2026-11-25T14:39:06.940Z，资料目录不变，`GET /infoguide` 为 v8 且含 `/v1/borrow`。发布后用正式令牌借用 `cli` 通道 `python-version` 返回 `Python 3.15.2`；动画生成器 `/api/status` 显示绯月在线、借用可用。菜单实际点击效果待用户确认。花园登记：用户确认最终清单后，审核包提交主站本地 Git `05c31fd94b405a625c2bb7ca3d832d2b81a99bdc`（主站分支与远端分叉，沿用历次做法仅本地提交），批次 `feiyue-animation-borrow-20261125` 于 23:41:20 JST 入队，23:42:24 JST 三步全部 verified（改善 #94、#95，部署 #121 / 明细 #205，绯月（桌面精灵）#61 版本 `35.0 → 35.1`，修订 `199 → 202`，reviewHash `dd1a4610…11ee`），23:42:36 JST 完成 `ack` 签收。**
+
+### 需求与验收
+- 用户原话：「开发，同时带上绯月的菜单」「开发借用接口」「部署」。需求与设计见 `G:/selftool/webmcreator/REQUIREMENTS.md` 第 3.1 节、`docs/DESIGN.md` 第 6 节。
+- 验收：右键/托盘菜单出现「动画生成器 ▸ 切图校准 / Gemini 生图 / GIF」，点击后按需拉起 `G:/selftool/webmcreator` 服务并用浏览器打开对应页签；`GET /infoguide` 为 v8 且含 `/v1/borrow`；借用 ai（Gemini）、comfy（4× 放大）、cli（`python-version`）可用。
+
+### 目标、基线与差异
+- 目标：`G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，运行 PID `31828`（启动命令：开发区 `desktop/node_modules/electron/dist/electron.exe` + 安装目录 `desktop`），REST v7，资料目录 `output/desktop-profile`。
+- 来源：`codex/workspace-checkpoint-20261120` @ `585d8a9`（已推送）。逐文件比对（忽略行尾）确认安装前像与父提交 `e4b5dff` 一致，差异仅为本次改动。
+
+| 文件 | 正式版前像 SHA-256 前 12 位 | 候选 SHA-256 前 12 位 | 变化 |
+| --- | --- | --- | --- |
+| `desktop/shell.mjs` | `E6E9B4184500` | `E7F64799A20B` | 菜单动作 `animationCrop/Gemini/Gif`；启动 REST 时装配借用服务 |
+| `desktop/local-rest.mjs` | `4094A7D05739` | `A6E8580D1282` | 说明 v8；新增 `POST /v1/borrow`、`GET /v1/borrow/:id`；仅该路由请求体上限 30MB |
+| `desktop/image-tasks.mjs` | `18DFA0D1DCB6` | `4A1D20D78234` | 新增 `localUpscale`（沿用图像 skill 的 upscale 工作流） |
+| `desktop/ai-gateway.mjs` | `CD8A0826A356` | `C5647C2935E5` | `requestGeminiImage` 新增可选 `aspectRatio` |
+| `desktop/menu-layout.json` | `53FE6220E357` | `7D1632B9ED9F` | 新增「动画生成器」子菜单 |
+| `desktop/borrow.mjs` | 新增 | `3A153F8EB1EE` | 借用任务校验、逐个执行、内存结果 |
+| `desktop/animation-maker.mjs` | 新增 | `402CD3094440` | 菜单入口：查状态、独立进程拉起服务、打开页签 |
+
+### 数据和配置影响
+无数据库或配置变更，无新增密钥。纯代码发布，跳过数据库备份。花园登记只写元数据。
+
+### 实际验证（开发树）
+- `node --test agent/tests/borrow.test.mjs agent/tests/local-rest-garden.test.mjs agent/tests/skill-hot-update.test.mjs agent/tests/garden-first-use.test.mjs agent/tests/image-gemini.test.mjs`：32/32；`agent/tests/animation-maker.test.mjs`：3/3。
+- `node tools/build-desktop.mjs` + `node tools/test-desktop-shell.mjs`：通过；隔离 Electron `tools/test-menu-popup-electron.mjs`：通过。
+- 真实联调（隔离资料目录、端口 8795）：Gemini 10.1 秒 848×1264；ComfyUI 冷启动后 25 秒放大到 3392×5056；CLI 返回 `Python 3.15.2`。
+- 审核：`docs/reviews/BORROW_API_REVIEW_2026-11-25.md`（通过，开发版）。
+
+### 未完成与风险
+- `agent/tests/screen-question-host.test.mjs` 本轮未跑完（与改动无直接关系）。
+- 借用任务逐个执行，ComfyUI 冷启动期间后到的请求需排队。
+- 恢复：前像备份至 `output/install-backup-animation-borrow-20261125/`，异常时还原 5 个文件、删除 2 个新增文件并按同样方式重启。
+
+### 部署步骤与发布后验证
+1. 备份 5 个前像；复制 7 个候选文件并核对 SHA-256。
+2. 让绯月退出（先正常结束，10 秒未退出再强制），等待 5 秒，确认旧进程、单实例锁与 8765 端口已释放。
+3. 以独立非沙盒进程、清除 `ELECTRON_RUN_AS_NODE`，用原启动命令拉起。
+4. 核对 `GET /infoguide`：新 PID、资料目录不变、`version 8`、含 `/v1/borrow`；用令牌调用 `cli` 通道 `python-version` 验证借用；动画生成器顶栏显示“绯月在线”。
+5. 菜单实际点击效果由用户确认。
+6. 发布结果明确后按确认清单登记花园，回读并 ack。
+
+---
+
 ## 2026-11-25 半岛文字触发兜底流程日志说明 · 绯月 Windows 正式安装版 · 已部署（免花园登记）
 
 状态：**已于 2026-11-25 23:01 JST 完成 Windows 正式安装版 2 文件精准替换（`desktop/ai-gateway.mjs`、`desktop/shell.mjs`，前像备份至 `output/install-backup-fallback-log-20261125/`），等待 5 秒确认旧进程与 8765 端口释放后独立拉起受控重启生效（新 PID `31536`，`GET http://127.0.0.1:8765/infoguide` 返回 200）；已完成 3 轮自审通过（[自审明细报告](docs/reviews/BANDAO_FALLBACK_LOG_SELF_REVIEW_2026-11-25.md)）；按用户要求本次免登记花园。**
