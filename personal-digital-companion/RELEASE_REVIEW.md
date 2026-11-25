@@ -1,3 +1,35 @@
+## 2026-11-25 半岛文字触发兜底流程日志说明 · 绯月 Windows 正式安装版 · 已部署（免花园登记）
+
+状态：**已于 2026-11-25 23:01 JST 完成 Windows 正式安装版 2 文件精准替换（`desktop/ai-gateway.mjs`、`desktop/shell.mjs`，前像备份至 `output/install-backup-fallback-log-20261125/`），等待 5 秒确认旧进程与 8765 端口释放后独立拉起受控重启生效（新 PID `31536`，`GET http://127.0.0.1:8765/infoguide` 返回 200）；已完成 3 轮自审通过（[自审明细报告](docs/reviews/BANDAO_FALLBACK_LOG_SELF_REVIEW_2026-11-25.md)）；按用户要求本次免登记花园。**
+
+### 需求与验收
+- 用户原话：「这种触发了兜底流程的失败，需要在日志上予以说明」
+- 验收：`requestBandao` 与 `askBandaoJson` 在半岛（DeepSeek）主请求失败（含 `DEEPSEEK_RESULT_INVALID`、`DEEPSEEK_HTTP_502/503/429`、`DEEPSEEK_TIMEOUT` 等）并实际触发兜底流程时，向 `任务通信.jsonl` 写入 `route: "DeepSeek 兜底"` 说明记录，标明 `primary_error`、实际接管通道（`Gemini` / `AGY CLI`）及兜底结果（`已兜底恢复` 或 `兜底失败`）。
+
+### 目标、基线与差异
+- 目标：`G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`（部署前运行 PID `12268`）。
+- 来源：`codex/workspace-checkpoint-20261120` @ `39048e0` 上变更 2 个运行文件：`desktop/ai-gateway.mjs`、`desktop/shell.mjs`。
+
+### 行为变化
+| 文件 | 正式版基线 SHA-256 前 12 位 | 候选 SHA-256 前 12 位 | 变化 |
+| --- | --- | --- | --- |
+| `desktop/ai-gateway.mjs` | `AD79EBE8FD60` | `CD8A0826A356` | 新增 `setCloudFallbackLog` 与共用 `logCloudFallback`，在 `requestBandao` / `askBandaoJson` 触发兜底成功或全失败时写入说明日志 |
+| `desktop/shell.mjs` | `D092B2445A92` | `E6E9B4184500` | 启动装配时调用 `setCloudFallbackLog(tasks.traffic?.write)` |
+
+### 数据和配置影响
+无数据库结构或数据变更，无新增配置项或密钥。纯代码发布，跳过数据库备份。
+
+### 实际验证
+- `node --check desktop/ai-gateway.mjs` 与 `desktop/shell.mjs`：通过。
+- `requestBandao` 3 场景内联断言测试（Gemini 兜底成功、AGY CLI 兜底成功、兜底全失败）：通过（`ALL_PASSED 3`）。
+- `node --test --test-timeout=15000 agent/tests/bandao-fallback.test.mjs agent/tests/agy-bandao-fallback.test.mjs agent/tests/ai-gateway-guard.test.mjs agent/tests/cloud-lane.test.mjs agent/tests/task-log-reader.test.mjs`：**26/26 全部通过**（`883.32ms`）。
+
+### 未完成与风险
+- 正式安装版运行中进程重启前尚未实际触发一次线上兜底日志写入，重启后可通过 `GET http://127.0.0.1:8765/infoguide` 核实服务恢复。
+- 恢复方案：备份正式版原 `desktop/ai-gateway.mjs` 与 `desktop/shell.mjs` 至 `output/install-backup-fallback-log-20261125/`，异常时还原并重启。
+
+---
+
 ## 2026-11-25 日记与唠叨缓慢重写机制 · 生产 subscriptions-api 与 Windows 正式安装版 · 已部署并登记（线上效果待用户确认）
 
 状态：**已于 2026-11-25 19:38:49 JST 完成生产 `subscriptions-api` 部署（版本 `a0d81f03-545d-4b66-9c44-2a704b480139`，100% 流量，绑定与变量不变）；19:39 JST 完成 Windows 正式安装版 9 文件精准替换与 `memory-refinement` v2.0 快照安装（前像备份至 `output/install-backup-memory-rewrite-20261125/`），等待 5 秒后独立拉起受控重启生效（新 PID `12268`，`GET http://127.0.0.1:8765/infoguide` 返回 200，`/v1/skills` 确认 `memory-refinement` `2.0`）；Git 推送并回读一致（`WebCharacter` `05f04fd`、`informationManage` `4c7c652`）；花园登记批次 `feiyue-memory-rewrite-20261125` 已于 19:44:59 JST 完成最终回读并于 19:45:01 JST 完成 `ack` 签收（版本 `34.8 → 34.9`，修订 `195 → 197`，审核包提交 `2210881c3663a342c0d5c333eefea82d43a03b44`，`reviewHash: b37486de...5fe1`）。** 自审明细见 [记忆重写自审报告](docs/reviews/MEMORY_REWRITE_SELF_AUDIT_2026-11-25.md)（4 轮自审通过）。第三方审核：无。线上重写效果待用户确认。

@@ -6,7 +6,7 @@ import {screenPosture} from './screen-posture.mjs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {dirname,resolve} from 'node:path';
 import {createInteractionWork} from './interaction-work.mjs';
-import {isBandaoConfigured,createVision,setCloudTaskAudit,createLocalAi,createPrivateModel,desktopModelPath,readGpuLoad} from './ai-gateway.mjs';
+import {isBandaoConfigured,createVision,setCloudTaskAudit,setCloudFallbackLog,createLocalAi,createPrivateModel,desktopModelPath,readGpuLoad} from './ai-gateway.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
 import {readFile,stat} from 'node:fs/promises';
@@ -114,6 +114,7 @@ export async function startDesktop(electron,options={}){
   function formalRoom(){return formalUsed()<FORMAL_LIMIT;}
   setLiveWarningLog(tasks.traffic?.write);
   setCloudTaskAudit(tasks.traffic?.beginDeepSeek??(()=>{throw Error('任务日志不可用');}));
+  setCloudFallbackLog(tasks.traffic?.write);
   if(memory){
     try{await migrateMemory(profile,memory,electron.safeStorage);}
     catch(error){void messages.showMessageBox({type:'warning',title:'记忆归档',message:'旧记录暂未全部导入，原文件已保留，下次启动会重试。',detail:error.message,buttons:['确定']});}

@@ -101,9 +101,14 @@ export function routesToCloud({kind,private:isPrivate=false,short=false}={}){
 // 云端 OpenAI 兼容接口的公用客户端：鉴权、超时、取消、密钥脱敏和任务日志审计。
 // 各供应商只在 本文件下面各供应商段声明端点、密钥变量和默认参数。
 let taskAudit;
+let cloudFallbackLog;
 
 export function setCloudTaskAudit(audit){
   taskAudit=audit;
+}
+
+export function setCloudFallbackLog(log){
+  cloudFallbackLog=log;
 }
 
 export function createCloudClient({endpoint,keyName,codePrefix,defaults={}}){
@@ -247,11 +252,26 @@ function stripCodeFence(text){
   return String(text??'').trim().replace(/^```(?:json)?\s*/iu,'').replace(/\s*```$/u,'');
 }
 
+function logCloudFallback({log=cloudFallbackLog,purpose='模型调用',primaryError,fallback,outcome,error}={}){
+  if(typeof log!=='function')return;
+  const code=primaryError?.code??primaryError?.name??'DEEPSEEK_FAILED';
+  void log({
+    direction:'local',
+    route:'DeepSeek 兜底',
+    operation:purpose,
+    stage:outcome==='ok'?`主请求失败（${code}），已由 ${fallback} 兜底成功`:`主请求失败（${code}），兜底均失败`,
+    primary_error:code,
+    ...(fallback?{fallback}:{}),
+    result:outcome==='ok'?'已兜底恢复':'兜底失败',
+    ...(error?{error}:{})
+  });
+}
+
 // 半岛文字统一入口：半岛失败时先兜底 Gemini，再兜底 AGY CLI；单条兜底超时自动停止并跳过，全部失败保留半岛原始错误码。
 export async function requestBandao(payload,options={}){
   const {
     signal,timeoutMs=30000,fetcher=fetch,audit=taskAudit,purpose='模型调用',priority=1,
-    fallback,allowAgyFallback=true,
+    fallback,allowAgyFallback=true,fallbackLog=cloudFallbackLog,
     geminiRequest=requestGemini,agyRun=runAgyPrompt,
     geminiReady=isGeminiConfigured,agyReady=isAgyFallbackReady
   }=options;
@@ -267,15 +287,23 @@ export async function requestBandao(payload,options={}){
   }
   const fbTimeoutMs=fallbackTimeoutMs(timeoutMs,30_000);
   const jsonMode=payload?.response_format?.type==='json_object';
+  let attempted=false;
   if(geminiReady()){
+    attempted=true;
     try{
       const gemRes=await geminiRequest(toGeminiPayload(payload),{
         signal,timeoutMs:fbTimeoutMs,audit,priority,purpose:`${purpose}（Gemini 兜底）`
       });
-      if(!jsonMode)return gemRes;
+      if(!jsonMode){
+        logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'Gemini',outcome:'ok'});
+        return gemRes;
+      }
       if(gemRes?.finishReason==='stop'){
         const parsed=parseJsonObject(gemRes.content);
-        if(parsed)return {content:JSON.stringify(parsed),finishReason:'stop'};
+        if(parsed){
+          logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'Gemini',outcome:'ok'});
+          return {content:JSON.stringify(parsed),finishReason:'stop'};
+        }
       }
     }catch(error){
       signal?.throwIfAborted?.();
@@ -284,19 +312,27 @@ export async function requestBandao(payload,options={}){
   if(allowAgyFallback&&agyReady()){
     const agyPrompt=messagesToAgyPrompt(payload?.messages,jsonMode);
     if(agyPrompt){
+      attempted=true;
       const agyRes=await runAgyWithTimeout(agyRun,{prompt:agyPrompt,signal,timeoutMs:fbTimeoutMs});
       signal?.throwIfAborted?.();
       if(agyRes?.success){
         if(jsonMode){
           const parsed=parseJsonObject(agyRes.response);
-          if(parsed)return {content:JSON.stringify(parsed),finishReason:'stop'};
+          if(parsed){
+            logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'AGY CLI',outcome:'ok'});
+            return {content:JSON.stringify(parsed),finishReason:'stop'};
+          }
         }else{
           const text=String(agyRes.response??'').trim();
-          if(text)return {content:text,finishReason:'stop'};
+          if(text){
+            logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'AGY CLI',outcome:'ok'});
+            return {content:text,finishReason:'stop'};
+          }
         }
       }
     }
   }
+  if(attempted)logCloudFallback({log:fallbackLog,purpose,primaryError,outcome:'failed',error:'DEEPSEEK_FALLBACK_FAILED'});
   throw primaryError;
 }
 
@@ -305,7 +341,7 @@ export async function requestBandao(payload,options={}){
 // 本地调用文字模型的唯一云端入口：半岛 deepseek-v4.1-flash，JSON 输出并按 schema 校验。
 // 半岛失败（含 HTTP 502/超时或连续两次非 JSON）时依次兜底 Gemini → AGY CLI；单条兜底超时自动停止并跳过，全部失败抛半岛原始错误。
 export async function askBandaoJson({instruction,schema,input,signal,purpose='AI 任务',timeoutMs=90_000,
-  fallback=true,allowAgyFallback=true,geminiRequest=requestGemini,agyRun=runAgyPrompt,
+  fallback=true,allowAgyFallback=true,fallbackLog=cloudFallbackLog,geminiRequest=requestGemini,agyRun=runAgyPrompt,
   geminiReady=isGeminiConfigured,agyReady=isAgyFallbackReady}={}){
   const text=typeof input==='string'?input:JSON.stringify(input);
   const system=instruction+'\n只输出符合以下 JSON Schema 的 JSON 对象，不附加说明。\n'+JSON.stringify(schema);
@@ -333,21 +369,30 @@ export async function askBandaoJson({instruction,schema,input,signal,purpose='AI
     if(!fallback||!canFallbackBandaoError(error))throw error;
   }
   const fbTimeoutMs=fallbackTimeoutMs(timeoutMs,30_000);
+  let attempted=false;
   if(geminiReady()){
+    attempted=true;
     try{
-      return await runJsonClient(geminiRequest,'Gemini 兜底',fbTimeoutMs,true);
+      const value=await runJsonClient(geminiRequest,'Gemini 兜底',fbTimeoutMs,true);
+      logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'Gemini',outcome:'ok'});
+      return value;
     }catch(error){
       signal?.throwIfAborted?.();
     }
   }
   if(allowAgyFallback&&agyReady()){
+    attempted=true;
     const agyRes=await runAgyWithTimeout(agyRun,{prompt:instruction+'\n\n'+text,schema,signal,timeoutMs:fbTimeoutMs});
     signal?.throwIfAborted?.();
     if(agyRes?.success){
       const value=agyRes.structuredOutput!==undefined?agyRes.structuredOutput:extractJson(agyRes.response);
-      if(valid(value,schema))return value;
+      if(valid(value,schema)){
+        logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'AGY CLI',outcome:'ok'});
+        return value;
+      }
     }
   }
+  if(attempted)logCloudFallback({log:fallbackLog,purpose,primaryError,outcome:'failed',error:'DEEPSEEK_FALLBACK_FAILED'});
   throw primaryError;
 }
 
