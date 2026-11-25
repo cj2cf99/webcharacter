@@ -38,7 +38,7 @@
 
 ## 2026-11-25 半岛文字通道新增 Gemini + AGY CLI 两级兜底 · 绯月 Windows 正式安装版 · 已部署，花园登记已入队待回执（线上效果待用户确认）
 
-状态：**已于 2026-11-25 19:34 JST 完成正式版单文件精准替换（`desktop/ai-gateway.mjs`，SHA-256 前 12 位 `AD79EBE8FD60`，原文件备份至 `output/install-backup-bandao-fallback-20261125/`），19:34:36 JST 独立拉起受控重启生效（新 PID `22224`，`GET http://127.0.0.1:8765/infoguide` 返回 200）；花园登记批次 `feiyue-bandao-fallback-20261125` 已于 19:44:39 JST 入队待回执（队列位置 `2/20`，审核包提交 `93afeb9741914d429e8e89379940eca4c15b6538`，确认摘要 `bf03d45f6812cb3b5f10dbd3a1d232ad89c495ea3e47da4ef3f4d2a5bc6cdedc`，预期版本 `34.8 → 34.9`）。** 线上实际效果待用户确认。自审明细见 [半岛兜底自审报告](docs/reviews/BANDAO_FALLBACK_SELF_REVIEW_2026-11-25.md)（3 轮自审通过）。第三方审核：无。
+状态：**已于 2026-11-25 19:34 JST 完成正式版单文件精准替换（`desktop/ai-gateway.mjs`，SHA-256 前 12 位 `AD79EBE8FD60`，原文件备份至 `output/install-backup-bandao-fallback-20261125/`），19:34:36 JST 独立拉起受控重启生效（新 PID `22224`，`GET http://127.0.0.1:8765/infoguide` 返回 200）；花园登记批次 `feiyue-bandao-fallback-20261125` 经续办（基线 `197`，审核包提交 `83e83a3d06fc2b35223f1b62bff028539887a345`，确认摘要 `88a2483c3c15f4645032c4ead44000ea1762b58ab682839e35778afa1372e3ec`，预期版本 `34.9 → 35.0`）已入队执行中（步骤 1 已 `verified` 修订 `198`，步骤 2 `applying`，待最终回读与 `ack`）。** 线上实际效果待用户确认。自审明细见 [半岛兜底自审报告](docs/reviews/BANDAO_FALLBACK_SELF_REVIEW_2026-11-25.md)（3 轮自审通过）。第三方审核：无。
 
 ### 需求与验收
 - 用户原话：「给bandao加兜底，兜底对象分别是gemini和agy cli两条线，先问gemini」「没有监控到超时自动停止并跳过的要求吗」「修正这两处」
@@ -69,12 +69,12 @@
 4. 核实新进程 PID、加载目录、启动时间及 `GET http://127.0.0.1:8765/infoguide` 返回 200。
 5. 恢复：用备份目录还原 `desktop/ai-gateway.mjs` 并按相同步骤重启。
 
-### 花园登记回执（已入队待回执）
+### 花园登记回执（续办已入队执行中，待终读签收）
 - 批次编号：`feiyue-bandao-fallback-20261125`（`desktop-update`，`release: succeeded`）
-- 审核包提交（`G:/cloudflare/myapp`）：`93afeb9741914d429e8e89379940eca4c15b6538`
-- 确认摘要（`reviewHash`）：`bf03d45f6812cb3b5f10dbd3a1d232ad89c495ea3e47da4ef3f4d2a5bc6cdedc`
-- 入队状态：`queued`（`2026-11-25 19:44:39 JST`，`queue: position 2 / used 2 / limit 20`）
-- 登记内容：网页角色组件（16）→ 绯月（桌面精灵）（61），新增功能改善（id `92`）+ 新增部署版本 `34.8 → 34.9`（deploy `119` / deploy_item `203`）；无需更新项：种子、Bug、项目关联、平台、平台功能、链接、数据源。
+- 续办审核包提交（`G:/cloudflare/myapp`）：`83e83a3d06fc2b35223f1b62bff028539887a345`（原初稿提交 `93afeb9741914d429e8e89379940eca4c15b6538` 因前序并行批次推进基线 `195 → 197` 自动暂停后续办）
+- 续办确认摘要（`reviewHash`）：`88a2483c3c15f4645032c4ead44000ea1762b58ab682839e35778afa1372e3ec`
+- 当前状态：`running`（`2026-11-25 19:48:33 JST` 查询：步骤 1 改善 `id 93` 已 `verified` 修订 `198`，步骤 2 部署 `deploy 120 / deploy_item 204` 正在 `applying`；预期版本 `34.9 → 35.0`）
+- 登记内容：网页角色组件（16）→ 绯月（桌面精灵）（61），新增功能改善（id `93`）+ 新增部署版本 `34.9 → 35.0`；无需更新项：种子、Bug、项目关联、平台、平台功能、链接、数据源。
 
 ---
 
