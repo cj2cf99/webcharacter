@@ -607,10 +607,10 @@ test('单模型注入时本地整理、服务器文本、评价、日记和唠�
         if(skill.stage==='shortDiary')return {review:'我想以后再看看进展。'};
         if(skill.name==='news-summary')return {summary:'本地资料显示，事项仍在按计划推进。相关团队已整理出下一步的清单和交接材料，当前公开内容只说明准备进度和已有事实。'};
         if(skill.name==='memory-refinement'){
-          if(skill.stage==='plan')return {organize:'删去重复评价',additions:'',format:''};
-          if(skill.stage==='review')return {decision:'accept',reason:'保留了核对事实',part:''};
-          const part=JSON.parse(text).part;
-          return {text:part.text.replace('重复。重复。','确认已核对。'),note:'我合并了重复评价'};
+          if(skill.stage==='diagnose')return {needsRewrite:'yes',issues:['重写唠叨评价'],plan:'删去重复评价'};
+          if(skill.stage==='review')return {decision:'accept',reason:''};
+          const current=JSON.parse(text).current;
+          return {beforeEvaluation:current.beforeEvaluation??'',afterEvaluation:(current.afterEvaluation??'').replace('重复。重复。','确认已核对。'),talk:current.talk,note:'我合并了重复评价'};
         }
         const values={text:schema.required.includes('review')?text:'我记下了这件事。',review:'我读后核实了原意。',
           mood:'平静',summary:'今日手记',tags:'',comment:'我想以后再看看进展。',thread:''};
@@ -636,7 +636,6 @@ test('单模型注入时本地整理、服务器文本、评价、日记和唠�
     id:'closed',revision:1,source:'diary',source_id:day+'.1/1',created_at:new Date(at).toISOString(),
     title:'核对记录',reason:'核对',status:'回合结束',mood:'平静',talk:[{who:'你',text:'已完成。',at:new Date(at).toISOString()}],
     afterEvaluation:'我已核对。重复。重复。'})});
-  await nags.refine(signal()); // 首轮轮询没有日记，下一轮检查已结束唠叨。
   const news=createNewsEditor(ai);
   let prompts=0;
   const command=createServerTaskCommand({profile,localModel:ai,tasks:{identity:{device_id:'local-fixture'},
@@ -655,7 +654,7 @@ test('单模型注入时本地整理、服务器文本、评价、日记和唠�
   assert.match(server,/取消/);assert.equal(prompts,1);
   assert.match(evaluation,/补写 1 条执行评价/);
   assert.match(diary,/已同步/);
-  assert.match(nag,/已修订唠叨/);
+  assert.match(nag,/已重写唠叨/);
   assert(seen.some(x=>x.endsWith(':shortDiary')));
   assert(seen.some(x=>x.startsWith('memory-refinement:review')));
 });

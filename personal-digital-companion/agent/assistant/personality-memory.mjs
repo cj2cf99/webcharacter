@@ -203,7 +203,7 @@ async function refine(request,db,owner,kind,id,parts,input){
   }
   if(row.revision!==input.baseRevision)return fail(409,'记录版本已变化');
   if(!canRefine(kind,record))return fail(409,'当前记录不参与修订');
-  if(!checkedRefinement(kind,record,fields))return fail(400,'修订缺少原话或附件引用');
+  if(!checkedRefinement(kind,record,fields))return fail(400,'修订缺少附件引用');
   if(JSON.stringify(fields)===JSON.stringify(refinementText(kind,record)))return fail(400,'没有需要写入的修改');
   const at=Date.now();
   if(receipt&&at-Date.parse(receipt.refineDatetime)<refinementInterval)return fail(409,'该记录距离上次修订未满七天');
@@ -212,10 +212,10 @@ async function refine(request,db,owner,kind,id,parts,input){
   if(diary){
     history[diaryOriginalKey]??=refinementText(kind,record);
     history[diaryReceiptKey]=result;
-    update=db.prepare(`UPDATE companion_diary SET body=?,summary=?,batches=?,updated_at=?,revision=revision+1
+    update=db.prepare(`UPDATE companion_diary SET body=?,summary=?,tags=?,threads=?,batches=?,updated_at=?,revision=revision+1
       WHERE owner=? AND day=? AND part=? AND revision=? AND NOT EXISTS(
         SELECT 1 FROM (${knownQuotes}) known WHERE instr(?,known.quote)=0)`)
-      .bind(fields.body,fields.summary,JSON.stringify(history),result.refineDatetime,...keys,row.revision,owner,recordId,row.body,fields.body);
+      .bind(fields.body,fields.summary,JSON.stringify(fields.tags),JSON.stringify(fields.threads),JSON.stringify(history),result.refineDatetime,...keys,row.revision,owner,recordId,row.body,fields.body);
   }else{
     const metadata={original:history[nagRefinementKey]?.original??refinementText(kind,record),receipt:result};
     const payload=JSON.stringify({...history,...fields,revision:result.revision,[nagRefinementKey]:metadata});

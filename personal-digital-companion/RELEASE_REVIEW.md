@@ -1,6 +1,44 @@
-## 2026-11-25 半岛文字通道新增 Gemini + AGY CLI 两级兜底 · 绯月 Windows 正式安装版 · 部署中
+## 2026-11-25 日记与唠叨缓慢重写机制 · 生产 subscriptions-api 与 Windows 正式安装版 · 已部署待花园登记确认（线上效果待用户确认）
 
-状态：**正在部署至 Windows 正式安装版（单文件精准更新 `desktop/ai-gateway.mjs`），重启核实后进入花园登记制单与确认。** 自审明细见 [半岛兜底自审报告](docs/reviews/BANDAO_FALLBACK_SELF_REVIEW_2026-11-25.md)（3 轮自审通过）。第三方审核：无。
+状态：**已于 2026-11-25 19:38:49 JST 完成生产 `subscriptions-api` 部署（版本 `a0d81f03-545d-4b66-9c44-2a704b480139`，100% 流量，绑定与变量不变）；19:39 JST 完成 Windows 正式安装版 9 文件精准替换与 `memory-refinement` v2.0 快照安装（前像备份至 `output/install-backup-memory-rewrite-20261125/`），等待 5 秒后独立拉起受控重启生效（新 PID `32248`，`GET http://127.0.0.1:8765/infoguide` 返回 200）。** 自审明细见 [记忆重写自审报告](docs/reviews/MEMORY_REWRITE_SELF_AUDIT_2026-11-25.md)（4 轮自审通过）。第三方审核：无。线上重写效果待用户确认。
+
+### 需求与验收
+- 需求与设计：[REQUIREMENTS.md](REQUIREMENTS.md#2026-11-25-jst--日记与唠叨缓慢重写机制)、[DESIGN.md](docs/DESIGN.md#2026-11-25-jst--日记与唠叨缓慢重写机制)。
+- 验收：取消旧版 144 字硬切分片与逐片复核，升级为 4 步整篇重写（`体检 1/4 → 整篇重写 2/4 → 一次性整篇复核 3/4 → 提交同步 4/4`）；选篇按东京日期近 7 天从旧到新优先、再 8～30 天从旧到新、超 30 天跳过；头顶气泡展示篇号、具体问题与步骤进度；日记云端 `/refine` 放开 `body / summary / tags(<=10) / threads`（锁死 `weather` 与 `mood`，保护附件锚点与 `asked` 悬念编号，注入本机高频 Tag 池优先复用）；唠叨放开 `beforeEvaluation / afterEvaluation / talk`（锁死 `mood`，校验原合法时间戳与结束记录保留）；除直连不发外部 AI API 外不做其他私密拦截，所有记录统一正常上传 Cloudflare。
+
+### 目标、基线与差异
+- 目标 1（云端 Worker）：生产 `subscriptions-api`（由 `a5de8e4d-7478-423c-8b3c-ad920425bbce` 升至 `a0d81f03-545d-4b66-9c44-2a704b480139`，源码基线 `informationManage` @ `6aa4adf8` → 分支 `codex/memory-rewrite-20261125`）。
+- 目标 2（Windows 正式安装版）：`G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`（精准替换 9 个运行文件 + 新增 `skills/memory-refinement/versions/memory-refinement-v2-0/`，不混入工作区其他未提交改动）。
+
+### 行为变化
+| 目标 | 文件 | 正式版基线 SHA-256 前 12 位 | 候选 SHA-256 前 12 位 | 变化 |
+| --- | --- | --- | --- | --- |
+| Worker + 桌面 | `agent/assistant/memory-refinement.mjs` | `6F94934EB976`（Worker 新增） | `8F05F460816D` | 放开日记 `tags/threads` 与唠叨 `talk` 校验，锁死 `weather/mood`，保护附件锚点、`asked` 悬念编号与 `talk` 原时间戳/结束记录 |
+| Worker + 桌面 | `agent/assistant/personality-memory.mjs` | `DA647285B75A` | `324B25C7B589` | `/refine` 写入同步更新 `body, summary, tags, threads` 与唠叨 `talk`，保留 `@refineOriginal` 与 7 天冷却 |
+| 桌面 | `desktop/memory-refinement.mjs` | `63102312415D` | `148466546107` | 重塑为 4 步整篇重写引擎、7 天优先 + 30 天旧→新选篇、气泡进度、Tag 池注入、旧分片断点兼容与失败不误标已检 |
+| 桌面 | `desktop/personality-diary.mjs` | `389F021C6C39` | `6C65FF8DB172` | 注入 `readTagPool()` 并在修订链路移除非直连私密拦截 |
+| 桌面 | `desktop/ai-workflow-model.mjs` | `5E61FD2C7197` | `1EE9A1CD3EB2` | `laneFor` 补齐 `memory-refinement` 的 `diagnose` 阶段归入辅助通道 |
+| 桌面 | `skills/memory-refinement/{latest.json,source/*,versions/memory-refinement-v2-0/*}` | `v1.8` | `v2.0` | 发布 `memory-refinement` v2.0（`diagnose / rewriteDiary / rewriteNag / review`） |
+
+### 数据和配置影响
+无 D1/SQLite 结构迁移，无新增环境变量、密钥或绑定。纯代码与技能更新，按规则跳过数据库备份。
+
+### 实际验证
+- `node --test --test-timeout=15000 agent/tests/memory-refinement.test.mjs agent/tests/personality-memory.test.mjs agent/tests/prompt-rules.test.mjs`：**45/45 通过**。
+- `node --test --test-timeout=15000 --test-name-pattern="混合" agent/tests/ai-workflow.test.mjs`：**1/1 通过**。
+- `node tools/build-desktop.mjs` 与 `node tools/test-desktop-shell.mjs`：构建与 **7/7 项**桌面壳检查通过。
+- `npx.cmd wrangler deploy --dry-run` 与 `npx.cmd wrangler deploy --keep-vars`：上传 `371.96 KiB`，版本 `a0d81f03-545d-4b66-9c44-2a704b480139` 承接 100% 流量。
+- 正式版重启核实：PID `32248`，`GET http://127.0.0.1:8765/infoguide` 返回 200（REST v7）。
+
+### 未完成与风险
+- 未在生产环境用真实模型端到端重写线上日记；线上效果待重启后由用户确认。
+- 恢复方案：Worker 用 `wrangler rollback` 回退至 `a5de8e4d-7478-423c-8b3c-ad920425bbce`；桌面端从 `output/install-backup-memory-rewrite-20261125/` 还原并按统一重启流程重启。
+
+---
+
+## 2026-11-25 半岛文字通道新增 Gemini + AGY CLI 两级兜底 · 绯月 Windows 正式安装版 · 已部署待登记确认（线上效果待用户确认）
+
+状态：**已于 2026-11-25 19:34 JST 完成正式版单文件精准替换（`desktop/ai-gateway.mjs`，SHA-256 前 12 位 `AD79EBE8FD60`，原文件备份至 `output/install-backup-bandao-fallback-20261125/`），19:34:36 JST 独立拉起受控重启生效（新 PID `22224`，`GET http://127.0.0.1:8765/infoguide` 返回 200）；正在准备花园登记清单待用户确认。** 自审明细见 [半岛兜底自审报告](docs/reviews/BANDAO_FALLBACK_SELF_REVIEW_2026-11-25.md)（3 轮自审通过）。第三方审核：无。
 
 ### 需求与验收
 - 用户原话：「给bandao加兜底，兜底对象分别是gemini和agy cli两条线，先问gemini」「没有监控到超时自动停止并跳过的要求吗」「修正这两处」

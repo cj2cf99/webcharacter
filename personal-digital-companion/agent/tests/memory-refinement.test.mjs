@@ -13,16 +13,19 @@ import {createPersonalityDiary} from '../../desktop/personality-diary.mjs';
 
 const day='2026-11-22', at='2026-11-22T02:00:00.000Z';
 const recordPath=`diaries/${day}.1`,refinePath=recordPath+'/refine';
-const batch={day,batch:'initial',body:'你说：装好了。\n原先的描述需要整理。',summary:'安装',mood:'平静',tags:[],weather:'晴',threads:['结果如何？']};
+const batch={day,batch:'initial',body:'你说：装好了，然后把日志里的每一步也都念了一遍。\n原先的描述需要整理。',summary:'安装过程与详细记录',mood:'平静',tags:['日常','安装'],weather:'晴',threads:['结果如何？','明天还要干嘛？']};
 const nag={id:'closed',revision:1,created_at:at,source:'diary',source_id:day+'.1/1',title:'结果如何？',reason:'记下了这件事',
-  status:'回合结束',mood:'平静',talk:[{who:'你',text:'已经装好。',at}],afterEvaluation:'我记下了。'};
+  status:'回合结束',mood:'平静',
+  talk:[{who:'绯月',text:'好了吗？',at:'2026-11-22T01:55:00.000Z'},{who:'你',text:'嗯，等等我看看。',at:'2026-11-22T01:58:00.000Z'},{who:'你',text:'已经装好了。',at}],
+  beforeEvaluation:'用户刚说要安装。',afterEvaluation:'我记下了。'};
 const signal=new AbortController().signal;
 const migration=readFileSync(new URL('../migrations/016-personality-memory.sql',import.meta.url),'utf8');
 const schemas=JSON.parse(readFileSync(new URL('../../skills/memory-refinement/source/schemas.json',import.meta.url),'utf8'));
 const localAi=JSON.parse(readFileSync(new URL('../../skills/memory-refinement/source/local-ai.json',import.meta.url),'utf8'));
+const fakeSkill=(version='2.0')=>async name=>name==='memoryRefinement'?{skill:'memory-refinement',version,content:'整篇重写指引',schemas,localAi}:{version:'1.0',content:'现行格式'};
 
-function fixture(t){
-  let time=Date.parse(at);
+function fixture(t,nowIso=at){
+  let time=Date.parse(nowIso);
   t.mock.method(Date,'now',()=>time);
   const {DB,sqlite,close}=openTestDatabase();
   sqlite.exec(migration);t.after(close);
@@ -35,58 +38,215 @@ function fixture(t){
     assert.equal(response.status,200,await response.clone().text());
     return response.json();
   }
-  return {sqlite,request,api,advance:ms=>{time+=ms;}};
+  return {sqlite,request,api,advance:ms=>{time+=ms;},now:()=>time};
 }
 
-test('两次修订保留云端最初和最新稿，原话、引用、追加、七天边界与幂等',async t=>{
+test('日记修订放开正文精简、摘要、Tag(<=10)与悬念，锁死天气与心情，保护附件锚点、引用及已念叨悬念编号',async t=>{
   const {sqlite,api,request,advance}=fixture(t);
-  await api('diaries',batch);
+  const withAttach={...batch,body:batch.body+'\n〔附件原文 a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4〕'};
+  await api('diaries',withAttach);
+  await api(recordPath+'/threads/1',{field:'asked'});
   const quoted='原先的描述需要整理。';
   const audit={id:'audit-one',revision:1,created_at:at,source:'audit',source_id:day+'.1',title:'如何整理？',reason:'希望看清楚',
     status:'等待回应',mood:'平静',talk:[{who:'绯月',text:'如何整理？',at}],refs:[{page:day+'.1',quote:quoted}],points:['旧描述不清楚'],questions:1,next:'如何整理？'};
   await api('nags',audit);
   assert.deepEqual((await api(refinePath)).quotes,[quoted]);
-  const first={baseRevision:1,refineId:'first-refine',fields:{body:batch.body+'\n绯月后记：这次顺利完成。',summary:'安装完成'}};
-  assert.equal((await request(refinePath,{...first,fields:{...first.fields,body:'改掉原话'}})).status,400);
-  assert.equal((await request(refinePath,{...first,fields:{...first.fields,summary:'第一行\n【情绪】第二行'}})).status,400);
-  assert.equal((await request(refinePath,{...first,fields:{...first.fields,body:'你说：装好了。'}})).status,409);
-  assert.equal((await request(refinePath,{...first,note:'只存本地'})).status,400);
+
+  const goodFields={
+    body:'老公确认已经装好了。原先的描述需要整理。\n〔附件原文 a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4〕\n绯月后记：这次顺利完成。',
+    summary:'老公完成安装',
+    tags:['安装','桌面精灵'],
+    threads:[{no:1,text:'安装后的效果如何？',resolved:false,asked:true}]
+  };
+  const first={baseRevision:2,refineId:'first-refine',fields:goodFields};
+  // 锁死 weather / mood，不允许传入
+  assert.equal((await request(refinePath,{...first,fields:{...goodFields,weather:'雨'}})).status,400);
+  assert.equal((await request(refinePath,{...first,fields:{...goodFields,mood:'开心'}})).status,400);
+  // 摘要不允许换行
+  assert.equal((await request(refinePath,{...first,fields:{...goodFields,summary:'第一行\n第二行'}})).status,400);
+  // Tag 超过 10 个拒绝
+  assert.equal((await request(refinePath,{...first,fields:{...goodFields,tags:Array.from({length:11},(_,i)=>'词'+i)}})).status,400);
+  // 删掉附件锚点拒绝
+  assert.equal((await request(refinePath,{...first,fields:{...goodFields,body:'老公确认已经装好了。原先的描述需要整理。'}})).status,400);
+  // 删掉质问引用短句拒绝 (409)
+  assert.equal((await request(refinePath,{...first,fields:{...goodFields,body:'老公确认已经装好了。\n〔附件原文 a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4〕'}})).status,409);
+  // 删掉已念叨的悬念编号拒绝 (400)
+  assert.equal((await request(refinePath,{...first,fields:{...goodFields,threads:[]}})).status,400);
+  // 权限与只读保护
   assert.equal((await request(refinePath,first,'other')).status,404);
   assert.equal((await request(refinePath,first,'owner',{companionBrowser:true})).status,405);
+
   const [one,two]=await Promise.all([api(refinePath,first),api(refinePath,first)]);
   assert.deepEqual(one,two);
-  await api('diaries',{...batch,batch:'append',body:'你说：后来又装好了一样东西。',threads:[]});
-  await api(recordPath+'/threads/1',{field:'resolved'});
   const current=await api(refinePath);
-  assert.equal(current.record.revision,4);assert.equal(current.record.threads[0].resolved,true);
-  assert.deepEqual(current.receipt,one);assert.deepEqual(await api(refinePath,first),one);
-  assert.equal((await request(refinePath,{...first,fields:{...first.fields,summary:'同号不同文字'}})).status,409);
-  const second={baseRevision:4,refineId:'second-refine',fields:{summary:'安装与后续',body:current.record.body+'\n此处记录已核对。'}};
+  assert.equal(current.record.revision,3);
+  assert.equal(current.record.weather,'晴');
+  assert.equal(current.record.mood,'平静');
+  assert.deepEqual(current.record.tags,['安装','桌面精灵']);
+  assert.equal(current.record.threads.length,1);
+  assert.equal(current.record.threads[0].no,1);
+  assert.equal(current.record.threads[0].asked,true);
+  // 冷却保护与第二次修订
+  const second={baseRevision:3,refineId:'second-refine',fields:{...goodFields,summary:'老公完成安装与验收'}};
   advance(refinementInterval-1);
   assert.equal((await request(refinePath,second)).status,409);
   advance(1);
-  assert.equal((await api(refinePath,second)).revision,5);
-  const stored=sqlite.prepare('SELECT body,batches FROM companion_diary').get();
+  assert.equal((await api(refinePath,second)).revision,4);
+  const stored=sqlite.prepare('SELECT body,tags,threads,weather,mood,batches FROM companion_diary').get();
   const metadata=JSON.parse(stored.batches);
-  assert.deepEqual(metadata['@refineOriginal'],{body:batch.body,summary:batch.summary});
-  assert.equal(stored.body,second.fields.body);
+  assert.equal(metadata['@refineOriginal'].body,withAttach.body);
+  assert.deepEqual(metadata['@refineOriginal'].threads,[
+    {no:1,text:'结果如何？',resolved:false,asked:false},
+    {no:2,text:'明天还要干嘛？',resolved:false,asked:false}
+  ]);
+  assert.equal(stored.weather,'晴');
+  assert.equal(stored.mood,'平静');
   assert.equal(metadata['@refineReceipt'].refineId,'second-refine');
 });
 
-test('旧记录备份只能固定一次，已结束唠叨只改评价，空日记跳过',async t=>{
+test('唠叨修订允许精简 talk 与重写评价，锁死 mood，校验原合法时间戳与结束记录保留',async t=>{
   const {api,request,sqlite}=fixture(t);
-  await api('nags',nag);
-  sqlite.exec("UPDATE companion_nags SET payload=json_remove(payload,'$._refinement')");
-  const body={baseRevision:1,refineId:'nag-first',fields:{beforeEvaluation:'',afterEvaluation:'绯月后记：我确认安装完成。'}};
-  assert.equal((await request('nags/closed/refine',{...body,fields:{...body.fields,talk:'不允许'}})).status,400);
+  const endedWithClose={...nag,status:'用户结束',talk:[...nag.talk,{who:'结束记录',text:'老公闷闷的不理我了',at}]};
+  await api('nags',endedWithClose);
+  const good={
+    beforeEvaluation:'我惦记着老公的安装进度。',
+    afterEvaluation:'老公确认已经装好了。',
+    talk:[{who:'绯月',text:'装好了吗？',at:'2026-11-22T01:55:00.000Z'},{who:'你',text:'已经装好了。',at},{who:'结束记录',text:'老公闷闷的不理我了',at}]
+  };
+  const body={baseRevision:1,refineId:'nag-rewrite-1',fields:good};
+  // 锁死 mood
+  assert.equal((await request('nags/closed/refine',{...body,fields:{...good,mood:'开心'}})).status,400);
+  // 编造时间戳拒绝
+  assert.equal((await request('nags/closed/refine',{...body,fields:{...good,talk:[{who:'你',text:'装好了',at:'2026-11-22T09:00:00.000Z'},{who:'结束记录',text:'老公闷闷的不理我了',at}]}})).status,400);
+  // 删掉结束记录拒绝
+  assert.equal((await request('nags/closed/refine',{...body,fields:{...good,talk:[{who:'你',text:'已经装好了。',at}]}})).status,400);
+
   await api('nags/closed/refine',body);
-  const record=await api('nags/closed');
-  assert.equal(record.afterEvaluation,body.fields.afterEvaluation);assert.deepEqual(record.talk,nag.talk);
-  assert.equal(record.status,nag.status);assert(!Object.hasOwn(record,'_refinement'));
+  const saved=await api('nags/closed');
+  assert.equal(saved.mood,'平静');
+  assert.equal(saved.talk.length,3);
+  assert.equal(saved.afterEvaluation,good.afterEvaluation);
   const raw=JSON.parse(sqlite.prepare('SELECT payload FROM companion_nags').get().payload);
-  assert.equal(raw._refinement.original.afterEvaluation,nag.afterEvaluation);
-  await api('diaries',{...batch,body:'无所事事的一天'});
-  assert.equal((await request(refinePath,{baseRevision:1,refineId:'empty',fields:{body:'假补写',summary:'测试'}})).status,409);
+  assert.equal(raw._refinement.original.talk.length,4);
+  // 空日记跳过
+  await api('diaries',{...batch,body:'无所事事的一天',threads:[]});
+  assert.equal((await request(refinePath,{baseRevision:1,refineId:'empty',fields:{body:'假补写',summary:'测试',tags:[],threads:[]}})).status,409);
+});
+
+test('选篇顺序：近 7 天从旧到新优先，再 8-30 天从旧到新，超 30 天跳过',async t=>{
+  const {api,now}=fixture(t,'2026-11-25T10:00:00.000Z');
+  // 40 天前（应跳过）、15 天前（第二梯队）、6 天前（第一梯队最旧）、2 天前（第一梯队较新）
+  for(const d of ['2026-10-15','2026-11-10','2026-11-19','2026-11-23']){
+    await api('diaries',{...batch,day:d,batch:'b-'+d,body:`用户今天在 ${d} 做了测试。`,threads:[]});
+  }
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+  const visited=[];
+  const runner=createMemoryRefinement({db,api,now,clean:s=>s.trim(),loadSkill:fakeSkill(),
+    model:{async memory(text,_inst,_schema,_sig,skill){
+      const data=JSON.parse(text);
+      if(skill.stage==='diagnose'){visited.push(data.id);return {needsRewrite:'yes',issues:['修正人称与称呼'],plan:'把用户改成老公'};}
+      if(skill.stage==='rewriteDiary')return {body:`老公在 ${data.context.date} 做了测试。`,summary:`${data.context.date} 测试`,tags:['测试'],threads:[],note:'修正了称呼'};
+      return {decision:'accept',reason:''};
+    }}
+  });
+  assert.match(await runner.run(signal),/已重写日记 2026-11-19\.1/);
+  assert.match(await runner.run(signal),/已重写日记 2026-11-23\.1/);
+  assert.match(await runner.run(signal),/已重写日记 2026-11-10\.1/);
+  assert.equal(await runner.run(signal),'本轮没有符合条件的重写');
+  assert.deepEqual(visited,['2026-11-19.1','2026-11-23.1','2026-11-10.1']);
+});
+
+test('整篇重写不拆 144 字分片、一次性复核、注入已有 Tag 库并向头顶气泡汇报篇号/问题/步数',async t=>{
+  const {api,now}=fixture(t,'2026-11-25T10:00:00.000Z');
+  const longBody='用户今天调试了很久。\n'+'你说：这里日志太长了需要精简。'.repeat(18)+'\n绯月当时回复：收到，我来记下来。';
+  await api('diaries',{...batch,day:'2026-11-24',body:longBody,tags:['日常','聊天','调试']});
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+  const stages=[],bubbles=[];
+  let seenTagPool=null;
+  const runner=createMemoryRefinement({db,api,now,clean:s=>s.trim(),loadSkill:fakeSkill(),
+    readTagPool:()=>['绯月桌面','调试','云端同步'],
+    model:{async memory(text,_inst,_schema,_sig,skill){
+      stages.push(skill.stage);
+      const data=JSON.parse(text);
+      if(skill.stage==='diagnose')return {needsRewrite:'yes',issues:['修正人称与称呼','精简冗长对话'],plan:'统一第一人称并精简对话'};
+      if(skill.stage==='rewriteDiary'){
+        seenTagPool=data.tagPool;
+        return {body:'老公今天完成了长日志调试，要求精简记录。',summary:'老公完成日志调试',tags:['调试','绯月桌面'],threads:[{no:1,text:'日志精简后的效果如何？',resolved:false}],note:'精简了对话并复用已有Tag'};
+      }
+      return {decision:'accept',reason:''};
+    }}
+  });
+  assert.match(await runner.run(signal,p=>bubbles.push(p)),/已重写日记 2026-11-24\.1/);
+  // 只调用 3 次模型（体检 + 整篇重写 + 一次性整篇复核），无分片循环
+  assert.deepEqual(stages,['diagnose','rewriteDiary','review']);
+  assert.deepEqual(seenTagPool,['绯月桌面','调试','云端同步']);
+  assert.equal(bubbles.length,4);
+  assert.match(bubbles[0].stage,/重写 日记 11-24\.1 · 体检问题/);assert.equal(bubbles[0].done,1);assert.equal(bubbles[0].total,4);
+  assert.match(bubbles[1].stage,/重写 日记 11-24\.1 · 修正人称与称呼/);assert.equal(bubbles[1].done,2);assert.equal(bubbles[1].total,4);
+  assert.match(bubbles[2].stage,/重写 日记 11-24\.1 · 整篇复核/);assert.equal(bubbles[2].done,3);assert.equal(bubbles[2].total,4);
+  assert.match(bubbles[3].stage,/重写 日记 11-24\.1 · 提交同步/);assert.equal(bubbles[3].done,4);assert.equal(bubbles[3].total,4);
+});
+
+test('整篇复核退回时保留体检断点并带原因整篇返工一次，唠叨 talk 精简同步云端',async t=>{
+  const {api,now}=fixture(t,'2026-11-22T03:00:00.000Z');
+  await api('nags',nag);
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+  let reviewCount=0,feedbackSeen='';
+  const runner=createMemoryRefinement({db,api,now,clean:s=>s.trim(),loadSkill:fakeSkill(),
+    model:{async memory(text,_inst,_schema,_sig,skill){
+      const data=JSON.parse(text);
+      if(skill.stage==='diagnose')return {needsRewrite:'yes',issues:['修正人称与称呼','精简唠叨问答'],plan:'删掉无效过渡句'};
+      if(skill.stage==='rewriteNag'){
+        feedbackSeen=data.reviewFeedback??'';
+        return {
+          beforeEvaluation:'我惦记着老公的安装进度。',
+          afterEvaluation:feedbackSeen?'老公确认已经装好了。':'记下了。',
+          talk:[{who:'绯月',text:'装好了吗？',at:'2026-11-22T01:55:00.000Z'},{who:'你',text:'已经装好了。',at}],
+          note:'精简了唠叨问答并收束结论'
+        };
+      }
+      reviewCount++;
+      return reviewCount===1?{decision:'revise',reason:'结论太敷衍，请写明结果'}:{decision:'accept',reason:''};
+    }}
+  });
+  assert.match(await runner.run(signal),/整篇复核要求补正/);
+  assert.match(await runner.run(signal),/已重写唠叨 closed/);
+  assert.match(feedbackSeen,/结论太敷衍/);
+  const saved=await api('nags/closed');
+  assert.equal(saved.talk.length,2);
+  assert.equal(saved.afterEvaluation,'老公确认已经装好了。');
+});
+
+test('断点恢复、丢失回执幂等续跑与无问题跳过',async t=>{
+  const {api,now}=fixture(t,'2026-11-22T03:00:00.000Z');
+  await api('diaries',batch);
+  const folder=mkdtempSync(join(tmpdir(),'fy-refine-')),file=join(folder,'memory.sqlite');
+  let db=new DatabaseSync(file);
+  t.after(()=>{db.close();rmSync(folder,{recursive:true,force:true});});
+  let posted=0,drop=true,calls=[];
+  const makeRunner=()=>createMemoryRefinement({db,now,clean:s=>s.trim(),loadSkill:fakeSkill(),
+    async api(path,body){
+      const res=await api(path,body);
+      if(body){posted++;if(drop){drop=false;throw Error('模拟回执丢失');}}
+      return res;
+    },
+    model:{async memory(_text,_inst,_schema,_sig,skill){
+      calls.push(skill.stage);
+      if(skill.stage==='diagnose')return {needsRewrite:'yes',issues:['精简摘要骨架'],plan:'重写精简'};
+      if(skill.stage==='rewriteDiary')return {body:'老公确认装好了。',summary:'老公完成安装',tags:['安装'],threads:[],note:'整篇精简'};
+      return {decision:'accept',reason:''};
+    }}
+  });
+  await assert.rejects(makeRunner().run(signal),/模拟回执丢失/);
+  assert.deepEqual(calls,['diagnose','rewriteDiary','review']);
+  assert.equal(posted,1);
+  // 重开库后直接核对原回执并完成，不重跑模型、不重复 POST
+  db.close();db=new DatabaseSync(file);calls=[];
+  assert.match(await makeRunner().run(signal),/已重写日记 2026-11-22\.1/);
+  assert.deepEqual(calls,[]);
+  assert.equal(posted,1);
+  // 再次运行应跳过（已检查且在冷却内）
+  assert.equal(await makeRunner().run(signal),'本轮没有符合条件的重写');
 });
 
 test('当天第一条正文替换空日记，空批次重试沿用原篇',async t=>{
@@ -98,274 +258,6 @@ test('当天第一条正文替换空日记，空批次重试沿用原篇',async 
   assert.deepEqual({part:saved.part,body:saved.body,revision:saved.revision},{part:1,body:fact.body,revision:2});
   assert.deepEqual(await api('diaries',empty),saved);
   assert.deepEqual(await api('diaries',fact),saved);
-});
-
-test('旧服务的修订读取返回 404 时跳过，入口上线后继续原记录',async t=>{
-  const profile=mkdtempSync(join(tmpdir(),'feiyue-refine-legacy-'));
-  const requests=[];
-  let missing=true;
-  const archived={...nag,talk:[{who:'绯月',text:'你愿意听我讲故事吗？',at},
-    {who:'你',text:'我给你讲故事。',at},{who:'绯月',text:'我给你讲故事，你听。',at}]};
-  const {api,request}=fixture(t);
-  await api('nags',archived);
-  const diary=createPersonalityDiary({profile,now:()=>Date.parse(at),
-    model:{memory:()=>assert.fail('可证的更正不需要模型')},
-    request(path,options){
-      const target=path.slice('/api/memory/'.length);
-      requests.push([target,options.method]);
-      if(missing&&target.endsWith('/refine'))return Response.json({error:'原记录不可用'},{status:404});
-      return request(target,options.body&&JSON.parse(options.body));
-    }});
-  t.after(()=>{diary.close();rmSync(profile,{recursive:true,force:true});});
-  await diary.refine(signal);
-  assert.equal(await diary.refine(signal),'本轮没有符合条件的修订');
-  assert.ok(requests.some(([path])=>path==='nags/closed/refine'));
-  assert.ok(requests.every(([,method])=>method==='GET'));
-  missing=false;
-  await diary.refine(signal);
-  assert.match(await diary.refine(signal),/已修订唠叨/);
-  const saved=(await api('nags/closed/refine')).record;
-  assert.deepEqual(saved.talk,archived.talk);
-  assert.match(saved.afterEvaluation,/我听你讲故事/);
-});
-
-test('事后修订移除历史空占位，保留来源摘要和原话，唠叨只追加更正',async t=>{
-  const {api}=fixture(t);
-  const body='你说：已经装好了。\n\n我等到了最新的结果。';
-  const summary='你的日记：安装顺利\n当日消费：配件 480 日元';
-  await api('diaries',{...batch,body:'无所事事的一天\n\n'+body,summary:'无所事事的一天\n'+summary});
-  const archived={...nag,talk:[{who:'绯月',text:'好了吗？',at},{who:'你',text:'已经装好。',at},
-    {who:'绯月',text:'还没动工就慢慢准备吧。',at}]};
-  await api('nags',archived);
-  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
-  const runner=createMemoryRefinement({db,api,clean:text=>text.trim(),
-    loadSkill:async name=>name==='memoryRefinement'?{skill:'memory-refinement',version:'1.0',content:'固定复审',schemas,localAi}:
-      {version:'1.0',content:'现行格式'},
-    model:{async memory(text,prompt,_schema,_signal,skill){
-      const data=JSON.parse(text);
-      if(skill.stage==='plan')return {organize:data.record.kind==='唠叨'?'纠正把已完成误写成未动工':'',additions:'',format:''};
-      if(skill.stage==='draft'){
-        const {part}=data;
-        return {text:part.field==='afterEvaluation'?part.text+'\n绯月后记：我当时把已经装好听成尚未动工。':part.text,note:''};
-      }
-      assert.match(prompt,/固定复审/);
-      return {decision:'accept',part:'',reason:''};
-    }}
-  });
-  assert.match(await runner.run(signal),/已修订日记/);
-  const diary=await api(recordPath);
-  assert.equal(diary.body,body);
-  assert.equal(diary.summary,summary);
-  assert.match(await runner.run(signal),/已修订唠叨/);
-  const corrected=await api('nags/closed');
-  assert.deepEqual(corrected.talk,archived.talk);
-  assert.match(corrected.afterEvaluation,/绯月后记：我当时把已经装好听成尚未动工/);
-});
-
-test('明确待复核的唠叨按原话补记，保留整段发言和原评价',async t=>{
-  const {api}=fixture(t);
-  const archived={...nag,talk:[{who:'绯月',text:'什么时候到？',at},{who:'你',text:'最迟九点。',at},
-    {who:'绯月',text:'这句我先记下，之后我会按你的原话再核对。',at}],
-    afterEvaluation:'已保存原话，待复核这轮回应。'};
-  await api('nags',archived);
-  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
-  const runner=createMemoryRefinement({db,api,clean:text=>text.trim(),
-    loadSkill:async name=>name==='memoryRefinement'?{skill:'memory-refinement',version:'1.0',content:'固定复审',schemas,localAi}:
-      {version:'1.0',content:'现行格式'},
-    model:{memory(){assert.fail('证据明确的更正不需要额外推理');}}
-  });
-  await runner.run(signal);
-  assert.match(await runner.run(signal),/已修订唠叨/u);
-  const {record,receipt}=await api('nags/closed/refine');
-  assert.deepEqual(record.talk,archived.talk);
-  assert.equal(record.afterEvaluation,archived.afterEvaluation+'\n绯月后记：重新核对这轮，你当时说的是「最迟九点。」');
-  assert.equal(receipt.revision,archived.revision+1);
-  await runner.run(signal);await runner.run(signal);
-  assert.equal((await api('nags/closed/refine')).record.revision,receipt.revision);
-});
-
-test('两条旧私密唠叨离线逐条补记，重开数据库后不重复也不外发',async t=>{
-  const profile=mkdtempSync(join(tmpdir(),'feiyue-nag-private-'));
-  let requests=0;
-  const model={memory(){assert.fail('本机可证的补记不需要模型');}};
-  const offline=()=>{requests++;assert.fail('私密唠叨不应走网络');};
-  let diary=createPersonalityDiary({profile,model,request:offline,now:()=>Date.parse(at)});
-  t.after(()=>{diary.close();rmSync(profile,{recursive:true,force:true});});
-  const sample=id=>({...nag,id,localOnly:true,revision:0,talk:[{who:'你',text:'最迟九点。',at},
-    {who:'绯月',text:'这句我先记下，之后我会按你的原话再核对。',at}]});
-  const first=sample('private-one');
-  first.talk.push({who:'你',text:'我给你讲故事。',at},{who:'绯月',text:'我给你讲故事。',at});
-  diary.saveNag(first);
-  diary.saveNag(sample('private-two'));
-  const before=diary.nags();
-  await diary.syncNags(signal);
-  assert.match(await diary.refine(signal),/已修订本机唠叨 private-one/u);
-  assert.equal(diary.nags().filter(n=>n.afterEvaluation.includes('绯月后记')).length,1);
-  diary.close();
-  diary=createPersonalityDiary({profile,model,now:()=>Date.parse(at)});
-  assert.match(await diary.refine(signal),/已修订本机唠叨 private-two/u);
-  assert.match(await diary.refine(signal),/本轮没有符合条件/u);
-  const corrected=diary.nags();
-  for(const record of before){
-    const next=corrected.find(row=>row.id===record.id);
-    assert.deepEqual(next.talk,record.talk);
-    assert.ok(next.afterEvaluation.startsWith(record.afterEvaluation+'\n绯月后记：重新核对这轮，你当时说的是「最迟九点。」'));
-    assert.equal(next.afterEvaluation.includes('我听你讲故事。'),record.id===first.id);
-    assert.equal(next.revision,record.revision+1);
-  }
-  assert.equal(requests,0);
-  const db=new DatabaseSync(join(profile,'personality-memory.sqlite'),{readOnly:true});
-  try{
-    const rows=db.prepare('SELECT data FROM memory_refinements WHERE active=0').all().map(row=>JSON.parse(row.data));
-    assert.equal(rows.length,2);
-    assert.ok(rows.every(row=>row.localOnly&&row.previous.afterEvaluation===nag.afterEvaluation));
-  }finally{db.close();}
-
-  diary.close();
-  const listCalls=[];
-  const request=async (path,{method})=>{
-    listCalls.push([path,method]);
-    assert.match(path,/^\/api\/memory\/(?:diaries|nags)\?page=0$/u);
-    return Response.json(path.includes('/nags')?{items:[{...sample(first.id),revision:20}],total:1}:{items:[],total:0});
-  };
-  diary=createPersonalityDiary({profile,model,request,now:()=>Date.parse(at)});
-  await diary.refresh(signal);
-  await diary.refine(signal);await diary.refine(signal);
-  assert.deepEqual(diary.nags(),corrected);
-  assert.equal(listCalls.length,4);
-  assert.ok(listCalls.every(([,method])=>method==='GET'));
-});
-
-test('远端修订准备好后改成私密，放弃待提交稿且不发写请求',async t=>{
-  const {api}=fixture(t);
-  const before={...nag,talk:[{who:'你',text:'最迟九点。',at},
-    {who:'绯月',text:'这句我先记下，之后我会按你的原话再核对。',at}]};
-  await api('nags',before);
-  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
-  let privateNow=false,reads=0,writes=0;
-  const runner=createMemoryRefinement({db,clean:text=>text.trim(),isLocalNag:()=>privateNow,
-    async api(path,body){
-      if(body)writes++;
-      const result=await api(path,body);
-      if(path==='nags/closed/refine'&&++reads===2)privateNow=true;
-      return result;
-    },
-    loadSkill:async name=>name==='memoryRefinement'?{skill:'memory-refinement',version:'1.0',content:'固定复审',schemas,localAi}:
-      {version:'1.0',content:'现行格式'},
-    model:{memory(){assert.fail('此用例应在调用模型前结束');}}
-  });
-  await runner.run(signal);
-  assert.match(await runner.run(signal),/已停止远端修订/u);
-  assert.equal(writes,0);
-  assert.deepEqual(await api('nags/closed'),before);
-  const row=db.prepare('SELECT active,data FROM memory_refinements').get();
-  assert.equal(row.active,0);
-  assert.equal(JSON.parse(row.data).cancelled,true);
-});
-
-test('拟稿断点、技能版本、丢失回执、追加与本机单任务归档',async t=>{
-  const {api,sqlite}=fixture(t);
-  await api('diaries',batch);await api('nags',nag);
-  const folder=mkdtempSync(join(tmpdir(),'fy-refine-')),file=join(folder,'memory.sqlite');
-  let db=new DatabaseSync(file),runner;
-  t.after(()=>{db.close();rmSync(folder,{recursive:true,force:true});});
-  let calls=[],posted=0,drop=true,abort=new AbortController(),failCache=true;
-  const model={async memory(text,instruction,_schema,_signal,skill){
-    assert.equal(skill.name,'memory-refinement');assert.equal(skill.version,'1.0');
-    const input=JSON.parse(text);
-    if(instruction.includes(localAi.plan)){calls.push('plan');return {organize:'把描述理顺',additions:'',format:''};}
-    if(instruction.includes(localAi.draft)){
-      calls.push('draft:'+input.part.id);
-      return input.part.field==='body'?{text:input.part.text+'\n绯月后记：我看清了这一步。',note:'我补充了安装后的感受。'}:
-        {text:input.part.text,note:''};
-    }
-    assert(instruction.includes(localAi.review));calls.push('review');
-    if(!abort.signal.aborted)abort.abort();
-    return {decision:'accept',part:'',reason:''};
-  }};
-  const setup=()=>createMemoryRefinement({db,model,clean:text=>text.trim(),
-    cache(){if(failCache)throw Error('模拟本机归档失败');},
-    async api(path,body){
-      const result=await api(path,body);
-      if(body){posted++;if(drop){drop=false;throw Error('模拟回执丢失');}}
-      return result;
-    },
-    loadSkill:async name=>name==='memoryRefinement'?{skill:'memory-refinement',version:'1.0',content:'测试指引',schemas,localAi}:
-      {version:'1.0',content:'现行格式'}
-  });
-  runner=setup();
-  await assert.rejects(runner.run(abort.signal),{name:'AbortError'});
-  assert.deepEqual(calls,['plan','draft:body-2','draft:summary-1','review']);
-  assert.equal((await api(recordPath)).body,batch.body);
-  const checkpoint=JSON.parse(db.prepare('SELECT data FROM memory_refinements WHERE active=1').get().data);
-  assert.deepEqual(Object.keys(checkpoint.drafts),['body-1','body-2','summary-1']);
-  assert.equal(checkpoint.drafts['body-1'].text,'你说：装好了。\n');
-  db.close();db=new DatabaseSync(file);runner=setup();calls=[];
-  await assert.rejects(runner.run(signal),/模拟回执丢失/);
-  assert.deepEqual(calls,['review']);assert.equal(posted,1);
-  await api('diaries',{...batch,batch:'after',body:'随后追加了一条。',threads:[]});
-  await assert.rejects(runner.run(signal),/模拟本机归档失败/);
-  assert.equal(db.prepare('SELECT count(*) AS count FROM memory_refinements WHERE active=1').get().count,1);
-  failCache=false;
-  assert.match(await runner.run(signal),/已修订日记/);
-  assert.equal(posted,1);
-  const historical=JSON.parse(db.prepare('SELECT data FROM memory_refinements WHERE active=0').get().data);
-  assert.equal(historical.previous.body,batch.body);
-  assert.match(historical.fields.body,/绯月后记/);
-  assert.match(historical.note,/我补充/);
-  assert(historical.receipt.refineDatetime);
-  assert.equal(sqlite.prepare('SELECT revision FROM companion_nags').get().revision,1);
-});
-
-test('无改动只记检查结果，材料相同不重做，有新材料时重新核对',async t=>{
-  const {api,advance}=fixture(t);
-  await api('diaries',batch);
-  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
-  let runs=0,sources=[];
-  const runner=createMemoryRefinement({db,api,clean:text=>text.trim(),evidence:()=>sources,
-    model:{memory:async()=>{runs++;return {organize:'',additions:'',format:''};}},
-    loadSkill:async name=>name==='memoryRefinement'?{skill:'memory-refinement',version:'1.0',content:'测试指引',schemas,localAi}:
-      {version:'1.0',content:'现行格式'}
-  });
-  assert.equal(await runner.run(signal),'本轮无改动');assert.equal(runs,1);
-  assert.equal(db.prepare('SELECT count(*) AS n FROM memory_refinements').get().n,0);
-  advance(refinementInterval);
-  await runner.run(signal);await runner.run(signal);
-  assert.equal(runs,1);
-  sources=[{day:'2026-11-27',kind:'本机对话',snippet:'后来确认了配送日期。'}];
-  await runner.run(signal);await runner.run(signal);
-  assert.equal(runs,2);assert.equal((await api(refinePath)).receipt,null);
-});
-
-test('悬念状态推进版本时复用已复核正文，按新版本提交同一条',async t=>{
-  const {api}=fixture(t);
-  await api('diaries',batch);
-  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
-  let modelCalls=0;
-  const runner=createMemoryRefinement({db,api,clean:text=>text.trim(),
-    loadSkill:async name=>name==='memoryRefinement'?{skill:'memory-refinement',version:'1.0',content:'测试指引',schemas,localAi}:
-      {version:'1.0',content:'现行格式'},
-    model:{async memory(text,instruction){
-      modelCalls++;
-      if(instruction.includes(localAi.plan))return {organize:'整理叙述',additions:'',format:''};
-      if(instruction.includes(localAi.draft)){
-        const {part}=JSON.parse(text);
-        return part.field==='body'?{text:part.text+'\n绯月后记：我理解了。',note:''}:{text:part.text,note:''};
-      }
-      await api(recordPath+'/threads/1',{field:'asked'});
-      return {decision:'accept',part:'',reason:''};
-    }}
-  });
-  assert.match(await runner.run(signal),/记录版本已变化/);
-  const before=JSON.parse(db.prepare('SELECT data FROM memory_refinements WHERE active=1').get().data);
-  assert.equal(before.baseRevision,2);assert.equal(modelCalls,4);
-  assert.match(await runner.run(signal),/已修订/);
-  assert.equal(modelCalls,4);
-  const after=await api(refinePath);
-  assert.equal(after.record.revision,3);assert(after.record.threads[0].asked);
-  assert.match(after.record.body,/绯月后记/);
-  const archive=JSON.parse(db.prepare('SELECT data FROM memory_refinements WHERE active=0').get().data);
-  assert.match(archive.note,/我补入了「绯月后记：我理解了。/);
 });
 
 test('修订轮询与启动时的手记核对错峰，仍沿用现有闲时调度',async t=>{
@@ -389,18 +281,16 @@ test('修订轮询与启动时的手记核对错峰，仍沿用现有闲时调�
   await advance(1);assert.equal(refined,1);
 });
 
-test('修订取消时保留原任务及已完成步骤，推理没有固定截止',async t=>{
-  const {api}=fixture(t);
+test('取消时保留体检断点，推理没有固定截止，且直连记录标记 aiPrivate 仍允许提交云端',async t=>{
+  const {api,now}=fixture(t,'2026-11-22T03:00:00.000Z');
   await api('diaries',batch);
   const db=new DatabaseSync(':memory:');t.after(()=>db.close());
   let calls=0;
   const controller=new AbortController(),entered=Promise.withResolvers();
   t.mock.method(AbortSignal,'timeout',()=>assert.fail('修订不应设置推理截止时间'));
-  const runner=createMemoryRefinement({db,api,clean:text=>text.trim(),
-    loadSkill:async name=>name==='memoryRefinement'?{skill:'memory-refinement',version:'1.0',content:'测试指引',schemas,localAi}:
-      {version:'1.0',content:'现行格式'},
+  const runner=createMemoryRefinement({db,api,now,clean:s=>s.trim(),loadSkill:fakeSkill(),
     model:{async memory(){
-      if(++calls===1)return {organize:'理顺原有描述',additions:'',format:''};
+      if(++calls===1)return {needsRewrite:'yes',issues:['精简冗长对话'],plan:'重写正文'};
       entered.resolve();
       return new Promise(()=>{});
     }}
@@ -410,7 +300,32 @@ test('修订取消时保留原任务及已完成步骤，推理没有固定截�
   controller.abort();
   await stopped;
   const job=JSON.parse(db.prepare('SELECT data FROM memory_refinements WHERE active=1').get().data);
-  assert.equal(job.plan.organize,'理顺原有描述');
-  assert.equal(job.drafts['body-1'].text,'你说：装好了。\n');
+  assert.equal(job.diagnosis.plan,'重写正文');
   assert.equal((await api(refinePath)).receipt,null);
+});
+
+test('旧版分片活跃任务平滑清理并重新按整篇重写；复核连续退回不误标已检',async t=>{
+  const {api,now}=fixture(t,'2026-11-22T03:00:00.000Z');
+  await api('diaries',batch);
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+  // 模拟升级前残留的旧版 144 字分片任务（无 ruleVersion / rawRecord）
+  db.exec('CREATE TABLE memory_refinements (task_id TEXT PRIMARY KEY, active INTEGER NOT NULL, data TEXT NOT NULL);');
+  db.prepare('INSERT INTO memory_refinements VALUES(?,1,?)').run('legacy-task',JSON.stringify({taskId:'legacy-task',kind:'diaries',id:day+'.1',parts:[{id:'body-1',text:'old'}]}));
+  let rejectAll=true;
+  const runner=createMemoryRefinement({db,api,now,clean:s=>s.trim(),loadSkill:fakeSkill(),
+    model:{async memory(_text,_inst,_schema,_sig,skill){
+      if(skill.stage==='diagnose')return {needsRewrite:'yes',issues:['精简冗长对话'],plan:'重写'};
+      if(skill.stage==='rewriteDiary')return {body:'老公确认装好了。',summary:'老公完成安装',tags:['安装'],threads:[],note:'整篇精简'};
+      return rejectAll?{decision:'revise',reason:'再精简一点'}:{decision:'accept',reason:''};
+    }}
+  });
+  // 第 1 次：清理旧任务，跑完体检+重写+复核退回
+  assert.match(await runner.run(signal),/整篇复核要求补正/);
+  // 第 2 次：返工后仍被退回 -> 释放任务，但不写入 memory_refinement_checked
+  assert.match(await runner.run(signal),/已放弃本轮留待后续重试/);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM memory_refinement_checked').get().n,0);
+  // 第 3 次：允许通过后，可重新接取并成功提交
+  rejectAll=false;
+  assert.match(await runner.run(signal),/已重写日记 2026-11-22\.1/);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM memory_refinement_checked').get().n,1);
 });

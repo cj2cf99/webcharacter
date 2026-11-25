@@ -218,13 +218,21 @@ export function createPersonalityDiary({profile,memory,topics,model,request,weat
   const originals=createOriginalFiles({db,profile,memory,request,report:reportOriginals});
   const rows=(sql,...args)=>db.prepare(sql).all(...args);
   const put=(sql,...args)=>db.prepare(sql).run(...args);
+  function readTagPool(){
+    const counts=new Map();
+    const stop=new Set(['日常','聊天','记录','日记','今天','生活','杂记','其他','绯月','手记']);
+    for(const row of rows('SELECT json FROM pages')){
+      try{
+        for(const tag of JSON.parse(row.json).tags??[]){
+          const text=String(tag??'').trim();
+          if(text&&!stop.has(text))counts.set(text,(counts.get(text)??0)+1);
+        }
+      }catch{}
+    }
+    return [...counts.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,80).map(([tag])=>tag);
+  }
   const refinement=model?.memory&&createMemoryRefinement({db,api:request?api:undefined,model,now,clean:cleanMemory,
-    evidence:refinementEvidence,cache:cacheRefined,
-    isLocalNag:id=>db.prepare("SELECT json_extract(json,'$.localOnly') AS private FROM nags WHERE id=?").get(id)?.private===1,
-    readLocalNags:()=>rows(`SELECT json FROM nags WHERE json_extract(json,'$.localOnly')=1 AND json_extract(json,'$.source')<>'audit'
-      AND json_extract(json,'$.status') IN ('用户结束','已解释','回合结束') ORDER BY rowid`).map(row=>JSON.parse(row.json)),
-    writeLocalNag:(previous,next)=>put('UPDATE nags SET json=?,dirty=0 WHERE id=? AND json=?',
-      JSON.stringify(next),previous.id,JSON.stringify(previous)).changes});
+    evidence:refinementEvidence,cache:cacheRefined,readTagPool});
   const threadStamp=db.prepare('SELECT at FROM schedule WHERE job=?');
   const takeThread=db.prepare(`INSERT INTO schedule(job,at) VALUES(?,?)
     ON CONFLICT(job) DO UPDATE SET at=excluded.at WHERE schedule.at<?`);

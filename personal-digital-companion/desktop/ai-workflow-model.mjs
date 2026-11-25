@@ -102,7 +102,7 @@ function laneFor(input){
   if(name==='news-editorial'&&stage==='reviewTitle'||name==='memory-refinement'&&stage==='review')return 'review';
   if(aiRole)return aiRole==='assist'?'assist':'main';
   // 旧单步检查点尚无角色字段，可从已保存的确切业务阶段识别辅助工作。
-  if(name==='memory-refinement'&&stage==='plan'||name==='news-editorial'&&stage==='keywords'||
+  if(name==='memory-refinement'&&(stage==='plan'||stage==='diagnose')||name==='news-editorial'&&stage==='keywords'||
     name==='diary-writing'&&['reviewThread','answerThread'].includes(stage))return 'assist';
   return 'main';
 }
