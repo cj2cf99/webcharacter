@@ -1,3 +1,9 @@
+## 专聊改走 AGY 后启动失败的修复与菜单「本地生图」（2026-11-26 JST · 已部署）
+
+约 22:56 JST 随 6 文件安装生效，同时菜单「动画生成器」增加「本地生图」（打开 `#local`）。安装版 22:57 自动专聊已发出邀请；朗读、回应和菜单点击待用户确认，见[发布审核](../RELEASE_REVIEW.md)。
+
+11-25 专聊模型改走 AGY CLI 后，`private-chat.mjs` 启动检查仍要求本机 CPU 后端，专聊必定失败。现在只检查模型 `state==='ready'`（本机 4B 仍在 `createPrivateModel` 里指定 CPU）。同时给 `createAgyCliModel` 加 `ownsStandby`：备用进程全应用共用一个，专聊的临时模型关闭时不再停掉它。注意：换模型后端时，要按新后端的 `snapshot()` 形态测一遍调用方。回归见 `agent/tests/private-chat-agy.test.mjs`；自审见[审核报告](reviews/PRIVATE_CHAT_AGY_FIX_SELF_REVIEW_2026-11-26.md)。
+
 ## 云端登记提醒（2026-11-26 JST · 界面已选定，未开发）
 
 云端专用页面登记，可选生成事项提醒、鱼与熊掌、随手记（以 `link_id` 关联）；绯月领取即完成任务，本地保留 48 小时反馈窗口。详见[需求](CLOUD_REMINDER_REQUIREMENTS.md)、[需求审核](reviews/CLOUD_REMINDER_REQUIREMENTS_REVIEW_2026-11-26.md)与[自审报告](reviews/CLOUD_REMINDER_SELF_REVIEW_2026-11-26.md)。注意：事项提醒可能被用户提前手动结束，收尾只处理未完成项；失败即结束、不自动重试，保持最简。

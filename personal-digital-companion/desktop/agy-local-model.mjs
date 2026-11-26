@@ -31,8 +31,10 @@ const CHAT_INTENT_SCHEMA = {
 /**
  * 创建基于 AGY CLI 的本地模型替换实现
  */
-export function createAgyCliModel({log, model = 'gemini-3.8-flash-low', fallback, cooldownMs = 5 * 60_000} = {}) {
+export function createAgyCliModel({log, model = 'gemini-3.8-flash-low', fallback, cooldownMs = 5 * 60_000, ownsStandby = true} = {}) {
   let closed = false;
+  // 备用进程全应用共用一个：借用它的临时模型（专聊）关闭时不能停掉。
+  const releaseStandby = () => { if (ownsStandby) stopAgyStandby(); };
   const conversation = createAgyConversation({model});
   const batch = createAgyConversation({model, maxTurns: 40, idleMs: 5 * 60_000});
   let suspended = false;
@@ -98,7 +100,7 @@ export function createAgyCliModel({log, model = 'gemini-3.8-flash-low', fallback
     // 启动后立刻预热第一个进程（对话与任务共用），不用等待对话到来
     if (isAgyInstalled() && !isAgyResourceExhausted()) startAgyStandby(model);
     const check = await checkAgyAvailable();
-    if (closed) { stopAgyStandby(); return; }
+    if (closed) { releaseStandby(); return; }
     if (check.available) {
       status = {
         state: 'ready',
@@ -111,7 +113,7 @@ export function createAgyCliModel({log, model = 'gemini-3.8-flash-low', fallback
       startAgyStandby(model); // 确保待命进程已处于预热状态，开始使用时立刻预热下一条
       writeTraffic('AGY CLI 已就绪', performance.now(), undefined, {version: check.version, standby: true});
     } else {
-      stopAgyStandby();
+      releaseStandby();
       status = {
         state: 'unavailable',
         model: 'AGY CLI',
@@ -365,7 +367,7 @@ export function createAgyCliModel({log, model = 'gemini-3.8-flash-low', fallback
     isBusy: () => Boolean(busyCount > 0 || workSession || suspended || closed),
     suspend: async () => { suspended = true; return true; },
     resume: () => { suspended = false; },
-    close: () => { closed = true; conversation.close(); batch.close(); stopAgyStandby(); return Promise.resolve(); },
+    close: () => { closed = true; conversation.close(); batch.close(); releaseStandby(); return Promise.resolve(); },
     standbyReady: () => agyStandbyReady(),
     conversation,
     batch,

@@ -87,7 +87,7 @@ export function withOnDevice(cloud,device){
 // 绯月专聊的模型：AGY CLI 已安装时同样用它（失败时由半岛兜底），否则独占一份 4B（CPU），避免和主对话抢 GPU。
 export function createPrivateModel({utilityProcess,modelPath,log,useAgy=true,agyFallback}){
   const fallback=agyFallback===undefined?createBandaoFallback():agyFallback;
-  if(useAgy&&isAgyInstalled())return createAgyCliModel({log,fallback});
+  if(useAgy&&isAgyInstalled())return createAgyCliModel({log,fallback,ownsStandby:false});
   return createLocalModel({utilityProcess,modelPath:join(dirname(modelPath),LOCAL_MODEL_FILE),device:'cpu',log});
 }
 

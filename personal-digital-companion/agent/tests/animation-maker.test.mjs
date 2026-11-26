@@ -11,7 +11,8 @@ test('动画生成器：服务已运行时直接打开页签，不重复启动',
   const opened = [], spawned = [];
   const maker = createAnimationMaker({openExternal: u => opened.push(u), spawn: (...a) => spawned.push(a), fetcher: async () => ok({app: 'webmcreator'}), base: 'http://x'});
   await maker.open('gif');
-  assert.deepEqual(opened, ['http://x/#gif']);
+  await maker.open('local');
+  assert.deepEqual(opened, ['http://x/#gif', 'http://x/#local']);
   assert.equal(spawned.length, 0);
   await assert.rejects(maker.open('bad'), /未知页签/);
 });

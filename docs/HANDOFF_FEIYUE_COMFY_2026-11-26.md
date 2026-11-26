@@ -50,3 +50,5 @@
 1. **浏览器端真实 UI 操作验证**：尚未在真实浏览器中点击 `#local` 页签跑通一次完整的前端提交到出图闭环，待用户在 [http://127.0.0.1:8766/#local](http://127.0.0.1:8766/#local) 实测或由后续会话通过浏览器验证。
 2. **Git 提交状态**：`WebCharacter` 与 `webmcreator` 本次修改（及两仓库中原有未提交改动）均**尚未提交 Git / 未推送**。
 3. **正式版同步**：`personal-digital-companion/desktop/animation-maker.mjs` 的改动尚未同步到 Windows 正式安装版目录（如需从绯月菜单直接打开 `#local` 再安排安装）。
+
+> 2026-11-26 JST 后续：上述第 1 项已在浏览器实际生成一次（47.3 秒，672×1008，控制台无报错）；第 3 项已安装，菜单新增「动画生成器 → 本地生图」；两仓库随后提交推送。见 `personal-digital-companion/RELEASE_REVIEW.md`。

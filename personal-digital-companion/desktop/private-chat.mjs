@@ -203,8 +203,7 @@ export function createPrivateChat({profile,readGpu,idle,prepare,resume,createMod
       const opening=(async()=>{
         await session.model.start();
         if(!live(session))return;
-        const backend=session.model.snapshot();
-        if(backend.state!=='ready'||backend.backend!=='cpu'||backend.gpuLayers!==0)throw Error('绯月的文字模型未能在 CPU 上启动。');
+        if(session.model.snapshot().state!=='ready')throw Error('绯月的文字模型未能启动。');
         await generate(session,'',tts);
       })();
       await Promise.all([opening,tts,asr,session.shown]);

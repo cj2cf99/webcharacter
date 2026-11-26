@@ -5,6 +5,7 @@ const flag=name=>args[args.indexOf(name)+1];
 let turn=0;
 const answer=prompt=>{
   turn++;
+  if(/"done"/.test(prompt))return JSON.stringify({reply:'周末一起去公园走走吧，回来喝一杯热茶。路上如果看到好看的树，我想站一会儿，听听风吹树叶的声音，再和你商量晚饭吃什么。',done:false});
   if(/"kind"/.test(prompt))return JSON.stringify({kind:'chat',summary:'s',reply:'第'+turn+'轮 pid'+process.pid,review:false});
   return /JSON Schema/.test(prompt)?JSON.stringify({answer:'是'}):'你好，第'+turn+'轮 pid'+process.pid;
 };

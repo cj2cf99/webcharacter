@@ -1,3 +1,60 @@
+## 2026-11-26 专聊启动修复与菜单「本地生图」· 绯月 Windows 正式安装版 · 已部署（花园登记待确认）
+
+状态：**用户 2026-11-26 JST 指示“确认没问题就部署”“部署时带上本地生图的那个页面”。约 22:56 JST 完成 6 文件精准安装（前像备份至 `output/install-backup-private-chat-agy-20261126/`，复制后逐个核对 SHA-256 一致）。旧进程 PID `37832` 收到结束信号后正常退出，等待 5 秒确认无残留且 8765 未监听，经资源管理器以原启动命令拉起：新 PID `33644`，`instance.started` 2026-11-26T13:56:53.368Z，资料目录不变，`GET /infoguide` 为 v8。**
+
+### 部署后验证
+- 安装版自动专聊：22:57:08 AGY CLI 就绪，22:57:11「任务处理完成」（3.4 秒）；22:57:59 专聊邀请写入 `lastInvitedAt`（代码仅在语音预热完成且邀请气泡打开后写入）。此后日志未见专聊错误。
+- 待用户确认：接受邀请后的朗读与回应；菜单「动画生成器 → 本地生图」点击效果。
+- 花园登记：清单待用户确认，尚未登记。
+- Git：见包含本记录的提交。
+
+### 需求与验收
+- 用户原话：「绯月专聊的文字模型部分似乎有问题，看看是没接通还是怎么了，我预期中应该是走agy cli接口的」「修复」「确认没问题就部署，然后本地项目代码全量提交一次，防止功能遗漏，push完成后合并main」「部署时带上本地生图的那个页面」。
+- 验收：专聊能经 AGY CLI 开聊，不再报“未能在 CPU 上启动”；右键/托盘菜单「动画生成器」下有「本地生图」，打开 `http://127.0.0.1:8766/#local`。
+
+### 目标、基线与差异
+- 目标：`G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`，部署前运行 PID `37832`，资料目录 `output/desktop-profile`。
+- 来源：`codex/workspace-checkpoint-20261120` @ `c8ae398` 加本次改动。逐文件比对（忽略行尾），安装前像与目标候选只差下表内容。
+- 页面本体在 `G:/selftool/webmcreator`（`main` @ `872aa6f`），由菜单按需拉起，不复制到安装目录。
+
+| 文件 | 正式版前像 SHA-256 前 12 位 | 候选 SHA-256 前 12 位 | 前后行为 |
+| --- | --- | --- | --- |
+| `desktop/private-chat.mjs` | `7B7A09FF598F` | `9928377E978C` | 启动检查由“CPU 后端且 0 GPU 层”改为只看 `state==='ready'`；报错改为“绯月的文字模型未能启动。” |
+| `desktop/agy-local-model.mjs` | `82E3D74B264B` | `7741FFD9CA11` | 新增 `ownsStandby`，借用方关闭时不停共用备用进程 |
+| `desktop/ai-gateway.mjs` | `C5647C2935E5` | `38CF58D09316` | 专聊模型传 `ownsStandby:false` |
+| `desktop/shell.mjs` | `E7F64799A20B` | `99EBC82E1C62` | 新增菜单动作 `animationLocal` |
+| `desktop/menu-layout.json` | `7D1632B9ED9F` | `013E34894F0D` | 「动画生成器」增加「本地生图」 |
+| `desktop/animation-maker.mjs` | `402CD3094440` | `2C8D9587090E` | 页签白名单增加 `local` |
+
+不带入：提交 `6c69c67` 的 `configured-renderer.mjs`、`effect-preview.mjs`；测试与文档文件。
+
+### 数据和配置影响
+无数据库、配置或密钥变更。纯代码发布，跳过数据库备份。花园登记只写元数据。
+
+### 实际验证（开发树）
+- 专聊、AGY、网关守卫、轮询相关测试 32/32；`tools/test-private-chat.mjs` 8/8；`animation-maker` 与新专聊测试 4/4；新专聊测试在修改前代码上按原错误失败。
+- 真实 AGY CLI 两轮专聊通过（语音与气泡用替身），首段 7.5–7.9 秒，第二轮 3.8–4.1 秒。
+- `tools/build-desktop.mjs` 与 `tools/test-desktop-shell.mjs` 通过。
+- `#local` 页面实际生成：47.3 秒、672×1008，控制台无报错；`webmcreator` 的 `tools/test-core.mjs` 4/4。
+- 全量对照（清云端密钥、AGY 视为未安装）：改动版 611 项 575 过 / 32 失败 / 1 取消；基线 610 项 573 过 / 33 失败 / 1 取消；无新增失败。
+- 审核：`docs/reviews/PRIVATE_CHAT_AGY_FIX_SELF_REVIEW_2026-11-26.md`（有条件通过）。第三方审核：未进行。
+
+### 未完成与风险
+- 全量测试两边共有的 32 项失败与 `news-briefing.test.mjs` 超时未处理。
+- 安装版内语音、气泡、菜单点击待用户确认。
+- 专聊仍受 GPU 门槛限制（占用低于 40%、空闲显存至少 3700 MiB）。
+- 恢复：前像备份至 `output/install-backup-private-chat-agy-20261126/`，异常时还原 6 个文件并按同样方式重启。
+
+### 部署步骤与发布后验证
+1. 备份 6 个前像；复制 6 个候选文件并核对 SHA-256。
+2. 让绯月退出，等待 5 秒，确认旧进程与 8765 端口已释放。
+3. 以独立非沙盒进程、清除 `ELECTRON_RUN_AS_NODE`，用原启动命令拉起。
+4. 核对 `GET /infoguide`（新 PID、资料目录不变、v8）与任务通信日志。
+5. 专聊与菜单「本地生图」实际效果由用户确认。
+6. 发布结果明确后按确认清单登记花园。
+
+---
+
 ## 2026-11-25 菜单「动画生成器」入口与本机借用接口 v8 · 绯月 Windows 正式安装版 · 已部署并登记（菜单效果待用户确认）
 
 状态：**用户确认“部署并登记”后，于 2026-11-25 23:38 JST 完成 7 文件精准安装（替换 5、新增 2，前像备份至 `output/install-backup-animation-borrow-20261125/`，复制后逐个核对 SHA-256 一致）。旧进程 PID `31828` 正常结束请求 10 秒未退出后强制结束进程树，等待 5 秒确认无残留 Electron 且 8765 未监听，再以原启动命令（清除 `ELECTRON_RUN_AS_NODE`）独立拉起：新 PID `31352`，`instance.started` 2026-11-25T14:39:06.940Z，资料目录不变，`GET /infoguide` 为 v8 且含 `/v1/borrow`。发布后用正式令牌借用 `cli` 通道 `python-version` 返回 `Python 3.15.2`；动画生成器 `/api/status` 显示绯月在线、借用可用。菜单实际点击效果待用户确认。花园登记：用户确认最终清单后，审核包提交主站本地 Git `05c31fd94b405a625c2bb7ca3d832d2b81a99bdc`（主站分支与远端分叉，沿用历次做法仅本地提交），批次 `feiyue-animation-borrow-20261125` 于 23:41:20 JST 入队，23:42:24 JST 三步全部 verified（改善 #94、#95，部署 #121 / 明细 #205，绯月（桌面精灵）#61 版本 `35.0 → 35.1`，修订 `199 → 202`，reviewHash `dd1a4610…11ee`），23:42:36 JST 完成 `ack` 签收。**

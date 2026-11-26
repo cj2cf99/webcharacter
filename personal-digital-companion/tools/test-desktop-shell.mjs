@@ -180,7 +180,7 @@ ipcMain.emit('desktop:sound-change',event,{enabled:false,volume:23});assert.deep
 ipcMain.emit('desktop:sound-change',event,{enabled:true,volume:999});ipcMain.emit('desktop:sound-ready',event);assert.equal(win.sent.at(-1)[1].volume,23);
 const labels=items=>items.filter(item=>item.type!=='separator').map(item=>item.label);
 assert.deepEqual(labels(tray.menu),['问绯月','今日任务','三地天气','本地复盘','阅读与学习','任务','动画生成器','桌宠动作','设置与维护']);
-assert.deepEqual(labels(tray.menu.find(item=>item.label==='动画生成器').submenu),['切图校准','Gemini 生图','GIF']);
+assert.deepEqual(labels(tray.menu.find(item=>item.label==='动画生成器').submenu),['切图校准','Gemini 生图','本地生图','GIF']);
 win.webContents.emit('context-menu');assert.equal(tray.openedMenu,tray.menu,'角色右键与托盘使用同一菜单');
 assert.deepEqual(labels(tray.menu.find(item=>item.label==='任务').submenu),['看绯月写日记','补写本机任务执行评价','绯月任务管理','中断任务与补传','任务日志']);
 const settingsLabels=labels(tray.menu.find(item=>item.label==='设置与维护').submenu);

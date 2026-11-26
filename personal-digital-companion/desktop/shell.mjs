@@ -1126,6 +1126,7 @@ export async function startDesktop(electron,options={}){
       knowledge:{click:()=>taskNotice(knowledge.open())},
       animationCrop:{click:()=>openAnimationMaker('crop')},
       animationGemini:{click:()=>openAnimationMaker('gemini')},
+      animationLocal:{click:()=>openAnimationMaker('local')},
       animationGif:{click:()=>openAnimationMaker('gif')},
       notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
       pendingCheck:checks.pending&&{click:()=>taskNotice(screenQuestion.openReview('checks'))},
