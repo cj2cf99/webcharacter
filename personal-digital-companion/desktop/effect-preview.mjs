@@ -16,7 +16,7 @@ export class EffectPreview{
  this.controller=new BehaviorController(this.draft.config,(id,phase)=>{if(id!==this.id){this.complete();return;}this.load(phase);});
  if(this.id==='hover')this.controller.over=true;if(this.id==='work')this.controller.work=true;if(this.id==='drag')this.controller.drag=true;if(this.id==='walk')this.controller.walk=true;
  if(WINDOW_NODES[this.id])this.controller.holds=()=>!this.controller.stopping;
- this.player.preserveAspect=!!WINDOW_NODES[this.id];
+ this.player.preserveAspect=true;
  this.controller.start(this.id);
  }
  show(){const names={single:'单段',enter:'进入',loop:'循环',exit:'退出'};this.label.textContent=names[this.controller.phase]+(this.controller.phase==='loop'?' · 第 '+this.round+' 轮':'');}

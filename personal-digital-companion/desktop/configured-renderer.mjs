@@ -39,7 +39,7 @@ function level(id,phase){const s=config.states[id].sound[phase];return config.ma
 function updateLevel(){if(!activeSound)return;audio.volume=level(activeSound.id,activeSound.phase);if(!audio.volume)stopVoice();}
 function speak(id,phase){clearVoiceTimer();if(id==='walk'&&quietWalk)return;const s=config.states[id].sound[phase],resource=snapshot.assets.find(a=>a.id===s.voice&&a.kind==='audio');if(!visible||!resource||!level(id,phase))return;const start=()=>{voiceTimer=null;if(!visible||!level(id,phase))return;audio.pause();audio.src=resource.url;audio.loop=false;audio.volume=level(id,phase);activeSound={id,phase};audio.play().catch(e=>{if(e.name!=='AbortError')message('语音失败：'+e.message);});};if(s.delay)voiceTimer=setTimeout(start,s.delay*1000);else start();}
 function report(frame=null){if(!action&&!awaitingHost)host.reportRuntime({frame,state:controller.current,specialPending:controller.specialPending,phase:controller.phase,resource:config.states[controller.current].slots[controller.phase],target:'pc'});}
-async function play(id,phase){if(action||awaitingHost)return;player.preserveAspect=false;const token=++request;clearVoiceTimer();const resource=config.states[id].slots[phase];if(id==='walk'&&phase==='exit')report();try{await player.load(resource);if(token!==request)return;displayedAsset=resource;playing=true;player.loopBlend=!['hoverLoop','walk-loop'].includes(resource);player.video.loop=controller.canNativeLoop();if(!visible)player.pause();message('');speak(id,phase);report({time:player.video.currentTime,duration:player.video.duration});}catch(e){if(token===request)message('动画失败：'+e.message);}}
+async function play(id,phase){if(action||awaitingHost)return;player.preserveAspect=true;const token=++request;clearVoiceTimer();const resource=config.states[id].slots[phase];if(id==='walk'&&phase==='exit')report();try{await player.load(resource);if(token!==request)return;displayedAsset=resource;playing=true;player.loopBlend=!['hoverLoop','walk-loop'].includes(resource);player.video.loop=controller.canNativeLoop();if(!visible)player.pause();message('');speak(id,phase);report({time:player.video.currentTime,duration:player.video.duration});}catch(e){if(token===request)message('动画失败：'+e.message);}}
 function input(kind,value){
  if(action?.kind==='praise-idle'&&value!==false){
    if(kind==='click')controller.clickPending=true;else controller[kind]=value;
@@ -66,7 +66,7 @@ async function lifecycle(command){
  awaitingHost=false;
  if(command.kind==='resume'){resumeBehavior();return;}
  action=command;const token=++request;
- player.hold();stopVoice();player.preserveAspect=false;fitCanvas();
+ player.hold();stopVoice();player.preserveAspect=true;fitCanvas();
  try{
    await player.load(command.kind);
    if(token!==request)return;
