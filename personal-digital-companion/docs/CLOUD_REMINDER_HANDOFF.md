@@ -49,8 +49,8 @@
 | 仓库 | 分支／提交 | 未提交项数 | 与本功能重叠 |
 | --- | --- | --- | --- |
 | 本项目 | `codex/workspace-checkpoint-20261120`／见下节 | 见下节 | — |
-| `G:/cloudflare/myapp` | `main`／`05c31fd` | 30 | 迁移 `0034` 未跟踪，本功能用下一个编号 |
-| `G:/selftool/informationManage/api-worker` | `main`／`a63983a` | 7 | `src/index.js` 等 |
+| `G:/cloudflare/myapp` | `main`／`05c31fd` | 30 | `myapp/migrations/0034_garden_release_tenths.sql` 未跟踪，本功能用下一个编号 |
+| `G:/selftool/informationManage/api-worker` | `main`／`a63983a` | 7 | `api-worker/src/index.js` 等 |
 | `G:/selftool/recordanyting` | `main`／`dab8c69` | 12 | `public/app.js`、`src/api.js`；已有未跟踪迁移 `0004` |
 | `G:/selftool/resourceforlater` | `main`／`a834975` | 12 | `public/resources/app.js`、`src/api.js`；已有未跟踪迁移 `0002` |
 
