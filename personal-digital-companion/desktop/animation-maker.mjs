@@ -6,7 +6,7 @@ import {join} from 'node:path';
 
 export const ANIMATION_MAKER_DIR = process.env.FEIYUE_WEBMCREATOR_DIR || 'G:/selftool/webmcreator';
 export const ANIMATION_MAKER_URL = process.env.FEIYUE_WEBMCREATOR_URL || 'http://127.0.0.1:8766';
-const TABS = new Set(['crop', 'gemini', 'gif']);
+const TABS = new Set(['crop', 'gemini', 'local', 'gif']);
 
 export function createAnimationMaker({openExternal, spawn = nodeSpawn, fetcher = fetch, dir = ANIMATION_MAKER_DIR, base = ANIMATION_MAKER_URL, wait = 5000, sleep = ms => new Promise(r => setTimeout(r, ms))}) {
   let starting = null;
