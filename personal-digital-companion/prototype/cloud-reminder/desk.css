@@ -1,0 +1,28 @@
+/* 本功能新增样式；颜色与组件沿用 feiyue-surface.css。 */
+.cn-time{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;margin-top:6px}
+.cn-bar{height:5px;border-radius:9px;background:var(--fy-soft);overflow:hidden}
+.cn-bar i{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,var(--fy-accent),var(--fy-gold));transform-origin:left;animation:cn-grow .7s ease-out both}
+.fy-card[data-tone=warn] .cn-bar i{background:var(--fy-warn)}
+.cn-note{margin:4px 0 0;color:var(--fy-muted);font-size:12.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.cn-form{display:grid;gap:6px;margin-top:8px;animation:fy-rise .25s ease both}
+.cn-form textarea{min-height:72px;resize:vertical;font:inherit}
+.cn-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+.cn-actions button{padding:5px 12px}
+.cn-error{margin:6px 0 0;padding:6px 8px;border-radius:7px;background:color-mix(in srgb,var(--fy-danger) 10%,transparent);color:var(--fy-danger);font:11.5px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+.cn-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:99px;background:var(--fy-accent);color:var(--fy-on-accent);font-size:11px;animation:fy-pulse 1.6s ease-in-out infinite}
+.cn-pop-list{display:grid;gap:7px;margin:10px 0 0;padding:0;list-style:none;white-space:normal}
+.cn-pop-list li{display:grid;grid-template-columns:30px minmax(0,1fr);gap:9px;align-items:center;padding:8px 10px;border:1px solid var(--fy-line);border-radius:10px;background:var(--fy-surface);color:var(--fy-ink);animation:cn-drop .45s cubic-bezier(.2,1.5,.5,1) both;animation-delay:calc(var(--i)*90ms)}
+.cn-pop-list li>b{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--fy-soft)}
+.cn-pop-list small{display:block;color:var(--fy-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cn-picks{display:grid;gap:12px;padding:14px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.cn-picks figure{margin:0}.cn-picks figcaption{padding:0 12px 4px;font-weight:700}
+.cn-picks .menu-mock{border:1px solid var(--fy-line);border-radius:12px;background:var(--fy-paper);padding:6px}
+.cn-picks .item{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;width:100%;border:0;background:transparent;color:inherit;padding:6px 8px;border-radius:7px;text-align:left;font:inherit}
+.cn-picks .item.mine{background:var(--fy-soft);color:var(--fy-accent);font-weight:700}
+.cn-picks .item.mine span:first-child{animation:cn-wiggle 2.2s ease-in-out infinite;display:inline-block}
+@keyframes cn-grow{from{transform:scaleX(0)}}
+@keyframes cn-drop{from{opacity:0;translate:0 -14px}}
+@keyframes cn-wiggle{0%,70%,100%{rotate:0deg}78%{rotate:-16deg}86%{rotate:12deg}94%{rotate:-5deg}}
+/* 预览中按所选主题固定标题栏；正式窗口跟随系统。 */
+header.fy-titlebar{color-scheme:inherit}
+.cn-feedback{margin:4px 0 0;padding:4px 8px;border-radius:7px;background:var(--fy-soft);font-size:12.5px;white-space:pre-wrap;overflow-wrap:anywhere}

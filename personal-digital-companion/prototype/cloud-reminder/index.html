@@ -1,0 +1,43 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>云端登记提醒 · 界面预览</title><style>
+:root{color-scheme:light dark;--line:light-dark(#d8c9c0,#55434c);--accent:light-dark(#77405b,#e3adc6)}
+body{margin:0;padding:12px 16px 40px;font:14px/1.5 "Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;background:light-dark(#f6f1ec,#1f1a20);color:light-dark(#33262e,#f0e6e3)}
+h1{font-size:20px;margin:0 0 8px}h2{font-size:16px;margin:22px 0 8px;border-left:4px solid var(--accent);padding-left:8px}
+.tools{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;gap:10px;padding:8px 0;background:inherit;background-color:light-dark(#f6f1ec,#1f1a20)}
+select{font:inherit;padding:2px 6px}.row{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+figure{margin:0;min-width:0;max-width:100%}figcaption{margin-bottom:4px;font-weight:700}figcaption small{font-weight:400;opacity:.75}
+iframe{display:block;border:1px solid var(--line);border-radius:10px;background:Canvas;max-width:100%}
+.web{width:100%}.web iframe{width:100%;height:760px}.web.phone{width:390px}
+</style></head><body>
+<h1>云端登记提醒 · 界面预览（数据与结果均为模拟）</h1>
+<div class="tools">
+  <label>绯月主题 <select id="theme"><option value="light">浅色</option><option value="dark">深色</option></select></label>
+  <label>网页宽度 <select id="width"><option value="">桌面</option><option value="phone">手机 390</option></select></label>
+  <label>提交结果 <select id="sim"><option value="part">鱼与熊掌失败</option><option value="ok">全部成功</option><option value="task">任务建立失败</option></select></label>
+</div>
+<h2>① 专用页面（网页主题在页头切换）</h2>
+<div class="row"><figure class="web"><figcaption>A 单卡纵排 <small>★ 已选</small></figcaption><iframe data-web="a" title="专用页面 A"></iframe></figure>
+<figure class="web"><figcaption>B 左右两栏 <small>未选</small></figcaption><iframe data-web="b" title="专用页面 B"></iframe></figure></div>
+<h2>② 入口按钮</h2>
+<div class="row"><figure class="web"><figcaption>任务页「单条任务」区</figcaption><iframe data-web="entry" style="height:330px" title="入口按钮"></iframe></figure></div>
+<h2>③ 弹窗</h2>
+<div class="row"><figure><figcaption>A 现有消息框 <small>未选</small></figcaption><iframe data-desk="view=popup&v=a" width="440" height="330" title="弹窗 A"></iframe></figure>
+<figure><figcaption>B 卡片清单 <small>★ 已选 · 在现有消息框上加清单</small></figcaption><iframe data-desk="view=popup&v=b" width="440" height="410" title="弹窗 B"></iframe></figure></div>
+<h2>④ 单独页（可点「写反馈」）</h2>
+<div class="row"><figure><figcaption>A 单列表 <small>未选</small></figcaption><iframe data-desk="view=page&v=a" width="460" height="540" title="单独页 A"></iframe></figure>
+<figure><figcaption>B 两个页签 <small>★ 已选</small></figcaption><iframe data-desk="view=page&v=b" width="460" height="540" title="单独页 B"></iframe></figure></div>
+<h2>⑤ 待确认区块与失败提醒项</h2>
+<div class="row"><figure><figcaption>本地复盘 · 待确认</figcaption><iframe data-desk="view=pending" width="460" height="300" title="待确认区块"></iframe></figure>
+<figure><figcaption>本地复盘 · 提醒</figcaption><iframe data-desk="view=notice" width="460" height="300" title="失败提醒项"></iframe></figure></div>
+<h2>⑥ 菜单名称与图标（甲 云端提醒 ★）</h2>
+<div class="row"><figure style="width:100%"><iframe data-desk="view=menu" style="width:100%;height:250px" title="菜单候选"></iframe></figure></div>
+<script>
+const $=id=>document.getElementById(id);
+function load(){
+  document.documentElement.style.colorScheme=$('theme').value;
+  for(const f of document.querySelectorAll('[data-desk]'))f.src='/desk.html?'+f.dataset.desk+'&theme='+$('theme').value;
+  for(const f of document.querySelectorAll('[data-web]')){f.src='/web.html?v='+f.dataset.web+'&sim='+$('sim').value;f.parentElement.classList.toggle('phone',$('width').value==='phone');}
+}
+for(const id of ['theme','width','sim'])$(id).onchange=load;
+load();
+</script></body></html>

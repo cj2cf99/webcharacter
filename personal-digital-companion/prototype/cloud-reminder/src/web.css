@@ -1,0 +1,37 @@
+.cn-card{background:var(--t-surface,Canvas);border:1px solid var(--t-line,#aaa);border-radius:.9rem;box-shadow:var(--t-shadow);padding:clamp(.65rem,2vw,1rem);display:grid;gap:.65rem;align-content:start;min-width:0}
+.cn-layout{display:grid;gap:.75rem;min-width:0}
+.cn-b .cn-layout{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);align-items:start}
+.cn-a{max-width:46rem}
+.companion-page label.cn-field{display:grid;gap:.2rem;font-size:.9rem}
+.cn-field :is(input,textarea,select){width:100%;box-sizing:border-box}
+.cn-field textarea{min-height:5.2rem;resize:vertical}
+.cn-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.55rem;align-items:center;border:1px solid var(--t-line,#aaa);border-radius:.7rem;padding:.45rem .65rem;transition:border-color .2s,background .2s,opacity .2s}
+.cn-row:has(input[type=checkbox]:checked){border-color:var(--t-brand-ink,#286760);background:var(--t-surface-2,#f1f7f6)}
+.cn-row:not(:has(input[type=checkbox]:checked)) .cn-option{opacity:.35;pointer-events:none}
+.companion-page .cn-row input[type=checkbox]{min-height:0;width:1.1rem;height:1.1rem;accent-color:var(--t-brand-ink,#286760)}
+.cn-name{font-weight:650;white-space:nowrap}
+.cn-option{width:10.5rem;max-width:100%}
+.cn-b .cn-row{grid-template-columns:auto minmax(0,1fr)}
+.cn-b .cn-option{grid-column:2;width:100%}
+.cn-locked{display:inline-flex;gap:.35rem;align-items:center;justify-self:start;border-radius:999px;padding:.2rem .75rem;border:1px dashed var(--t-brand-ink,#286760);color:var(--t-brand-ink,#286760);font-size:.86rem}
+.cn-locked b{animation:cn-ring 2.6s ease-in-out infinite;display:inline-block;transform-origin:50% 0}
+.companion-page .cn-submit{display:flex;justify-self:end;gap:.5rem}
+.cn-results{display:grid;gap:.4rem;margin:0;padding:0;list-style:none}
+.cn-result{display:grid;grid-template-columns:1.5rem minmax(0,1fr) auto;gap:.45rem;align-items:start;padding:.45rem .6rem;border-radius:.65rem;border:1px solid var(--t-line,#aaa);animation:cn-rise .3s ease both}
+.cn-result[data-state=ok]{border-color:#3b9b74}
+.cn-result[data-state=fail]{border-color:#c0475c;background:color-mix(in srgb,#c0475c 9%,transparent);animation:cn-shake .35s}
+.cn-icon{width:1.5rem;height:1.5rem;border-radius:50%;display:grid;place-items:center;font-size:.85rem}
+.cn-result[data-state=wait] .cn-icon{border:2px solid var(--t-line,#aaa);border-top-color:var(--t-brand-ink,#286760);animation:cn-spin .7s linear infinite}
+.cn-result[data-state=ok] .cn-icon{background:#3b9b74;color:#fff;animation:cn-pop .35s}
+.cn-result[data-state=fail] .cn-icon{background:#c0475c;color:#fff}
+.cn-result a{font-size:.82rem;overflow-wrap:anywhere}
+.cn-error{display:block;margin-top:.2rem;font:12px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;user-select:all}
+.cn-entry-note{font-size:.85rem;opacity:.75}
+@media(max-width:700px){.cn-b .cn-layout{grid-template-columns:minmax(0,1fr)}.cn-row{grid-template-columns:auto minmax(0,1fr)}.cn-option{grid-column:2;width:100%}}
+@keyframes cn-rise{from{opacity:0;transform:translateY(8px)}}
+@keyframes cn-spin{to{transform:rotate(1turn)}}
+@keyframes cn-pop{50%{transform:scale(1.35)}}
+@keyframes cn-shake{25%{transform:translateX(-6px)}60%{transform:translateX(4px)}}
+@keyframes cn-ring{0%,70%,100%{transform:rotate(0)}76%{transform:rotate(18deg)}84%{transform:rotate(-14deg)}92%{transform:rotate(7deg)}}
+.cn-option{box-sizing:border-box;min-width:0}
+@media(hover:none){html[data-theme] body[data-shell-page] .companion-page .t-expand{flex-shrink:0}html[data-theme] body[data-shell-page] .companion-page .t-expand>.t-expand-label{white-space:nowrap!important;flex:none}}

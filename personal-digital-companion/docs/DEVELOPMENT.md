@@ -1,3 +1,9 @@
+## 云端登记提醒（2026-11-26 JST · 界面已选定，未开发）
+
+云端专用页面登记，可选生成事项提醒、鱼与熊掌、随手记（以 `link_id` 关联）；绯月领取即完成任务，本地保留 48 小时反馈窗口。详见[需求](CLOUD_REMINDER_REQUIREMENTS.md)、[需求审核](reviews/CLOUD_REMINDER_REQUIREMENTS_REVIEW_2026-11-26.md)与[自审报告](reviews/CLOUD_REMINDER_SELF_REVIEW_2026-11-26.md)。注意：事项提醒可能被用户提前手动结束，收尾只处理未完成项；失败即结束、不自动重试，保持最简。
+
+接手先读[交接文档](CLOUD_REMINDER_HANDOFF.md)。见[详细设计](CLOUD_REMINDER_DESIGN.md)与[设计审核](reviews/CLOUD_REMINDER_DESIGN_REVIEW_2026-11-26.md)。开发前置：`web/chains.js`、`web/chains.css`、`agent/host/subscriptions.mjs` 落后于线上副本，对齐前不要运行 `tools/sync-release-sources.mjs`。
+
 ## 本机借用接口 /v1/borrow（2026-11-25 JST · 开发完成，未部署）
 
 本机 REST 升到 v8，新增 `POST /v1/borrow` 与 `GET /v1/borrow/:id`，让动画生成器等本机程序借用绯月的 AI、ComfyUI 与已登记 CLI，密钥和模型留在绯月。`desktop/borrow.mjs` 校验输入、同编号只执行一次、借用任务之间逐个执行，结果只留内存（最近 30 个）。三个通道：`ai` 调 `requestGeminiImage`（新增可选 `aspectRatio`，写入 `generationConfig.imageConfig`）；`comfy` 调 `image-tasks.mjs` 新增的 `localUpscale`（沿用图像 skill 的 upscale 工作流，ComfyUI 未运行时由 `comfy_job.py` 自动拉起）；`cli` 只允许登记的只读 `python-version`。借用与生图同属并行工作，不占正式名额。该路由请求体上限 30MB，其余路由仍为 8KB。说明与手册见 [LOCAL_GARDEN_API.md](LOCAL_GARDEN_API.md#v8本机借用接口2026-11-25-jst开发版)。
