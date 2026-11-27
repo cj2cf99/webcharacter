@@ -145,6 +145,16 @@ Invoke-RestMethod "$base/v1/batches/$batchId/ack" -Method Post -Headers $headers
 - 结果只留在内存，最多保留最近 30 个；绯月重启后查询返回 404，需按原内容重交。
 - 编号格式同花园批次。鉴权、来源限制与其他路由相同。
 
+## v9：借用接口增加 agy 文本通道（2026-11-27 JST，开发版，未安装）
+
+首个调用方是语音分段制作页面 `G:/selftool/voicestudio` 的情绪改写。说明中 `borrow.channels` 含 `agy` 才可用；本机未装 agy 时不列出，提交返回 503。
+
+- `POST /v1/borrow`，`channel:'agy'`：`prompt`（1～4000 字）。
+- 单独排队、一次一个，不阻塞生图与放大。开始前让位：绯月自身没有进行中的 agy 调用且额度不在冷却，连续满 3 秒才开始；等待中任务的 `waiting` 为 `busy` 或 `cooldown`，不会自动放弃。已开始的任务不被打断。
+- 完成结果 `{text}` 为模型原样回复，解析与校验由调用方负责。
+- `DELETE /v1/borrow/:id`：取消未完成的 agy 任务（排队的移除，执行中的中断并丢弃结果），返回 `{id, cancelled:true}`；不存在 404，其他通道或已完成 409。
+- 调用方式：一次性 stream-json 进程，提示词只经标准输入传入，附 `--sandbox --disable-slash-commands`，不放开任何工具权限，工作目录为现有 agy 空目录，模型沿用 `gemini-3.8-flash-low`，单次超时 120 秒。
+
 ## 正式安装验收后的全局说明条款
 
 待更新位置为 `C:/Users/asura/.codex/AGENTS.md` 和 `C:/Users/asura/.claude/CLAUDE.md`。本次开发阶段自动审批因正式安装、受控重启和验收尚未完成而拒绝写入。实际切换时在两份文件追加以下条款，并在本次发布纪要记录执行情况。

@@ -63,7 +63,7 @@ test('Gemini 客户端：aspectRatio 写入 imageConfig，未给时不带', asyn
   assert.equal(bodies[1].generationConfig.imageConfig, undefined);
 });
 
-test('REST：/v1/borrow 鉴权、大请求体、202/200/404 与说明 v8', async () => {
+test('REST：/v1/borrow 鉴权、大请求体、202/200/404 与说明 v9', async () => {
   const profile = mkdtempSync(join(tmpdir(), 'feiyue-borrow-'));
   const borrow = createBorrow({gemini: async () => ({mime: 'image/png', bytes: png(400, 600)}), upscale: async () => ({}), cli: async () => ({stdout: ''})});
   const api = await openLocalREST({profile, pool: {}, borrow, listenPort: 0});
@@ -81,7 +81,8 @@ test('REST：/v1/borrow 鉴权、大请求体、202/200/404 与说明 v8', async
     const bad = await fetch(api.address + '/v1/borrow', {method: 'POST', headers, body: JSON.stringify({id: 'wm-2', channel: 'x'})});
     assert.equal(bad.status, 400);
     const guide = await (await fetch(api.address + '/infoguide')).json();
-    assert.equal(guide.version, 8);
+    assert.equal(guide.version, 9);
+    assert.deepEqual(guide.borrow.channels, ['ai', 'comfy', 'cli']);
     assert.ok(guide.routes.some(r => r.path === '/v1/borrow'));
     assert.deepEqual(guide.borrow.commands, ['python-version']);
   } finally { await api.close(); rmSync(profile, {recursive: true, force: true}); }

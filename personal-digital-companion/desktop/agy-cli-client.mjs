@@ -149,9 +149,9 @@ export const standbyDir = process.env.FEIYUE_AGY_WORKDIR
   || (existsSync(DEFAULT_WSL_DIR) ? join(DEFAULT_WSL_DIR, 'temp') : join(tmpdir(), 'feiyue-agy'));
 let standbyOn = false, standbyModel = 'gemini-3.8-flash-low', spare = null;
 
-function startSpare(model) {
+function startSpare(model, extraArgs = []) {
   mkdirSync(standbyDir, {recursive: true});
-  const [file, fileArgs] = agyCommand(['-p', '', '--input-format', 'stream-json', '--output-format', 'stream-json', '--model', model], standbyDir);
+  const [file, fileArgs] = agyCommand(['-p', '', '--input-format', 'stream-json', '--output-format', 'stream-json', '--model', model, ...extraArgs], standbyDir);
   const child = spawn(file, fileArgs, {windowsHide: true, cwd: standbyDir, stdio: ['pipe', 'pipe', 'pipe']});
   const entry = {child, model, dead: false, waiters: [], lines: []};
   const rl = createInterface({input: child.stdout});
@@ -262,6 +262,30 @@ async function runStandby({prompt, model, signal, timeoutMs}) {
   }
 }
 
+// ───────── 进行中计数与借用调用 ─────────
+// 绯月自身正在进行的 agy 调用数，借用任务据此让位（预热待命进程不算）。
+let activeCalls = 0;
+export const agyActiveCalls = () => activeCalls;
+async function tracked(task) {
+  activeCalls++;
+  try { return await task(); } finally { activeCalls--; }
+}
+
+// 给借用接口的一次性调用：提示词只经标准输入传入（命令行参数经 wsl.exe -- 会被 shell 展开），
+// 不领用待命进程，附带沙盒与禁用斜杠命令参数，不放开任何工具权限。
+export async function runAgyIsolated({prompt, model = 'gemini-3.8-flash-low', signal, timeoutMs = 120_000} = {}) {
+  if (isAgyResourceExhausted()) return {success: false, error: 'RESOURCE_EXHAUSTED'};
+  if (signal?.aborted) return {success: false, error: 'ABORTED'};
+  const entry = startSpare(model, ['--sandbox', '--disable-slash-commands']);
+  try {
+    const result = await sendTurn(entry, prompt, {signal, timeoutMs});
+    if (result) return {success: true, response: result.response ?? ''};
+    return {success: false, error: signal?.aborted ? 'ABORTED' : isAgyResourceExhausted() ? 'RESOURCE_EXHAUSTED' : 'AGY_CLI_FAILED'};
+  } finally {
+    if (!entry.dead) stopChild(entry.child);
+  }
+}
+
 // ───────── 对话会话 ─────────
 // 面对面对话要记得前几轮，所以这里保留同一个进程：多轮共享上下文，空闲超时或轮数达上限后回收，
 // 进程中途退出则下一轮换新进程（上下文从头开始）。一次只处理一轮，后到的排队。
@@ -298,7 +322,7 @@ export function createAgyConversation({model = 'gemini-3.8-flash-low', idleMs = 
   return {
     // first：新会话第一轮前置的人设说明，之后的轮次不再重复。
     ask(prompt, options = {}) {
-      const run = queue.then(() => turn(prompt, options));
+      const run = queue.then(() => tracked(() => turn(prompt, options)));
       queue = run.catch(() => {});
       return run;
     },
@@ -328,7 +352,11 @@ export function extractJson(text) {
  * @param {number} [options.timeoutMs=60000] 超时时间
  * @returns {Promise<{success: boolean, response?: string, structuredOutput?: any, durationSeconds?: number, usage?: any, error?: string}>}
  */
-export async function runAgyPrompt({
+export function runAgyPrompt(options) {
+  return tracked(() => singlePrompt(options));
+}
+
+async function singlePrompt({
   prompt,
   schema,
   model = 'gemini-3.8-flash-low',

@@ -7,7 +7,13 @@ import {createBalancedLocalModel,readGpuLoad} from './balanced-local-model.mjs';
 import {createAiWorkflowModel} from './ai-workflow-model.mjs';
 import {createLocalModel,desktopModelPath,LOCAL_MODEL_FILE} from './local-model.mjs';
 import {createAgyCliModel,testAgyCliPipeline} from './agy-local-model.mjs';
-import {extractJson,isAgyInstalled,isAgyResourceExhausted,runAgyPrompt,standbyDir} from './agy-cli-client.mjs';
+import {agyActiveCalls,extractJson,isAgyInstalled,isAgyResourceExhausted,runAgyIsolated,runAgyPrompt,standbyDir} from './agy-cli-client.mjs';
+
+// 本机借用接口的 agy 文本通道：未安装时不提供；绯月自身在用或额度冷却时让借用方等待。
+export function agyBorrow(){
+  return isAgyInstalled()?{agy:input=>runAgyIsolated(input),
+    agyBusy:()=>isAgyResourceExhausted()?'cooldown':agyActiveCalls()?'busy':null}:{};
+}
 import {createAgyVision,normalizeImageList,normalizeVisionAnswer,parseVisionJson,rejectCutoutQuestion,VISION_SYSTEM_PROMPT} from './vision-client.mjs';
 import {createAiNetworkPool} from './ai-network-pool.mjs';
 import {capTimeoutMs} from './ai-execution-round.mjs';

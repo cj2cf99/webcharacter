@@ -178,7 +178,7 @@ test('HTTP 确认、鉴权、固定 Git 清单、整批回读与一次复盘',as
   f.cleanup.push(async()=>{await api.close();await pool.close();});
   const headers={authorization:'Bearer '+readFileSync(join(f.dir,'local-api.token'),'utf8'),'content-type':'application/json'};
   const post=v=>fetch(api.address+'/v1/batches',{method:'POST',headers,body:JSON.stringify(v)});
-  const guide=await (await fetch(api.address+'/infoguide')).json();assert.equal(guide.baseURL,api.address);assert.equal(guide.routes.length,16);assert.equal(guide.version,8);
+  const guide=await (await fetch(api.address+'/infoguide')).json();assert.equal(guide.baseURL,api.address);assert.equal(guide.routes.length,17);assert.equal(guide.version,9);
   assert.deepEqual(await (await fetch(api.address)).json(),guide);
   assert.equal((await fetch(api.address+'/v1/batches')).status,401);
   assert.equal((await fetch(api.address+'/v1/batches',{headers:{...headers,Origin:'https://other.invalid'}})).status,403);

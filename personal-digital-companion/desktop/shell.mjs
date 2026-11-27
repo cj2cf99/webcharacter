@@ -7,7 +7,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {dirname,resolve} from 'node:path';
 import {createInteractionWork} from './interaction-work.mjs';
 import {createAnimationMaker} from './animation-maker.mjs';
-import {requestGeminiImage,isBandaoConfigured,createVision,setCloudTaskAudit,setCloudFallbackLog,createLocalAi,createPrivateModel,desktopModelPath,readGpuLoad} from './ai-gateway.mjs';
+import {agyBorrow,requestGeminiImage,isBandaoConfigured,createVision,setCloudTaskAudit,setCloudFallbackLog,createLocalAi,createPrivateModel,desktopModelPath,readGpuLoad} from './ai-gateway.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
 import {readFile,stat} from 'node:fs/promises';
@@ -1421,7 +1421,7 @@ export async function startDesktop(electron,options={}){
         queueInfo:()=>({used:formalUsed(),limit:FORMAL_LIMIT,tasks:tasks.formalCount?.()??0,
           running:localPool?.active?.title??((tasks.executingCount?.()??0)?taskThought?.title??'本机任务':null)})});
       // 借用接口：动画生成器等本机程序借用 Gemini、ComfyUI 高清放大与已登记 CLI
-      const borrow=createBorrow({gemini:input=>requestGeminiImage(input),upscale:image=>localUpscale({root,profile,image})});
+      const borrow=createBorrow({gemini:input=>requestGeminiImage(input),upscale:image=>localUpscale({root,profile,image}),...agyBorrow()});
       localREST=await openLocalREST({profile,pool:localPool,borrow,...options.localAPI});
       localPool.start();
     }catch(error){
