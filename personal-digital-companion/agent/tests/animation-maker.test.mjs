@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createAnimationMaker} from '../../desktop/animation-maker.mjs';
+import {createAnimationMaker, createVoiceStudio} from '../../desktop/animation-maker.mjs';
 
 const ok = body => ({ok: true, json: async () => body});
 
@@ -45,4 +45,13 @@ test('动画生成器：目录缺失或启动超时给出明确错误', async ()
   try {
     await assert.rejects(createAnimationMaker({dir, wait: 500, sleep: async () => {}, fetcher: down, openExternal() {}, spawn: () => ({on() {}, unref() {}})}).open('crop'), /未启动/);
   } finally { rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('语音制作：按自己的服务名识别，打开根地址，缺目录时报语音制作', async () => {
+  const opened = [], spawned = [];
+  const maker = createVoiceStudio({openExternal: u => opened.push(u), spawn: (...a) => spawned.push(a), fetcher: async () => ok({app: 'voicestudio'}), base: 'http://v'});
+  await maker.open();
+  assert.deepEqual([opened, spawned.length], [['http://v/'], 0]);
+  // 端口上是别的服务时不当作已运行
+  await assert.rejects(createVoiceStudio({dir: 'Z:/none', fetcher: async () => ok({app: 'webmcreator'}), openExternal() {}}).open(), /找不到语音制作/);
 });

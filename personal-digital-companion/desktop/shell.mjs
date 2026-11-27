@@ -6,7 +6,7 @@ import {screenPosture} from './screen-posture.mjs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {dirname,resolve} from 'node:path';
 import {createInteractionWork} from './interaction-work.mjs';
-import {createAnimationMaker} from './animation-maker.mjs';
+import {createAnimationMaker,createVoiceStudio} from './animation-maker.mjs';
 import {agyBorrow,requestGeminiImage,isBandaoConfigured,createVision,setCloudTaskAudit,setCloudFallbackLog,createLocalAi,createPrivateModel,desktopModelPath,readGpuLoad} from './ai-gateway.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
@@ -1086,6 +1086,13 @@ export async function startDesktop(electron,options={}){
       if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'动画生成器',message:'动画生成器没能打开。',detail:error.message,buttons:['确定']}).catch(()=>{});
     });
   }
+  // 语音制作挂在动画生成器菜单下级，是另一个独立服务；装载模型占内存和显存，只在点击时启动。
+  const voiceStudio=createVoiceStudio({openExternal:url=>electron.shell.openExternal(url)});
+  function openVoiceStudio(){
+    void voiceStudio.open().catch(error=>{
+      if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'语音制作',message:'语音制作没能打开。',detail:error.message,buttons:['确定']}).catch(()=>{});
+    });
+  }
   function menu(candidate=layout){
     const attachedCommand=click=>({enabled:windowsReady,click});
     const actions={
@@ -1128,6 +1135,7 @@ export async function startDesktop(electron,options={}){
       animationGemini:{click:()=>openAnimationMaker('gemini')},
       animationLocal:{click:()=>openAnimationMaker('local')},
       animationGif:{click:()=>openAnimationMaker('gif')},
+      voiceStudio:{click:()=>openVoiceStudio()},
       notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
       pendingCheck:checks.pending&&{click:()=>taskNotice(screenQuestion.openReview('checks'))},
       pollSettings:{click:()=>taskNotice(pollSettings.open())},
