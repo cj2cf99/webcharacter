@@ -147,7 +147,7 @@ Invoke-RestMethod "$base/v1/batches/$batchId/ack" -Method Post -Headers $headers
 
 ## v9：借用接口增加 agy 文本通道（2026-11-27 JST，开发版，未安装）
 
-首个调用方是语音分段制作页面 `G:/selftool/voicestudio` 的情绪改写。说明中 `borrow.channels` 含 `agy` 才可用；本机未装 agy 时不列出，提交返回 503。
+首个调用方是语音分段制作页面 `G:/selftool/toolswithmodel/voicestudio` 的情绪改写。说明中 `borrow.channels` 含 `agy` 才可用；本机未装 agy 时不列出，提交返回 503。
 
 - `POST /v1/borrow`，`channel:'agy'`：`prompt`（1～4000 字）。
 - 单独排队、一次一个，不阻塞生图与放大。开始前让位：绯月自身没有进行中的 agy 调用且额度不在冷却，连续满 3 秒才开始；等待中任务的 `waiting` 为 `busy` 或 `cooldown`，不会自动放弃。已开始的任务不被打断。

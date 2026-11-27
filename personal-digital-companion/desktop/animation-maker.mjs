@@ -7,7 +7,7 @@ import {join} from 'node:path';
 export const ANIMATION_MAKER_DIR = process.env.FEIYUE_WEBMCREATOR_DIR || 'G:/selftool/webmcreator';
 export const ANIMATION_MAKER_URL = process.env.FEIYUE_WEBMCREATOR_URL || 'http://127.0.0.1:8766';
 const TABS = new Set(['crop', 'gemini', 'local', 'gif']);
-export const VOICE_STUDIO_DIR = process.env.FEIYUE_VOICESTUDIO_DIR || 'G:/selftool/voicestudio';
+export const VOICE_STUDIO_DIR = process.env.FEIYUE_VOICESTUDIO_DIR || 'G:/selftool/toolswithmodel/voicestudio';
 export const VOICE_STUDIO_URL = process.env.FEIYUE_VOICESTUDIO_URL || 'http://127.0.0.1:8767';
 export const createVoiceStudio = options => createAnimationMaker({dir: VOICE_STUDIO_DIR, base: VOICE_STUDIO_URL, app: 'voicestudio', name: '语音制作', tabs: null, ...options});
 
