@@ -7,10 +7,11 @@ import {createBubbleVoice} from './bubble-voice.mjs';
 import {loadStudyConnection} from './cloud-connection.mjs';
 import {createPanelWindow,showPanel} from './panel-window.mjs';
 import {generateDialogue} from './study-generate.mjs';
-import {importStudyMaterials,languageMaterial,sceneMaterial} from './study-materials.mjs';
+import {importStudyMaterials,languageMaterial,sceneMaterial,studyServerQuestion} from './study-materials.mjs';
 import {createStudyRelay} from './study-relay.mjs';
 import {createStudyStore,normalizeStudySentence} from './study-store.mjs';
 
+const knowledgeUrl='https://myapp.cj2cf99.workers.dev/knowledge/';
 const freeSchema={type:'object',additionalProperties:false,required:['next','done','summary','feedback'],
   properties:{next:{type:'string'},done:{type:'boolean'},summary:{type:'string'},feedback:{type:'string'}}};
 const verdictSchema={type:'object',additionalProperties:false,required:['verdict','quote','feedback','concepts'],properties:{
@@ -117,9 +118,28 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
     }
     return local().operate(id,action,clean);
   }
+  // 评论挂在知序线上题目上，只在答案已展示后读写。
+  function reviewedQuestion(id,index){
+    const formal=local().relayGet(id)?.session;
+    const session=formal??local().findSession(id),item=session.items[index];
+    if(!item||session.status!=='completed'&&(formal||!item.result))throw Error('作答结束后才能看评论');
+    const question=studyServerQuestion(formal?item.base:item.question.base);
+    if(!question)throw Error('此题没有知序线上题号，无法评论');
+    return question;
+  }
+  function entryChange({ref,revision,value,remove}){
+    if(remove){
+      if(!ref)throw Error('请选择要删除的内容');
+      return {ref,revision,remove:true};
+    }
+    const text=typeof value==='string'?value.trim():'';
+    if(!text||text.length>20000)throw Error('请输入 1 至 20000 字');
+    return {ref,revision,value:text};
+  }
   const handlers={
-    overview:()=>({...local().overview(),formal:remote().latest()}),
-    history:({offset})=>local().history(offset),
+    overview:()=>{local().closeLanguage();return {...local().overview(),formal:remote().latest()};},
+    history:({offset})=>{local().closeLanguage();return local().history(offset);},
+    leave:()=>local().closeLanguage(),
     import:async()=>{
       const file=await dialog.showOpenDialog(panel,{title:'导入学习材料',properties:['openFile'],filters:[{name:'学习材料 JSON',extensions:['json']}]});
       if(file.canceled)return null;
@@ -150,15 +170,19 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
     },
     verifyOptions:({id,index})=>local().scriptOptions(id,index),
     free,
-    catalog:({kind})=>remote().catalog(kind),
-    catalogPage:({kind,cursor})=>remote().catalogPage(kind,cursor),
-    download:({kind,id,scene})=>remote().download(kind,id,scene===true),
+    catalog:()=>remote().catalog(),
+    catalogPage:({cursor})=>remote().catalogPage(cursor),
+    download:({id})=>remote().download(id),
     formalOpen:({id,create})=>remote().open(id,create),
     formalView:({id})=>remote().view(id),
     formalRefresh:({id})=>remote().refresh(id),
     formalDraft:({id,index,kind,value})=>remote().draft(id,index,kind,value),
     formalResolve:({id,choice,revision})=>remote().resolveDraft(id,choice,revision),
     formalSend:({id,action})=>remote().send(id,action),
+    comments:({id,index})=>remote().comments(reviewedQuestion(id,index)),
+    comment:({id,index,...change})=>remote().comment(reviewedQuestion(id,index),entryChange(change)),
+    reflect:({id,index,...change})=>(local().relayGet(id)?.session?remote():local()).reflect(id,index,entryChange(change)),
+    openKnowledge:()=>electron.shell.openExternal(knowledgeUrl),
   };
   const own=event=>Boolean(panel)&&event.sender===panel.webContents&&event.senderFrame===panel.webContents.mainFrame;
   // 朗读单独走通道，不阻塞对话操作。发音服务打开学习面板即启动，保留到面板关闭。
@@ -176,7 +200,8 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
     if(!own(event)||!Object.hasOwn(handlers,action))
       throw Error('仅绯月学习面板可使用');
     const current=active;
-    const keepDraft=action==='operate'&&args?.action==='draft';
+    // 关窗时在途的草稿和笔记仍要落盘。
+    const keepDraft=action==='operate'&&['draft','note'].includes(args?.action)||action==='formalDraft'&&args?.kind==='note';
     const work=queue.then(()=>{if(!keepDraft)current.signal.throwIfAborted();return handlers[action](args);});
     queue=work.catch(()=>{});
     return work;
@@ -194,12 +219,16 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
     panel=created;active=new AbortController();
     created.webContents.setWindowOpenHandler(()=>({action:'deny'}));
     created.webContents.on('will-navigate',(event,url)=>{if(url!==pathToFileURL(entry).href)event.preventDefault();});
-    created.once('closed',()=>{if(panel===created){active.abort();voice.stopSpeaking();panel=null;}});
+    created.once('closed',()=>{if(panel===created){active.abort();voice.stopSpeaking();panel=null;
+      // 排在在途草稿之后结束语言场次。
+      queue=queue.then(()=>store?.closeLanguage()).catch(()=>{});
+    }});
     // 加载模型并合成一句暖机，结果丢弃；失败留给之后的朗读提示。
     speaking=speaking.then(()=>panel===created?voice.render('はい。','study'):null).catch(()=>{});
     try{
       await created.loadFile(entry);
-      if(visible&&panel===created){showPanel(created);created.focus();}
+      // 首次打开铺满屏幕，保留标题栏按钮和任务栏；之后沿用用户调整的大小。
+      if(visible&&panel===created){created.maximize();showPanel(created);created.focus();}
     }catch(error){if(!created.isDestroyed())created.destroy();throw error;}
   }
   return {open,get executing(){return executing;},get panel(){return panel;},close(){

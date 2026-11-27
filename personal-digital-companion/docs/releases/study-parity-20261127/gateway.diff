@@ -1,0 +1,61 @@
+diff -ru --strip-trailing-cr /g/selftool/WebCharacter/work/study-parity-release-20261127/gateway-base/api-worker/src/companion/study-engine/api.mjs /g/selftool/WebCharacter/work/study-parity-release-20261127/gateway/api-worker/src/companion/study-engine/api.mjs
+--- /g/selftool/WebCharacter/work/study-parity-release-20261127/gateway-base/api-worker/src/companion/study-engine/api.mjs	2026-11-25 19:40:57.000000000 +0900
++++ /g/selftool/WebCharacter/work/study-parity-release-20261127/gateway/api-worker/src/companion/study-engine/api.mjs	2026-11-27 12:42:33.065315900 +0900
+@@ -207,6 +207,7 @@
+         req,
+         url.searchParams,
+         time,
++        desktopExamOnly,
+       );
+       if (write)
+         s.put("operations", {
+@@ -313,7 +314,7 @@
+   }
+ }
+ 
+-async function route(s, p, m, b, req, query, now) {
++async function route(s, p, m, b, req, query, now, desktopExamOnly) {
+   const [root, id, action] = p;
+   const result = (data, status) => ({ data, status });
+   if (root === "config" && m === "GET")
+@@ -388,7 +389,13 @@
+               ? tagIds.every((t) => q.tag_ids.includes(t))
+               : tagIds.some((t) => q.tag_ids.includes(t)),
+           );
+-        return result(page(qs, query));
++        const response = page(qs, query);
++        if (desktopExamOnly) {
++          const ids = new Set(response.items.map(q => q.id));
++          const attempted = new Set(s.all("attempts").filter(a => ids.has(a.question_id)).map(a => a.question_id));
++          response.items = response.items.map(q => ({ ...q, attempted: attempted.has(q.id) }));
++        }
++        return result(response);
+       }
+       if (m === "POST") {
+         const q = validateQuestion(s, id, {
+diff -ru --strip-trailing-cr /g/selftool/WebCharacter/work/study-parity-release-20261127/gateway-base/api-worker/src/companion/study.mjs /g/selftool/WebCharacter/work/study-parity-release-20261127/gateway/api-worker/src/companion/study.mjs
+--- /g/selftool/WebCharacter/work/study-parity-release-20261127/gateway-base/api-worker/src/companion/study.mjs	2026-11-25 19:40:57.000000000 +0900
++++ /g/selftool/WebCharacter/work/study-parity-release-20261127/gateway/api-worker/src/companion/study.mjs	2026-11-27 12:42:33.116197800 +0900
+@@ -2,8 +2,10 @@
+ 
+ const companionPrefix = '/api/companion';
+ const studyPrefix = companionPrefix + '/study/v1/';
+-const readRoutes = /^(?:banks(?:\/[\w.-]+(?:\/(?:questions|review))?)?|tags|assets\/[\w.-]+|sessions\/[\w.-]+(?:\/result)?)$/;
+-const writeRoutes = /^(?:sessions|sessions\/[\w.-]+\/(?:takeover|pause|resume|finish))$/;
++const readRoutes = /^(?:banks(?:\/[\w.-]+(?:\/(?:questions|review))?)?|tags|assets\/[\w.-]+|questions\/[\w.-]+\/comments|sessions\/[\w.-]+(?:\/result)?)$/;
++const writeRoutes = /^(?:sessions|sessions\/[\w.-]+\/(?:takeover|pause|resume|finish|reflections)|questions\/[\w.-]+\/comments)$/;
++// 题目评论与考后复盘的修改、删除，和网页版同一份数据。
++const entryRoute = /^(?:comments|reflections)\/[\w.-]+$/;
+ const progressRoute = /^sessions\/[\w.-]+\/progress$/;
+ 
+ export const isStudyDesktopPath = path => path.startsWith(studyPrefix);
+@@ -26,7 +28,8 @@
+   const route = url.pathname.slice(studyPrefix.length);
+   const allowed = (request.method === 'GET' && readRoutes.test(route))
+     || (request.method === 'POST' && writeRoutes.test(route))
+-    || (request.method === 'PATCH' && progressRoute.test(route));
++    || (request.method === 'PATCH' && progressRoute.test(route))
++    || (['PATCH', 'DELETE'].includes(request.method) && entryRoute.test(route));
+   if (!allowed) return fail(404, 'NOT_FOUND', '接口不存在');
+ 
+   url.pathname = '/api' + url.pathname.slice(companionPrefix.length);

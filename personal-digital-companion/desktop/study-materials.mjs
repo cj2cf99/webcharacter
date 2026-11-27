@@ -23,6 +23,12 @@ export function validStudyQuestionBase(base){
     return Array.isArray(parts)&&parts.length===3&&parts[0]==='question'&&parts.slice(1).every(text);
   }catch{return false;}
 }
+// 知序线上题号。手工导入、没有来源编号的题目返回 null。
+export function studyServerQuestion(base){
+  if(!validStudyQuestionBase(base))return null;
+  const id=JSON.parse(base)[2];
+  return /^[-_a-zA-Z0-9]{1,120}$/u.test(id)?id:null;
+}
 export function studyQuestionId(bank,identity,type,stem,options,pairs,correct){
   return key(studyQuestionBase(bank,identity),version([type,stem,options,pairs,[...correct].sort()]));
 }

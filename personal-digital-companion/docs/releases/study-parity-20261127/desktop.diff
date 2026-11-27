@@ -1,0 +1,1088 @@
+--- installed/desktop/cloud-connection.mjs
++++ candidate/desktop/cloud-connection.mjs
+@@ -59,9 +59,7 @@
+     return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(client.origin).hostname) ? client : null;
+   }
+   return {...client, request(path, options) {
+-    const languageRead=/^\/api\/language\/(?:dialogues|scenes)(?:\/[A-Za-z0-9_-]{1,120})?$/u.test(path.split('?')[0]) &&
+-      (options?.method??'GET')==='GET';
+-    if (!path.startsWith('/api/study/v1/') && !languageRead) throw Error('该材料尚未接入学习服务，可使用缓存或导入文件');
++    if (!path.startsWith('/api/study/v1/')) throw Error('该材料尚未接入学习服务，可使用缓存或导入文件');
+     return client.request(path, options);
+   }};
+ }
+--- installed/desktop/study-host.mjs
++++ candidate/desktop/study-host.mjs
+@@ -7,10 +7,11 @@
+ import {loadStudyConnection} from './cloud-connection.mjs';
+ import {createPanelWindow,showPanel} from './panel-window.mjs';
+ import {generateDialogue} from './study-generate.mjs';
+-import {importStudyMaterials,languageMaterial,sceneMaterial} from './study-materials.mjs';
++import {importStudyMaterials,languageMaterial,sceneMaterial,studyServerQuestion} from './study-materials.mjs';
+ import {createStudyRelay} from './study-relay.mjs';
+ import {createStudyStore,normalizeStudySentence} from './study-store.mjs';
+ 
++const knowledgeUrl='https://myapp.cj2cf99.workers.dev/knowledge/';
+ const freeSchema={type:'object',additionalProperties:false,required:['next','done','summary','feedback'],
+   properties:{next:{type:'string'},done:{type:'boolean'},summary:{type:'string'},feedback:{type:'string'}}};
+ const verdictSchema={type:'object',additionalProperties:false,required:['verdict','quote','feedback','concepts'],properties:{
+@@ -117,9 +118,28 @@
+     }
+     return local().operate(id,action,clean);
+   }
++  // 评论挂在知序线上题目上，只在答案已展示后读写。
++  function reviewedQuestion(id,index){
++    const formal=local().relayGet(id)?.session;
++    const session=formal??local().findSession(id),item=session.items[index];
++    if(!item||session.status!=='completed'&&(formal||!item.result))throw Error('作答结束后才能看评论');
++    const question=studyServerQuestion(formal?item.base:item.question.base);
++    if(!question)throw Error('此题没有知序线上题号，无法评论');
++    return question;
++  }
++  function entryChange({ref,revision,value,remove}){
++    if(remove){
++      if(!ref)throw Error('请选择要删除的内容');
++      return {ref,revision,remove:true};
++    }
++    const text=typeof value==='string'?value.trim():'';
++    if(!text||text.length>20000)throw Error('请输入 1 至 20000 字');
++    return {ref,revision,value:text};
++  }
+   const handlers={
+-    overview:()=>({...local().overview(),formal:remote().latest()}),
+-    history:({offset})=>local().history(offset),
++    overview:()=>{local().closeLanguage();return {...local().overview(),formal:remote().latest()};},
++    history:({offset})=>{local().closeLanguage();return local().history(offset);},
++    leave:()=>local().closeLanguage(),
+     import:async()=>{
+       const file=await dialog.showOpenDialog(panel,{title:'导入学习材料',properties:['openFile'],filters:[{name:'学习材料 JSON',extensions:['json']}]});
+       if(file.canceled)return null;
+@@ -150,15 +170,19 @@
+     },
+     verifyOptions:({id,index})=>local().scriptOptions(id,index),
+     free,
+-    catalog:({kind})=>remote().catalog(kind),
+-    catalogPage:({kind,cursor})=>remote().catalogPage(kind,cursor),
+-    download:({kind,id,scene})=>remote().download(kind,id,scene===true),
++    catalog:()=>remote().catalog(),
++    catalogPage:({cursor})=>remote().catalogPage(cursor),
++    download:({id})=>remote().download(id),
+     formalOpen:({id,create})=>remote().open(id,create),
+     formalView:({id})=>remote().view(id),
+     formalRefresh:({id})=>remote().refresh(id),
+     formalDraft:({id,index,kind,value})=>remote().draft(id,index,kind,value),
+     formalResolve:({id,choice,revision})=>remote().resolveDraft(id,choice,revision),
+     formalSend:({id,action})=>remote().send(id,action),
++    comments:({id,index})=>remote().comments(reviewedQuestion(id,index)),
++    comment:({id,index,...change})=>remote().comment(reviewedQuestion(id,index),entryChange(change)),
++    reflect:({id,index,...change})=>(local().relayGet(id)?.session?remote():local()).reflect(id,index,entryChange(change)),
++    openKnowledge:()=>electron.shell.openExternal(knowledgeUrl),
+   };
+   const own=event=>Boolean(panel)&&event.sender===panel.webContents&&event.senderFrame===panel.webContents.mainFrame;
+   // 朗读单独走通道，不阻塞对话操作。发音服务打开学习面板即启动，保留到面板关闭。
+@@ -176,7 +200,8 @@
+     if(!own(event)||!Object.hasOwn(handlers,action))
+       throw Error('仅绯月学习面板可使用');
+     const current=active;
+-    const keepDraft=action==='operate'&&args?.action==='draft';
++    // 关窗时在途的草稿和笔记仍要落盘。
++    const keepDraft=action==='operate'&&['draft','note'].includes(args?.action)||action==='formalDraft'&&args?.kind==='note';
+     const work=queue.then(()=>{if(!keepDraft)current.signal.throwIfAborted();return handlers[action](args);});
+     queue=work.catch(()=>{});
+     return work;
+@@ -194,12 +219,16 @@
+     panel=created;active=new AbortController();
+     created.webContents.setWindowOpenHandler(()=>({action:'deny'}));
+     created.webContents.on('will-navigate',(event,url)=>{if(url!==pathToFileURL(entry).href)event.preventDefault();});
+-    created.once('closed',()=>{if(panel===created){active.abort();voice.stopSpeaking();panel=null;}});
++    created.once('closed',()=>{if(panel===created){active.abort();voice.stopSpeaking();panel=null;
++      // 排在在途草稿之后结束语言场次。
++      queue=queue.then(()=>store?.closeLanguage()).catch(()=>{});
++    }});
+     // 加载模型并合成一句暖机，结果丢弃；失败留给之后的朗读提示。
+     speaking=speaking.then(()=>panel===created?voice.render('はい。','study'):null).catch(()=>{});
+     try{
+       await created.loadFile(entry);
+-      if(visible&&panel===created){showPanel(created);created.focus();}
++      // 首次打开铺满屏幕，保留标题栏按钮和任务栏；之后沿用用户调整的大小。
++      if(visible&&panel===created){created.maximize();showPanel(created);created.focus();}
+     }catch(error){if(!created.isDestroyed())created.destroy();throw error;}
+   }
+   return {open,get executing(){return executing;},get panel(){return panel;},close(){
+--- installed/desktop/study-materials.mjs
++++ candidate/desktop/study-materials.mjs
+@@ -23,6 +23,12 @@
+     return Array.isArray(parts)&&parts.length===3&&parts[0]==='question'&&parts.slice(1).every(text);
+   }catch{return false;}
+ }
++// 知序线上题号。手工导入、没有来源编号的题目返回 null。
++export function studyServerQuestion(base){
++  if(!validStudyQuestionBase(base))return null;
++  const id=JSON.parse(base)[2];
++  return /^[-_a-zA-Z0-9]{1,120}$/u.test(id)?id:null;
++}
+ export function studyQuestionId(bank,identity,type,stem,options,pairs,correct){
+   return key(studyQuestionBase(bank,identity),version([type,stem,options,pairs,[...correct].sort()]));
+ }
+--- installed/desktop/study-relay.mjs
++++ candidate/desktop/study-relay.mjs
+@@ -1,17 +1,17 @@
+ import {randomUUID} from 'node:crypto';
+-import {bankMaterial,cacheStudyImage,languageMaterial,publicQuestion,questionMedia,sceneMaterial,studyAssetIds,studyQuestionBase,studyQuestionId,validSelection,validStudyQuestionBase} from './study-materials.mjs';
++import {bankMaterial,cacheStudyImage,publicQuestion,questionMedia,studyAssetIds,studyQuestionBase,studyQuestionId,studyServerQuestion,validSelection,validStudyQuestionBase} from './study-materials.mjs';
+ import {pairChoice} from './pair-choice.mjs';
+ 
+ const prefix='/api/study/v1';
+-const language='/api/language/dialogues';
+-const scenes='/api/language/scenes';
+ const segment=value=>{
+   if(typeof value!=='string'||!/^[-_a-zA-Z0-9]{1,120}$/u.test(value))throw Error('资料编号无效');
+   return value;
+ };
+ const sameSelection=(a,b)=>a.length===b.length&&a.every(value=>b.includes(value));
+ const matchesPatch=(item,patch)=>item&&(!('selected_ids' in patch)||sameSelection(patch.selected_ids,item.selected_ids))&&
+-  (!('flag' in patch)||patch.flag===item.flagged);
++  (!('flag' in patch)||patch.flag===item.flagged)&&(!('note' in patch)||patch.note===(item.note??''));
++// 评论与复盘在绯月里的统一形状。
++const entry=row=>({id:row.id,body:row.body,revision:row.revision,time:row.created_at});
+ 
+ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
+   function record(id){return store.relayGet(id);}
+@@ -20,9 +20,11 @@
+     if(!client)throw Error('学习服务尚未连接，可使用已缓存材料或导入文件');
+     const response=await client.request(path,operation?{
+       method:operation.method??'POST',body:JSON.stringify(operation.body),
+-      headers:{'Content-Type':'application/json','Idempotency-Key':operation.key},
++      headers:{'Content-Type':'application/json','Idempotency-Key':operation.key,
++        ...(operation.revision!=null?{'If-Match':String(operation.revision)}:{})},
+       signal:AbortSignal.timeout(12_000),
+     }:{signal:AbortSignal.timeout(12_000)});
++    if(response.status===204)return null;
+     const body=await response.json().catch(()=>undefined);
+     if(!response.ok){
+       const code=body?.error?.code;
+@@ -50,39 +52,23 @@
+     }while(cursor);
+     return items;
+   }
+-  async function catalog(kind){
+-    if(kind==='language'){
+-      const [scripts,rows]=await Promise.all([pages(language),pages(scenes)]);
+-      return [...scripts.map(row=>({id:row.id,title:row.title})),...rows.map(row=>row.scene??row).filter(scene=>!scene.archived)
+-        .map(scene=>({id:scene.id,title:scene.title,scene:true}))];
+-    }
+-    if(kind==='bank')return (await pages(prefix+'/banks')).filter(row=>row.status==='active').map(row=>({id:row.id,title:row.name}));
+-    throw Error('材料类型无效');
+-  }
+-  async function catalogPage(kind,cursor){
+-    const path={scripts:language,scenes,banks:prefix+'/banks'}[kind];
+-    if(!path||cursor!=null&&(typeof cursor!=='string'||cursor.length>2048))throw Error('材料目录或游标无效');
+-    const query=new URLSearchParams(kind==='banks'?{limit:'20'}:{});
++  async function catalog(){
++    return (await pages(prefix+'/banks')).filter(row=>row.status==='active').map(row=>({id:row.id,title:row.name}));
++  }
++  async function catalogPage(cursor){
++    if(cursor!=null&&(typeof cursor!=='string'||cursor.length>2048))throw Error('材料目录或游标无效');
++    const query=new URLSearchParams({limit:'20'});
+     if(cursor)query.set('cursor',cursor);
+-    const page=await request(path+'?'+query);
+-    if(!Array.isArray(page?.items)||kind!=='banks'&&page.version!==1)throw Error('来源目录格式无效');
+-    const items=page.items.map(row=>row.scene??row).filter(row=>kind==='banks'?row.status==='active':!row.archived)
+-      .map(row=>({id:segment(row.id),title:row.title??row.name,scene:kind==='scenes'}));
++    const page=await request(prefix+'/banks?'+query);
++    if(!Array.isArray(page?.items))throw Error('来源目录格式无效');
++    const items=page.items.filter(row=>row.status==='active').map(row=>({id:segment(row.id),title:row.title??row.name}));
+     if(items.some(row=>typeof row.title!=='string'||!row.title))throw Error('来源标题无效');
+     const next=page.next_cursor??page.cursor??null;
+     if(next!=null&&(typeof next!=='string'||!next||next.length>2048||next===cursor))throw Error('来源分页游标无效');
+     return {items,next};
+   }
+-  async function download(kind,id,scene=false){
++  async function download(id){
+     id=segment(id);
+-    if(kind==='language'){
+-      const entry=await request((scene?scenes:language)+'/'+id);
+-      const body=scene?entry.scene:entry.script;
+-      if(entry.version!==1||body?.id!==id||body.archived)throw Error('来源材料已变更，请重新选取');
+-      const m=scene?sceneMaterial(body):languageMaterial(body);
+-      store.cache([m]);return store.material(m.id);
+-    }
+-    if(kind!=='bank')throw Error('材料类型无效');
+     const path=prefix+'/banks/'+id;
+     const [bank,questions,tags,review]=await Promise.all([
+       request(path),pages(path+'/questions',{status:'active'}),pages(prefix+'/tags'),pages(path+'/review'),
+@@ -129,7 +115,8 @@
+         const base=[bankId,questionId].every(value=>typeof value==='string'&&value.trim())?studyQuestionBase(bankId,questionId):undefined;
+         const evidenceId=done&&base?studyQuestionId(bankId,questionId,q.type,q.stem,
+           q.options.map(({id,text})=>({id,text})),(q.pairs??[]).map(({id,text})=>({id,text})),question.correct):undefined;
+-        return {question,evidenceId,base,answer:item.selected_ids,flag:item.flagged,
++        return {question,evidenceId,base,answer:item.selected_ids,flag:item.flagged,note:item.note??'',
++          reflections:dto.reflections?.filter(row=>row.session_item_id===item.id).map(entry),
+           result:done?item.correctness:undefined};
+       })};
+   }
+@@ -147,6 +134,8 @@
+       const hasSource=done&&validStudyQuestionBase(base);
+       return {...display,...(!done?patch:undefined),unsure:!!row.unsure?.[item.question.id],canRetry:hasSource&&!!row.material&&!!evidenceId,
+         serverAnswer:patch?.answer!==undefined?item.answer:undefined,serverFlag:patch?.flag!==undefined?item.flag:undefined,
++        serverNote:patch?.note!==undefined?item.note??'':undefined,draftNote:done?patch?.note:undefined,
++        canComment:done&&Boolean(studyServerQuestion(base)),
+         pending:Boolean(patch),draftAnswer:done?patch?.answer:undefined,doubt:hasSource?store.isDoubt(base):undefined};
+     });
+     return {id,material:row.material,title:s.bank_name,mode:'formal',status:s.status,created:s.started_at,finished:s.finished_at,
+@@ -158,12 +147,18 @@
+   }
+   function save(dto,previous={},changes={}){
+     const session=decode(dto),drafts={...previous.drafts};
++    // 只有场次读取回执带复盘，其他回执沿用已取回的内容。
++    if(!dto.reflections){
++      const kept=new Map(previous.session?.items.map(item=>[item.question.id,item.reflections]));
++      for(const item of session.items)item.reflections=kept.get(item.question.id);
++    }
+     for(const item of session.items){
+       const id=item.question.id,patch=drafts[id];
+       if(!patch)continue;
+       const remaining={...patch};
+       if('answer' in patch&&sameSelection(patch.answer,item.answer))delete remaining.answer;
+       if('flag' in patch&&patch.flag===item.flag)delete remaining.flag;
++      if('note' in patch&&patch.note===(item.note??''))delete remaining.note;
+       if(Object.keys(remaining).length)drafts[id]=remaining;
+       else delete drafts[id];
+     }
+@@ -248,6 +243,11 @@
+       if(kind==='answer'&&!validSelection(item.question,value))throw Error('作答格式无效');
+       row.drafts={...row.drafts,[item.question.id]:{...row.drafts?.[item.question.id],[kind]:value}};
+     }
++    // 解题笔记暂停时也能写。
++    else if(kind==='note'&&row.session.status!=='completed'&&writable(row.session)){
++      if(typeof value!=='string'||value.length>20000)throw Error('笔记最多 20000 字');
++      row.drafts={...row.drafts,[item.question.id]:{...row.drafts?.[item.question.id],note:value}};
++    }
+     store.relaySet(id,row);
+     return view(id);
+   }
+@@ -307,7 +307,8 @@
+     if(fresh.offline||s.status==='completed')return fresh;
+     if(action!=='takeover'&&(!writable(s)||row.conflict||row.reviewDrafts))return fresh;
+     const patch=Object.entries(row.drafts??{}).map(([item_id,values])=>({item_id,
+-      ...('answer' in values?{selected_ids:values.answer}:{}),...('flag' in values?{flag:values.flag}:{})}));
++      ...('answer' in values?{selected_ids:values.answer}:{}),...('flag' in values?{flag:values.flag}:{}),
++      ...('note' in values?{note:values.note}:{})}));
+     const hasPosition=positionPending(row);
+     if(action==='sync'&&!patch.length&&!hasPosition)return fresh;
+     if(action==='sync'&&s.status==='paused'&&patch[0]&&'selected_ids' in patch[0])throw Error('请先恢复考试，再提交待同步答案');
+@@ -327,5 +328,24 @@
+     store.relaySet(id,{...row,pending:next});
+     return send(id,'sync');
+   }
+-  return {catalog,catalogPage,download,open,view,refresh,draft,resolveDraft,send,latest:()=>record('latest')?.id};
++  // 新增、修改或删除一条评论或复盘；返回保存后的条目，删除返回 null。
++  async function changeEntry(kind,createPath,extra,{ref,revision,value,remove}){
++    const path=ref?prefix+'/'+kind+'/'+segment(ref):createPath;
++    const saved=await request(path,{method:remove?'DELETE':ref?'PATCH':'POST',key:randomUUID(),revision:ref?revision:undefined,
++      body:remove?undefined:{...(ref?{}:extra),body:value}});
++    return remove?null:entry(saved);
++  }
++  const commentsPath=question=>prefix+'/questions/'+segment(question)+'/comments';
++  const comments=async question=>(await pages(commentsPath(question))).map(entry).sort((a,b)=>a.time-b.time);
++  const comment=(question,change)=>changeEntry('comments',commentsPath(question),{},change);
++  async function reflect(id,index,change){
++    const item=record(id)?.session.items[index];
++    if(!item||record(id).session.status!=='completed')throw Error('交卷后才能复盘');
++    const saved=await changeEntry('reflections',prefix+'/sessions/'+segment(id)+'/reflections',{item_id:item.question.id},change);
++    const row=record(id),target=row.session.items[index],rest=(target.reflections??[]).filter(old=>old.id!==(change.ref??saved?.id));
++    target.reflections=saved?[...rest,saved].sort((a,b)=>a.time-b.time):rest;
++    store.relaySet(id,row);
++    return saved;
++  }
++  return {catalog,catalogPage,download,open,view,refresh,draft,resolveDraft,send,comments,comment,reflect,latest:()=>record('latest')?.id};
+ }
+--- installed/desktop/study-store.mjs
++++ candidate/desktop/study-store.mjs
+@@ -1,7 +1,7 @@
+ import {randomUUID} from 'node:crypto';
+ import {join} from 'node:path';
+ import {DatabaseSync} from 'node:sqlite';
+-import {gradeQuestion,publicQuestion,shuffled,validSelection,validStudyQuestionBase} from './study-materials.mjs';
++import {gradeQuestion,publicQuestion,shuffled,studyServerQuestion,validSelection,validStudyQuestionBase} from './study-materials.mjs';
+ 
+ const hour=3_600_000;
+ const weights=[1,3,5,7];
+@@ -149,6 +149,8 @@
+         explanation:q.explanation,concepts:q.concepts});
+       const progress=status?.get(q.id);
+       return {question,answer:item.answer,draft:item.draft,draftOnly:item.draftOnly,unsure:item.unsure,flag:item.flag,hinted:item.hinted,
++        note:item.note,reflections:item.reflections,
++        canComment:Boolean(studyServerQuestion(q.base))&&(done||!exam&&Boolean(item.result)),
+         result:feedback?item.result:undefined,originalResult:item.originalResult,disputed:item.disputed,feedback:done||s.mode!=='free'?item.feedback:undefined,retry:item.retry,
+         mastery:progress&&{...progress,weight:weights[progress.tier]},doubt:done&&q.base?isDoubt(q.base):undefined,
+         repeated:[...(mistakes.get(q.id)??[])].filter(([,n])=>n>1),hasVariant:Boolean(findVariant(related,q,item.evidenceConcepts))};
+@@ -171,6 +173,18 @@
+       db.exec('COMMIT');
+     }catch(error){db.exec('ROLLBACK');throw error;}
+   }
++  // 语言对练不做中途续练：离开时只把已提交的轮次记入复盘，一句没答的整场丢弃。
++  function closeLanguage(){
++    for(const {id} of sql("SELECT id FROM sessions WHERE status<>'completed' AND mode IN ('script','free','sentence')").all()){
++      const s=getSession(id);
++      s.items=s.items.filter(item=>item.result);
++      if(!s.items.some(item=>item.answer)){sql('DELETE FROM sessions WHERE id=?').run(id);continue;}
++      for(const item of s.items)delete item.draft;
++      s.position=s.items.length-1;
++      if(s.mode==='free')s.summary=`已记录 ${s.items.length} 轮，表达反馈待核对。`;
++      settle(s,'manual');
++    }
++  }
+   function overview(){
+     const continueList=sql("SELECT id,title,mode,status,started FROM sessions WHERE status<>'completed' ORDER BY started DESC").all();
+     for(const row of continueList)findSession(row.id);
+@@ -320,6 +334,10 @@
+       }
+       settle(s,'manual');
+       return view(s);
++    }else if(action==='note'&&exam){
++      // 解题笔记暂停时也能写。
++      if(typeof args.value!=='string'||args.value.length>20000)throw Error('笔记最多 20000 字');
++      item.note=args.value;
+     }else if(s.status==='running'){
+       if(action==='flag'&&exam)item.flag=Boolean(args.value);
+       else if(action==='unsure'&&index===s.position)item.unsure=Boolean(args.value);
+@@ -350,6 +368,17 @@
+     saveSession(s);
+     return view(s);
+   }
++  // 本机题库场次的考后复盘，与网页版同样按题增改删。
++  function reflect(id,index,{ref,value,remove}){
++    const s=findSession(id),item=s.items[index];
++    if(s.status!=='completed'||!item||item.question.type==='sentence')throw Error('结束题库练习后才能复盘');
++    const rows=item.reflections??[],old=ref?rows.find(row=>row.id===ref):null;
++    if(ref&&!old)throw Error('这条复盘已不存在');
++    const saved=remove?null:old?{...old,body:value,revision:old.revision+1}:{id:randomUUID(),body:value,revision:1,time:clock()};
++    item.reflections=old?rows.flatMap(row=>row===old?saved??[]:row):[...rows,saved];
++    saveSession(s);
++    return saved;
++  }
+   function freeCommit(id,index,answer,reply){
+     const s=findSession(id),item=s.items[index];
+     if(s.mode!=='free'||s.status!=='running'||index!==s.position||!item||item.result)return view(s);
+@@ -417,7 +446,7 @@
+   }
+   function next(id,index,kind,ref,accepted){
+     const s=findSession(id);
+-    if(kind==='script'&&s.mode==='free')return create(s.material,{mode:'script'});
++    if(kind==='script'&&s.mode==='free'){closeLanguage();return create(s.material,{mode:'script'});}
+     if(s.status!=='completed')throw Error('请先结束本场再复练');
+     const q=s.items[index]?.question;
+     if(!q)throw Error('找不到原作答');
+@@ -435,7 +464,7 @@
+     if(!choice)throw Error('暂无变式，原题验证记录仍可查看');
+     return replayCurrent(choice.material,[choice.question],{id,index},accepted);
+   }
+-  return {cache,overview,history,material,create,view:id=>view(findSession(id)),findSession,operate,next,freeCommit,
++  return {cache,closeLanguage,overview,history,material,create,view:id=>view(findSession(id)),findSession,operate,next,freeCommit,reflect,
+     scene:id=>{const m=getMaterial(id);return m?.sceneOnly?m:null;},
+     scenes:()=>sql("SELECT body FROM materials WHERE kind='language' ORDER BY rowid DESC").all().map(read)
+       .filter(m=>m.sceneOnly).map(({id,title,topics})=>({id,title,topics})),
+--- installed/desktop/study-ui.mjs
++++ candidate/desktop/study-ui.mjs
+@@ -8,7 +8,19 @@
+ const names={script:'照剧本练',free:'自由对练',sentence:'表达强化',practice:'抽题练习',exam:'本地模考','strength-exam':'强化测验',formal:'知序 · 正式考试'};
+ const outcomes={correct:'答对',wrong:'答错',unanswered:'未答',pending:'待核对'};
+ const date=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Tokyo',dateStyle:'short',timeStyle:'short'});
+-let busy=false,session=null,category='language',screen='home',historyOffset=0,filter='all',dictation;
++const labels={language:'语言对练',bank:'题库练习',history:'复盘记录'};
++const icons={language:'💬',bank:'📚',history:'🕘',script:'📜',free:'💬',sentence:'✏️',
++  practice:'🎯',exam:'⏱️','strength-exam':'💪',formal:'🏛️'};
++const tones={correct:'ok',wrong:'danger',unanswered:'warn',pending:'info'};
++const languageModes=['script','sentence','free'];
++let busy=false,session=null,category='language',screen='home',historyOffset=0,filter='all';
++// 当前页面上的语音录入框；笔记输入的待保存动作。
++const boxes=[];
++let flushNote=()=>{};
++// 最近停留的非场次页面，场次页返回到这里。
++let page;
++// 从当前页面一路复练开出的场次，返回时先回来源作答。
++const retried=new Set();
+ let writes=Promise.resolve(),deadline=null;
+ let reviewPage=0;
+ const obj=(tag,text='',css='')=>{const node=document.createElement(tag);node.textContent=text;node.className=css;return node;};
+@@ -23,6 +35,29 @@
+ const paragraph=(text,css)=>obj('p',text,css);
+ const notice=text=>{status.textContent=text;};
+ const empty=text=>obj('p',text,'fy-empty');
++const withIcon=(node,icon)=>{node.dataset.icon=icon;return node;};
++const grid=(nodes,css='study-grid')=>{
++  const node=obj('div','',css);
++  nodes.forEach((child,index)=>child.style.setProperty('--i',index));
++  node.append(...nodes);return node;
++};
++function hero(icon,title,...extra){
++  const mark=obj('span',icon,'study-hero-icon');mark.setAttribute('aria-hidden','true');
++  const head=obj('div','','study-hero-text');head.append(obj('h2',title));
++  const node=obj('section','','study-hero');node.append(mark,head);
++  for(const child of extra)(child.classList.contains('fy-chip')?head:node).append(child);
++  return node;
++}
++function tile(icon,title,click,meta){
++  const control=withIcon(button('',click,'study-tile'),icon);
++  control.append(obj('span',title,'study-tile-title'));
++  if(meta)control.dataset.meta=meta;
++  return control;
++}
++const mode=(icon,label,click,css='')=>withIcon(button(label,click,'study-mode '+css),icon);
++function field(label,control){
++  const node=obj('label','','study-field');node.append(obj('span',label),control);return node;
++}
+ // A 的台词自动朗读与重放，按钮跨重绘复用。
+ const speakButton=obj('button','','study-speak');speakButton.type='button';
+ const speakStatus=obj('small','','study-note');speakStatus.setAttribute('role','status');speakStatus.hidden=true;
+@@ -36,10 +71,14 @@
+     voiceSelect.value=current;
+   }catch{notice('音色列表读取失败，请检查音色目录和 voices.json。');}
+ }
++function listen(input,options={}){boxes.push(bindDictation(input,{blocked:()=>busy,...options}));}
++const updateDictation=()=>boxes.forEach(box=>box.update());
++const closeDictation=()=>boxes.splice(0).forEach(box=>box.close());
+ async function work(fn,control){
+   if(busy||dictating())return;
+   busy=true;
+-  dictation?.update();
++  updateDictation();
++  flushNote();
+   main.setAttribute('aria-busy','true');
+   if(control)control.setAttribute('aria-busy','true');
+   notice('');
+@@ -49,7 +88,7 @@
+     clearTimeout(pending);
+     if(status.textContent==='处理中…')notice('');
+     busy=false;
+-    dictation?.update();
++    updateDictation();
+     main.setAttribute('aria-busy','false');
+     control?.removeAttribute('aria-busy');
+   }
+@@ -60,30 +99,47 @@
+   return field;
+ }
+ function tab(text,active,click){const control=button(text,click);control.setAttribute('aria-pressed',String(active));return control;}
+-function switchScreen(next){
++function renderNav(owner,back){
++  const tabs=obj('div','','fy-seg');
++  for(const [key,open] of [['language',()=>openHome('language')],['bank',()=>openHome('bank')],['history',()=>openHistory(0)]]){
++    const control=withIcon(button('',open),icons[key]);
++    control.setAttribute('aria-pressed',String(owner===key));control.title=labels[key];
++    control.append(obj('span',labels[key]));tabs.append(control);
++  }
++  nav.replaceChildren(tabs);
++  if(owner==='bank'||screen==='session'&&category==='bank'){
++    const link=withIcon(button('',()=>run('openKnowledge'),'study-link'),'📖');
++    link.title='打开网页知识库';link.setAttribute('aria-label',link.title);link.append(obj('span','知识库'));
++    nav.append(link);
++  }
++  if(back){
++    const control=button(back.label,back.go,'study-back');control.title=back.title;
++    nav.prepend(control);
++  }
++}
++const homePage=(kind,offset=0)=>({owner:kind,name:labels[kind],go:()=>openHome(kind,offset)});
++function switchScreen(next,here,parent){
+   speech.setLine('');
+-  dictation?.close();dictation=null;
+-  screen=next;session=null;main.replaceChildren();actions.replaceChildren();
+-  nav.replaceChildren(tab('语言对练',category==='language'&&next!=='history',()=>openHome('language')),
+-    tab('题库练习',category==='bank'&&next!=='history',()=>openHome('bank')),tab('复盘记录',next==='history',()=>openHistory(0)));
++  closeDictation();
++  screen=next;session=null;page=here;retried.clear();main.replaceChildren();actions.replaceChildren();
++  renderNav(here.owner,parent&&{label:'返回',title:'返回'+parent.name,go:parent.go});
+   main.scrollTop=0;
+ }
+-function recordButton(entry){
++function recordButton(entry,from){
+   const when=entry.finished??entry.started;
+-  return button(`${entry.title} · ${names[entry.mode]}${when?` · ${date.format(when)} JST`:''}`,
+-    async()=>showSession(await run(entry.mode==='formal'?'formalView':'view',{id:entry.id})));
++  return tile(icons[entry.mode],entry.title,async()=>{
++    // 正式场次读一次回执，网页端写的复盘一起带回；断网时仍显示缓存。
++    const value=await run(entry.mode==='formal'?'formalRefresh':'view',{id:entry.id});
++    if(value&&from)page=from;
++    showSession(value);
++  },`${names[entry.mode]}${when?` · ${date.format(when)} JST`:''}`);
+ }
+ async function openHome(kind=category,offset=0){
+-  category=kind;switchScreen('home');
++  category=kind;switchScreen('home',homePage(kind,offset));
+   const data=await run('overview');
+   const rows=data.materials.filter(item=>item.kind===kind);
+-  if(data.active.length||data.formal){
+-    const more=data.active.map(recordButton);
+-    if(data.formal)more.push(button('继续或复盘正式考试',async()=>showSession(await run('formalRefresh',{id:data.formal}))));
+-    main.append(card(obj('h2','继续上次'),row(...more)));
+-  }
+-  const controls=row(button('导入 JSON',async()=>{const count=await run('import');if(count){await openHome();notice(`已缓存 ${count} 份材料`);}}),
+-    button('从来源取材',()=>sourceCatalog(kind)));
++  const controls=row(button('导入 JSON',async()=>{const count=await run('import');if(count){await openHome();notice(`已缓存 ${count} 份材料`);}}));
++  if(kind==='bank')controls.append(button('从来源取材',()=>sourceCatalog()));
+   if(kind==='language')controls.prepend(button('✨ 生成对话',()=>openGenerate(),'primary'));
+   if(kind==='language')controls.append(button('基础剧本',async()=>{
+     const count=await run('basic');await openHome(kind);notice(`已载入 ${count} 套基础剧本`);
+@@ -92,38 +148,53 @@
+     const result=await run('formalOpen',{});
+     if(result)showSession(result);else notice('知序没有进行中的正式考试');
+   }));
+-  main.append(card(row(obj('h2',kind==='language'?'场景与剧本':'题库'),controls),rows.length?
+-    row(...rows.slice(offset,offset+20).map(item=>button(item.title,()=>openMaterial(item)))):empty('暂无本机材料，可导入来源备份或取材。')));
++  main.append(hero(icons[kind],kind==='language'?'场景与剧本':'题库',
++    obj('span',`本机 ${rows.length} 份`,'fy-chip'),controls));
++  if(data.active.length||data.formal){
++    // 能续练的只有题库场次，返回时回到题库练习主页。
++    const from=homePage('bank');
++    const more=data.active.map(entry=>recordButton(entry,from));
++    if(data.formal)more.push(tile(icons.formal,'继续或复盘正式考试',async()=>{
++      const value=await run('formalRefresh',{id:data.formal});
++      if(value)page=from;
++      showSession(value);
++    }));
++    for(const control of more)control.dataset.tone='warn';
++    main.append(obj('h3','继续上次','fy-section'),grid(more));
++  }
++  main.append(rows.length?grid(rows.slice(offset,offset+20).map(item=>{
++    const scene=kind==='language'&&item.id.startsWith('["scene"');
++    return tile(kind==='bank'?icons.bank:scene?'🎭':icons.script,item.title,()=>openMaterial(item),
++      kind==='bank'?'题库':scene?'场景':'剧本');
++  })):empty(kind==='language'?'暂无本机材料，可生成对话、载入基础剧本或导入 JSON。':'暂无本机材料，可导入来源备份或取材。'));
+   if(offset)actions.append(button('上一页',()=>openHome(kind,offset-20)));
+   if(offset+20<rows.length)actions.append(button('下一页',()=>openHome(kind,offset+20)));
+ }
+-async function sourceCatalog(kind,group=kind==='bank'?'banks':'scripts'){
+-  const pages=[],cursors=[],ids=new Set();
++async function sourceCatalog(){
++  const pages=[],cursors=[],ids=new Set(),parent=page;
+   async function render(index){
+     if(!pages[index]){
+       const cursor=index?pages[index-1].next:null;
+-      const page=await run('catalogPage',{kind:group,cursor});
+-      if(page.next&&(cursors.includes(page.next)||page.next===cursor))throw Error('来源游标重复，请重新打开目录');
+-      page.items=page.items.filter(item=>!ids.has(item.id)&&ids.add(item.id));
+-      pages.push(page);cursors.push(cursor);
++      const result=await run('catalogPage',{cursor});
++      if(result.next&&(cursors.includes(result.next)||result.next===cursor))throw Error('来源游标重复，请重新打开目录');
++      result.items=result.items.filter(item=>!ids.has(item.id)&&ids.add(item.id));
++      pages.push(result);cursors.push(cursor);
+     }
+-    switchScreen('sources');
+-    if(kind==='language')main.append(row(tab('剧本',group==='scripts',()=>sourceCatalog(kind,'scripts')),
+-      tab('场景',group==='scenes',()=>sourceCatalog(kind,'scenes'))));
+-    const page=pages[index];
+-    main.append(card(obj('h2','选择要下载的材料'),page.items.length?row(...page.items.map(item=>button(item.title+(item.scene?' · 场景':''),async()=>{
+-      const downloaded=await run('download',{kind,id:item.id,scene:item.scene});
++    switchScreen('sources',{owner:'bank',name:'来源目录',go:()=>render(index)},parent);
++    const {items,next}=pages[index];
++    main.append(hero('☁️','选择要下载的题库'),items.length?grid(items.map(item=>tile(icons.bank,item.title,async()=>{
++      const downloaded=await run('download',{id:item.id});
+       await openMaterial(downloaded);notice('已缓存，断网可练习');
+-    }))):empty('本页暂无可用材料。')));
++    }))):empty('本页暂无可用材料。'));
+     if(index)actions.append(button('上一页',()=>render(index-1)));
+-    if(page.next)actions.append(button('下一页',()=>render(index+1)));
++    if(next)actions.append(button('下一页',()=>render(index+1)));
+   }
+   await render(0);
+ }
+ const levels=['N1','N2','N3','N4','N5'];
+ async function openGenerate(){
+   const scenes=await run('scenes');
+-  switchScreen('generate');
++  switchScreen('generate',{owner:'language',name:'生成对话'},homePage('language'));
+   const textField=(label,placeholder)=>{const node=obj('input');node.type='text';node.maxLength=500;node.placeholder=placeholder;node.setAttribute('aria-label',label);return node;};
+   const scene=select([['','＋ 新场景'],...scenes.map(item=>[item.id,item.title])],'场景');
+   const title=textField('新场景名称','例：午休时在茶水间闲聊');
+@@ -138,57 +209,74 @@
+     waiting.hidden=false;
+     try{
+       const result=await run('generate',{sceneId:scene.value,title:title.value,topic:topic.value,level:level.value,ability:ability.value,steps:Number(steps.value)});
+-      await openMaterial({id:result.materialId});
++      await openMaterial({id:result.materialId},homePage('language'));
+       notice(`已由 ${result.providers.join(' / ')} 生成并缓存到本机`);
+     }finally{waiting.hidden=true;}
+   },'primary');
+-  const form=card(obj('h2','生成对话'),scene,title,topic,topics,row(level,ability,steps,obj('span','步','study-note')),row(submit),waiting);
+-  main.append(form);
+-  const titleBox=bindDictation(title,{language:'zh',blocked:()=>busy}),topicBox=bindDictation(topic,{language:'zh',blocked:()=>busy});
+-  dictation={update(){titleBox.update();topicBox.update();},close(){titleBox.close();topicBox.close();}};
++  const titleField=field('新场景名称',title),options=obj('div','','study-fields');
++  options.append(field('语言等级',level),field('表达类型',ability),field('对话步数',steps));
++  main.append(hero('✨','生成对话'),card(field('场景',scene),titleField,field('本次话题',topic),topics,options,row(submit),waiting));
++  listen(title,{language:'zh'});listen(topic,{language:'zh'});
+   scene.onchange=()=>{
+     const chosen=scenes.find(item=>item.id===scene.value);
+-    (title.closest('.fy-dictation-field')??title).hidden=Boolean(chosen);
++    titleField.hidden=Boolean(chosen);
+     topics.replaceChildren(...(chosen?.topics??[]).map(name=>{const option=obj('option');option.value=name;return option;}));
+     topic.value='';
+   };
+ }
+-async function openMaterial(material){
++async function openMaterial(material,parent=page){
+   const entry=await run('material',{id:material.id});
+-  switchScreen('material');
++  category=entry.kind;
++  switchScreen('material',{owner:entry.kind,name:entry.title,go:()=>openMaterial(material,parent)},parent);
+   const start=options=>async()=>showSession(await run('create',{id:material.id,options}));
+   if(entry.kind==='language'){
+     if(entry.sceneOnly){
+       const topics=select([['','场景默认话题'],...entry.topics.map(topic=>[topic,topic])],'话题');
+-      main.append(card(obj('h2',entry.title),row(topics,button('自由对练',()=>start({mode:'free',topic:topics.value})(),'primary'))));
++      main.append(hero('🎭',entry.title,obj('span','场景','fy-chip')),card(field('话题',topics)),
++        grid([mode(icons.free,'自由对练',()=>start({mode:'free',topic:topics.value})(),'primary')],'study-modes'));
+       return;
+     }
+-    main.append(card(obj('h2',entry.title),paragraph(`${entry.count} 轮`,'study-note'),
+-      row(button('照剧本练',start({mode:'script'}),'primary'),button('自由对练',start({mode:'free'})),
+-        button('抽取薄弱句',start({mode:'sentence',reinforce:true})))));
++    main.append(hero(icons.script,entry.title,obj('span',`${entry.count} 轮`,'fy-chip')),grid([
++      mode(icons.script,'照剧本练',start({mode:'script'}),'primary'),mode(icons.free,'自由对练',start({mode:'free'})),
++      mode(icons.sentence,'抽取薄弱句',start({mode:'sentence',reinforce:true}))],'study-modes'));
+     return;
+   }
+   const tags=select([['','全部标签'],...entry.tags.map(tag=>[tag.id,tag.name])],'标签');
+   const scope=select([['','全部启用题'],['unseen','未见作答记录'],['review','待复习']],'练习范围');
+   const count=obj('input');count.type='number';count.min='1';count.max='70';count.value='10';count.setAttribute('aria-label','抽题数量');
+   const reinforce=obj('input');reinforce.type='checkbox';reinforce.checked=true;
+-  const check=obj('label','');check.append(reinforce,' 反馈强化');
+-  const configured=mode=>async()=>start({mode,count:Number(count.value),tag:tags.value,scope:scope.value,reinforce:reinforce.checked})();
+-  main.append(card(obj('h2',entry.title),paragraph(`${entry.count} 道缓存题目`,'study-note'),row(tags,scope,count,check),
+-    paragraph(entry.attemptsComplete?`已做记录截至 ${date.format(entry.fetchedAt)} JST`:'未见题仅按本机已知记录筛选','study-note'),
+-    row(button('抽题练习',configured('practice'),'primary'),button('强化测验',configured('strength-exam'))),
+-    row(button('本地模考 · 60 分钟',start({mode:'exam'})),button('打开知序正式考试',async()=>{
+-      const [,id]=JSON.parse(material.id);
+-      if(window.confirm('从知序继续原场次；没有进行中的场次时创建正式考试。继续？'))showSession(await run('formalOpen',{id,create:true}));
+-    }))));
++  const check=obj('label','','study-check');check.append(reinforce,' 反馈强化');
++  const configured=kind=>async()=>start({mode:kind,count:Number(count.value),tag:tags.value,scope:scope.value,reinforce:reinforce.checked})();
++  const fields=obj('div','','study-fields');
++  fields.append(field('标签',tags),field('练习范围',scope),field('抽题数量',count),check);
++  main.append(hero(icons.bank,entry.title,obj('span',`${entry.count} 道缓存题目`,'fy-chip')),
++    card(fields,paragraph(entry.attemptsComplete?`已做记录截至 ${date.format(entry.fetchedAt)} JST`:'未见题仅按本机已知记录筛选','study-note')),
++    grid([mode(icons.practice,'抽题练习',configured('practice'),'primary'),mode(icons['strength-exam'],'强化测验',configured('strength-exam')),
++      mode(icons.exam,'本地模考 · 60 分钟',start({mode:'exam'})),mode(icons.formal,'打开知序正式考试',async()=>{
++        const [,id]=JSON.parse(material.id);
++        if(window.confirm('从知序继续原场次；没有进行中的场次时创建正式考试。继续？'))showSession(await run('formalOpen',{id,create:true}));
++      })],'study-modes'));
+ }
+ async function openHistory(offset){
+-  switchScreen('history');historyOffset=offset;
++  switchScreen('history',{owner:'history',name:labels.history,go:()=>openHistory(offset)});historyOffset=offset;
+   const rows=await run('history',{offset});
+-  main.append(card(obj('h2','本机复盘 · JST'),rows.length?row(...rows.map(recordButton)):empty('暂无此页记录。')));
++  main.append(hero(icons.history,'本机复盘 · JST'),rows.length?grid(rows.map(entry=>recordButton(entry))):empty('暂无此页记录。'));
+   if(offset)actions.append(button('‹ 较新',()=>openHistory(Math.max(0,historyOffset-20))));
+   if(rows.length===20)actions.append(button('较早 ›',()=>openHistory(historyOffset+20)));
+ }
++async function openSource(source){
++  const snapshot=await run(source.formal?'formalView':'view',{id:source.id});
++  showSession(snapshot,source.index);
++  document.getElementById('study-review-'+source.index)?.scrollIntoView({block:'center'});
++}
++function sessionBack(value){
++  const source=retried.has(value.id)?value.sourceTurn:null;
++  const target=source?{name:'来源作答',go:()=>openSource(source)}:page;
++  // 语言场次不续练：返回即结束本场。
++  if(languageModes.includes(value.mode)&&value.status!=='completed')
++    return {label:'结束并返回',title:'结束本场并返回'+target.name,go:async()=>{await run('leave');await target.go();}};
++  return {label:source?'返回来源作答':'返回',title:'返回'+target.name,go:target.go};
++}
+ function command(action,args={}){return run('operate',{id:session.id,action,args:{index:session.position,...args}});}
+ function formalDraft(kind,value){return run('formalDraft',{id:session.id,index:session.position,kind,value});}
+ function formalSend(action){return run('formalSend',{id:session.id,action});}
+@@ -201,13 +289,14 @@
+     const [type,id]=JSON.parse(result.materialId);
+     if(type!=='bank')throw Error('请先重新取回原材料');
+     if(!window.confirm('本机缺少该题库。现在取回材料再练？'))return;
+-    await run('download',{kind:'bank',id});result=await run(action,params);
++    await run('download',{id});result=await run(action,params);
+   }
+   if(result.retryStatus==='changed'){
+     if(!window.confirm(`新版题目：${result.changed.join('、')||'无'}。已排除 ${result.skipped} 项。按当前版本重练？`))return;
+     result=await run(action,{...params,accepted:result.versions});
+   }
+   if(result.retryStatus)throw Error('材料已变化，请重新核对');
++  if(result.sourceTurn)retried.add(result.id);
+   showSession(result);
+ };}
+ function fieldCheck(label,checked,onChange,disabled=false){
+@@ -232,6 +321,7 @@
+ function questionCard(item){
+   const q=item.question;
+   const block=card(obj('h2',q.title||'绯月 · A'),paragraph(q.stem,'study-prompt'));
++  if(q.type==='sentence')block.classList.add('study-talk');
+   if(q.externalId)block.append(paragraph(q.externalId,'study-note'));
+   media(block,q);
+   return block;
+@@ -279,21 +369,94 @@
+   }
+   return indexes;
+ }
++// 考试中的解题笔记：停顿后保存，任何按钮操作和关窗前先交出未保存内容。
++function noteBox(item,locked){
++  const {id,position:index,mode}=session;
++  const input=obj('textarea','','study-memo');input.maxLength=20000;input.value=item.note??'';input.disabled=locked;
++  input.placeholder='判断依据、犹豫点或排除过程…';input.setAttribute('aria-label','本次解题笔记');
++  let timer=null;
++  const flush=()=>{
++    if(timer===null)return;
++    clearTimeout(timer);timer=null;
++    const value=input.value;
++    const request=(mode==='formal'?run('formalDraft',{id,index,kind:'note',value}):run('operate',{id,action:'note',args:{index,value}}))
++      .then(result=>{
++        if(session?.id!==id)return;
++        session=result;
++        const indicator=document.querySelector('[data-sync]');
++        if(indicator&&result.pending)indicator.textContent='尚待提交';
++      }).catch(error=>notice(error.message));
++    writes=Promise.all([writes,request]);
++  };
++  input.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(flush,500);});
++  input.addEventListener('blur',flush);
++  flushNote=flush;
++  const node=field('📝 本次解题笔记（可选）',input);
++  return {node,bind:()=>listen(input,{language:'zh'})};
++}
++// 考后复盘与题目评论共用：列出、就地新增或修改、删除。
++function thread({label,add,rows,change,keep=()=>{}}){
++  const box=obj('div','','study-thread');
++  const update=next=>{rows=next;keep(rows);draw();};
++  function editor(entry){
++    const input=obj('textarea','','study-memo');input.maxLength=20000;input.value=entry?.body??'';
++    input.setAttribute('aria-label',label);
++    const holder=obj('div','','study-stack');
++    holder.append(input,row(button('保存',async()=>{
++      const saved=await change({ref:entry?.id,revision:entry?.revision,value:input.value});
++      update(entry?rows.map(old=>old.id===entry.id?saved:old):[...rows,saved]);
++    },'primary'),button('取消',()=>draw())));
++    return holder;
++  }
++  function card(entry){
++    const node=obj('div','','study-entry');
++    node.append(paragraph(entry.body),row(obj('small',`${date.format(entry.time)} JST`,'study-note'),
++      button('编辑',()=>draw(entry.id)),button('删除',async()=>{
++        if(!window.confirm(`删除这条${label}？`))return;
++        await change({ref:entry.id,revision:entry.revision,remove:true});
++        update(rows.filter(old=>old.id!==entry.id));
++      })));
++    return node;
++  }
++  function draw(editing){
++    const adding=editing==='';
++    box.replaceChildren(obj('h3',rows.length?`${label} · ${rows.length}`:label),
++      ...rows.map(entry=>editing===entry.id?editor(entry):card(entry)),adding?editor():button(add,()=>draw('')));
++    const input=box.querySelector('textarea');
++    if(input){listen(input,{language:'zh'});input.focus();}
++  }
++  draw();
++  return box;
++}
++// 评论存在知序线上题目上，点开才读取。
++function commentsEntry(index){
++  const {id}=session,holder=obj('div');
++  holder.append(button('💬 题目评论',async()=>{
++    const rows=await run('comments',{id,index});
++    holder.replaceChildren(thread({label:'题目评论',add:'＋ 添加评论',rows,change:change=>run('comment',{id,index,...change})}));
++  }));
++  return holder;
++}
+ function showSession(value,reviewIndex){
+   if(!value){notice('正式考试暂无回执');return;}
+-  if(session?.id!==value.id){filter='all';reviewPage=0;}
++  const entered=session?.id!==value.id,previous=session?.status;
++  if(entered){filter='all';reviewPage=0;}
+   if(Number.isInteger(reviewIndex)){filter='all';reviewPage=Math.max(0,Math.floor(reviewIndexes(value).indexOf(reviewIndex)/20));}
+-  dictation?.close();dictation=null;
++  closeDictation();flushNote=()=>{};
+   const finished=value.status==='completed';
+   const current=finished?null:value.items[value.position]?.question;
+   // 刚结束的自由对练还有 A 的道别句；翻看旧记录时不自动朗读。
+   const farewell=finished&&value.mode==='free'&&session?.id===value.id&&(session.status!=='completed'||speech.line===value.closing);
+   const line=farewell?value.closing??'':current?.type==='sentence'?current.stem??'':'';
+   speech.setLine(line,`${value.id}:${finished?'end':value.position}`);
+-  session=value;screen='session';nav.replaceChildren();main.replaceChildren();actions.replaceChildren();
++  session=value;screen='session';main.replaceChildren();actions.replaceChildren();
++  category=languageModes.includes(value.mode)?'language':'bank';
++  // 同一场内的重绘保留导航，避免页签动画反复播放。
++  if(entered||value.status!==previous)renderNav(page.owner==='history'?'history':category,sessionBack(value));
+   const {mode,status:state,items,position}=session;
+   const formal=mode==='formal',timed=['exam','strength-exam','formal'].includes(mode),done=state==='completed';
+-  const top=row(obj('strong',names[mode]||mode),obj('span',session.title,'study-note'));
++  const top=row(withIcon(obj('strong',names[mode]||mode,'fy-chip study-mode-chip'),icons[mode]),obj('span',session.title,'study-title'));
++  top.classList.add('study-top');
+   deadline=timed&&!done&&state==='running'?performance.now()+session.remaining:null;
+   if(timed&&!done){const clock=obj('span','','study-clock');clock.id='study-clock';top.append(clock);}
+   if(state==='paused')top.append(obj('span','已暂停','fy-chip'));
+@@ -308,6 +471,7 @@
+       const lines=[];
+       if(item.serverAnswer!==undefined)lines.push(`第 ${i+1} 题 · 已收 ${answerText(item.question,item.serverAnswer)||'未答'} ／ 草稿 ${answerText(item.question,item.answer)||'未答'}`);
+       if(item.serverFlag!==undefined)lines.push(`第 ${i+1} 题标记 · 已收 ${item.serverFlag?'是':'否'} ／ 本机 ${item.flag?'是':'否'}`);
++      if(item.serverNote!==undefined)lines.push(`第 ${i+1} 题笔记 · 已收 ${item.serverNote||'无'} ／ 本机 ${item.note||'无'}`);
+       return lines;
+     });
+     if(position!==session.serverPosition)changes.push(`题号 · 已收 ${session.serverPosition+1} ／ 本机 ${position+1}`);
+@@ -317,11 +481,14 @@
+   }
+   if(done){
+     if(line){main.append(card(paragraph(`A · ${line}`,'study-prompt'),row(speakButton,voiceSelect,speakStatus)));void loadVoices();}
+-    renderReview();return;
++    renderReview();
++    if(entered)main.scrollTop=0;
++    return;
+   }
+   if(session.requested&&items.length<session.requested)main.append(paragraph(`本次 ${items.length} 题，所选范围少于 ${session.requested} 题。`,'study-note'));
+   if(session.context){const {background,roleA,roleB,goal}=session.context;
+-    main.append(card(paragraph([roleA&&`A · ${roleA}`,roleB&&`B · ${roleB}`,background,goal].filter(Boolean).join('\n'))));}
++    const roles=row(...[roleA&&`A · ${roleA}`,roleB&&`B · ${roleB}`].filter(Boolean).map(text=>obj('span',text,'fy-chip')));
++    main.append(card(roles,...[background&&paragraph(background),goal&&paragraph(`🎯 ${goal}`,'study-note')].filter(Boolean)));}
+   const item=items[position];
+   if(!item)return;
+   if(mode!=='free'){
+@@ -347,7 +514,11 @@
+   block.append(fieldCheck('没把握',item.unsure,async value=>showSession(await (formal?formalDraft('unsure',value):command('unsure',{value}))),locked));
+   if(timed)block.append(fieldCheck('待检查',item.flag,async value=>showSession(await (formal?formalDraft('flag',value):command('flag',{value}))),locked));
+   if(item.result||item.hinted&&item.question.reference)block.append(feedback(item));
++  if(item.canComment)block.append(commentsEntry(position));
++  const memo=timed?noteBox(item,formal&&!session.writer):null;
++  if(memo)block.append(memo.node);
+   main.append(block);
++  memo?.bind();
+   if(formal){
+     actions.append(button('读取回执',async()=>showSession(await run('formalRefresh',{id:session.id}))));
+     if(!session.writer)actions.append(button('接管',async()=>{if(window.confirm('接管后，原窗口无法继续写入。继续？'))showSession(await formalSend('takeover'));}));
+@@ -364,6 +535,7 @@
+     },timed?'primary':''));
+   }
+   updateClock(session.remaining);
++  if(entered)main.scrollTop=0;
+ }
+ function renderSentence(item,block){
+   const input=obj('textarea');input.maxLength=1500;input.setAttribute('aria-label','B 的回答');input.placeholder='我是 B …';
+@@ -371,10 +543,10 @@
+   const free=modeIsFree();
+   if(free&&session.position){
+     const latest=session.items[session.position-1];
+-    block.prepend(paragraph(`B · ${latest.answer??''}`,'study-note'));
++    block.prepend(paragraph(`B · ${latest.answer??''}`,'study-reply'));
+   }
+   block.append(input);
+-  if(free)dictation=bindDictation(input,{blocked:()=>busy});
++  if(free)listen(input);
+   const {id,position:index}=session;
+   function saveDraft(){
+     if(item.result)return;
+@@ -420,7 +592,10 @@
+   const weakIndex=items.findIndex(item=>item.unsure&&!item.disputed&&!item.draftOnly&&(mode!=='free'||item.answer));
+   const target=weakIndex>=0?weakIndex:items.findIndex(item=>!item.disputed&&['wrong','unanswered'].includes(item.result));
+   const counts=['correct','wrong','unanswered'].map(key=>outcomes[key]+' '+items.filter(item=>item.result===key).length).join(' · ');
+-  main.append(card(row(obj('strong',score,'study-score'),passed===undefined?obj('span'):obj('span',passed?'合格':'未合格','fy-chip'),
++  const part=items.length?(language?items.filter(item=>item.answer&&!item.draftOnly).length:correct??0)/items.length:0;
++  const ring=obj('div','','study-ring');ring.setAttribute('aria-hidden','true');
++  ring.style.setProperty('--p',part);ring.append(obj('span',`${Math.round(part*100)}%`));
++  main.append(card(row(ring,obj('strong',score,'study-score'),passed===undefined?obj('span'):obj('span',passed?'合格':'未合格','fy-chip'),
+     reason==='timeout'?obj('span','到时结算','fy-chip'):obj('span')),
+     paragraph(formal?'知序交卷回执 · 计分采用服务端已收作答':'历史版本 · 本场开场时的材料','study-note'),
+     paragraph(language?(session.context?.goal||session.title):counts,'study-note'),
+@@ -428,26 +603,32 @@
+       showSession(session,target);document.getElementById('study-review-'+target)?.scrollIntoView({block:'center'});
+     })]:[]),
+     ...[summary,session.closing].filter(Boolean).map(text=>paragraph(text))));
+-  if(session.sourceTurn)actions.append(button('返回来源作答',async()=>{
+-    const source=session.sourceTurn;
+-    const snapshot=await run(source.formal?'formalView':'view',{id:source.id});
+-    showSession(snapshot,source.index);
+-    document.getElementById('study-review-'+source.index)?.scrollIntoView({block:'center'});
+-  }));
+   if(!language)main.append(row(...[['all','全部'],['correct','答对'],['wrong','答错'],['unanswered','未答']].map(([key,label])=>
+     tab(label,filter===key,()=>{filter=key;reviewPage=0;showSession(session);}))));
++  // 从列表打开的复练记录，返回键回列表，来源作答单独给入口。
++  const source=session.sourceTurn;
++  if(source&&!retried.has(session.id))actions.append(button('返回来源作答',()=>openSource(source)));
+   const list=obj('div','','fy-list study-stack');
+   const indexes=reviewIndexes(session);
+   indexes.slice(reviewPage*20,reviewPage*20+20).forEach(index=>{
+     const item=items[index];
+     const block=questionCard(item);
+     block.id='study-review-'+index;
++    if(item.result)block.dataset.tone=tones[item.result];
+     if(item.unsure)block.append(paragraph('没把握 · 待验证','study-note'));
+     if(item.originalResult&&item.originalResult!==item.result)block.append(paragraph('原判 · '+outcomes[item.originalResult]+' ／ 复核 · '+outcomes[item.result]));
+     if(item.draftOnly)block.append(paragraph('未提交草稿 · '+item.draft));
+     if(mode==='free'&&item.disputed)block.append(paragraph(`反馈复核中 · ${item.disputed}`,'study-note'));
+     block.append(feedback(item));
+     if(item.draftAnswer)block.append(paragraph(`结算后仍有本机草稿 · ${answerText(item.question,item.draftAnswer)}`,'study-note'));
++    if(item.note)block.append(paragraph(`📝 交卷笔记\n${item.note}`,'study-entry'));
++    if(item.draftNote)block.append(paragraph(`结算后仍有本机笔记草稿 · ${item.draftNote}`,'study-note'));
++    if(!language){
++      const {id}=session;
++      block.append(thread({label:'考后复盘',add:'✍️ 添加考后复盘',rows:item.reflections??[],
++        keep:rows=>{item.reflections=rows;},change:change=>run('reflect',{id,index,...change})}));
++      if(item.canComment)block.append(commentsEntry(index));
++    }
+     if(formal){
+       if(item.canRetry)block.append(button('本地重练',retry('original',index)));else block.append(paragraph('历史回执仅可回看','study-note'));
+       if(item.doubt!==undefined)block.append(row(button(item.doubt?'恢复强化':'题目有疑问',async()=>showSession(
+@@ -499,5 +680,6 @@
+     void work(async()=>showSession(await run(session.mode==='formal'?'formalRefresh':'view',{id:session.id})));
+   }
+ },1000);
++window.addEventListener('pagehide',()=>flushNote());
+ homeButton.onclick=()=>void work(()=>openHome(),homeButton);
+ void work(()=>openHome());
+--- installed/desktop/study.css
++++ candidate/desktop/study.css
+@@ -1,39 +1,128 @@
+ body{margin:0}
++/* 默认铺满屏幕：正文居中限宽，导航、内容、底栏左右对齐。 */
++#study-nav,#study-content,#study-actions{padding-inline:max(14px,calc((100% - 960px)/2))}
+ #study-nav,#study-actions{flex-wrap:wrap}
+ #study-nav:empty,#study-actions:empty{display:none}
+-#study-content{padding:10px 14px}
+-#study-content>*+*{margin-top:8px}
+-#study-status{margin:0 14px 5px}
+-.study-stack{display:grid;gap:9px}
+-.study-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
++#study-content{padding-block:16px 24px;background:
++  radial-gradient(110% 60% at 100% 0,color-mix(in srgb,var(--fy-accent) 9%,transparent),transparent 62%)}
++#study-content>*+*{margin-top:12px}
++#study-status{margin:0 max(14px,calc((100% - 960px)/2)) 6px}
++
++/* 导航：返回在左，三个功能页签常驻。 */
++.fy-panel #study-nav .fy-seg button{min-height:30px;padding:3px 15px}
++.fy-panel .study-back{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:3px 15px 3px 11px;border-radius:999px;
++  border-color:var(--fy-accent);color:var(--fy-accent);font-weight:650;animation:fy-rise .25s ease-out}
++.study-back::before{content:'‹';font-size:19px;line-height:1;transition:transform .15s}
++.study-back:hover::before{transform:translateX(-3px)}
++.fy-panel .study-back:not(:disabled):hover{background:var(--fy-soft);border-color:var(--fy-accent)}
++
++.fy-panel .study-link{display:inline-flex;align-items:center;margin-left:auto;min-height:32px;padding:3px 14px;border-radius:999px;border-color:var(--fy-gold)}
++.fy-panel .study-link:not(:disabled):hover{transform:translateY(-1px);background:var(--fy-soft)}
++
++/* 页首横幅 */
++.study-hero{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:17px 19px;border:1px solid var(--fy-line);border-radius:18px;
++  background:linear-gradient(115deg,var(--fy-soft),var(--fy-surface) 65%);animation:fy-rise .3s ease-out backwards}
++.study-hero-icon{display:grid;place-items:center;flex:none;width:52px;height:52px;border-radius:50%;font-size:26px;background:var(--fy-surface);
++  box-shadow:0 0 0 1px var(--fy-gold),0 0 0 6px color-mix(in srgb,var(--fy-gold) 18%,transparent);animation:fy-float 3.2s ease-in-out infinite}
++.study-hero-text{display:grid;justify-items:start;gap:5px;flex:1;min-width:150px}
++.study-hero h2{margin:0;font:700 19px/1.35 var(--fy-serif);letter-spacing:.04em;overflow-wrap:anywhere}
++
++/* 材料、续练和复盘卡片 */
++.study-grid,.study-modes{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr))}
++.study-modes{gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr))}
++.fy-panel .study-tile,.fy-panel .study-mode{border-radius:14px;animation:fy-rise .3s ease-out backwards;animation-delay:calc(var(--i,0)*30ms)}
++.fy-panel .study-tile:not(:disabled):hover,.fy-panel .study-mode:not(:disabled):hover{transform:translateY(-3px);
++  box-shadow:0 8px 18px color-mix(in srgb,var(--fy-accent) 20%,transparent)}
++.fy-panel .study-tile{display:grid;grid-template-columns:40px minmax(0,1fr);align-content:center;align-items:center;gap:1px 11px;
++  min-height:68px;padding:11px 13px;text-align:left}
++.study-tile[data-icon]::before{grid-row:1/span 2;display:grid;place-items:center;width:40px;height:40px;margin:0;border-radius:12px;
++  background:var(--fy-soft);font-size:20px;transition:transform .2s}
++.study-tile:hover::before{transform:rotate(-8deg) scale(1.08)}
++.study-tile-title{grid-column:2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;font-weight:650}
++.study-tile[data-meta]::after{content:attr(data-meta);grid-column:2;color:var(--fy-muted);font-size:11.5px;font-variant-numeric:tabular-nums}
++.fy-panel .study-tile[data-tone=warn]{border-color:color-mix(in srgb,var(--fy-warn) 50%,var(--fy-line))}
++.study-tile[data-tone=warn]::before{background:color-mix(in srgb,var(--fy-warn) 16%,var(--fy-surface));animation:fy-pulse 1.8s ease-in-out infinite}
++.fy-panel .study-mode{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;min-height:112px;padding:15px;
++  font-size:14px;font-weight:650}
++.study-mode[data-icon]::before{margin:0;font-size:32px;line-height:1;transition:transform .2s}
++.study-mode:hover::before{transform:translateY(-2px) scale(1.14) rotate(-6deg)}
++.fy-panel .study-mode.primary:not(:disabled){background:linear-gradient(145deg,var(--fy-accent),color-mix(in srgb,var(--fy-accent) 70%,var(--fy-gold)))}
++
++.study-stack{display:grid;gap:11px}
++.study-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ .study-row h2,.study-card h2,.study-card h3{margin:0;font-size:15px}
+-.study-card{padding:11px 13px}
++.study-card{padding:14px 17px;border-radius:14px}
+ .study-card p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+-.study-card textarea{box-sizing:border-box;width:100%;min-height:70px;resize:vertical}
+-.study-card select,.study-card input[type=number]{max-width:100%;padding:5px;border:1px solid var(--fy-line);border-radius:6px;background:var(--fy-surface);color:var(--fy-ink)}
+-.study-card button{min-height:30px}
+-.study-option{display:flex;gap:7px;align-items:start;padding:5px 0;overflow-wrap:anywhere}
+-.study-option input{margin-top:4px;accent-color:var(--fy-accent)}
+-.study-option select{margin-left:auto;max-width:55%;flex-shrink:1}
+-.study-card img{display:block;max-width:100%;max-height:310px;object-fit:contain}
+-.study-pager{display:flex;flex-wrap:wrap;gap:4px}
+-.study-pager button{min-width:32px}
++.study-card textarea{box-sizing:border-box;width:100%;min-height:90px;resize:vertical;font-size:15px}
++.study-card select,.study-card input[type=number]{max-width:100%;padding:6px;border:1px solid var(--fy-line);border-radius:8px;background:var(--fy-surface);color:var(--fy-ink)}
++.study-card button{min-height:32px}
++.study-stack>button{justify-self:start}
++.study-card input[type=text]{box-sizing:border-box;width:100%;padding:6px 8px;border:1px solid var(--fy-line);border-radius:8px;background:var(--fy-surface);color:var(--fy-ink)}
++.study-card .fy-dictation-field[hidden]{display:none}
++.study-card img{display:block;max-width:100%;max-height:360px;object-fit:contain;border-radius:8px}
++.study-fields{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));align-items:end}
++.study-field{display:grid;gap:4px;color:var(--fy-muted);font-size:12px}
++.study-field :is(input,select){width:100%;font-size:13px}
++.study-check{display:flex;align-items:center;gap:6px;min-height:32px}
++
++/* 场次：状态条、题号、对话气泡与选项 */
++.study-top{gap:10px}
++.study-mode-chip{--tone:var(--fy-accent);padding:3px 11px;font-size:12px}
++.study-title{flex:1;min-width:120px;overflow-wrap:anywhere;font:700 16px/1.35 var(--fy-serif)}
++.study-clock{padding:2px 14px;border-radius:999px;background:var(--fy-soft);color:var(--fy-accent);font-size:19px;font-weight:700}
++.study-pager{display:flex;flex-wrap:wrap;gap:5px}
++.fy-panel .study-pager button{min-width:34px;min-height:34px;padding:0 6px;border-radius:999px}
+ .study-pager button[data-answered=true]:not([aria-current=true]){color:var(--fy-ok);border-color:var(--fy-ok)}
+-.study-pager button[aria-current=true]{background:var(--fy-soft);border-color:var(--fy-accent)}
++.fy-panel .study-pager button[aria-current=true]{background:var(--fy-accent);border-color:var(--fy-accent);color:var(--fy-on-accent);animation:fy-pop .22s ease-out}
++.study-prompt{font-size:18px;line-height:1.65}
++.study-talk .study-prompt{justify-self:start;max-width:88%;padding:11px 17px;border-radius:4px 18px 18px 18px;
++  background:var(--fy-soft);animation:fy-rise .35s ease-out backwards}
++.study-reply{justify-self:end;max-width:88%;padding:9px 15px;border-radius:18px 4px 18px 18px;
++  background:color-mix(in srgb,var(--fy-gold) 20%,var(--fy-surface))}
++.study-option{display:flex;gap:10px;align-items:center;padding:10px 13px;border:1px solid var(--fy-line);border-radius:11px;background:var(--fy-paper);
++  overflow-wrap:anywhere;cursor:pointer;transition:border-color .15s,background-color .15s,transform .15s}
++.study-option+.study-option{margin-top:7px}
++.study-option:hover{border-color:var(--fy-gold);transform:translateX(3px)}
++.study-option:has(input:checked){border-color:var(--fy-accent);background:var(--fy-soft)}
++.study-option input{flex:none;margin:0;accent-color:var(--fy-accent)}
++.study-option select{margin-left:auto;max-width:55%;flex-shrink:1}
++
++.study-card textarea.study-memo{min-height:64px;font-size:13px}
++.study-thread{display:grid;gap:8px;padding-top:10px;border-top:1px dashed var(--fy-line)}
++.study-thread>button{justify-self:start}
++.study-entry{display:grid;gap:5px;padding:9px 12px;border-left:3px solid var(--fy-gold);border-radius:4px 10px 10px 4px;
++  background:var(--fy-paper);animation:fy-rise .25s ease-out backwards}
++
++/* 复盘 */
++@property --p{syntax:'<number>';inherits:false;initial-value:0}
++.study-ring{display:grid;place-items:center;flex:none;width:76px;height:76px;border-radius:50%;
++  background:conic-gradient(var(--fy-accent) calc(var(--p)*1turn),var(--fy-soft) 0);animation:study-ring .9s ease-out}
++.study-ring span{display:grid;place-items:center;width:60px;height:60px;border-radius:50%;background:var(--fy-surface);
++  font-weight:700;font-variant-numeric:tabular-nums}
++@keyframes study-ring{from{--p:0}}
+ .study-score,.study-clock{font-variant-numeric:tabular-nums}
+-.study-score{font-size:20px;color:var(--fy-accent)}
++.study-score{font-size:22px;color:var(--fy-accent)}
++
+ .study-note{color:var(--fy-muted);font-size:12px}
+-.study-prompt{font-size:17px}
++.study-note[data-error=true]{color:var(--fy-accent)}
+ .study-speak::before{content:'🔊 '}
+ .study-speak[hidden]{display:none}
+ .study-speak[data-playing=true]{border-color:var(--fy-accent);animation:study-speaking .8s ease-in-out infinite alternate}
+ @keyframes study-speaking{to{background:var(--fy-soft);box-shadow:0 0 0 3px var(--fy-soft)}}
+-.study-note[data-error=true]{color:var(--fy-accent)}
+ .study-voice{max-width:45%}
+-.study-card input[type=text]{box-sizing:border-box;width:100%;padding:5px 7px;border:1px solid var(--fy-line);border-radius:6px;background:var(--fy-surface);color:var(--fy-ink)}
+-.study-card .fy-dictation-field[hidden]{display:none}
+ .study-generating{display:flex;align-items:center;gap:9px;color:var(--fy-muted);font-size:12px}
+ .study-generating[hidden]{display:none}
+ .study-spinner{flex:none;width:18px;height:18px;border-radius:50%;border:3px solid var(--fy-soft);border-top-color:var(--fy-accent);animation:study-spin .8s linear infinite}
+ @keyframes study-spin{to{transform:rotate(1turn)}}
+-@media (max-width:430px){#study-content{padding-inline:8px}.study-card{padding:9px}.study-option select{max-width:48%}}
++@media (max-width:560px){
++  .fy-panel #study-nav .fy-seg button[aria-pressed=false] span{display:none}
++  .fy-panel #study-nav .fy-seg button{padding:3px 11px}
++  #study-nav .fy-seg button[aria-pressed=false]::before{margin:0}
++  .study-link span{display:none}
++  .fy-panel .study-link{padding:3px 9px}
++  .study-link[data-icon]::before{margin:0}
++}
++@media (max-width:430px){
++  #study-nav,#study-content,#study-actions{padding-inline:8px}
++  .study-card{padding:10px}.study-hero{padding:12px;gap:12px}.study-option select{max-width:48%}
++}

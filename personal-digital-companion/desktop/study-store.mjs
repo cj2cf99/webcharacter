@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
-import {gradeQuestion,publicQuestion,shuffled,validSelection,validStudyQuestionBase} from './study-materials.mjs';
+import {gradeQuestion,publicQuestion,shuffled,studyServerQuestion,validSelection,validStudyQuestionBase} from './study-materials.mjs';
 
 const hour=3_600_000;
 const weights=[1,3,5,7];
@@ -149,6 +149,8 @@ export function createStudyStore(profile,clock=at,safeStorage){
         explanation:q.explanation,concepts:q.concepts});
       const progress=status?.get(q.id);
       return {question,answer:item.answer,draft:item.draft,draftOnly:item.draftOnly,unsure:item.unsure,flag:item.flag,hinted:item.hinted,
+        note:item.note,reflections:item.reflections,
+        canComment:Boolean(studyServerQuestion(q.base))&&(done||!exam&&Boolean(item.result)),
         result:feedback?item.result:undefined,originalResult:item.originalResult,disputed:item.disputed,feedback:done||s.mode!=='free'?item.feedback:undefined,retry:item.retry,
         mastery:progress&&{...progress,weight:weights[progress.tier]},doubt:done&&q.base?isDoubt(q.base):undefined,
         repeated:[...(mistakes.get(q.id)??[])].filter(([,n])=>n>1),hasVariant:Boolean(findVariant(related,q,item.evidenceConcepts))};
@@ -170,6 +172,18 @@ export function createStudyStore(profile,clock=at,safeStorage){
       }
       db.exec('COMMIT');
     }catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  // 语言对练不做中途续练：离开时只把已提交的轮次记入复盘，一句没答的整场丢弃。
+  function closeLanguage(){
+    for(const {id} of sql("SELECT id FROM sessions WHERE status<>'completed' AND mode IN ('script','free','sentence')").all()){
+      const s=getSession(id);
+      s.items=s.items.filter(item=>item.result);
+      if(!s.items.some(item=>item.answer)){sql('DELETE FROM sessions WHERE id=?').run(id);continue;}
+      for(const item of s.items)delete item.draft;
+      s.position=s.items.length-1;
+      if(s.mode==='free')s.summary=`已记录 ${s.items.length} 轮，表达反馈待核对。`;
+      settle(s,'manual');
+    }
   }
   function overview(){
     const continueList=sql("SELECT id,title,mode,status,started FROM sessions WHERE status<>'completed' ORDER BY started DESC").all();
@@ -320,6 +334,10 @@ export function createStudyStore(profile,clock=at,safeStorage){
       }
       settle(s,'manual');
       return view(s);
+    }else if(action==='note'&&exam){
+      // 解题笔记暂停时也能写。
+      if(typeof args.value!=='string'||args.value.length>20000)throw Error('笔记最多 20000 字');
+      item.note=args.value;
     }else if(s.status==='running'){
       if(action==='flag'&&exam)item.flag=Boolean(args.value);
       else if(action==='unsure'&&index===s.position)item.unsure=Boolean(args.value);
@@ -349,6 +367,17 @@ export function createStudyStore(profile,clock=at,safeStorage){
     }
     saveSession(s);
     return view(s);
+  }
+  // 本机题库场次的考后复盘，与网页版同样按题增改删。
+  function reflect(id,index,{ref,value,remove}){
+    const s=findSession(id),item=s.items[index];
+    if(s.status!=='completed'||!item||item.question.type==='sentence')throw Error('结束题库练习后才能复盘');
+    const rows=item.reflections??[],old=ref?rows.find(row=>row.id===ref):null;
+    if(ref&&!old)throw Error('这条复盘已不存在');
+    const saved=remove?null:old?{...old,body:value,revision:old.revision+1}:{id:randomUUID(),body:value,revision:1,time:clock()};
+    item.reflections=old?rows.flatMap(row=>row===old?saved??[]:row):[...rows,saved];
+    saveSession(s);
+    return saved;
   }
   function freeCommit(id,index,answer,reply){
     const s=findSession(id),item=s.items[index];
@@ -417,7 +446,7 @@ export function createStudyStore(profile,clock=at,safeStorage){
   }
   function next(id,index,kind,ref,accepted){
     const s=findSession(id);
-    if(kind==='script'&&s.mode==='free')return create(s.material,{mode:'script'});
+    if(kind==='script'&&s.mode==='free'){closeLanguage();return create(s.material,{mode:'script'});}
     if(s.status!=='completed')throw Error('请先结束本场再复练');
     const q=s.items[index]?.question;
     if(!q)throw Error('找不到原作答');
@@ -435,7 +464,7 @@ export function createStudyStore(profile,clock=at,safeStorage){
     if(!choice)throw Error('暂无变式，原题验证记录仍可查看');
     return replayCurrent(choice.material,[choice.question],{id,index},accepted);
   }
-  return {cache,overview,history,material,create,view:id=>view(findSession(id)),findSession,operate,next,freeCommit,
+  return {cache,closeLanguage,overview,history,material,create,view:id=>view(findSession(id)),findSession,operate,next,freeCommit,reflect,
     scene:id=>{const m=getMaterial(id);return m?.sceneOnly?m:null;},
     scenes:()=>sql("SELECT body FROM materials WHERE kind='language' ORDER BY rowid DESC").all().map(read)
       .filter(m=>m.sceneOnly).map(({id,title,topics})=>({id,title,topics})),

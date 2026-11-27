@@ -1,17 +1,17 @@
 import {randomUUID} from 'node:crypto';
-import {bankMaterial,cacheStudyImage,languageMaterial,publicQuestion,questionMedia,sceneMaterial,studyAssetIds,studyQuestionBase,studyQuestionId,validSelection,validStudyQuestionBase} from './study-materials.mjs';
+import {bankMaterial,cacheStudyImage,publicQuestion,questionMedia,studyAssetIds,studyQuestionBase,studyQuestionId,studyServerQuestion,validSelection,validStudyQuestionBase} from './study-materials.mjs';
 import {pairChoice} from './pair-choice.mjs';
 
 const prefix='/api/study/v1';
-const language='/api/language/dialogues';
-const scenes='/api/language/scenes';
 const segment=value=>{
   if(typeof value!=='string'||!/^[-_a-zA-Z0-9]{1,120}$/u.test(value))throw Error('资料编号无效');
   return value;
 };
 const sameSelection=(a,b)=>a.length===b.length&&a.every(value=>b.includes(value));
 const matchesPatch=(item,patch)=>item&&(!('selected_ids' in patch)||sameSelection(patch.selected_ids,item.selected_ids))&&
-  (!('flag' in patch)||patch.flag===item.flagged);
+  (!('flag' in patch)||patch.flag===item.flagged)&&(!('note' in patch)||patch.note===(item.note??''));
+// 评论与复盘在绯月里的统一形状。
+const entry=row=>({id:row.id,body:row.body,revision:row.revision,time:row.created_at});
 
 export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
   function record(id){return store.relayGet(id);}
@@ -20,9 +20,11 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
     if(!client)throw Error('学习服务尚未连接，可使用已缓存材料或导入文件');
     const response=await client.request(path,operation?{
       method:operation.method??'POST',body:JSON.stringify(operation.body),
-      headers:{'Content-Type':'application/json','Idempotency-Key':operation.key},
+      headers:{'Content-Type':'application/json','Idempotency-Key':operation.key,
+        ...(operation.revision!=null?{'If-Match':String(operation.revision)}:{})},
       signal:AbortSignal.timeout(12_000),
     }:{signal:AbortSignal.timeout(12_000)});
+    if(response.status===204)return null;
     const body=await response.json().catch(()=>undefined);
     if(!response.ok){
       const code=body?.error?.code;
@@ -50,39 +52,23 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
     }while(cursor);
     return items;
   }
-  async function catalog(kind){
-    if(kind==='language'){
-      const [scripts,rows]=await Promise.all([pages(language),pages(scenes)]);
-      return [...scripts.map(row=>({id:row.id,title:row.title})),...rows.map(row=>row.scene??row).filter(scene=>!scene.archived)
-        .map(scene=>({id:scene.id,title:scene.title,scene:true}))];
-    }
-    if(kind==='bank')return (await pages(prefix+'/banks')).filter(row=>row.status==='active').map(row=>({id:row.id,title:row.name}));
-    throw Error('材料类型无效');
+  async function catalog(){
+    return (await pages(prefix+'/banks')).filter(row=>row.status==='active').map(row=>({id:row.id,title:row.name}));
   }
-  async function catalogPage(kind,cursor){
-    const path={scripts:language,scenes,banks:prefix+'/banks'}[kind];
-    if(!path||cursor!=null&&(typeof cursor!=='string'||cursor.length>2048))throw Error('材料目录或游标无效');
-    const query=new URLSearchParams(kind==='banks'?{limit:'20'}:{});
+  async function catalogPage(cursor){
+    if(cursor!=null&&(typeof cursor!=='string'||cursor.length>2048))throw Error('材料目录或游标无效');
+    const query=new URLSearchParams({limit:'20'});
     if(cursor)query.set('cursor',cursor);
-    const page=await request(path+'?'+query);
-    if(!Array.isArray(page?.items)||kind!=='banks'&&page.version!==1)throw Error('来源目录格式无效');
-    const items=page.items.map(row=>row.scene??row).filter(row=>kind==='banks'?row.status==='active':!row.archived)
-      .map(row=>({id:segment(row.id),title:row.title??row.name,scene:kind==='scenes'}));
+    const page=await request(prefix+'/banks?'+query);
+    if(!Array.isArray(page?.items))throw Error('来源目录格式无效');
+    const items=page.items.filter(row=>row.status==='active').map(row=>({id:segment(row.id),title:row.title??row.name}));
     if(items.some(row=>typeof row.title!=='string'||!row.title))throw Error('来源标题无效');
     const next=page.next_cursor??page.cursor??null;
     if(next!=null&&(typeof next!=='string'||!next||next.length>2048||next===cursor))throw Error('来源分页游标无效');
     return {items,next};
   }
-  async function download(kind,id,scene=false){
+  async function download(id){
     id=segment(id);
-    if(kind==='language'){
-      const entry=await request((scene?scenes:language)+'/'+id);
-      const body=scene?entry.scene:entry.script;
-      if(entry.version!==1||body?.id!==id||body.archived)throw Error('来源材料已变更，请重新选取');
-      const m=scene?sceneMaterial(body):languageMaterial(body);
-      store.cache([m]);return store.material(m.id);
-    }
-    if(kind!=='bank')throw Error('材料类型无效');
     const path=prefix+'/banks/'+id;
     const [bank,questions,tags,review]=await Promise.all([
       request(path),pages(path+'/questions',{status:'active'}),pages(prefix+'/tags'),pages(path+'/review'),
@@ -129,7 +115,8 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
         const base=[bankId,questionId].every(value=>typeof value==='string'&&value.trim())?studyQuestionBase(bankId,questionId):undefined;
         const evidenceId=done&&base?studyQuestionId(bankId,questionId,q.type,q.stem,
           q.options.map(({id,text})=>({id,text})),(q.pairs??[]).map(({id,text})=>({id,text})),question.correct):undefined;
-        return {question,evidenceId,base,answer:item.selected_ids,flag:item.flagged,
+        return {question,evidenceId,base,answer:item.selected_ids,flag:item.flagged,note:item.note??'',
+          reflections:dto.reflections?.filter(row=>row.session_item_id===item.id).map(entry),
           result:done?item.correctness:undefined};
       })};
   }
@@ -147,6 +134,8 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
       const hasSource=done&&validStudyQuestionBase(base);
       return {...display,...(!done?patch:undefined),unsure:!!row.unsure?.[item.question.id],canRetry:hasSource&&!!row.material&&!!evidenceId,
         serverAnswer:patch?.answer!==undefined?item.answer:undefined,serverFlag:patch?.flag!==undefined?item.flag:undefined,
+        serverNote:patch?.note!==undefined?item.note??'':undefined,draftNote:done?patch?.note:undefined,
+        canComment:done&&Boolean(studyServerQuestion(base)),
         pending:Boolean(patch),draftAnswer:done?patch?.answer:undefined,doubt:hasSource?store.isDoubt(base):undefined};
     });
     return {id,material:row.material,title:s.bank_name,mode:'formal',status:s.status,created:s.started_at,finished:s.finished_at,
@@ -158,12 +147,18 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
   }
   function save(dto,previous={},changes={}){
     const session=decode(dto),drafts={...previous.drafts};
+    // 只有场次读取回执带复盘，其他回执沿用已取回的内容。
+    if(!dto.reflections){
+      const kept=new Map(previous.session?.items.map(item=>[item.question.id,item.reflections]));
+      for(const item of session.items)item.reflections=kept.get(item.question.id);
+    }
     for(const item of session.items){
       const id=item.question.id,patch=drafts[id];
       if(!patch)continue;
       const remaining={...patch};
       if('answer' in patch&&sameSelection(patch.answer,item.answer))delete remaining.answer;
       if('flag' in patch&&patch.flag===item.flag)delete remaining.flag;
+      if('note' in patch&&patch.note===(item.note??''))delete remaining.note;
       if(Object.keys(remaining).length)drafts[id]=remaining;
       else delete drafts[id];
     }
@@ -248,6 +243,11 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
       if(kind==='answer'&&!validSelection(item.question,value))throw Error('作答格式无效');
       row.drafts={...row.drafts,[item.question.id]:{...row.drafts?.[item.question.id],[kind]:value}};
     }
+    // 解题笔记暂停时也能写。
+    else if(kind==='note'&&row.session.status!=='completed'&&writable(row.session)){
+      if(typeof value!=='string'||value.length>20000)throw Error('笔记最多 20000 字');
+      row.drafts={...row.drafts,[item.question.id]:{...row.drafts?.[item.question.id],note:value}};
+    }
     store.relaySet(id,row);
     return view(id);
   }
@@ -307,7 +307,8 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
     if(fresh.offline||s.status==='completed')return fresh;
     if(action!=='takeover'&&(!writable(s)||row.conflict||row.reviewDrafts))return fresh;
     const patch=Object.entries(row.drafts??{}).map(([item_id,values])=>({item_id,
-      ...('answer' in values?{selected_ids:values.answer}:{}),...('flag' in values?{flag:values.flag}:{})}));
+      ...('answer' in values?{selected_ids:values.answer}:{}),...('flag' in values?{flag:values.flag}:{}),
+      ...('note' in values?{note:values.note}:{})}));
     const hasPosition=positionPending(row);
     if(action==='sync'&&!patch.length&&!hasPosition)return fresh;
     if(action==='sync'&&s.status==='paused'&&patch[0]&&'selected_ids' in patch[0])throw Error('请先恢复考试，再提交待同步答案');
@@ -327,5 +328,24 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
     store.relaySet(id,{...row,pending:next});
     return send(id,'sync');
   }
-  return {catalog,catalogPage,download,open,view,refresh,draft,resolveDraft,send,latest:()=>record('latest')?.id};
+  // 新增、修改或删除一条评论或复盘；返回保存后的条目，删除返回 null。
+  async function changeEntry(kind,createPath,extra,{ref,revision,value,remove}){
+    const path=ref?prefix+'/'+kind+'/'+segment(ref):createPath;
+    const saved=await request(path,{method:remove?'DELETE':ref?'PATCH':'POST',key:randomUUID(),revision:ref?revision:undefined,
+      body:remove?undefined:{...(ref?{}:extra),body:value}});
+    return remove?null:entry(saved);
+  }
+  const commentsPath=question=>prefix+'/questions/'+segment(question)+'/comments';
+  const comments=async question=>(await pages(commentsPath(question))).map(entry).sort((a,b)=>a.time-b.time);
+  const comment=(question,change)=>changeEntry('comments',commentsPath(question),{},change);
+  async function reflect(id,index,change){
+    const item=record(id)?.session.items[index];
+    if(!item||record(id).session.status!=='completed')throw Error('交卷后才能复盘');
+    const saved=await changeEntry('reflections',prefix+'/sessions/'+segment(id)+'/reflections',{item_id:item.question.id},change);
+    const row=record(id),target=row.session.items[index],rest=(target.reflections??[]).filter(old=>old.id!==(change.ref??saved?.id));
+    target.reflections=saved?[...rest,saved].sort((a,b)=>a.time-b.time):rest;
+    store.relaySet(id,row);
+    return saved;
+  }
+  return {catalog,catalogPage,download,open,view,refresh,draft,resolveDraft,send,comments,comment,reflect,latest:()=>record('latest')?.id};
 }

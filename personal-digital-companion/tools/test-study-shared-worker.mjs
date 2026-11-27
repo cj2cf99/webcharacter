@@ -59,18 +59,6 @@ try{
     return data;
   }
   const relay=createStudyRelay(store,async()=>({request:(path,init)=>request(path.replace('/api/','/api/companion/'),init,{'x-test-service':'local-study'})}));
-  const script=JSON.parse(readFileSync(new URL('../assets/study-initial.v1.json',import.meta.url))).scripts[0];
-  await bucket.put('language/dialogues/v1/'+script.id+'.json',JSON.stringify(script),{
-    customMetadata:{entry:encodeURIComponent(JSON.stringify({id:script.id,title:'本地剧本',revision:script.revision}))}});
-  await bucket.put('language/scenes/v1/'+script.scene.id+'.json',JSON.stringify(script.scene));
-  assert.equal((await relay.catalogPage('scripts')).items[0].id,script.id);
-  assert.equal((await relay.catalogPage('scenes')).items[0].id,script.scene.id);
-  const language=await relay.download('language',script.id);
-  assert.equal(store.create(language.id,{mode:'script'}).items.length,script.turns.length);
-  const path='/api/companion/language/scenes/'+script.scene.id;
-  assert.equal((await request(path,{}, {'x-test-service':'other'})).status,403);
-  assert.equal((await request(path,{method:'PUT'}, {'x-test-service':'local-study'})).status,405);
-
   const bank=await web('/banks','POST',{name:'隔离合成题库',description:''});
   await web('/banks/'+bank.id+'/questions','POST',{external_id:'local',title:'练习',type:'single',stem:'选择甲',
     options:[{id:'a',text:'甲'},{id:'b',text:'乙'}],answer_option_ids:['a'],tag_ids:[],status:'active',
@@ -96,7 +84,7 @@ try{
   const done=await relay.send(s.id,'finish');
   assert.equal(done.correct,1);assert.equal((await web('/sessions/'+s.id+'/result')).correct_count,1);
   assert.equal(store.formalRetry(s.id,0).retryStatus,'missing');
-  const material=await relay.download('bank',bank.id);
+  const material=await relay.download(bank.id);
   assert(material.attemptsComplete);
   assert.throws(()=>store.create(material.id,{mode:'practice',scope:'unseen'}),/没有符合/);
   assert.equal(store.formalRetry(s.id,0).sourceTurn.id,s.id);
@@ -119,7 +107,41 @@ try{
   assert(opened.pending&&!opened.reviewDrafts);
   assert.equal((await relay.send(s.id,'finish')).correct,1);
   assert.equal((await web('/sessions/'+s.id+'/result')).correct_count,1);
-  console.log('PASS Workerd：隔离 R2 目录与选材、身份和只读限制、同库双向接续、草稿冲突选择、首次正确标记、正式卷回到本地练习。');
+  // 网关按账户标记已做题，桌面据此判断「未见」筛选是否完整。
+  assert.equal((await relay.download(bank.id)).attemptsComplete,true);
+  // 解题笔记、考后复盘和题目评论与网页版共用同一份数据。
+  const noted=await relay.open(bank.id,true);
+  relay.draft(noted.id,0,'note','先排除乙');
+  let synced=await relay.send(noted.id,'sync');
+  assert(!synced.pending);
+  assert.equal((await web('/sessions/'+noted.id)).items[0].note,'先排除乙');
+  await relay.send(noted.id,'pause');
+  relay.draft(noted.id,0,'note','暂停时补记');
+  synced=await relay.send(noted.id,'sync');
+  assert(!synced.pending);
+  await relay.send(noted.id,'resume');
+  relay.draft(noted.id,0,'note','交卷笔记');
+  let closed=await relay.send(noted.id,'finish');
+  assert.equal(closed.items[0].note,'交卷笔记');assert(closed.items[0].canComment);
+  const mine=await relay.reflect(noted.id,0,{value:'下次看清题干'});
+  let result=await web('/sessions/'+noted.id+'/result');
+  assert.deepEqual(result.reflections.map(row=>row.body),['下次看清题干']);
+  const changed=await relay.reflect(noted.id,0,{ref:mine.id,revision:mine.revision,value:'下次先看限定词'});
+  await assert.rejects(relay.reflect(noted.id,0,{ref:mine.id,revision:mine.revision,value:'旧版本覆盖'}),/revision/u);
+  assert.equal((await relay.refresh(noted.id)).items[0].reflections[0].body,'下次先看限定词');
+  await relay.reflect(noted.id,0,{ref:changed.id,revision:changed.revision,remove:true});
+  assert.equal((await web('/sessions/'+noted.id+'/result')).reflections.length,0);
+  const questionId=result.items[0].question_id;
+  const fromWeb=await web('/questions/'+questionId+'/comments','POST',{body:'网页端写的评论'});
+  const added=await relay.comment(questionId,{value:'绯月端写的评论'});
+  assert.deepEqual((await relay.comments(questionId)).map(row=>row.body).sort(),[fromWeb.body,added.body].sort());
+  const updated=await relay.comment(questionId,{ref:added.id,revision:added.revision,value:'改过的评论'});
+  assert.equal(await relay.comment(questionId,{ref:updated.id,revision:updated.revision,remove:true}),null);
+  assert.deepEqual((await web('/questions/'+questionId+'/comments')).items.map(row=>row.body),['网页端写的评论']);
+  // 未放行的写接口仍被拒绝。
+  const denied=await request('/api/companion/study/v1/questions/'+questionId,{method:'DELETE',headers:{'Content-Type':'application/json','Idempotency-Key':randomUUID()}},{'x-test-service':'local-study'});
+  assert.equal(denied.status,404);
+  console.log('PASS Workerd：同库双向接续、草稿冲突选择、首次正确标记、正式卷回到本地练习；笔记、考后复盘、题目评论双端一致。');
 }finally{
   store.close();unlinkSync(join(profile,'study.sqlite'));rmdirSync(profile);await mf.dispose();
 }

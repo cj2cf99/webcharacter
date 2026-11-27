@@ -42,16 +42,40 @@ test('正式知序通过已有 Access 连接访问 subscriptions-api',async t=>{
   });
   assert.equal(connection.mode,'Access');
   await connection.request('/api/study/v1/banks?limit=20');
-  await connection.request('/api/language/dialogues');
-  assert.equal(requests[1].url.pathname,'/api/companion/language/dialogues');
-  assert.throws(()=>connection.request('/api/language/dialogues',{method:'PUT'}),/该材料尚未接入/);
-  assert.throws(()=>connection.request('/api/language/private'),/该材料尚未接入/);
-  assert.equal(requests.length,2);
+  assert.throws(()=>connection.request('/api/language/dialogues'),/该材料尚未接入/);
+  assert.equal(requests.length,1);
   const [{url,options}]=requests;
   assert.equal(url.pathname+url.search,'/api/companion/study/v1/banks?limit=20');
   assert.equal(options.headers.Origin,url.origin);
   assert.equal(options.headers['CF-Access-Client-Id'],'local-service-id');
   assert.equal(options.redirect,'error');
+});
+
+test('本机考试笔记暂停时可写并进复盘，考后复盘可增改删，评论只给线上题号',t=>{
+  const f=fixture(t);
+  const bank=bankMaterial({bank_id:'bank',questions:[question('q1')]});
+  f.store.cache([bank]);
+  let s=f.store.create(bank.id,{mode:'exam'});
+  assert.equal(s.items[0].canComment,false);
+  f.store.operate(s.id,'note',{index:0,value:'排除法'});
+  f.store.operate(s.id,'pause',{});
+  s=f.store.operate(s.id,'note',{index:0,value:'暂停时补记'});
+  assert.equal(s.items[0].note,'暂停时补记');
+  assert.throws(()=>f.store.operate(s.id,'note',{index:0,value:'长'.repeat(20001)}),/20000/u);
+  assert.throws(()=>f.store.reflect(s.id,0,{value:'未交卷'}),/结束/u);
+  s=f.store.operate(s.id,'finish',{});
+  assert(s.items[0].canComment);
+  f.store.operate(s.id,'note',{index:0,value:'交卷后不改'});
+  const first=f.store.reflect(s.id,0,{value:'第一条'});
+  f.store.reflect(s.id,0,{value:'第二条'});
+  f.store.reflect(s.id,0,{ref:first.id,value:'改过'});
+  f.reopen();
+  let item=f.store.view(s.id).items[0];
+  assert.equal(item.note,'暂停时补记');
+  assert.deepEqual(item.reflections.map(row=>[row.body,row.revision]),[['改过',2],['第二条',1]]);
+  f.store.reflect(s.id,0,{ref:first.id,remove:true});
+  item=f.store.view(s.id).items[0];
+  assert.deepEqual(item.reflections.map(row=>row.body),['第二条']);
 });
 
 test('缓存和本地模考接受知序允许的长配对编号和冒号', t=>{
@@ -86,7 +110,7 @@ test('取材缓存带点号的图号，离线保留题图，解析图考后显�
     assert.equal(url.href,asset.url);assert.equal(options.credentials,'omit');assert.equal(options.redirect,'error');
     return new Response(Buffer.from(png,'base64'),{headers:{'Content-Type':'image/png'}});
   }});
-  await relay.download('bank','bank');
+  await relay.download('bank');
   assert.deepEqual(reads,['diagram.v1','missing.png','solution.1']);
   f.reopen();
   let session=f.store.create(bank.id,{mode:'exam'});
@@ -361,20 +385,43 @@ test('旧版重练核对启用版本、排除标疑并保留历史；未见题�
   assert.deepEqual(store.view(first.id).items[0].question.correct,['x']);
 });
 
-test('语言目录按页读取且场景与剧本使用独立游标，异常响应保留本机材料',async t=>{
+test('题库目录按页读取，重复游标与异常响应被拒绝',async t=>{
   const {store}=fixture(t),calls=[];
   const relay=createStudyRelay(store,async()=>({request:async path=>{
     calls.push(path);
-    if(path.includes('/dialogues/removed'))return Response.json({error:{code:'NOT_FOUND'}},{status:404});
-    if(path.includes('cursor=a'))return Response.json({version:1,items:[],cursor:'a'});
-    if(path.includes('/dialogues/'))return Response.json({version:1,script:script('different-id')});
-    return Response.json({version:1,items:[{id:'abc',title:'测试',revision:1}],cursor:'a'});
+    return Response.json({items:[{id:'abc',name:'测试',status:'active'},{id:'old',name:'停用',status:'archived'}],next_cursor:'a'});
   }}));
-  assert.equal((await relay.catalogPage('scripts')).next,'a');
+  const page=await relay.catalogPage();
+  assert.deepEqual(page,{items:[{id:'abc',title:'测试'}],next:'a'});
   assert.equal(calls.length,1);
-  await assert.rejects(relay.download('language','removed'),/已移除/u);
-  assert.equal((await relay.catalogPage('scenes')).items[0].scene,true);
-  await assert.rejects(relay.catalogPage('scripts','a'),/游标/u);
-  await assert.rejects(relay.download('language','abc'),/变更/u);
-  assert.deepEqual(store.overview().materials,[]);
+  await assert.rejects(relay.catalogPage('a'),/游标/u);
+});
+
+test('语言场次不续练：已答轮次记入复盘，一句没答的整场丢弃，题库场次保留',t=>{
+  const f=fixture(t);
+  const lang=languageMaterial(script('close'));
+  const bank=bankMaterial({bank_id:'keep',questions:[question('q',{bank_id:'keep'})]});
+  f.store.cache([lang,bank]);
+  const empty=f.store.create(lang.id,{mode:'script'});
+  f.store.operate(empty.id,'draft',{index:0,value:'未提交'});
+  const answered=f.store.create(lang.id,{mode:'script'});
+  f.store.operate(answered.id,'answer',{index:0,value:lang.turns[0].answer});
+  f.store.operate(answered.id,'position',{index:1});
+  f.store.operate(answered.id,'draft',{index:1,value:'半句'});
+  const free=f.store.create(lang.id,{mode:'free'});
+  f.store.freeCommit(free.id,0,'こんにちは',{done:false,next:'次です。',summary:'',feedback:''});
+  const exam=f.store.create(bank.id,{mode:'exam'});
+  f.reopen();
+  f.store.closeLanguage();
+  assert.throws(()=>f.store.view(empty.id),/找不到/u);
+  const done=f.store.view(answered.id);
+  assert.equal(done.status,'completed');
+  assert.equal(done.items.length,1);
+  assert.equal(done.items[0].result,'correct');
+  assert.equal(done.items[0].draft,undefined);
+  const talk=f.store.view(free.id);
+  assert.deepEqual([talk.status,talk.items.length,talk.items[0].question.stem.length>0],['completed',1,true]);
+  assert.match(talk.summary,/已记录 1 轮/u);
+  assert.deepEqual(f.store.overview().active.map(row=>row.id),[exam.id]);
+  assert.deepEqual(f.store.history().map(row=>row.id).sort(),[answered.id,free.id].sort());
 });
