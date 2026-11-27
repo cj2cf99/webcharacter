@@ -57,7 +57,7 @@ export function createStudyRelay(store,connect,{clock=Date.now,fetchImage}={}){
   }
   async function catalogPage(cursor){
     if(cursor!=null&&(typeof cursor!=='string'||cursor.length>2048))throw Error('材料目录或游标无效');
-    const query=new URLSearchParams({limit:'20'});
+    const query=new URLSearchParams({limit:'10'});
     if(cursor)query.set('cursor',cursor);
     const page=await request(prefix+'/banks?'+query);
     if(!Array.isArray(page?.items))throw Error('来源目录格式无效');

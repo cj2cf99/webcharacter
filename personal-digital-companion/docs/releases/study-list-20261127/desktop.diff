@@ -1,0 +1,360 @@
+--- installed/desktop/study-host.mjs
++++ candidate/desktop/study-host.mjs
+@@ -137,8 +137,13 @@
+     return {ref,revision,value:text};
+   }
+   const handlers={
+-    overview:()=>{local().closeLanguage();return {...local().overview(),formal:remote().latest()};},
+-    history:({offset})=>{local().closeLanguage();return local().history(offset);},
++    overview:()=>{
++      local().closeLanguage();
++      // 只有未交卷的正式考试算作可续，已结束的在复盘记录里。
++      const latest=remote().latest(),status=latest&&local().relayGet(latest)?.session?.status;
++      return {...local().overview(),formal:status&&status!=='completed'?latest:null};
++    },
++    history:({offset})=>{local().closeLanguage();return {rows:local().history(offset),total:local().historyCount()};},
+     leave:()=>local().closeLanguage(),
+     import:async()=>{
+       const file=await dialog.showOpenDialog(panel,{title:'导入学习材料',properties:['openFile'],filters:[{name:'学习材料 JSON',extensions:['json']}]});
+--- installed/desktop/study-relay.mjs
++++ candidate/desktop/study-relay.mjs
+@@ -57,7 +57,7 @@
+   }
+   async function catalogPage(cursor){
+     if(cursor!=null&&(typeof cursor!=='string'||cursor.length>2048))throw Error('材料目录或游标无效');
+-    const query=new URLSearchParams({limit:'20'});
++    const query=new URLSearchParams({limit:'10'});
+     if(cursor)query.set('cursor',cursor);
+     const page=await request(prefix+'/banks?'+query);
+     if(!Array.isArray(page?.items))throw Error('来源目录格式无效');
+--- installed/desktop/study-store.mjs
++++ candidate/desktop/study-store.mjs
+@@ -188,21 +188,30 @@
+   function overview(){
+     const continueList=sql("SELECT id,title,mode,status,started FROM sessions WHERE status<>'completed' ORDER BY started DESC").all();
+     for(const row of continueList)findSession(row.id);
+-    return {materials:sql('SELECT id,title,kind FROM materials ORDER BY kind,rowid DESC').all().map(titleOf),
+-      active:sql("SELECT id,title,mode,status,started FROM sessions WHERE status<>'completed' ORDER BY started DESC LIMIT 12").all().map(titleOf)};
++    // 语言材料带场景和话题供主页归组，题库正文较大不解开。
++    const materials=sql('SELECT id,title,kind,body FROM materials ORDER BY kind,rowid DESC').all().map(row=>{
++      const base={id:row.id,title:read({body:row.title}),kind:row.kind};
++      if(row.kind!=='language')return base;
++      const {sceneId,topic,sceneOnly}=read(row);
++      return {...base,sceneId,topic,sceneOnly};
++    });
++    return {materials,
++      active:sql("SELECT id,title,mode,status,started FROM sessions WHERE status<>'completed' ORDER BY started DESC LIMIT 10").all().map(titleOf)};
+   }
+   function history(offset=0){
+     return sql(`SELECT id,title,mode,status,started,finished FROM sessions WHERE status='completed'
+       UNION ALL SELECT id,title,'formal','completed',started,finished FROM formal_history
+-      ORDER BY finished DESC,id DESC LIMIT 20 OFFSET ?`)
++      ORDER BY finished DESC,id DESC LIMIT 10 OFFSET ?`)
+       .all(Number.isSafeInteger(offset)&&offset>=0?offset:0).map(titleOf);
+   }
++  const historyCount=()=>sql(`SELECT (SELECT COUNT(*) FROM sessions WHERE status='completed')+
++    (SELECT COUNT(*) FROM formal_history) AS total`).get().total;
+   function material(id){
+     const m=getMaterial(id);
+     if(!m)throw Error('请先选择学习材料');
+     const tags=[...new Set(m.questions?.filter(q=>q.active).flatMap(q=>q.tagIds)??[])];
+     for(const tag of m.tags??[])if(!tags.includes(tag.id)&&m.tags.some(child=>child.parent===tag.id&&tags.includes(child.id)))tags.push(tag.id);
+-    return {id:m.id,title:m.title,kind:m.kind,sceneOnly:m.sceneOnly,topics:m.topics,attemptsComplete:m.attemptsComplete===true,fetchedAt:m.fetchedAt,
++    return {id:m.id,title:m.title,kind:m.kind,sceneOnly:m.sceneOnly,topic:m.topic,topics:m.topics,attemptsComplete:m.attemptsComplete===true,fetchedAt:m.fetchedAt,
+       tags:tags.map(id=>m.tags?.find(tag=>tag.id===id)??{id,name:id}),count:(m.questions?.filter(q=>q.active)??m.turns).length};
+   }
+   const isDoubt=id=>Boolean(sql('SELECT 1 FROM doubts WHERE id=?').get(id));
+@@ -291,7 +300,9 @@
+     const now=clock();
+     const context=m.kind==='language'?{background:m.background,roleA:m.roleA,roleB:m.roleB,goal:m.goal,closing:m.closing,
+       topic:topic??m.topic,sceneOnly:m.sceneOnly,sceneId:m.sceneId}:undefined;
+-    const s={id:randomUUID(),mode,material:materialId,title:title??m.title,context,items,sourceTurn,position:0,created:now,
++    // 同一场景有多个话题，场次标题带上话题，复盘记录才分得清。
++    const named=context?.topic&&!m.title.includes(context.topic)?`${m.title} · ${context.topic}`:m.title;
++    const s={id:randomUUID(),mode,material:materialId,title:title??named,context,items,sourceTurn,position:0,created:now,
+       status:'running',started:now,remaining:timed(mode)?hour:null,requested};
+     saveSession(s);
+     return view(s);
+@@ -464,7 +475,7 @@
+     if(!choice)throw Error('暂无变式，原题验证记录仍可查看');
+     return replayCurrent(choice.material,[choice.question],{id,index},accepted);
+   }
+-  return {cache,closeLanguage,overview,history,material,create,view:id=>view(findSession(id)),findSession,operate,next,freeCommit,reflect,
++  return {cache,closeLanguage,overview,history,historyCount,material,create,view:id=>view(findSession(id)),findSession,operate,next,freeCommit,reflect,
+     scene:id=>{const m=getMaterial(id);return m?.sceneOnly?m:null;},
+     scenes:()=>sql("SELECT body FROM materials WHERE kind='language' ORDER BY rowid DESC").all().map(read)
+       .filter(m=>m.sceneOnly).map(({id,title,topics})=>({id,title,topics})),
+--- installed/desktop/study-ui.mjs
++++ candidate/desktop/study-ui.mjs
+@@ -13,7 +13,7 @@
+   practice:'🎯',exam:'⏱️','strength-exam':'💪',formal:'🏛️'};
+ const tones={correct:'ok',wrong:'danger',unanswered:'warn',pending:'info'};
+ const languageModes=['script','sentence','free'];
+-let busy=false,session=null,category='language',screen='home',historyOffset=0,filter='all';
++let busy=false,session=null,category='language',screen='home',filter='all';
+ // 当前页面上的语音录入框；笔记输入的待保存动作。
+ const boxes=[];
+ let flushNote=()=>{};
+@@ -118,6 +118,32 @@
+   }
+ }
+ const homePage=(kind,offset=0)=>({owner:kind,name:labels[kind],go:()=>openHome(kind,offset)});
++// 任何列表每页最多这么多行。
++const pageSize=10;
++// 翻页控件：只有一页时也显示页码，翻不动的一侧置灰。总页数未知时传 null。
++function turnerNode(index,total,go,labels=['上一页','下一页'],more){
++  const arrows=[['‹',index-1,index>0],['›',index+1,total==null?more:index+1<total]].map(([mark,target,open],side)=>{
++    const control=button(mark,()=>go(target));
++    control.disabled=!open;control.title=labels[side];control.setAttribute('aria-label',labels[side]);
++    return control;
++  });
++  const node=obj('div','','fy-pager study-turn');
++  node.append(arrows[0],obj('span',total==null?`第 ${index+1} 页`:`${index+1} / ${total}`),arrows[1]);
++  return node;
++}
++// 页面主列表的翻页放在底栏。
++const turner=(...args)=>actions.prepend(turnerNode(...args));
++const pageCount=count=>Math.max(1,Math.ceil(count/pageSize));
++const pageOf=(rows,page)=>rows.slice(page*pageSize,(page+1)*pageSize);
++// 卡片内的列表超过一页时就地翻页。
++function paged(rows,render){
++  const node=obj('div','','study-paged');
++  const draw=page=>{
++    node.replaceChildren(...pageOf(rows,page).map(render));
++    if(rows.length>pageSize)node.append(turnerNode(page,pageCount(rows.length),draw));
++  };
++  draw(0);return node;
++}
+ function switchScreen(next,here,parent){
+   speech.setLine('');
+   closeDictation();
+@@ -125,15 +151,36 @@
+   renderNav(here.owner,parent&&{label:'返回',title:'返回'+parent.name,go:parent.go});
+   main.scrollTop=0;
+ }
+-function recordButton(entry,from){
++function recordButton(entry){
+   const when=entry.finished??entry.started;
+   return tile(icons[entry.mode],entry.title,async()=>{
+     // 正式场次读一次回执，网页端写的复盘一起带回；断网时仍显示缓存。
+-    const value=await run(entry.mode==='formal'?'formalRefresh':'view',{id:entry.id});
+-    if(value&&from)page=from;
+-    showSession(value);
++    showSession(await run(entry.mode==='formal'?'formalRefresh':'view',{id:entry.id}));
+   },`${names[entry.mode]}${when?` · ${date.format(when)} JST`:''}`);
+ }
++// 同一场景的剧本和场景对练归成一组，话题按缓存先后排列。
++function sceneGroups(rows){
++  const groups=new Map();
++  for(const item of rows){
++    const key=item.sceneId||item.id;
++    groups.set(key,[item,...groups.get(key)??[]]);
++  }
++  return [...groups.values()].map(items=>{
++    items.sort((a,b)=>Number(Boolean(a.sceneOnly))-Number(Boolean(b.sceneOnly)));
++    const {title,topic,sceneOnly}=items.at(-1),suffix=` · ${topic}`;
++    // 生成的剧本标题带话题后缀，组标题只留场景名。
++    return {title:!sceneOnly&&topic&&title.endsWith(suffix)?title.slice(0,-suffix.length):title,items};
++  });
++}
++// 一个场景占一行，话题横排在右侧。
++function sceneRow({title,items}){
++  const node=obj('section','','study-scene'),head=obj('div','','study-scene-head');
++  const mark=obj('span','🎭','study-scene-icon');mark.setAttribute('aria-hidden','true');
++  head.append(mark,obj('h3',title));
++  node.append(head,paged(items,item=>withIcon(button(item.sceneOnly?'场景自由对练':item.topic||'剧本',
++    ()=>openMaterial(item),'study-topic'),item.sceneOnly?icons.free:icons.script)));
++  return node;
++}
+ async function openHome(kind=category,offset=0){
+   category=kind;switchScreen('home',homePage(kind,offset));
+   const data=await run('overview');
+@@ -148,27 +195,21 @@
+     const result=await run('formalOpen',{});
+     if(result)showSession(result);else notice('知序没有进行中的正式考试');
+   }));
++  const groups=kind==='language'?sceneGroups(rows):null,entries=groups??rows;
+   main.append(hero(icons[kind],kind==='language'?'场景与剧本':'题库',
+-    obj('span',`本机 ${rows.length} 份`,'fy-chip'),controls));
+-  if(data.active.length||data.formal){
+-    // 能续练的只有题库场次，返回时回到题库练习主页。
+-    const from=homePage('bank');
+-    const more=data.active.map(entry=>recordButton(entry,from));
+-    if(data.formal)more.push(tile(icons.formal,'继续或复盘正式考试',async()=>{
+-      const value=await run('formalRefresh',{id:data.formal});
+-      if(value)page=from;
+-      showSession(value);
+-    }));
++    obj('span',groups?`${groups.length} 个场景 · ${rows.length} 份`:`本机 ${rows.length} 份`,'fy-chip'),controls));
++  // 能续练的只有题库场次，语言对练离开即结束。
++  if(kind==='bank'&&(data.active.length||data.formal)){
++    const more=data.active.map(recordButton);
++    if(data.formal)more.unshift(tile(icons.formal,'继续正式考试',async()=>showSession(await run('formalRefresh',{id:data.formal}))));
+     for(const control of more)control.dataset.tone='warn';
+-    main.append(obj('h3','继续上次','fy-section'),grid(more));
++    main.append(obj('h3','继续上次','fy-section'),grid(more.slice(0,pageSize)));
+   }
+-  main.append(rows.length?grid(rows.slice(offset,offset+20).map(item=>{
+-    const scene=kind==='language'&&item.id.startsWith('["scene"');
+-    return tile(kind==='bank'?icons.bank:scene?'🎭':icons.script,item.title,()=>openMaterial(item),
+-      kind==='bank'?'题库':scene?'场景':'剧本');
+-  })):empty(kind==='language'?'暂无本机材料，可生成对话、载入基础剧本或导入 JSON。':'暂无本机材料，可导入来源备份或取材。'));
+-  if(offset)actions.append(button('上一页',()=>openHome(kind,offset-20)));
+-  if(offset+20<rows.length)actions.append(button('下一页',()=>openHome(kind,offset+20)));
++  const shown=entries.slice(offset,offset+pageSize);
++  main.append(!rows.length?empty(kind==='language'?'暂无本机材料，可生成对话、载入基础剧本或导入 JSON。':'暂无本机材料，可导入来源备份或取材。'):
++    groups?grid(shown.map(sceneRow),'study-scenes'):
++    grid(shown.map(item=>tile(icons.bank,item.title,()=>openMaterial(item),'题库'))));
++  if(rows.length)turner(offset/pageSize,pageCount(entries.length),index=>openHome(kind,index*pageSize));
+ }
+ async function sourceCatalog(){
+   const pages=[],cursors=[],ids=new Set(),parent=page;
+@@ -186,8 +227,7 @@
+       const downloaded=await run('download',{id:item.id});
+       await openMaterial(downloaded);notice('已缓存，断网可练习');
+     }))):empty('本页暂无可用材料。'));
+-    if(index)actions.append(button('上一页',()=>render(index-1)));
+-    if(next)actions.append(button('下一页',()=>render(index+1)));
++    turner(index,null,render,undefined,Boolean(next));
+   }
+   await render(0);
+ }
+@@ -236,7 +276,8 @@
+         grid([mode(icons.free,'自由对练',()=>start({mode:'free',topic:topics.value})(),'primary')],'study-modes'));
+       return;
+     }
+-    main.append(hero(icons.script,entry.title,obj('span',`${entry.count} 轮`,'fy-chip')),grid([
++    const named=entry.topic&&!entry.title.includes(entry.topic)?[obj('span',entry.topic,'fy-chip')]:[];
++    main.append(hero(icons.script,entry.title,...named,obj('span',`${entry.count} 轮`,'fy-chip')),grid([
+       mode(icons.script,'照剧本练',start({mode:'script'}),'primary'),mode(icons.free,'自由对练',start({mode:'free'})),
+       mode(icons.sentence,'抽取薄弱句',start({mode:'sentence',reinforce:true}))],'study-modes'));
+     return;
+@@ -258,11 +299,11 @@
+       })],'study-modes'));
+ }
+ async function openHistory(offset){
+-  switchScreen('history',{owner:'history',name:labels.history,go:()=>openHistory(offset)});historyOffset=offset;
+-  const rows=await run('history',{offset});
+-  main.append(hero(icons.history,'本机复盘 · JST'),rows.length?grid(rows.map(entry=>recordButton(entry))):empty('暂无此页记录。'));
+-  if(offset)actions.append(button('‹ 较新',()=>openHistory(Math.max(0,historyOffset-20))));
+-  if(rows.length===20)actions.append(button('较早 ›',()=>openHistory(historyOffset+20)));
++  switchScreen('history',{owner:'history',name:labels.history,go:()=>openHistory(offset)});
++  const {rows,total}=await run('history',{offset});
++  main.append(hero(icons.history,'本机复盘 · JST',obj('span',`共 ${total} 场`,'fy-chip')),
++    rows.length?grid(rows.map(entry=>recordButton(entry))):empty('暂无此页记录。'));
++  if(total)turner(offset/pageSize,pageCount(total),index=>openHistory(index*pageSize),['较新','较早']);
+ }
+ async function openSource(source){
+   const snapshot=await run(source.formal?'formalView':'view',{id:source.id});
+@@ -397,7 +438,9 @@
+ // 考后复盘与题目评论共用：列出、就地新增或修改、删除。
+ function thread({label,add,rows,change,keep=()=>{}}){
+   const box=obj('div','','study-thread');
+-  const update=next=>{rows=next;keep(rows);draw();};
++  let page=0;
++  // 新增后翻到新条目所在的末页。
++  const update=next=>{if(next.length>rows.length)page=pageCount(next.length)-1;rows=next;keep(rows);draw();};
+   function editor(entry){
+     const input=obj('textarea','','study-memo');input.maxLength=20000;input.value=entry?.body??'';
+     input.setAttribute('aria-label',label);
+@@ -420,8 +463,11 @@
+   }
+   function draw(editing){
+     const adding=editing==='';
++    page=Math.min(page,pageCount(rows.length)-1);
+     box.replaceChildren(obj('h3',rows.length?`${label} · ${rows.length}`:label),
+-      ...rows.map(entry=>editing===entry.id?editor(entry):card(entry)),adding?editor():button(add,()=>draw('')));
++      ...pageOf(rows,page).map(entry=>editing===entry.id?editor(entry):card(entry)),
++      ...(rows.length>pageSize?[turnerNode(page,pageCount(rows.length),next=>{page=next;draw();})]:[]),
++      adding?editor():button(add,()=>draw('')));
+     const input=box.querySelector('textarea');
+     if(input){listen(input,{language:'zh'});input.focus();}
+   }
+@@ -441,7 +487,7 @@
+   if(!value){notice('正式考试暂无回执');return;}
+   const entered=session?.id!==value.id,previous=session?.status;
+   if(entered){filter='all';reviewPage=0;}
+-  if(Number.isInteger(reviewIndex)){filter='all';reviewPage=Math.max(0,Math.floor(reviewIndexes(value).indexOf(reviewIndex)/20));}
++  if(Number.isInteger(reviewIndex)){filter='all';reviewPage=Math.max(0,Math.floor(reviewIndexes(value).indexOf(reviewIndex)/pageSize));}
+   closeDictation();flushNote=()=>{};
+   const finished=value.status==='completed';
+   const current=finished?null:value.items[value.position]?.question;
+@@ -610,7 +656,7 @@
+   if(source&&!retried.has(session.id))actions.append(button('返回来源作答',()=>openSource(source)));
+   const list=obj('div','','fy-list study-stack');
+   const indexes=reviewIndexes(session);
+-  indexes.slice(reviewPage*20,reviewPage*20+20).forEach(index=>{
++  pageOf(indexes,reviewPage).forEach(index=>{
+     const item=items[index];
+     const block=questionCard(item);
+     block.id='study-review-'+index;
+@@ -660,8 +706,7 @@
+     list.append(block);
+   });
+   main.append(list.childNodes.length?list:empty('没有符合此项的作答。'));
+-  if(reviewPage)actions.append(button('上一页',()=>{reviewPage--;showSession(session);}));
+-  if((reviewPage+1)*20<indexes.length)actions.append(button('下一页',()=>{reviewPage++;showSession(session);}));
++  if(indexes.length)turner(reviewPage,pageCount(indexes.length),index=>{reviewPage=index;showSession(session);});
+   if(!formal&&mode!=='free'&&items.some(item=>item.result==='wrong'||item.result==='unanswered'||item.result==='pending'||item.unsure))
+     actions.append(button('重练待复习项',retry('wrong',0),'primary'));
+ }
+--- installed/desktop/study.css
++++ candidate/desktop/study.css
+@@ -1,12 +1,12 @@
+ body{margin:0}
+ /* 默认铺满屏幕：正文居中限宽，导航、内容、底栏左右对齐。 */
+-#study-nav,#study-content,#study-actions{padding-inline:max(14px,calc((100% - 960px)/2))}
++#study-nav,#study-content,#study-actions{padding-inline:max(14px,calc((100% - 1200px)/2))}
+ #study-nav,#study-actions{flex-wrap:wrap}
+ #study-nav:empty,#study-actions:empty{display:none}
+ #study-content{padding-block:16px 24px;background:
+   radial-gradient(110% 60% at 100% 0,color-mix(in srgb,var(--fy-accent) 9%,transparent),transparent 62%)}
+ #study-content>*+*{margin-top:12px}
+-#study-status{margin:0 max(14px,calc((100% - 960px)/2)) 6px}
++#study-status{margin:0 max(14px,calc((100% - 1200px)/2)) 6px}
+ 
+ /* 导航：返回在左，三个功能页签常驻。 */
+ .fy-panel #study-nav .fy-seg button{min-height:30px;padding:3px 15px}
+@@ -19,6 +19,11 @@
+ .fy-panel .study-link{display:inline-flex;align-items:center;margin-left:auto;min-height:32px;padding:3px 14px;border-radius:999px;border-color:var(--fy-gold)}
+ .fy-panel .study-link:not(:disabled):hover{transform:translateY(-1px);background:var(--fy-soft)}
+ 
++/* 底栏翻页：单独时居中，旁边有操作按钮时靠左。 */
++.fy-panel .study-turn{margin:0 auto 0 0}
++.fy-panel .study-turn:only-child{margin-inline:auto}
++.fy-panel :is(.study-paged,.study-thread) .study-turn{margin:0;justify-content:center}
++
+ /* 页首横幅 */
+ .study-hero{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:17px 19px;border:1px solid var(--fy-line);border-radius:18px;
+   background:linear-gradient(115deg,var(--fy-soft),var(--fy-surface) 65%);animation:fy-rise .3s ease-out backwards}
+@@ -48,6 +53,22 @@
+ .study-mode:hover::before{transform:translateY(-2px) scale(1.14) rotate(-6deg)}
+ .fy-panel .study-mode.primary:not(:disabled){background:linear-gradient(145deg,var(--fy-accent),color-mix(in srgb,var(--fy-accent) 70%,var(--fy-gold)))}
+ 
++/* 语言主页：一个场景一行，话题横排。 */
++.study-scenes{display:grid;gap:7px}
++.study-scene{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);align-items:center;gap:7px 14px;padding:7px 10px;
++  border:1px solid var(--fy-line);border-radius:13px;background:var(--fy-surface);
++  animation:fy-rise .3s ease-out backwards;animation-delay:calc(var(--i,0)*25ms);transition:border-color .15s,box-shadow .15s}
++.study-scene:hover{border-color:var(--fy-gold);box-shadow:0 6px 14px color-mix(in srgb,var(--fy-accent) 16%,transparent)}
++.study-scene-head{display:flex;align-items:center;gap:10px;min-width:0}
++.study-scene-head h3{flex:1;min-width:0;margin:0;font-size:14px;overflow-wrap:anywhere}
++.study-scene-icon{display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:10px;background:var(--fy-soft);font-size:17px}
++.study-paged{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
++.fy-panel .study-topic{display:flex;flex:1 1 220px;align-items:center;gap:4px;min-height:32px;padding:4px 10px;border-color:transparent;
++  border-radius:9px;background:var(--fy-paper);text-align:left}
++.study-topic::after{content:'›';margin-left:auto;padding-left:8px;color:var(--fy-accent);font-size:17px;transition:transform .15s}
++.fy-panel .study-topic:not(:disabled):hover{background:var(--fy-soft);border-color:var(--fy-accent)}
++.study-topic:hover::after{transform:translateX(3px)}
++
+ .study-stack{display:grid;gap:11px}
+ .study-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ .study-row h2,.study-card h2,.study-card h3{margin:0;font-size:15px}
+@@ -115,6 +136,7 @@
+ .study-spinner{flex:none;width:18px;height:18px;border-radius:50%;border:3px solid var(--fy-soft);border-top-color:var(--fy-accent);animation:study-spin .8s linear infinite}
+ @keyframes study-spin{to{transform:rotate(1turn)}}
+ @media (max-width:560px){
++  .study-scene{grid-template-columns:minmax(0,1fr)}
+   .fy-panel #study-nav .fy-seg button[aria-pressed=false] span{display:none}
+   .fy-panel #study-nav .fy-seg button{padding:3px 11px}
+   #study-nav .fy-seg button[aria-pressed=false]::before{margin:0}

@@ -137,8 +137,13 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
     return {ref,revision,value:text};
   }
   const handlers={
-    overview:()=>{local().closeLanguage();return {...local().overview(),formal:remote().latest()};},
-    history:({offset})=>{local().closeLanguage();return local().history(offset);},
+    overview:()=>{
+      local().closeLanguage();
+      // 只有未交卷的正式考试算作可续，已结束的在复盘记录里。
+      const latest=remote().latest(),status=latest&&local().relayGet(latest)?.session?.status;
+      return {...local().overview(),formal:status&&status!=='completed'?latest:null};
+    },
+    history:({offset})=>{local().closeLanguage();return {rows:local().history(offset),total:local().historyCount()};},
     leave:()=>local().closeLanguage(),
     import:async()=>{
       const file=await dialog.showOpenDialog(panel,{title:'导入学习材料',properties:['openFile'],filters:[{name:'学习材料 JSON',extensions:['json']}]});

@@ -63,6 +63,9 @@ async function test(){
     await until(()=>shell.study.panel?.isVisible(),'首击学习面板未显示');
     let panel=shell.study.panel;
     const js=script=>panel.webContents.executeJavaScript(script);
+    const turn=label=>js(`document.querySelector('.study-turn button[aria-label="${label}"]:not(:disabled)').click()`);
+    const pages=()=>js("document.querySelector('.study-turn span')?.textContent??''");
+    const openScene=title=>js(`([...document.querySelectorAll('.study-scene')].find(e=>e.querySelector('h3').textContent===${JSON.stringify(title)})??(()=>{throw Error('场景不存在')})()).querySelector('.study-topic').click()`);
     const click=label=>js(`([...document.querySelectorAll('button')].find(e=>e.textContent.trim()===${JSON.stringify(label)})??(()=>{throw Error('按钮不存在')})()).click()`);
     const text=expected=>js(`document.body.innerText.includes(${JSON.stringify(expected)}) && document.querySelector('main').getAttribute('aria-busy')==='false'`);
     const ready=(label,ms)=>until(()=>text(label),`没有出现 ${label}：`+label,ms);
@@ -93,10 +96,11 @@ async function test(){
     await js("const memo=document.querySelector('.study-memo');memo.focus();memo.value='先排除蓝色';memo.dispatchEvent(new Event('input'));");
     panel.close();await until(()=>!shell.study.panel,'旧学习窗口未关闭');
     await shell.study.open();panel=shell.study.panel;
-    await ready('继续上次');
+    // 题库的续练只出现在题库练习页，语言对练页不显示。
+    await ready('场景与剧本');assert.equal(await text('继续上次'),false);
+    await click('题库练习');await ready('继续上次');
     const resume="[...document.querySelectorAll('.study-tile')].find(e=>e.dataset.meta?.startsWith('本地模考')).click()";
     await js(resume);await ready('已暂停');
-    // 从语言主页续考，返回时回到所属的题库练习主页。
     await back();await ready('继续正式场次');assert.equal(await pressed(),'题库练习');
     await js(resume);await ready('已暂停');assert.equal(await js(getSelected),'red');
     assert.equal(await js("document.querySelector('.study-memo').value"),'先排除蓝色');
@@ -115,7 +119,13 @@ async function test(){
     await click('💬 题目评论');await ready('学习服务尚未连接');await ready('💬 题目评论');
     await js('window.confirm=()=>true;void 0');await click('删除');await ready('✍️ 添加考后复盘');
     assert.equal(await text('改过的复盘'),false);
-    await click('复盘记录');await ready('本机复盘');await shot('history');
+    await click('复盘记录');await ready('本机复盘');
+    // 只有一页时也显示页码，两侧置灰。
+    assert.equal(await pages(),'1 / 1');
+    assert.equal(await js("document.querySelectorAll('.study-turn button:disabled').length"),2);
+    await shot('history');
+    await click('题库练习');await ready('继续正式场次');assert.equal(await pages(),'1 / 1');
+    await click('复盘记录');await ready('本机复盘');
     await js("document.querySelector('.study-tile').click()");await ready('1 / 1 答对');
     assert.equal(await pressed(),'复盘记录');
     await back();await ready('本机复盘');
@@ -139,7 +149,7 @@ async function test(){
     await back();await ready('场景与剧本');
     await click('导入 JSON');await ready('餐厅试练');await shot('language-home');
     panel.unmaximize();panel.setSize(360,590);
-    await click('餐厅试练');await ready('自由对练');await shot('language-material');
+    await openScene('餐厅试练');await ready('自由对练');await shot('language-material');
     await click('自由对练');await ready('ご注文はお決まりですか');
     assert.equal(await backText(),'结束并返回');await shot('talk');
     // 返回即结束语言场次：回到材料页，未作答的场次不进复盘。
@@ -147,14 +157,14 @@ async function test(){
     await click('复盘记录');await ready('本机复盘');
     assert.equal(await js("[...document.querySelectorAll('.study-tile')].some(e=>e.innerText.includes('餐厅试练'))"),false);
     await click('语言对练');await ready('场景与剧本');
-    await click('餐厅试练');await ready('自由对练');await click('自由对练');await ready('ご注文はお決まりですか');
+    await openScene('餐厅试练');await ready('自由对练');await click('自由对练');await ready('ご注文はお決まりですか');
     await js("const field=document.querySelector('textarea');field.focus();field.value='メニューを見せてください。';field.dispatchEvent(new Event('input'));");
     panel.close();await until(()=>!shell.study.panel,'输入框聚焦时关窗失败');
     await shell.study.open();panel=shell.study.panel;
     // 语言对练不续练：未提交就关窗的场次丢弃，重新开始。
     await ready('场景与剧本');
     assert.equal(await text('餐厅试练 · 自由对练'),false);
-    await click('餐厅试练');await ready('自由对练');await click('自由对练');await ready('ご注文はお決まりですか');
+    await openScene('餐厅试练');await ready('自由对练');await click('自由对练');await ready('ご注文はお決まりですか');
     assert.equal(await js("document.querySelector('textarea').value"),'');
     await js("const field=document.querySelector('textarea');field.value='メニューを見せてください。';field.dispatchEvent(new Event('input'));");
     await js("[...document.querySelectorAll('label')].find(x=>x.textContent.includes('没把握')).querySelector('input').click()");
@@ -175,7 +185,7 @@ async function test(){
     await back();await ready('抽取薄弱句');
     if(japaneseSample){
       await js("document.querySelector('#home').click()");await ready('餐厅试练');
-      await click('餐厅试练');await ready('自由对练');await click('自由对练');await ready('ご注文はお決まりですか');
+      await openScene('餐厅试练');await ready('自由对练');await click('自由对练');await ready('ご注文はお決まりですか');
       const record=()=>panel.webContents.executeJavaScript("document.querySelector('.fy-dictation-button')?.click()",true);
       await until(()=>js("!!document.querySelector('.fy-dictation-button:not([hidden]):not(:disabled)')"),'日语录入未就绪');
       await record();await until(()=>js("document.querySelector('.fy-dictation-button')?.dataset.recording==='true'"),'模拟麦克风未打开')
@@ -187,14 +197,29 @@ async function test(){
     }
     await js("document.querySelector('#home').click()");await ready('基础剧本');
     await click('基础剧本');await ready('已载入 30 套基础剧本');
-    await click('下一页');await ready('上一页');
+    // 30 套基础剧本按场景归成 10 张卡，话题可分辨，一页放完。
+    electron.nativeTheme.themeSource='dark';panel.maximize();
+    await ready('11 个场景 · 31 份');
+    // 每页最多 10 条。
+    assert.equal(await pages(),'1 / 2');
+    assert.equal(await js("document.querySelectorAll('.study-scene').length"),10);
+    assert.equal(await js("new Set([...document.querySelectorAll('.study-topic')].map(e=>e.textContent)).size"),30);
+    assert(await js("(()=>{const main=document.querySelector('main');return main.scrollHeight<=main.clientHeight+1})()"),'语言主页一屏放不下');
+    await shot('language-scenes');
+    await turn('下一页');await ready('2 / 2');
+    assert.equal(await js("document.querySelectorAll('.study-scenes>*').length"),1);
+    await turn('上一页');await ready('1 / 2');
+    await click('晚间跑跳声影响休息');await ready('照剧本练');assert(await text('晚间跑跳声影响休息'));
+    await back();await ready('基础剧本');
+    panel.unmaximize();panel.setSize(360,590);await shot('language-narrow');
     await click('题库练习');await ready('继续正式场次');
     await click('导入 JSON');await ready('已缓存 1 份材料');
     await click('long');await ready('本地模考 · 60 分钟');
     await click('本地模考 · 60 分钟');await ready('颜色配对');
     await js('window.confirm=()=>true;void 0');await click('交卷');await ready('0 / 21 答对');
-    assert.equal(await js("document.querySelectorAll('[id^=study-review-]').length"),20);
-    await click('下一页');await ready('上一页');
+    assert.equal(await js("document.querySelectorAll('[id^=study-review-]').length"),10);
+    assert.equal(await pages(),'1 / 3');await turn('下一页');await ready('2 / 3');
+    await turn('下一页');await ready('3 / 3');
     assert.equal(await js("document.querySelectorAll('[id^=study-review-]').length"),1);
     assert(await js("!!document.getElementById('study-review-20')"));
     await click('再练原题');await ready('提交并查看解析');

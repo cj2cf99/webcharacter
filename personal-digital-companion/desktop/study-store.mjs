@@ -188,21 +188,30 @@ export function createStudyStore(profile,clock=at,safeStorage){
   function overview(){
     const continueList=sql("SELECT id,title,mode,status,started FROM sessions WHERE status<>'completed' ORDER BY started DESC").all();
     for(const row of continueList)findSession(row.id);
-    return {materials:sql('SELECT id,title,kind FROM materials ORDER BY kind,rowid DESC').all().map(titleOf),
-      active:sql("SELECT id,title,mode,status,started FROM sessions WHERE status<>'completed' ORDER BY started DESC LIMIT 12").all().map(titleOf)};
+    // 语言材料带场景和话题供主页归组，题库正文较大不解开。
+    const materials=sql('SELECT id,title,kind,body FROM materials ORDER BY kind,rowid DESC').all().map(row=>{
+      const base={id:row.id,title:read({body:row.title}),kind:row.kind};
+      if(row.kind!=='language')return base;
+      const {sceneId,topic,sceneOnly}=read(row);
+      return {...base,sceneId,topic,sceneOnly};
+    });
+    return {materials,
+      active:sql("SELECT id,title,mode,status,started FROM sessions WHERE status<>'completed' ORDER BY started DESC LIMIT 10").all().map(titleOf)};
   }
   function history(offset=0){
     return sql(`SELECT id,title,mode,status,started,finished FROM sessions WHERE status='completed'
       UNION ALL SELECT id,title,'formal','completed',started,finished FROM formal_history
-      ORDER BY finished DESC,id DESC LIMIT 20 OFFSET ?`)
+      ORDER BY finished DESC,id DESC LIMIT 10 OFFSET ?`)
       .all(Number.isSafeInteger(offset)&&offset>=0?offset:0).map(titleOf);
   }
+  const historyCount=()=>sql(`SELECT (SELECT COUNT(*) FROM sessions WHERE status='completed')+
+    (SELECT COUNT(*) FROM formal_history) AS total`).get().total;
   function material(id){
     const m=getMaterial(id);
     if(!m)throw Error('请先选择学习材料');
     const tags=[...new Set(m.questions?.filter(q=>q.active).flatMap(q=>q.tagIds)??[])];
     for(const tag of m.tags??[])if(!tags.includes(tag.id)&&m.tags.some(child=>child.parent===tag.id&&tags.includes(child.id)))tags.push(tag.id);
-    return {id:m.id,title:m.title,kind:m.kind,sceneOnly:m.sceneOnly,topics:m.topics,attemptsComplete:m.attemptsComplete===true,fetchedAt:m.fetchedAt,
+    return {id:m.id,title:m.title,kind:m.kind,sceneOnly:m.sceneOnly,topic:m.topic,topics:m.topics,attemptsComplete:m.attemptsComplete===true,fetchedAt:m.fetchedAt,
       tags:tags.map(id=>m.tags?.find(tag=>tag.id===id)??{id,name:id}),count:(m.questions?.filter(q=>q.active)??m.turns).length};
   }
   const isDoubt=id=>Boolean(sql('SELECT 1 FROM doubts WHERE id=?').get(id));
@@ -291,7 +300,9 @@ export function createStudyStore(profile,clock=at,safeStorage){
     const now=clock();
     const context=m.kind==='language'?{background:m.background,roleA:m.roleA,roleB:m.roleB,goal:m.goal,closing:m.closing,
       topic:topic??m.topic,sceneOnly:m.sceneOnly,sceneId:m.sceneId}:undefined;
-    const s={id:randomUUID(),mode,material:materialId,title:title??m.title,context,items,sourceTurn,position:0,created:now,
+    // 同一场景有多个话题，场次标题带上话题，复盘记录才分得清。
+    const named=context?.topic&&!m.title.includes(context.topic)?`${m.title} · ${context.topic}`:m.title;
+    const s={id:randomUUID(),mode,material:materialId,title:title??named,context,items,sourceTurn,position:0,created:now,
       status:'running',started:now,remaining:timed(mode)?hour:null,requested};
     saveSession(s);
     return view(s);
@@ -464,7 +475,7 @@ export function createStudyStore(profile,clock=at,safeStorage){
     if(!choice)throw Error('暂无变式，原题验证记录仍可查看');
     return replayCurrent(choice.material,[choice.question],{id,index},accepted);
   }
-  return {cache,closeLanguage,overview,history,material,create,view:id=>view(findSession(id)),findSession,operate,next,freeCommit,reflect,
+  return {cache,closeLanguage,overview,history,historyCount,material,create,view:id=>view(findSession(id)),findSession,operate,next,freeCommit,reflect,
     scene:id=>{const m=getMaterial(id);return m?.sceneOnly?m:null;},
     scenes:()=>sql("SELECT body FROM materials WHERE kind='language' ORDER BY rowid DESC").all().map(read)
       .filter(m=>m.sceneOnly).map(({id,title,topics})=>({id,title,topics})),

@@ -1,12 +1,12 @@
 body{margin:0}
 /* 默认铺满屏幕：正文居中限宽，导航、内容、底栏左右对齐。 */
-#study-nav,#study-content,#study-actions{padding-inline:max(14px,calc((100% - 960px)/2))}
+#study-nav,#study-content,#study-actions{padding-inline:max(14px,calc((100% - 1200px)/2))}
 #study-nav,#study-actions{flex-wrap:wrap}
 #study-nav:empty,#study-actions:empty{display:none}
 #study-content{padding-block:16px 24px;background:
   radial-gradient(110% 60% at 100% 0,color-mix(in srgb,var(--fy-accent) 9%,transparent),transparent 62%)}
 #study-content>*+*{margin-top:12px}
-#study-status{margin:0 max(14px,calc((100% - 960px)/2)) 6px}
+#study-status{margin:0 max(14px,calc((100% - 1200px)/2)) 6px}
 
 /* 导航：返回在左，三个功能页签常驻。 */
 .fy-panel #study-nav .fy-seg button{min-height:30px;padding:3px 15px}
@@ -18,6 +18,11 @@ body{margin:0}
 
 .fy-panel .study-link{display:inline-flex;align-items:center;margin-left:auto;min-height:32px;padding:3px 14px;border-radius:999px;border-color:var(--fy-gold)}
 .fy-panel .study-link:not(:disabled):hover{transform:translateY(-1px);background:var(--fy-soft)}
+
+/* 底栏翻页：单独时居中，旁边有操作按钮时靠左。 */
+.fy-panel .study-turn{margin:0 auto 0 0}
+.fy-panel .study-turn:only-child{margin-inline:auto}
+.fy-panel :is(.study-paged,.study-thread) .study-turn{margin:0;justify-content:center}
 
 /* 页首横幅 */
 .study-hero{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:17px 19px;border:1px solid var(--fy-line);border-radius:18px;
@@ -47,6 +52,22 @@ body{margin:0}
 .study-mode[data-icon]::before{margin:0;font-size:32px;line-height:1;transition:transform .2s}
 .study-mode:hover::before{transform:translateY(-2px) scale(1.14) rotate(-6deg)}
 .fy-panel .study-mode.primary:not(:disabled){background:linear-gradient(145deg,var(--fy-accent),color-mix(in srgb,var(--fy-accent) 70%,var(--fy-gold)))}
+
+/* 语言主页：一个场景一行，话题横排。 */
+.study-scenes{display:grid;gap:7px}
+.study-scene{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);align-items:center;gap:7px 14px;padding:7px 10px;
+  border:1px solid var(--fy-line);border-radius:13px;background:var(--fy-surface);
+  animation:fy-rise .3s ease-out backwards;animation-delay:calc(var(--i,0)*25ms);transition:border-color .15s,box-shadow .15s}
+.study-scene:hover{border-color:var(--fy-gold);box-shadow:0 6px 14px color-mix(in srgb,var(--fy-accent) 16%,transparent)}
+.study-scene-head{display:flex;align-items:center;gap:10px;min-width:0}
+.study-scene-head h3{flex:1;min-width:0;margin:0;font-size:14px;overflow-wrap:anywhere}
+.study-scene-icon{display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:10px;background:var(--fy-soft);font-size:17px}
+.study-paged{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.fy-panel .study-topic{display:flex;flex:1 1 220px;align-items:center;gap:4px;min-height:32px;padding:4px 10px;border-color:transparent;
+  border-radius:9px;background:var(--fy-paper);text-align:left}
+.study-topic::after{content:'›';margin-left:auto;padding-left:8px;color:var(--fy-accent);font-size:17px;transition:transform .15s}
+.fy-panel .study-topic:not(:disabled):hover{background:var(--fy-soft);border-color:var(--fy-accent)}
+.study-topic:hover::after{transform:translateX(3px)}
 
 .study-stack{display:grid;gap:11px}
 .study-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -115,6 +136,7 @@ body{margin:0}
 .study-spinner{flex:none;width:18px;height:18px;border-radius:50%;border:3px solid var(--fy-soft);border-top-color:var(--fy-accent);animation:study-spin .8s linear infinite}
 @keyframes study-spin{to{transform:rotate(1turn)}}
 @media (max-width:560px){
+  .study-scene{grid-template-columns:minmax(0,1fr)}
   .fy-panel #study-nav .fy-seg button[aria-pressed=false] span{display:none}
   .fy-panel #study-nav .fy-seg button{padding:3px 11px}
   #study-nav .fy-seg button[aria-pressed=false]::before{margin:0}
