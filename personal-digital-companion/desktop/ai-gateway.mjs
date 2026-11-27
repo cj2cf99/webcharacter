@@ -396,6 +396,50 @@ export async function askBandaoJson({instruction,schema,input,signal,purpose='AI
   throw primaryError;
 }
 
+// ───────── 对练对话生成（固定顺序逐家兜底）─────────
+
+const deepseekClient=createCloudClient({
+  endpoint:'https://api.deepseek.com/chat/completions',keyName:'DEEPSEEK_API_KEY',codePrefix:'DEEPSEEK_OFFICIAL_',
+  defaults:{model:'deepseek-flash'}
+});
+
+// 顺序：AGY CLI → 半岛 → Gemini → DeepSeek 官方。某家返回通过 accept 的 JSON 即结束；访问失败或内容不合格换下一家，
+// 全部失败时报出各家原因。每家只试一次。
+export async function askOrderedJson({instruction,input,schema,accept,signal,purpose='AI 任务',maxTokens=4096,timeoutMs=150_000,
+  log=cloudFallbackLog,agyRun=runAgyPrompt,agyReady=()=>isAgyInstalled()&&!isAgyResourceExhausted(),
+  bandaoRequest=bandaoClient.request,geminiRequest=requestGemini,deepseekRequest=deepseekClient.request}){
+  const text=JSON.stringify(input);
+  const chat=request=>async()=>{
+    const {content,finishReason}=await request({response_format:{type:'json_object'},max_tokens:maxTokens,
+      messages:[{role:'system',content:instruction},{role:'user',content:text}]},{signal,timeoutMs,purpose});
+    if(finishReason==='length')throw Error('输出被截断');
+    return content;
+  };
+  const providers=[
+    ['AGY CLI',async()=>{
+      if(!agyReady())throw Error('未安装或额度熔断中');
+      const result=await agyRun({prompt:instruction+'\n\n任务数据：'+text+'\n只输出一个 JSON 对象，不要附加说明或代码块。',schema,signal,timeoutMs});
+      if(!result?.success)throw Error(result?.error||'调用失败');
+      return result.structuredOutput===undefined?result.response:JSON.stringify(result.structuredOutput);
+    }],
+    ['半岛',chat(bandaoRequest)],['Gemini',chat(geminiRequest)],['DeepSeek',chat(deepseekRequest)],
+  ];
+  const failures=[];
+  for(const [provider,ask] of providers){
+    signal?.throwIfAborted();
+    try{
+      const value=accept(parseJsonObject(await ask()));
+      void log?.({direction:'local',route:'对练生成',operation:purpose,stage:provider+' 完成',...(failures.length?{failures}:{})});
+      return {value,provider};
+    }catch(error){
+      signal?.throwIfAborted();
+      failures.push(provider+'：'+(error.code||error.message));
+    }
+  }
+  void log?.({direction:'local',route:'对练生成',operation:purpose,stage:'全部失败',failures});
+  throw Error('生成失败。'+failures.join('；'));
+}
+
 // ───────── 视觉问答（AGY CLI 为主，Gemini 云端视觉为备用）─────────
 
 // 截图问答走 Gemini 云端视觉（便宜档 flash-lite）。签名与本机视觉一致：返回 {text} 或 {reason}。

@@ -104,23 +104,25 @@ export function attachDictation(electron, { root, bundle, voice, model, privateM
 
   const handlers = {
     'dictation:available': event=>available(event),
-    'dictation:start': event => {
+    'dictation:start': (event,requested) => {
       const selected=selectVoice(event);
-      if (!available(event,selected)) return { error: '本机语音环境尚未就绪。' };
+      // 页面默认语种之外，单个中文输入框可以指定按中文听写。
+      const spoken=requested==='zh'?'zh':language(event);
+      if (!(spoken==='ja'?selected?.canTranscribe?.('ja')===true:!!selected?.enabled)) return { error: '本机语音环境尚未就绪。' };
       if (active) return { error: '请先结束当前语音录入。' };
       const owner = event.sender;
       const abandon = () => { if(active?.owner===owner)end(true); };
-      active = { owner, abandon, voice:selected, private:isPrivate(event), mic: true, controller: new AbortController() };
+      active = { owner, abandon, voice:selected, language:spoken, private:isPrivate(event), mic: true, controller: new AbortController() };
       owner.once('destroyed',abandon);
       owner.once('did-start-loading',abandon);
       return {};
     },
     'dictation:transcribe': (event,audio) => active?.owner===event.sender && active.mic
-      ? active.voice.transcribe(audio,language(event)) : { error:'请先使用输入框的录音按钮。' },
+      ? active.voice.transcribe(audio,active.language) : { error:'请先使用输入框的录音按钮。' },
     'dictation:correct': (event,text) => {
       if (active?.owner!==event.sender || !active.mic || typeof text!=='string' || text.length>12_000) return { corrected:false };
       active.mic=false;
-      if(language(event)==='ja')return {text,corrected:true}; // 原样交回用户确认，不改写学习证据。
+      if(active.language==='ja')return {text,corrected:true}; // 原样交回用户确认，不改写学习证据。
       return correctDictation(text,{ model:privateModel?.(event.sender)??model, signal:active.controller.signal,session:active });
     },
     'dictation:end': (event,cancel) => { if(active?.owner===event.sender)end(cancel); },

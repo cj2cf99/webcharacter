@@ -17,7 +17,7 @@ function draftValue(run, addition) {
   return inserted.length < addition.length;
 }
 
-export function bindDictation(input, { button, status, changed = () => {}, blocked = () => false } = {}) {
+export function bindDictation(input, { button, status, language, changed = () => {}, blocked = () => false } = {}) {
   if (!api || !input || (input.maxLength>=0 && input.maxLength<=20)) return { update() {}, close() {} };
   if (!button) {
     const wrapper = document.createElement('span');
@@ -99,7 +99,7 @@ export function bindDictation(input, { button, status, changed = () => {}, block
     input.readOnly=true;
     setStatus('正在打开麦克风…');notify();
     try {
-      const permit=await api.start();
+      const permit=await api.start(language);
       if(permit.error)throw Error(permit.error);
       run.permitted=true;
       if(active!==run){await api.end(true);return;}

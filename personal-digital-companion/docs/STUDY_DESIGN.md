@@ -86,3 +86,15 @@
 | 正式考试双端 | 同一隔离 D1，网页版开考由桌面接管交卷，反向再做一次；重放回执、模拟掉线到期及原写入端迟到 | 题号和试卷一致，旧端写入被拒，正式卷只结算一次。含配对的卷及考中回执均按状态裁剪。 |
 
 备忘录与依据：全局 `G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md`（单人、紧凑、按需加载），绯月 `docs/TASK_TEMPLATE_PREVIEW.md`、`DESKTOP_UI_GUIDE.md` 和开发纪要（月印、原菜单首击、原话引用），语言来源 `G:/selftool/LanguageStudy/docs/catalog.md` 及 `CLOUD_DIALOGUES_20261109.md`（场景与剧本归属、进度本地），知序 `G:/selftool/selfexamsystem/docs/HANDOFF.md`、`docs/API.md`（同账户唯一活跃场、快照、回执），订阅 API `G:/selftool/informationManage/docs/catalog.md` 和 `api-worker/src/companion/study.mjs`（指定服务身份），主站 `G:/cloudflare/myapp/docs/design/development.md`（真实 Workerd、隔离结构）。上述索引未找到另立的全局、绯月或来源子项目设计备忘录。已有集成的历史结果见[开发验证记录](reviews/LEARNING_IMPLEMENTATION_REVIEW_2026-11-23.md#subscriptions-api-共用知序账户与场次)，本次核对见[设计自审](reviews/STUDY_DESIGN_REVIEW_2026-11-23.md)。
+
+## 音色、朗读与对话生成（2026-11-27 JST）
+
+依据[用户原话与验收项](../REQUIREMENTS.md#语言对练的音色朗读与对话生成)。
+
+**音色库。** 根目录 `G:/voicesample`（`FEIYUE_VOICE_ROOT` 可改）。`voices.json` 用 `default`、`study` 两个键指向目录名，每次读取。可选音色是正好含一个 `.wav` 和一个 `.txt` 的子目录，文件名不限；参考音频须为 3～10 秒（GPT-SoVITS 限制）。参考文本含假名按日语提示处理，否则按中文；朗读语言按用途定，日常中文、对练日语。
+
+**发音服务。** 学习面板持有独立的语音实例。打开学习窗口即启动 GPT-SoVITS，并用对练音色合成一句短语暖机（结果丢弃，失败留给之后的朗读提示）；停止播放、切页签不释放，关窗或退出绯月释放。朗读走单独的 IPC 通道，合成逐个进行，已被新台词取代的排队请求跳过。开始日语录音时停止播放。
+
+**生成对话。** `desktop/study-generate.mjs` 移植 LanguageStudy 的 `dialogue-first-v1`（提示词版本 `fixed-20261106-v6-bilingual`）：先规划脉络，再写整段双语对话，不带考点标注。出站调用在 `ai-gateway.mjs` 的 `askOrderedJson`：AGY CLI → 半岛 → Gemini → DeepSeek 官方（`deepseek-flash`），访问失败或内容不合格换下一家，每家一次，全部失败显示各家原因。两步各自走这个顺序。AGY 附带输出结构约束。结果与新场景只写本机缓存。自由对练接话和剧本判句仍走原有路径。场景名与话题输入框按中文听写。
+
+备忘录与依据：全局 `G:/selftool/resourceforlater/docs/FRAMEWORK_PREFERENCES.md`（动效始终开启、紧凑、按需加载），绯月 `docs/BUBBLE_VOICE.md`（手动朗读、本机语音运行方式、长输入框带听写）、`docs/DESKTOP_UI_GUIDE.md`、开发纪要 2026-11-25/26 的 AI 路由与测试注意点（换后端要按新形态实测；带密钥跑测试会发出真实请求），语言来源 `G:/selftool/LanguageStudy/docs/CLOUD_DIALOGUES_20261109.md`、`server/prompts/fixed-dialogue.mjs` 及 `app/src/fixed-contract.js`。未找到另立的设计备忘录。本次自动朗读按用户新要求覆盖「语音播报不用自动生效」，范围限语言对练。

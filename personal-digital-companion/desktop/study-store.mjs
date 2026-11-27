@@ -437,6 +437,8 @@ export function createStudyStore(profile,clock=at,safeStorage){
   }
   return {cache,overview,history,material,create,view:id=>view(findSession(id)),findSession,operate,next,freeCommit,
     scene:id=>{const m=getMaterial(id);return m?.sceneOnly?m:null;},
+    scenes:()=>sql("SELECT body FROM materials WHERE kind='language' ORDER BY rowid DESC").all().map(read)
+      .filter(m=>m.sceneOnly).map(({id,title,topics})=>({id,title,topics})),
     freeFinish:(id,reply)=>{
       const s=findSession(id);
       s.items=s.items.slice(0,s.position);s.position=Math.max(0,s.position-1);s.summary=reply.summary;s.closing=reply.next;

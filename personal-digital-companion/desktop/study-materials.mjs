@@ -85,9 +85,9 @@ function languageChunks(turn,script){
 export function sceneMaterial(scene){
   if(!text(scene?.id)||!text(scene.title)||!text(scene.setting)||!text(scene.roleA)||!text(scene.roleB)||
     !Number.isSafeInteger(scene.revision)||scene.revision<1)throw Error('语言场景不完整');
-  const {title,revision,setting:background,roleA,roleB,goal}=scene;
+  const {title,revision,setting:background,roleA,roleB,goal,relationship,atmosphere,boundaries}=scene;
   return {id:key('scene',scene.id),kind:'language',sceneOnly:true,title,revision,background,roleA,roleB,goal,sceneId:scene.id,
-    topics:list(scene.topics).filter(text),turns:[]};
+    relationship,atmosphere,boundaries,topics:list(scene.topics).filter(text),turns:[]};
 }
 
 export function languageMaterial(script){

@@ -2,9 +2,12 @@ import {readFile,stat} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {askOrderedJson} from './ai-gateway.mjs';
+import {createBubbleVoice} from './bubble-voice.mjs';
 import {loadStudyConnection} from './cloud-connection.mjs';
 import {createPanelWindow,showPanel} from './panel-window.mjs';
-import {importStudyMaterials} from './study-materials.mjs';
+import {generateDialogue} from './study-generate.mjs';
+import {importStudyMaterials,languageMaterial,sceneMaterial} from './study-materials.mjs';
 import {createStudyRelay} from './study-relay.mjs';
 import {createStudyStore,normalizeStudySentence} from './study-store.mjs';
 
@@ -22,7 +25,7 @@ const instruction=[
   '未结束时 next 提供角色 A 的下一句，结束时可以给一句日语道别。不要替 B 作答，也不要调用外部服务。',
 ].join('\n');
 
-export function attachStudy(electron,{root,bundle,profile,model,connection,visible=true,onForeground=()=>{}}){
+export function attachStudy(electron,{root,bundle,profile,model,connection,visible=true,onForeground=()=>{},voice=createBubbleVoice({root,profile}),ask=askOrderedJson}){
   const {ipcMain,dialog}=electron;
   const entry=resolve(bundle,'study.html');
   let panel,store,relay,active,closed=false;
@@ -57,6 +60,20 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
     return local().create(id,{mode,count,tag,scope,reinforce,opening,topic});
   }
 
+  async function generate(input){
+    const {sceneId,title,topic,level,ability,steps}=input??{};
+    const saved=sceneId?local().scene(sceneId):null;
+    if(sceneId&&!saved)throw Error('请选择已有场景或新建场景');
+    const {signal}=active;
+    const {script,providers}=await foreground(()=>generateDialogue({saved,title,topic,level,ability,steps},
+      request=>ask({...request,signal})));
+    signal.throwIfAborted();
+    const material=languageMaterial(script);
+    material.title=`${script.scene.title} · ${script.plan.resolvedTopic}`.slice(0,500);
+    // 新场景随首段对话一起留在本机，下次可直接选。
+    local().cache(saved?[material]:[sceneMaterial(script.scene),material]);
+    return {materialId:material.id,providers};
+  }
   async function free({id,index,value,finish=false}){
     const s=local().findSession(id);
     const item=s.items[index];
@@ -113,6 +130,10 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
       return materials.length;
     },
     material:({id})=>local().material(id),
+    scenes:()=>local().scenes(),
+    generate,
+    voices:()=>voice.voices('study'),
+    chooseVoice:({name})=>voice.chooseVoice('study',name),
     create,
     view:({id})=>local().view(id),
     operate,
@@ -139,9 +160,20 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
     formalResolve:({id,choice,revision})=>remote().resolveDraft(id,choice,revision),
     formalSend:({id,action})=>remote().send(id,action),
   };
+  const own=event=>Boolean(panel)&&event.sender===panel.webContents&&event.senderFrame===panel.webContents.mainFrame;
+  // 朗读单独走通道，不阻塞对话操作。发音服务打开学习面板即启动，保留到面板关闭。
+  // 合成逐个进行，排队时已被新请求取代的直接跳过。
+  let speaking=Promise.resolve(),latest=0;
+  ipcMain.handle('study:voice',(event,text)=>{
+    if(!own(event))throw Error('仅绯月学习面板可使用');
+    const ticket=++latest,owner=panel;
+    const job=speaking.then(()=>ticket===latest&&panel===owner?voice.render(text,'study'):{skipped:true});
+    speaking=job.catch(()=>{});
+    return job;
+  });
   let queue=Promise.resolve();
   ipcMain.handle('study:action',(event,action,args={})=>{
-    if(!panel||event.sender!==panel.webContents||event.senderFrame!==panel.webContents.mainFrame||!Object.hasOwn(handlers,action))
+    if(!own(event)||!Object.hasOwn(handlers,action))
       throw Error('仅绯月学习面板可使用');
     const current=active;
     const keepDraft=action==='operate'&&args?.action==='draft';
@@ -162,14 +194,16 @@ export function attachStudy(electron,{root,bundle,profile,model,connection,visib
     panel=created;active=new AbortController();
     created.webContents.setWindowOpenHandler(()=>({action:'deny'}));
     created.webContents.on('will-navigate',(event,url)=>{if(url!==pathToFileURL(entry).href)event.preventDefault();});
-    created.once('closed',()=>{if(panel===created){active.abort();panel=null;}});
+    created.once('closed',()=>{if(panel===created){active.abort();voice.stopSpeaking();panel=null;}});
+    // 加载模型并合成一句暖机，结果丢弃；失败留给之后的朗读提示。
+    speaking=speaking.then(()=>panel===created?voice.render('はい。','study'):null).catch(()=>{});
     try{
       await created.loadFile(entry);
       if(visible&&panel===created){showPanel(created);created.focus();}
     }catch(error){if(!created.isDestroyed())created.destroy();throw error;}
   }
   return {open,get executing(){return executing;},get panel(){return panel;},close(){
-    closed=true;ipcMain.removeHandler('study:action');panel?.destroy();
+    closed=true;for(const name of ['study:action','study:voice'])ipcMain.removeHandler(name);panel?.destroy();void voice.close();
     void queue.then(()=>store?.close());
   }};
 }

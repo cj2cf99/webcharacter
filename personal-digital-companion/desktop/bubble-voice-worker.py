@@ -10,9 +10,8 @@ import sys
 import wave
 
 
-mode, runtime_arg, reference_arg, cache_arg = sys.argv[1:]
+mode, runtime_arg, cache_arg = sys.argv[1:]
 runtime = Path(runtime_arg)
-reference = Path(reference_arg)
 cache = Path(cache_arg)
 wire = sys.stdout
 sys.stdout = sys.stderr
@@ -64,15 +63,17 @@ def recognize(audio, language='zh'):
     return {'text': (re.sub(r'<\|[^<>]*\|>', '', text) if language == 'ja' else text).strip()}
 
 
-def load_synthesizer():
+def load_synthesizer(voice):
     global engine
-    audio = reference / 'elysia_01.wav'
-    prompt_file = reference / 'prompt.txt'
-    if not audio.is_file() or not prompt_file.is_file():
-        raise ValueError('找不到本机 GPT-SoVITS 的参考音频或参考文本。')
-    prompt = prompt_file.read_text(encoding='utf-8-sig').strip()
+    # 一个音色目录：一份参考 WAV，加一份写着该 WAV 内容的 TXT，文件名不限。
+    folder = Path(voice)
+    audios, texts = list(folder.glob('*.wav')), list(folder.glob('*.txt'))
+    if len(audios) != 1 or len(texts) != 1:
+        raise ValueError(f'音色“{folder.name}”需要正好一个 WAV 和一个 TXT。')
+    audio = audios[0]
+    prompt = texts[0].read_text(encoding='utf-8-sig').strip()
     if not prompt:
-        raise ValueError('本机 GPT-SoVITS 的参考文本为空。')
+        raise ValueError(f'音色“{folder.name}”的参考文本为空。')
 
     if engine is None:
         sys.path.insert(0, str(runtime))
@@ -98,17 +99,18 @@ def load_synthesizer():
         config = TTS_Config({'custom': options})
         config.configs_path = str(cache / 'gpt-tts-config.yaml')
         engine = TTS(config)
-    return audio, prompt
+    # 参考文本含假名按日语处理，否则按中文。
+    return audio, prompt, 'ja' if re.search(r'[\u3041-\u3096\u30a1-\u30fa]', prompt) else 'zh'
 
 
-def synthesize(text):
-    audio, prompt = load_synthesizer()
+def synthesize(text, voice, language):
+    audio, prompt, prompt_language = load_synthesizer(voice)
     import numpy as np
     import soundfile as sf
 
     generation = engine.run({
-        'text': text, 'text_lang': 'zh', 'ref_audio_path': str(audio),
-        'prompt_text': prompt, 'prompt_lang': 'zh', 'text_split_method': 'cut0',
+        'text': text, 'text_lang': language, 'ref_audio_path': str(audio),
+        'prompt_text': prompt, 'prompt_lang': prompt_language, 'text_split_method': 'cut0',
         'sample_steps': 4, 'fragment_interval': 0.15, 'seed': 42,
     })
     try:
@@ -129,11 +131,12 @@ for line in sys.stdin:
             load_recognizer()
             result = {'ready': True}
         elif mode == 'tts' and request.get('preheat') is True:
-            load_synthesizer()
+            load_synthesizer(request['voice'])
             result = {'ready': True}
         else:
             language = 'ja' if request.get('language') == 'ja' else 'zh'
-            result = recognize(request['audio'], language) if mode == 'asr' else synthesize(request['text'])
+            result = (recognize(request['audio'], language) if mode == 'asr'
+                      else synthesize(request['text'], request['voice'], language))
     except (ValueError, wave.Error, EOFError) as error:
         result = {'error': str(error)}
     except Exception:

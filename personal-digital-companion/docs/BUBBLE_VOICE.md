@@ -24,7 +24,7 @@
 
 ## 运行与设计依据
 
-听写沿用本机 GPT-SoVITS 安装配套的 Paraformer、FSMN-VAD 和 CT-Transformer。气泡朗读使用已试用的中文参考音色。模型来自 `G:/selftool/voice/GPT-SoVITS-v5-20261006`，参考资料来自 `G:/voicesample/新建文件夹/`，可由 `FEIYUE_SOVITS_PATH` 和 `FEIYUE_VOICE_REFERENCE` 指定等价路径。原实验台为试听验证来源，桌宠通过自己的本机 IPC 启动语音工作进程。
+听写沿用本机 GPT-SoVITS 安装配套的 Paraformer、FSMN-VAD 和 CT-Transformer。模型来自 `G:/selftool/voice/GPT-SoVITS-v5-20261006`。参考音色来自音色库 `G:/voicesample/`（2026-11-27 起）：`voices.json` 的 `default` 指定气泡与专聊音色（现为「爱丽」），`study` 指定日语对练音色（现为「日语源」），每个音色目录放一份 WAV 和一份内容文本。可由 `FEIYUE_SOVITS_PATH` 和 `FEIYUE_VOICE_ROOT` 指定等价路径。语言对练的自动朗读见[学习设计](STUDY_DESIGN.md#音色朗读与对话生成2026-11-27-jst)。原实验台为试听验证来源，桌宠通过自己的本机 IPC 启动语音工作进程。
 
 授权按 Electron 本机页面完整路径和主框架检查。只有按录音按钮获得活动许可的窗口可以访问音频设备。持续采样沿用已试验的约 8 秒上限和优先停顿策略，浏览器向本机进程提交 16 kHz 单声道 WAV。对话校正沿用本机 `localModel.work` 的共享模型和本机档位，无外部调用。录音和音频结果由进程临时处理。语音运行设置写入资料目录下可重建的 `voice-runtime/`。
 

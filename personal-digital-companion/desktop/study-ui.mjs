@@ -1,5 +1,6 @@
 import {bindDictation,dictating} from './dictation-ui.mjs';
 import {pairChoice,splitPairChoice} from './pair-choice.mjs';
+import {bindLineVoice} from './study-voice.mjs';
 
 const {run}=window.feiyueStudy;
 const nav=document.querySelector('#study-nav'),main=document.querySelector('#study-content');
@@ -22,6 +23,19 @@ const card=(...nodes)=>{const node=obj('section','','fy-card study-card study-st
 const paragraph=(text,css)=>obj('p',text,css);
 const notice=text=>{status.textContent=text;};
 const empty=text=>obj('p',text,'fy-empty');
+// A 的台词自动朗读与重放，按钮跨重绘复用。
+const speakButton=obj('button','','study-speak');speakButton.type='button';
+const speakStatus=obj('small','','study-note');speakStatus.setAttribute('role','status');speakStatus.hidden=true;
+const speech=bindLineVoice(window.feiyueStudy,{button:speakButton,status:speakStatus,blocked:dictating});
+const voiceSelect=obj('select','','study-voice');voiceSelect.setAttribute('aria-label','对练音色');voiceSelect.title='对练音色';
+voiceSelect.onchange=()=>void run('chooseVoice',{name:voiceSelect.value}).then(()=>speech.replay()).catch(error=>notice(error.message));
+async function loadVoices(){
+  try{
+    const {list,current}=await run('voices');
+    voiceSelect.replaceChildren(...list.map(name=>{const option=obj('option',name);option.value=name;return option;}));
+    voiceSelect.value=current;
+  }catch{notice('音色列表读取失败，请检查音色目录和 voices.json。');}
+}
 async function work(fn,control){
   if(busy||dictating())return;
   busy=true;
@@ -47,6 +61,7 @@ function select(items,label){
 }
 function tab(text,active,click){const control=button(text,click);control.setAttribute('aria-pressed',String(active));return control;}
 function switchScreen(next){
+  speech.setLine('');
   dictation?.close();dictation=null;
   screen=next;session=null;main.replaceChildren();actions.replaceChildren();
   nav.replaceChildren(tab('语言对练',category==='language'&&next!=='history',()=>openHome('language')),
@@ -69,6 +84,7 @@ async function openHome(kind=category,offset=0){
   }
   const controls=row(button('导入 JSON',async()=>{const count=await run('import');if(count){await openHome();notice(`已缓存 ${count} 份材料`);}}),
     button('从来源取材',()=>sourceCatalog(kind)));
+  if(kind==='language')controls.prepend(button('✨ 生成对话',()=>openGenerate(),'primary'));
   if(kind==='language')controls.append(button('基础剧本',async()=>{
     const count=await run('basic');await openHome(kind);notice(`已载入 ${count} 套基础剧本`);
   }));
@@ -103,6 +119,39 @@ async function sourceCatalog(kind,group=kind==='bank'?'banks':'scripts'){
     if(page.next)actions.append(button('下一页',()=>render(index+1)));
   }
   await render(0);
+}
+const levels=['N1','N2','N3','N4','N5'];
+async function openGenerate(){
+  const scenes=await run('scenes');
+  switchScreen('generate');
+  const textField=(label,placeholder)=>{const node=obj('input');node.type='text';node.maxLength=500;node.placeholder=placeholder;node.setAttribute('aria-label',label);return node;};
+  const scene=select([['','＋ 新场景'],...scenes.map(item=>[item.id,item.title])],'场景');
+  const title=textField('新场景名称','例：午休时在茶水间闲聊');
+  const topic=textField('本次话题','本次话题（可留空）');
+  const topics=obj('datalist');topics.id='study-topics';topic.setAttribute('list',topics.id);
+  const level=select(levels.map(name=>[name,name]),'语言等级');
+  const ability=select([['business','商务表达'],['standard','日常表达']],'表达类型');
+  const steps=obj('input');steps.type='number';steps.min='1';steps.max='30';steps.value='20';steps.setAttribute('aria-label','对话步数');
+  const waiting=obj('div','','study-generating');waiting.hidden=true;
+  waiting.append(obj('span','','study-spinner'),obj('span','正在规划并编写对话 · AGY CLI → 半岛 → Gemini → DeepSeek'));
+  const submit=button('生成',async()=>{
+    waiting.hidden=false;
+    try{
+      const result=await run('generate',{sceneId:scene.value,title:title.value,topic:topic.value,level:level.value,ability:ability.value,steps:Number(steps.value)});
+      await openMaterial({id:result.materialId});
+      notice(`已由 ${result.providers.join(' / ')} 生成并缓存到本机`);
+    }finally{waiting.hidden=true;}
+  },'primary');
+  const form=card(obj('h2','生成对话'),scene,title,topic,topics,row(level,ability,steps,obj('span','步','study-note')),row(submit),waiting);
+  main.append(form);
+  const titleBox=bindDictation(title,{language:'zh',blocked:()=>busy}),topicBox=bindDictation(topic,{language:'zh',blocked:()=>busy});
+  dictation={update(){titleBox.update();topicBox.update();},close(){titleBox.close();topicBox.close();}};
+  scene.onchange=()=>{
+    const chosen=scenes.find(item=>item.id===scene.value);
+    (title.closest('.fy-dictation-field')??title).hidden=Boolean(chosen);
+    topics.replaceChildren(...(chosen?.topics??[]).map(name=>{const option=obj('option');option.value=name;return option;}));
+    topic.value='';
+  };
 }
 async function openMaterial(material){
   const entry=await run('material',{id:material.id});
@@ -235,6 +284,12 @@ function showSession(value,reviewIndex){
   if(session?.id!==value.id){filter='all';reviewPage=0;}
   if(Number.isInteger(reviewIndex)){filter='all';reviewPage=Math.max(0,Math.floor(reviewIndexes(value).indexOf(reviewIndex)/20));}
   dictation?.close();dictation=null;
+  const finished=value.status==='completed';
+  const current=finished?null:value.items[value.position]?.question;
+  // 刚结束的自由对练还有 A 的道别句；翻看旧记录时不自动朗读。
+  const farewell=finished&&value.mode==='free'&&session?.id===value.id&&(session.status!=='completed'||speech.line===value.closing);
+  const line=farewell?value.closing??'':current?.type==='sentence'?current.stem??'':'';
+  speech.setLine(line,`${value.id}:${finished?'end':value.position}`);
   session=value;screen='session';nav.replaceChildren();main.replaceChildren();actions.replaceChildren();
   const {mode,status:state,items,position}=session;
   const formal=mode==='formal',timed=['exam','strength-exam','formal'].includes(mode),done=state==='completed';
@@ -260,7 +315,10 @@ function showSession(value,reviewIndex){
       button('采用服务器内容',resolveDraft('server')),
       ...(session.writer?[button('保留本机待提交',resolveDraft('local'))]:[]))));
   }
-  if(done){renderReview();return;}
+  if(done){
+    if(line){main.append(card(paragraph(`A · ${line}`,'study-prompt'),row(speakButton,voiceSelect,speakStatus)));void loadVoices();}
+    renderReview();return;
+  }
   if(session.requested&&items.length<session.requested)main.append(paragraph(`本次 ${items.length} 题，所选范围少于 ${session.requested} 题。`,'study-note'));
   if(session.context){const {background,roleA,roleB,goal}=session.context;
     main.append(card(paragraph([roleA&&`A · ${roleA}`,roleB&&`B · ${roleB}`,background,goal].filter(Boolean).join('\n'))));}
@@ -278,6 +336,7 @@ function showSession(value,reviewIndex){
     main.append(pager);
   }
   const block=questionCard(item);
+  if(line){block.append(row(speakButton,voiceSelect,speakStatus));void loadVoices();}
   const locked=state==='paused'||formal&&!session.writer;
   if(item.question.type==='sentence')renderSentence(item,block);
   else{

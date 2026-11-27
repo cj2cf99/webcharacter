@@ -7,7 +7,8 @@ import {watchChanges,warnLiveUpdate} from './live-files.mjs';
 export const pages = {
   'news-notice.html':['feiyue-surface.css','news-notice.css'],
   'knowledge.html':['feiyue-surface.css','knowledge.css','knowledge-ui.mjs'],
-  'study.html':['feiyue-surface.css','study.css','study-ui.mjs','pair-choice.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
+  'study.html':['feiyue-surface.css','study.css','study-ui.mjs','pair-choice.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs',
+    'study-voice.mjs','bubble-voice-segments.mjs'],
   'news-panel.html':['feiyue-surface.css','news-panel.css','news-weekly.css','news-editorial.css','news-layout.mjs','news-panel-ui.mjs','news-heatmap.mjs'],
   'scene.html':['feiyue-surface.css','scene.css','scene-ui.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs'],
   'poll-settings.html':['feiyue-surface.css','poll-settings.css','poll-settings-ui.mjs'],
