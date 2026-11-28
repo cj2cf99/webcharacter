@@ -145,7 +145,7 @@ Invoke-RestMethod "$base/v1/batches/$batchId/ack" -Method Post -Headers $headers
 - 结果只留在内存，最多保留最近 30 个；绯月重启后查询返回 404，需按原内容重交。
 - 编号格式同花园批次。鉴权、来源限制与其他路由相同。
 
-## v9：借用接口增加 agy 文本通道（2026-11-27 JST，开发版，未安装）
+## v9：借用接口增加 agy 文本通道（2026-11-27 JST 开发，2026-11-28 安装）
 
 首个调用方是语音分段制作页面 `G:/selftool/toolswithmodel/voicestudio` 的情绪改写。说明中 `borrow.channels` 含 `agy` 才可用；本机未装 agy 时不列出，提交返回 503。
 
