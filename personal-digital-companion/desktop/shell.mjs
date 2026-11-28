@@ -6,7 +6,7 @@ import {screenPosture} from './screen-posture.mjs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {dirname,resolve} from 'node:path';
 import {createInteractionWork} from './interaction-work.mjs';
-import {createAnimationMaker,createVoiceStudio} from './animation-maker.mjs';
+import {createAnimationMaker,createVoiceStudio,createVideoStudio} from './animation-maker.mjs';
 import {agyBorrow,requestGeminiImage,isBandaoConfigured,createVision,setCloudTaskAudit,setCloudFallbackLog,createLocalAi,createPrivateModel,desktopModelPath,readGpuLoad} from './ai-gateway.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
@@ -1105,6 +1105,13 @@ export async function startDesktop(electron,options={}){
       if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'语音制作',message:'语音制作没能打开。',detail:error.message,buttons:['确定']}).catch(()=>{});
     });
   }
+  // 视频生成同样是独立服务；打开页面后才启动模型后端。
+  const videoStudio=createVideoStudio({openExternal:url=>electron.shell.openExternal(url)});
+  function openVideoStudio(){
+    void videoStudio.open().catch(error=>{
+      if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'视频生成',message:'视频生成没能打开。',detail:error.message,buttons:['确定']}).catch(()=>{});
+    });
+  }
   function menu(candidate=layout){
     const attachedCommand=click=>({enabled:windowsReady,click});
     const actions={
@@ -1148,6 +1155,7 @@ export async function startDesktop(electron,options={}){
       animationLocal:{click:()=>openAnimationMaker('local')},
       animationGif:{click:()=>openAnimationMaker('gif')},
       voiceStudio:{click:()=>openVoiceStudio()},
+      videoStudio:{click:()=>openVideoStudio()},
       cardDraw:{click:()=>taskNotice(cardDraw.open())},
       notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
       pendingCheck:checks.pending&&{click:()=>taskNotice(screenQuestion.openReview('checks'))},

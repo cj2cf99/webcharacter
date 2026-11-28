@@ -1,5 +1,5 @@
 // 菜单「动画生成器」：只做入口。服务不在运行时以独立进程拉起对应的本机服务，再用系统浏览器打开页面；
-// 长时间处理都在该服务进程里，不占绯月进程。下级「语音制作」是独立项目 voicestudio，只在点击时启动。
+// 长时间处理都在该服务进程里，不占绯月进程。下级「语音制作」「视频生成」是独立项目 voicestudio、videostudio，只在点击时启动。
 import {spawn as nodeSpawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
@@ -10,6 +10,9 @@ const TABS = new Set(['crop', 'gemini', 'local', 'gif']);
 export const VOICE_STUDIO_DIR = process.env.FEIYUE_VOICESTUDIO_DIR || 'G:/selftool/toolswithmodel/voicestudio';
 export const VOICE_STUDIO_URL = process.env.FEIYUE_VOICESTUDIO_URL || 'http://127.0.0.1:8767';
 export const createVoiceStudio = options => createAnimationMaker({dir: VOICE_STUDIO_DIR, base: VOICE_STUDIO_URL, app: 'voicestudio', name: '语音制作', tabs: null, ...options});
+export const VIDEO_STUDIO_DIR = process.env.FEIYUE_VIDEOSTUDIO_DIR || 'G:/selftool/toolswithmodel/videostudio';
+export const VIDEO_STUDIO_URL = process.env.FEIYUE_VIDEOSTUDIO_URL || 'http://127.0.0.1:8769';
+export const createVideoStudio = options => createAnimationMaker({dir: VIDEO_STUDIO_DIR, base: VIDEO_STUDIO_URL, app: 'videostudio', name: '视频生成', tabs: null, ...options});
 
 // tabs 为 null 时是单页服务，open() 直接打开根地址
 export function createAnimationMaker({openExternal, spawn = nodeSpawn, fetcher = fetch, dir = ANIMATION_MAKER_DIR, base = ANIMATION_MAKER_URL, app = 'webmcreator', name = '动画生成器', tabs = TABS, wait = 5000, sleep = ms => new Promise(r => setTimeout(r, ms))}) {
