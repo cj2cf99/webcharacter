@@ -96,3 +96,59 @@ test('DeepSeek 日志不能加密时，在发送之前失败',async t=>{
     fetcher:()=>assert.fail('不能发送无日志的请求')}),{code:'DEEPSEEK_AUDIT_FAILED'});
   assert.match((await logs.readPage()).lines[0],/DEEPSEEK_AUDIT_UNAVAILABLE/);
 });
+
+test('巡检排除已被 DeepSeek 兜底恢复的失败，保留未恢复的 DeepSeek 错误',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'feiyue-inspect-fallback-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  let clock=Date.parse('2026-11-28T12:00:00+09:00');
+  const logs=createTaskTrafficLog(dir,{clock:()=>clock});
+  const from=clock-1000;
+  // 正式版历史日志只有主通道回执携带编号，兜底回执没有该字段。
+  await logs.write({direction:'receive',route:'DeepSeek',operation:'diary-audit · compare',ai_step_id:'deepseek-legacy',status:502,error:'DEEPSEEK_HTTP_502'});
+  clock+=3000;
+  await logs.write({direction:'local',route:'DeepSeek 兜底',operation:'diary-audit · compare',primary_error:'DEEPSEEK_HTTP_502',fallback:'Gemini',result:'已兜底恢复'});
+  clock+=1000;
+  await logs.write({direction:'receive',route:'DeepSeek',operation:'对话转录补拟',error:'DEEPSEEK_CANCELLED'});
+  const summary=await logs.inspectRecent(from,clock+1000,new AbortController().signal);
+  assert.deepEqual(summary,{scanned:3,completed:0,failed:1,top:[['DEEPSEEK_CANCELLED',1]]});
+});
+
+test('巡检按 ai_step_id 精确配对，同名交错、跨窗口及无对应主错误的恢复不误抵消真实失败',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'feiyue-inspect-step-id-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  let clock=Date.parse('2026-11-28T12:00:00+09:00');
+  const logs=createTaskTrafficLog(dir,{clock:()=>clock});
+  // A 先 502，之后窗口开始，B 502；接着 A 兜底成功（带 A 的 ai_step_id），B 兜底失败
+  await logs.write({direction:'receive',route:'DeepSeek',operation:'diary-audit · compare',ai_step_id:'deepseek-a',status:502,error:'DEEPSEEK_HTTP_502'});
+  clock+=10_000;
+  const from=clock; // 窗口起点在 A 的 502 与 B 的 502 之间
+  await logs.write({direction:'receive',route:'DeepSeek',operation:'diary-audit · compare',ai_step_id:'deepseek-b',status:502,error:'DEEPSEEK_HTTP_502'});
+  clock+=1000;
+  await logs.write({direction:'local',route:'DeepSeek 兜底',operation:'diary-audit · compare',ai_step_id:'deepseek-a',primary_error:'DEEPSEEK_HTTP_502',fallback:'Gemini',result:'已兜底恢复'});
+  clock+=1000;
+  await logs.write({direction:'local',route:'DeepSeek 兜底',operation:'diary-audit · compare',primary_error:'DEEPSEEK_HTTP_502',error:'DEEPSEEK_FALLBACK_FAILED',result:'兜底失败'});
+  // 另有真实 RESULT_INVALID。调用方校验失败产生的恢复明确标记为 null，不能抵消前者。
+  clock+=1000;
+  await logs.write({direction:'receive',route:'DeepSeek',operation:'initiative-decision · propose',ai_step_id:'deepseek-c',status:200,error:'DEEPSEEK_RESULT_INVALID'});
+  clock+=1000;
+  await logs.write({direction:'local',route:'DeepSeek 兜底',operation:'initiative-decision · propose',ai_step_id:null,primary_error:'DEEPSEEK_RESULT_INVALID',fallback:'Gemini',result:'已兜底恢复'});
+  const summary=await logs.inspectRecent(from,clock+1000,new AbortController().signal);
+  assert.deepEqual({scanned:summary.scanned,completed:summary.completed,failed:summary.failed},{scanned:5,completed:0,failed:3});
+  assert.deepEqual(Object.fromEntries(summary.top),{DEEPSEEK_HTTP_502:1,DEEPSEEK_FALLBACK_FAILED:1,DEEPSEEK_RESULT_INVALID:1});
+});
+
+test('旧版无编号恢复遇到同名交错请求时保留未能确认归属的失败',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'feiyue-inspect-legacy-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  let clock=Date.parse('2026-11-29T00:00:00+09:00')-10_000;
+  const logs=createTaskTrafficLog(dir,{clock:()=>clock});
+  const main={direction:'receive',route:'DeepSeek',operation:'转录补拟',error:'DEEPSEEK_HTTP_502'};
+  await logs.write({...main,ai_step_id:'deepseek-legacy-a'});
+  clock+=10_000;
+  const from=clock;
+  await logs.write({...main,ai_step_id:'deepseek-legacy-b'});
+  clock+=1_000;
+  await logs.write({direction:'local',route:'DeepSeek 兜底',operation:main.operation,primary_error:main.error,result:'已兜底恢复'});
+  const summary=await logs.inspectRecent(from,clock+1_000,AbortSignal.timeout(2_000));
+  assert.deepEqual(summary,{scanned:2,completed:0,failed:1,top:[['DEEPSEEK_HTTP_502',1]]});
+});

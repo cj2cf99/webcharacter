@@ -471,7 +471,8 @@ async function transcribeThread(job,model,skill,save,rules,generateRemoteDraft,l
     const fullOutputBudget=priorAttempts.some(item=>item.error===adaptiveUnderflow);
     const call={at:Date.now(),state:'running',fullOutputBudget};
     (attempt.attempts??=[]).push(call);
-    const signal=remote?AbortSignal.any([lifetime,AbortSignal.timeout(60_000)]):lifetime;
+    // 远端补拟总时限需覆盖主通道 60s 及后续 Gemini / AGY 兜底，避免提前触发外层取消信号。
+    const signal=remote?AbortSignal.any([lifetime,AbortSignal.timeout(150_000)]):lifetime;
     const phase=remote?'classifyDeepSeek':stage;
     attempt.state='running';save(phase);
     try{
@@ -873,6 +874,7 @@ export function createConversationTranscription({profile,safeStorage,model,regis
         job.yieldedAt=now();save(job,'queued');return;
       }
       job.error=error.message;job.durationMs=now()-job.closedAt;
+      if(worker.claim)worker.claim.error=typeof error.code==='string'&&/^[a-z0-9_./@:-]{1,128}$/iu.test(error.code)?error.code:undefined;
       job.needsReview=job.line&&error.stepsExhausted===true;
       job.retryAt=job.line&&!job.needsReview?now()+60000:undefined;
       save(job,error.code==='LOCAL_AI_BUSY'&&!job.line?'queued':'failed');
@@ -896,7 +898,8 @@ export function createConversationTranscription({profile,safeStorage,model,regis
         save(job,job.state);
         void log?.({direction:'local',category:'绯月自主行动',route:title,goal:claim.stage,
           stage:job.state==='failed'?'失败':job.state==='queued'?'交接':'完成',
-          result:job.state,action_id:job.id+'/'+claim.startedAt+'/'+claim.worker,worker:claim.worker,
+          result:job.state,...(job.state==='failed'&&claim.error?{error:claim.error}:{}),
+          action_id:job.id+'/'+claim.startedAt+'/'+claim.worker,worker:claim.worker,
           started_at:claim.startedAt,finished_at:claim.endedAt,duration_ms:claim.endedAt-claim.startedAt});
       }
       workers.delete(lane);changed();kick(150);

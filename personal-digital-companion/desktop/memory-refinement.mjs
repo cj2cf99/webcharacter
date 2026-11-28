@@ -153,13 +153,22 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,readTa
     task_id TEXT PRIMARY KEY, active INTEGER NOT NULL, data TEXT NOT NULL);
     CREATE UNIQUE INDEX IF NOT EXISTS memory_refinements_one ON memory_refinements(active) WHERE active=1;
     CREATE TABLE IF NOT EXISTS memory_refinement_checked (
-      kind TEXT NOT NULL, record_id TEXT NOT NULL, fingerprint TEXT NOT NULL, PRIMARY KEY(kind,record_id));`);
+      kind TEXT NOT NULL, record_id TEXT NOT NULL, fingerprint TEXT NOT NULL, PRIMARY KEY(kind,record_id));
+    CREATE TABLE IF NOT EXISTS memory_refinement_deferred (
+      kind TEXT NOT NULL, record_id TEXT NOT NULL, revision INTEGER NOT NULL, rule_version TEXT NOT NULL DEFAULT '',
+      skill_version TEXT NOT NULL, count INTEGER NOT NULL, deferred_at INTEGER NOT NULL, PRIMARY KEY(kind,record_id));`);
+  const deferredColumns=db.prepare('PRAGMA table_info(memory_refinement_deferred)').all();
+  if(!deferredColumns.some(col=>col.name==='rule_version'))
+    db.exec("ALTER TABLE memory_refinement_deferred ADD COLUMN rule_version TEXT NOT NULL DEFAULT ''");
   const active=db.prepare('SELECT data FROM memory_refinements WHERE active=1');
   const history=db.prepare('UPDATE memory_refinements SET active=0,data=? WHERE task_id=? AND active=1');
   const noChange=db.prepare('DELETE FROM memory_refinements WHERE task_id=? AND active=1');
   const checkpoint=db.prepare('UPDATE memory_refinements SET data=? WHERE task_id=? AND active=1');
   const readChecked=db.prepare('SELECT fingerprint FROM memory_refinement_checked WHERE kind=? AND record_id=?');
   const writeChecked=db.prepare('INSERT OR REPLACE INTO memory_refinement_checked VALUES(?,?,?)');
+  const readDeferred=db.prepare('SELECT revision, rule_version, skill_version, count, deferred_at FROM memory_refinement_deferred WHERE kind=? AND record_id=?');
+  const writeDeferred=db.prepare('INSERT OR REPLACE INTO memory_refinement_deferred (kind,record_id,revision,rule_version,skill_version,count,deferred_at) VALUES(?,?,?,?,?,?,?)');
+  const clearDeferred=db.prepare('DELETE FROM memory_refinement_deferred WHERE kind=? AND record_id=?');
   let running=false;
   let outputKey;
 
@@ -188,6 +197,12 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,readTa
     writeChecked.run(kind,id,JSON.stringify({v:refinementRuleVersion,sv:skillVersion,rev:revision,fp}));
   }
 
+  function recordDeferred(job){
+    const prior=readDeferred.get(job.kind,job.id);
+    const same=prior&&prior.revision===job.baseRevision&&prior.rule_version===refinementRuleVersion&&prior.skill_version===job.skill.version;
+    writeDeferred.run(job.kind,job.id,job.baseRevision,refinementRuleVersion,job.skill.version,(same?prior.count:0)+1,now());
+  }
+
   async function complete(job,remote){
     const receipt=remote?.receipt??null;
     const fields=receipt?job.submission.fields:job.previous;
@@ -200,6 +215,7 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,readTa
       const saved=receipt?history.run(JSON.stringify(result),job.taskId):noChange.run(job.taskId);
       if(!saved.changes)throw Error('本机修订任务已变化');
       saveChecked(job.kind,job.id,revision,job.skill.version,fp);
+      clearDeferred.run(job.kind,job.id);
       if(remote)cache?.(job.kind,remote.record);
       db.exec('COMMIT');
     }catch(error){db.exec('ROLLBACK');throw error;}
@@ -241,9 +257,20 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,readTa
     if(!ordered.length)return null;
     const skill=await loadSkill('memoryRefinement');
     signal.throwIfAborted();
+    const normalCandidates=[],deferredCandidates=[];
     for(const candidate of ordered){
       const saved=checkedMeta(candidate.kind,candidate.id);
       if(saved&&saved.v===refinementRuleVersion&&saved.sv===skill.version&&saved.rev===candidate.revision)continue;
+      const deferred=readDeferred.get(candidate.kind,candidate.id);
+      if(deferred&&deferred.revision===candidate.revision&&deferred.rule_version===refinementRuleVersion&&deferred.skill_version===skill.version){
+        if(deferred.count>=2&&currentNow-deferred.deferred_at<dayMs)continue;
+        deferredCandidates.push({...candidate,savedFp:saved?.fp,deferredAt:deferred.deferred_at,deferredCount:deferred.count});
+        continue;
+      }
+      normalCandidates.push({...candidate,savedFp:saved?.fp});
+    }
+    deferredCandidates.sort((a,b)=>a.deferredCount-b.deferredCount||a.deferredAt-b.deferredAt);
+    for(const candidate of [...normalCandidates,...deferredCandidates]){
       const route={kind:candidate.kind,id:candidate.id};
       let remote;
       try{remote=await api(pathFor(route),undefined,signal);}
@@ -258,7 +285,7 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,readTa
       await rebase(task,remote,signal);
       const fp=await fingerprint(task,task.previous);
       signal.throwIfAborted();
-      if(saved?.fp===fp){
+      if(candidate.savedFp===fp){
         saveChecked(candidate.kind,candidate.id,remote.record.revision,skill.version,fp);
         continue;
       }
@@ -426,6 +453,7 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,readTa
           job.reviewFeedback='重写稿未通过字段或必留引用/编号校验，请确保保留附件锚点、引用短句、已念叨悬念编号及合法时间戳，且字数和Tag数合规。';
           store(job);
           if(job.attempts>=2){
+            recordDeferred(job);
             noChange.run(job.taskId);
             return '重写稿校验未通过，已放弃本轮留待后续重试';
           }
@@ -454,6 +482,7 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,readTa
           return '整篇复核要求补正，已保留体检结果';
         }
         if(job.review.decision!=='accept'){
+          recordDeferred(job);
           noChange.run(job.taskId);
           return '整篇复核未通过，已放弃本轮留待后续重试';
         }
@@ -466,6 +495,7 @@ export function createMemoryRefinement({db,api,model,evidence,clean,cache,readTa
       return await submit(job,signal,progress);
     }catch(error){
       if(!job||error.code!=='LOCAL_AI_TASK_DISCARDED')throw error;
+      recordDeferred(job);
       noChange.run(job.taskId);acknowledge();
       return '重写任务执行超时，已释放留待后续重试';
     }finally{outputKey=undefined;running=false;}

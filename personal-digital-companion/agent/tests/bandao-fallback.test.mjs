@@ -345,3 +345,28 @@ test('json_object 模式下 Gemini 返回非 JSON 时自动继续切 AGY CLI，�
   assert.deepEqual(res2, {content: '{"from":"gemini"}', finishReason: 'stop'});
 });
 
+test('askBandaoJson 与 requestBandao 支持半岛主通道直接返回代码块包裹的 JSON', async t => {
+  setupKeysAndFetch(t, {
+    geminiKey: null,
+    handler: url => {
+      if (!url.includes('sub.bandaoapi.com')) assert.fail('主通道已成功解析，不应兜底');
+      return Response.json({
+        choices: [{finish_reason: 'stop', message: {content: '```json\n{"reply":"来自半岛代码块"}\n```'}}]
+      });
+    }
+  });
+  const jsonRes = await askBandaoJson({
+    instruction: '回复用户',
+    schema: replySchema,
+    input: '你好',
+    agyReady: () => false
+  });
+  assert.deepEqual(jsonRes, {reply: '来自半岛代码块'});
+
+  const rawRes = await requestBandao(
+    {response_format: {type: 'json_object'}, messages: [{role: 'user', content: '你好'}]},
+    {agyReady: () => false}
+  );
+  assert.deepEqual(rawRes, {content: '{"reply":"来自半岛代码块"}', finishReason: 'stop'});
+});
+

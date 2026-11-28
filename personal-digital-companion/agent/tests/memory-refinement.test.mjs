@@ -329,3 +329,97 @@ test('旧版分片活跃任务平滑清理并重新按整篇重写；复核连�
   assert.match(await runner.run(signal),/已重写日记 2026-11-22\.1/);
   assert.equal(db.prepare('SELECT count(*) AS n FROM memory_refinement_checked').get().n,1);
 });
+
+test('复核连续未通过时让位给其他篇目，并在连续两轮放弃后冷却 24 小时避免每小时重复空转',async t=>{
+  const {api,now,advance}=fixture(t,'2026-11-22T03:00:00.000Z');
+  await api('diaries',{...batch,day:'2026-11-21'});
+  await api('diaries',{...batch,day:'2026-11-22'});
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+  const visited=[];
+  const runner=createMemoryRefinement({db,api,now,clean:s=>s.trim(),loadSkill:fakeSkill(),
+    model:{async memory(_text,_inst,_schema,_sig,skill){
+      if(skill.stage==='diagnose')return {needsRewrite:'yes',issues:['精简冗长对话'],plan:'重写'};
+      if(skill.stage==='rewriteDiary')return {body:'老公确认装好了。',summary:'老公完成安装',tags:['安装'],threads:[],note:'整篇精简'};
+      const active=JSON.parse(db.prepare('SELECT data FROM memory_refinements WHERE active=1').get().data);
+      visited.push(active.id);
+      return active.id==='2026-11-21.1'?{decision:'revise',reason:'未通过'}:{decision:'accept',reason:''};
+    }}
+  });
+  // 第 1 轮：11-21.1 复核退回一次（要求补正），第 2 轮再次退回并放弃，记入 deferred count=1
+  assert.match(await runner.run(signal),/整篇复核要求补正/);
+  assert.match(await runner.run(signal),/已放弃本轮留待后续重试/);
+  // 下一轮应优先让位给非延迟篇目 11-22.1 并成功完成，而不是卡死在 11-21.1
+  assert.match(await runner.run(signal),/已重写日记 2026-11-22\.1/);
+  // 再下一轮没有其他篇目了，重新挑起 11-21.1（第 2 次完整失败周期 -> count=2）
+  assert.match(await runner.run(signal),/整篇复核要求补正/);
+  assert.match(await runner.run(signal),/已放弃本轮留待后续重试/);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM memory_refinement_checked').get().n,1);
+  // 24 小时冷却期内不再反复空转 11-21.1
+  assert.equal(await runner.run(signal),'本轮没有符合条件的重写');
+  advance(24*3600_000+1);
+  assert.match(await runner.run(signal),/整篇复核要求补正/);
+});
+
+test('LOCAL_AI_TASK_DISCARDED 也记入延后让位其他篇目，且 skillVersion 变化立即清除冷却',async t=>{
+  const {api,now}=fixture(t,'2026-11-22T03:00:00.000Z');
+  await api('diaries',{...batch,day:'2026-11-21'});
+  await api('diaries',{...batch,day:'2026-11-22'});
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+  let skillVersion='2.0',failId='2026-11-21.1';
+  const visited=[];
+  const makeRunner=()=>createMemoryRefinement({db,api,now,clean:s=>s.trim(),
+    loadSkill:async name=>fakeSkill(skillVersion)(name),
+    model:{async memory(_text,_inst,_schema,_sig,skill){
+      const active=JSON.parse(db.prepare('SELECT data FROM memory_refinements WHERE active=1').get().data);
+      if(skill.stage==='diagnose'){
+        visited.push(active.id);
+        if(active.id===failId)throw Object.assign(Error('discarded'),{code:'LOCAL_AI_TASK_DISCARDED'});
+        return {needsRewrite:'yes',issues:['精简冗长对话'],plan:'重写'};
+      }
+      if(skill.stage==='rewriteDiary')return {body:'老公确认装好了。',summary:'老公完成安装',tags:['安装'],threads:[],note:'整篇精简'};
+      return {decision:'accept',reason:''};
+    }}
+  });
+  const runner=makeRunner();
+  assert.match(await runner.run(signal),/重写任务执行超时/);
+  assert.match(await runner.run(signal),/已重写日记 2026-11-22\.1/);
+  assert.match(await runner.run(signal),/重写任务执行超时/);
+  // 连续两次超时放弃后进入 24h 冷却
+  assert.equal(await runner.run(signal),'本轮没有符合条件的重写');
+  // skillVersion 升级后冷却立即失效
+  skillVersion='2.1';failId='';
+  assert.match(await runner.run(signal),/已重写日记 2026-11-21\.1/);
+  assert.deepEqual(visited,['2026-11-21.1','2026-11-22.1','2026-11-21.1','2026-11-21.1']);
+});
+
+test('旧版无 rule_version 延后表迁移后按列名正确写入、让位及 24h 冷却',async t=>{
+  const {api,now,advance}=fixture(t,'2026-11-22T03:00:00.000Z');
+  await api('diaries',{...batch,day:'2026-11-21'});
+  await api('diaries',{...batch,day:'2026-11-22'});
+  const db=new DatabaseSync(':memory:');t.after(()=>db.close());
+  // 预建缺少 rule_version 的旧版 6 列延后表并写入一条旧行（rule_version 迁移后为空串，应按规则版本变化重估）
+  db.exec(`CREATE TABLE memory_refinement_deferred (
+    kind TEXT NOT NULL, record_id TEXT NOT NULL, revision INTEGER NOT NULL, skill_version TEXT NOT NULL,
+    count INTEGER NOT NULL, deferred_at INTEGER NOT NULL, PRIMARY KEY(kind,record_id))`);
+  db.prepare('INSERT INTO memory_refinement_deferred VALUES(?,?,?,?,?,?)').run('diaries','2026-11-21.1',1,'2.0',9,now());
+  let failId='2026-11-21.1';
+  const runner=createMemoryRefinement({db,api,now,clean:s=>s.trim(),loadSkill:fakeSkill('2.0'),
+    model:{async memory(_text,_inst,_schema,_sig,skill){
+      const active=JSON.parse(db.prepare('SELECT data FROM memory_refinements WHERE active=1').get().data);
+      if(skill.stage==='diagnose'){
+        if(active.id===failId)throw Object.assign(Error('discarded'),{code:'LOCAL_AI_TASK_DISCARDED'});
+        return {needsRewrite:'yes',issues:['精简冗长对话'],plan:'重写'};
+      }
+      if(skill.stage==='rewriteDiary')return {body:'老公确认装好了。',summary:'老公完成安装',tags:['安装'],threads:[],note:'整篇精简'};
+      return {decision:'accept',reason:''};
+    }}
+  });
+  assert.match(await runner.run(signal),/重写任务执行超时/);
+  const row=db.prepare('SELECT kind,record_id,revision,rule_version,skill_version,count,deferred_at FROM memory_refinement_deferred WHERE record_id=?').get('2026-11-21.1');
+  assert.deepEqual({...row},{kind:'diaries',record_id:'2026-11-21.1',revision:1,rule_version:'rewrite-v1',skill_version:'2.0',count:1,deferred_at:now()});
+  assert.match(await runner.run(signal),/已重写日记 2026-11-22\.1/);
+  assert.match(await runner.run(signal),/重写任务执行超时/);
+  assert.equal(await runner.run(signal),'本轮没有符合条件的重写');
+  advance(24*3600_000+1);failId='';
+  assert.match(await runner.run(signal),/已重写日记 2026-11-21\.1/);
+});

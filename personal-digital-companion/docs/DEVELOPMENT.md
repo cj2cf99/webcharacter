@@ -1,3 +1,12 @@
+## 日志巡检、转录补拟与手记重试（2026-11-29 JST · 已安装）
+
+- 半岛在密钥已配置且兜底可用时，连续三次瞬态错误进入三分钟冷却。冷却中兜底全部失败会回探半岛，缺密钥或请求已取消时直接退出。结构化响应兼容 JSON 代码块，无法提取对象时转兜底。
+- 转录补拟的外层预算为 150 秒，半岛单步仍为 60 秒。失败任务日志附错误码。测试通过虚拟时钟验证主请求用尽单步预算后仍能兜底，并能识别外层回退到 60 秒的情况。
+- 手记重试使用 `memory_refinement_deferred` 存储延后状态，按原文修订、规则版本及技能版本匹配。失败篇目先让位给其他篇目，同一版本放弃两轮后冷却 24 小时。旧表可补齐规则版本列。
+- 巡检按 `ai_step_id` 和错误码匹配恢复日志。旧版无编号的恢复只在三分钟内有唯一候选时匹配。冷却跳过和调用方校验触发的恢复会留下空编号，保留其他请求的主通道错误。
+
+回归时清空 `bandao_api_key`、`gemini_aoxing_API_KEY`、`DEEPSEEK_API_KEY` 和 `FEIYUE_AGY_PATH`，使用测试桩覆盖推理路径。
+
 ## X 视频与长文归档（2026-11-28 JST · 开发自审中，未部署）
 
 按[需求](X_VIDEO_DOWNLOAD_REQUIREMENTS.md)与[设计](X_VIDEO_DOWNLOAD_DESIGN.md)开发。核心 `desktop/x-video.mjs`（纯 Node，界面和将来的云端任务共用 `enqueue()`）与 `desktop/x-article.mjs`（Electron 隐藏窗 + 独立临时会话，复用加密 Cookie），宿主与双窗 `desktop/x-video*`，提醒卡片在本地复盘，Chrome 插件在 `G:/selftool/extratools/x-cookie-helper/`。注意点：

@@ -184,7 +184,7 @@ export function createCloudClient({endpoint,keyName,codePrefix,defaults={}}){
       errorCode=signal?.aborted?codePrefix+'CANCELLED':deadline.aborted?codePrefix+'TIMEOUT':
         typeof error.code==='string'?error.code:codePrefix+'RESULT_INVALID';
       signal?.throwIfAborted();
-      throw unavailable(errorCode);
+      throw Object.assign(Error(errorCode),{code:errorCode,...(finish?.stepId?{stepId:finish.stepId}:{})});
     }finally{
       if(finish)try{
         await finish({output:scrub(output),error:errorCode,httpStatus:status,durationMs:Math.round(performance.now()-start)});
@@ -220,6 +220,23 @@ const canFallbackBandaoError=error=>!nonFallbackBandaoCodes.has(error?.code);
 const FALLBACK_TIMEOUT_CAP_MS=30_000;
 const fallbackTimeoutMs=(timeoutMs,fallback=30_000)=>Math.min(capTimeoutMs(timeoutMs,fallback),FALLBACK_TIMEOUT_CAP_MS);
 const isAgyFallbackReady=()=>(globalThis.fetch===nativeFetch||Boolean(process.env.FEIYUE_AGY_PATH))&&isAgyInstalled()&&!isAgyResourceExhausted();
+
+const BANDAO_COOLDOWN_MS=3*60_000;
+const BANDAO_COOLDOWN_STREAK=3;
+let bandaoFailureStreak=0,bandaoCooldownUntil=0,bandaoCooldownCode='';
+export function resetBandaoCooldown(){bandaoFailureStreak=0;bandaoCooldownUntil=0;bandaoCooldownCode='';}
+const isBandaoTransientError=error=>/^DEEPSEEK_HTTP_5\d\d$/u.test(error?.code??'')||error?.code==='DEEPSEEK_TIMEOUT'||error?.code==='DEEPSEEK_UNAVAILABLE';
+function noteBandaoSuccess(){bandaoFailureStreak=0;bandaoCooldownUntil=0;bandaoCooldownCode='';}
+function noteBandaoFailure(error){
+  if(!isBandaoTransientError(error)){bandaoFailureStreak=0;return;}
+  bandaoFailureStreak++;
+  if(bandaoFailureStreak>=BANDAO_COOLDOWN_STREAK){
+    bandaoCooldownUntil=Date.now()+BANDAO_COOLDOWN_MS;
+    bandaoCooldownCode=error.code;
+  }
+}
+const isBandaoCooling=(enabled)=>enabled&&Date.now()<bandaoCooldownUntil;
+const cooldownError=()=>Object.assign(Error(bandaoCooldownCode||'DEEPSEEK_HTTP_502'),{code:bandaoCooldownCode||'DEEPSEEK_HTTP_502'});
 
 function toGeminiPayload(payload){
   const {model:_model,reasoning_effort:_effort,...rest}=payload??{};
@@ -258,17 +275,22 @@ function stripCodeFence(text){
   return String(text??'').trim().replace(/^```(?:json)?\s*/iu,'').replace(/\s*```$/u,'');
 }
 
-function logCloudFallback({log=cloudFallbackLog,purpose='模型调用',primaryError,fallback,outcome,error}={}){
+function logCloudFallback({log=cloudFallbackLog,purpose='模型调用',primaryError,fallback,outcome,error,cooldown=false}={}){
   if(typeof log!=='function')return;
   const code=primaryError?.code??primaryError?.name??'DEEPSEEK_FAILED';
+  const stage=outcome==='ok'
+    ?(cooldown?`半岛冷却中（前序故障：${code}），已由 ${fallback} 兜底成功`:`主请求失败（${code}），已由 ${fallback} 兜底成功`)
+    :`主请求失败（${code}），兜底均失败`;
   void log({
     direction:'local',
     route:'DeepSeek 兜底',
     operation:purpose,
-    stage:outcome==='ok'?`主请求失败（${code}），已由 ${fallback} 兜底成功`:`主请求失败（${code}），兜底均失败`,
+    stage,
     primary_error:code,
+    ai_step_id:primaryError?.stepId??null,
     ...(fallback?{fallback}:{}),
     result:outcome==='ok'?'已兜底恢复':'兜底失败',
+    ...(cooldown?{cooldown:true}:{}),
     ...(error?{error}:{})
   });
 }
@@ -276,23 +298,43 @@ function logCloudFallback({log=cloudFallbackLog,purpose='模型调用',primaryEr
 // 半岛文字统一入口：半岛失败时先兜底 Gemini，再兜底 AGY CLI；单条兜底超时自动停止并跳过，全部失败保留半岛原始错误码。
 export async function requestBandao(payload,options={}){
   const {
-    signal,timeoutMs=30000,fetcher=fetch,audit=taskAudit,purpose='模型调用',priority=1,
+    signal,timeoutMs=30000,fetcher=fetch,audit=taskAudit,purpose='模型调用',priority=1,key=process.env.bandao_api_key,
     fallback,allowAgyFallback=true,fallbackLog=cloudFallbackLog,
     geminiRequest=requestGemini,agyRun=runAgyPrompt,
     geminiReady=isGeminiConfigured,agyReady=isAgyFallbackReady
   }=options;
+  signal?.throwIfAborted();
   // 调用方显式注入测试 fetcher 时默认仅测半岛本身，除非显式开启 fallback:true。
   const useFallback=fallback===undefined?fetcher===fetch:Boolean(fallback);
-  let primaryError;
-  try{
-    return await bandaoClient.request(payload,options);
-  }catch(error){
-    signal?.throwIfAborted?.();
-    primaryError=error;
-    if(!useFallback||!canFallbackBandaoError(error))throw error;
+  const jsonMode=payload?.response_format?.type==='json_object';
+  const useCooldown=useFallback&&fetcher===nativeFetch&&globalThis.fetch===nativeFetch&&Boolean(key?.trim())&&
+    (geminiReady()||(allowAgyFallback&&agyReady()));
+  async function callBandao(){
+    const res=await bandaoClient.request(payload,options);
+    if(!jsonMode)return res;
+    if(res?.finishReason==='stop'){
+      const parsed=parseJsonObject(res.content);
+      if(parsed)return {content:JSON.stringify(parsed),finishReason:'stop'};
+    }
+    throw Object.assign(Error('云端结果与任务字段不符'),{code:'DEEPSEEK_RESULT_INVALID'});
+  }
+  let primaryError,cooldownSkipped=false;
+  if(isBandaoCooling(useCooldown)){
+    cooldownSkipped=true;
+    primaryError=cooldownError();
+  }else{
+    try{
+      const res=await callBandao();
+      if(useCooldown)noteBandaoSuccess();
+      return res;
+    }catch(error){
+      signal?.throwIfAborted?.();
+      if(useCooldown)noteBandaoFailure(error);
+      primaryError=error;
+      if(!useFallback||!canFallbackBandaoError(error))throw error;
+    }
   }
   const fbTimeoutMs=fallbackTimeoutMs(timeoutMs,30_000);
-  const jsonMode=payload?.response_format?.type==='json_object';
   let attempted=false;
   if(geminiReady()){
     attempted=true;
@@ -301,13 +343,13 @@ export async function requestBandao(payload,options={}){
         signal,timeoutMs:fbTimeoutMs,audit,priority,purpose:`${purpose}（Gemini 兜底）`
       });
       if(!jsonMode){
-        logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'Gemini',outcome:'ok'});
+        logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'Gemini',outcome:'ok',cooldown:cooldownSkipped});
         return gemRes;
       }
       if(gemRes?.finishReason==='stop'){
         const parsed=parseJsonObject(gemRes.content);
         if(parsed){
-          logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'Gemini',outcome:'ok'});
+          logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'Gemini',outcome:'ok',cooldown:cooldownSkipped});
           return {content:JSON.stringify(parsed),finishReason:'stop'};
         }
       }
@@ -325,17 +367,27 @@ export async function requestBandao(payload,options={}){
         if(jsonMode){
           const parsed=parseJsonObject(agyRes.response);
           if(parsed){
-            logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'AGY CLI',outcome:'ok'});
+            logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'AGY CLI',outcome:'ok',cooldown:cooldownSkipped});
             return {content:JSON.stringify(parsed),finishReason:'stop'};
           }
         }else{
           const text=String(agyRes.response??'').trim();
           if(text){
-            logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'AGY CLI',outcome:'ok'});
+            logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'AGY CLI',outcome:'ok',cooldown:cooldownSkipped});
             return {content:text,finishReason:'stop'};
           }
         }
       }
+    }
+  }
+  if(cooldownSkipped){
+    resetBandaoCooldown();
+    try{
+      const res=await callBandao();
+      return res;
+    }catch(error){
+      signal?.throwIfAborted?.();
+      primaryError=error;
     }
   }
   if(attempted)logCloudFallback({log:fallbackLog,purpose,primaryError,outcome:'failed',error:'DEEPSEEK_FALLBACK_FAILED'});
@@ -349,30 +401,42 @@ export async function requestBandao(payload,options={}){
 export async function askBandaoJson({instruction,schema,input,signal,purpose='AI 任务',timeoutMs=90_000,
   fallback=true,allowAgyFallback=true,fallbackLog=cloudFallbackLog,geminiRequest=requestGemini,agyRun=runAgyPrompt,
   geminiReady=isGeminiConfigured,agyReady=isAgyFallbackReady}={}){
+  signal?.throwIfAborted();
   const text=typeof input==='string'?input:JSON.stringify(input);
   const system=instruction+'\n只输出符合以下 JSON Schema 的 JSON 对象，不附加说明。\n'+JSON.stringify(schema);
   // 中转站的 json_object 模式并不总是强制 JSON：模型偶尔直接写正文。用户消息末尾再提醒一次，仍不合格就带原因重来一次。
   const reminder='\n\n（只返回一个 JSON 对象，字段见系统提示的 Schema。）';
-  async function runJsonClient(clientRequest,tag,stepTimeoutMs,allowFence=false){
+  async function runJsonClient(clientRequest,tag,stepTimeoutMs,allowFence=true){
     let last;
     for(let attempt=0;attempt<2;attempt++){
       const messages=[{role:'system',content:system},{role:'user',content:text+reminder}];
       if(attempt)messages.push({role:'user',content:'上一次输出不是符合 Schema 的 JSON 对象。请重新作答，只输出 JSON 对象。'});
       const {content,finishReason}=await clientRequest({response_format:{type:'json_object'},messages},{signal,timeoutMs:stepTimeoutMs,purpose:tag?`${purpose}（${tag}）`:purpose});
       let value;
-      try{value=JSON.parse(allowFence?stripCodeFence(content):content);}catch{/* 下面按无效结果处理。 */}
+      try{value=JSON.parse(allowFence?stripCodeFence(content):content);}catch{/* 下面尝试提取或按无效结果处理。 */}
+      if(value===undefined&&allowFence)value=parseJsonObject(content);
       if(finishReason==='stop'&&valid(value,schema))return value;
       last=content;
     }
     throw Object.assign(Error('云端结果与任务字段不符'),{code:'DEEPSEEK_RESULT_INVALID',output:String(last??'').slice(0,200)});
   }
-  let primaryError;
-  try{
-    return await runJsonClient(bandaoClient.request,undefined,timeoutMs);
-  }catch(error){
-    signal?.throwIfAborted?.();
-    primaryError=error;
-    if(!fallback||!canFallbackBandaoError(error))throw error;
+  const useCooldown=Boolean(fallback)&&globalThis.fetch===nativeFetch&&isBandaoConfigured()&&
+    (geminiReady()||(allowAgyFallback&&agyReady()));
+  let primaryError,cooldownSkipped=false;
+  if(isBandaoCooling(useCooldown)){
+    cooldownSkipped=true;
+    primaryError=cooldownError();
+  }else{
+    try{
+      const value=await runJsonClient(bandaoClient.request,undefined,timeoutMs,true);
+      if(useCooldown)noteBandaoSuccess();
+      return value;
+    }catch(error){
+      signal?.throwIfAborted?.();
+      if(useCooldown)noteBandaoFailure(error);
+      primaryError=error;
+      if(!fallback||!canFallbackBandaoError(error))throw error;
+    }
   }
   const fbTimeoutMs=fallbackTimeoutMs(timeoutMs,30_000);
   let attempted=false;
@@ -380,7 +444,7 @@ export async function askBandaoJson({instruction,schema,input,signal,purpose='AI
     attempted=true;
     try{
       const value=await runJsonClient(geminiRequest,'Gemini 兜底',fbTimeoutMs,true);
-      logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'Gemini',outcome:'ok'});
+      logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'Gemini',outcome:'ok',cooldown:cooldownSkipped});
       return value;
     }catch(error){
       signal?.throwIfAborted?.();
@@ -393,9 +457,18 @@ export async function askBandaoJson({instruction,schema,input,signal,purpose='AI
     if(agyRes?.success){
       const value=agyRes.structuredOutput!==undefined?agyRes.structuredOutput:extractJson(agyRes.response);
       if(valid(value,schema)){
-        logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'AGY CLI',outcome:'ok'});
+        logCloudFallback({log:fallbackLog,purpose,primaryError,fallback:'AGY CLI',outcome:'ok',cooldown:cooldownSkipped});
         return value;
       }
+    }
+  }
+  if(cooldownSkipped){
+    resetBandaoCooldown();
+    try{
+      return await runJsonClient(bandaoClient.request,undefined,timeoutMs,true);
+    }catch(error){
+      signal?.throwIfAborted?.();
+      primaryError=error;
     }
   }
   if(attempted)logCloudFallback({log:fallbackLog,purpose,primaryError,outcome:'failed',error:'DEEPSEEK_FALLBACK_FAILED'});

@@ -98,7 +98,7 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
       throw cause;
     }
     if(await write({...event,direction:'send'})===false)throw Error('无法写入 DeepSeek 任务日志');
-    return async ({output,error,durationMs,httpStatus})=>{
+    const finish=async ({output,error,durationMs,httpStatus})=>{
       const finished=clock();
       const result={...snapshot,finished,status:error?'failed':'done',output,error,durationMs,httpStatus};
       const candidate=target+'.tmp';
@@ -111,6 +111,8 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
       }
       await write({...event,direction:'receive',status:httpStatus,error,duration_ms:durationMs});
     };
+    finish.stepId=id;
+    return finish;
   }
   // 游标只保留文件标识和字节位置。追加日志不改变已打开阅读的分页边界。
   async function readPage(cursor,day=tokyoDay(clock())) {
@@ -120,9 +122,10 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
   async function inspectRecent(from,to,signal){
     await pending;
     const lookback=from-5000;
-    const days=[...new Set([tokyoDay(lookback),tokyoDay(from),tokyoDay(to)])];
+    const legacyFallbackWindow=180_000,legacyLookback=from-legacyFallbackWindow;
+    const days=[...new Set([tokyoDay(legacyLookback),tokyoDay(from),tokyoDay(to)])];
     const files=memory?days.flatMap(day=>['任务通信.jsonl','历史通信.jsonl'].map(name=>join(memory.folder(day),'日志',name))):[previous,file];
-    const counts=new Map(),paired=new Map(),attempts=new Map();
+    const counts=new Map(),paired=new Map(),attempts=new Map(),deepseekErrors=[],deepseekRecoveries=[];
     let scanned=0,completed=0,failed=0;
     function report(code,total=1){
       failed+=total;counts.set(code,(counts.get(code)??0)+total);
@@ -134,14 +137,26 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
         const row=peek(line);
         if(!row||row.route==='分析专家巡检')continue;
         const at=Date.parse(row.time);
-        if(!Number.isFinite(at)||at<lookback||at>=to)continue;
+        if(!Number.isFinite(at)||at<legacyLookback||at>=to)continue;
         if(at>=from){
           scanned++;
           if(row.category==='绯月自主行动'&&row.stage==='完成')completed++;
         }
+        if(row.route==='DeepSeek 兜底'&&row.result==='已兜底恢复'&&word(row.primary_error)){
+          // 新回执的 null 表示本次没有主通道错误。缺少字段的旧回执才尝试按时间配对。
+          const stepId=id(row.ai_step_id);
+          if(!row.cooldown&&at>=from&&(stepId||row.ai_step_id===undefined))
+            deepseekRecoveries.push({at,op:String(row.operation??''),code:word(row.primary_error),stepId});
+          continue;
+        }
         const code=word(row.error??row.code??String(row.result??'').match(/\bLOCAL_AI_[A-Z_]+\b/u)?.[0]);
         if(recoveryCodes.has(code)||row.stage==='取消'||row.skill==='emotion-appraisal'&&['AI 询问池','本地 AI'].includes(row.route))continue;
         if(!code&&row.stage!=='失败')continue;
+        if(row.route==='DeepSeek'&&code){
+          deepseekErrors.push({at,op:String(row.operation??''),code,stepId:id(row.ai_step_id)});
+          continue;
+        }
+        if(at<lookback)continue;
         const modelRoute=row.route==='本地 AI'||row.route==='AI 询问池';
         if(modelRoute&&code&&id(row.ai_attempt_id)){
           const key=JSON.stringify([row.ai_attempt_id,code]);
@@ -160,6 +175,21 @@ export function createTaskTrafficLog(profile, {maxBytes = 2 * 1024 * 1024, clock
         }else report(code??'自主任务失败');
       }
     }
+    const stepKey=({stepId,code})=>JSON.stringify([stepId,code]);
+    const stepErrors=new Map(deepseekErrors.filter(err=>err.stepId).map(err=>[stepKey(err),err]));
+    for(const rec of deepseekRecoveries){
+      if(!rec.stepId)continue;
+      const err=stepErrors.get(stepKey(rec));
+      if(err&&err.at<=rec.at)err.recovered=true;
+    }
+    // 旧回执只在候选唯一时抵消。同名请求交错时保留失败，避免错删另一笔故障。
+    const legacyRecoveries=deepseekRecoveries.filter(rec=>!rec.stepId).sort((a,b)=>a.at-b.at);
+    for(const rec of legacyRecoveries){
+      const candidates=deepseekErrors.filter(err=>!err.recovered&&err.code===rec.code&&err.op===rec.op&&
+        err.at<=rec.at&&rec.at-err.at<=legacyFallbackWindow);
+      if(candidates.length===1)candidates[0].recovered=true;
+    }
+    for(const err of deepseekErrors)if(!err.recovered&&err.at>=from)report(err.code);
     for(const {at,code} of attempts.values())if(at>=from)report(code);
     for(const {code,model,queue,task} of paired.values())report(code,Math.max(model,queue,task));
     return {scanned,completed,failed,top:[...counts].sort((a,b)=>b[1]-a[1]).slice(0,5)};
