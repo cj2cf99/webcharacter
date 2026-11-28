@@ -6,6 +6,19 @@ import {Script} from 'node:vm';
 import {run} from './media.mjs';
 import {prepareDesktopPages} from '../desktop/source-updates.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url)),out=resolve(root,'output/desktop-bundle'),media=resolve(root,'output/four-states-v3');
+const extratoolsQuickLinks=resolve(root,'../../extratools/quick-links');
+const quickLinkFiles=['quick-links-core.mjs','quick-links.html','quick-links.css','quick-links-ui.mjs'];
+if(existsSync(extratoolsQuickLinks)&&quickLinkFiles.every(file=>existsSync(resolve(extratoolsQuickLinks,file)))){
+  const synced=[];
+  for(const file of quickLinkFiles){
+    const source=resolve(extratoolsQuickLinks,file),dest=resolve(root,'desktop',file);
+    if(!existsSync(dest)||readFileSync(source,'utf8')!==readFileSync(dest,'utf8')){
+      copyFileSync(source,dest);
+      synced.push(file);
+    }
+  }
+  if(synced.length)console.log('已同步常用链接文件：'+synced.join(', '));
+}
 mkdirSync(out,{recursive:true});
 prepareDesktopPages(root,out);
 copyFileSync(resolve(root,'assets/study-initial.v1.json'),resolve(out,'study-initial.v1.json'));

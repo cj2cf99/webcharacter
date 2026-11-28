@@ -137,6 +137,9 @@ test('图像确定性步骤、附件角色与负面指令',()=>{
   assert.equal(attachmentRegistration('把图里的会议记成提醒'),true);
   assert.equal(attachmentRegistration('请描述这张图片'),false);
   assert.match(menuGuidance('本地复盘怎么打开'),/选择「本地复盘」/);
+  assert.match(menuGuidance('常用链接怎么打开'),/选择「常用链接」/);
+  assert.match(menuGuidance('应用链接设置在哪'),/常用链接 → 应用链接设置/);
+  assert.match(menuGuidance('常用链接里的应用链接设置在哪'),/常用链接 → 应用链接设置/);
   assert.match(menuGuidance('知识库怎么打开'),/阅读与学习 → 知识库/);
   assert.match(menuGuidance('看绯月写日记在哪'),/任务 → 看绯月写日记/);
   assert.match(menuGuidance('补写本机任务执行评价在哪'),/任务 → 补写本机任务执行评价/);

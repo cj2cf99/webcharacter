@@ -25,6 +25,11 @@ async function main(){
   actions.work={label:'开始工作',click:()=>clicks.push('work')};
   actions.attachment={label:'窗口依附'};
   actions.move={submenu:[{label:'右下角',click:()=>clicks.push('move')}]};
+  actions.quickLinks={submenu:[
+    {label:'应用链接设置',fyIcon:'⚙',fyTitle:'打开应用链接设置',click:()=>clicks.push('quickLinksSettings')},
+    {type:'separator'},
+    {label:'知序题库',fyIcon:'🌐',fyTitle:'日常刷题入口',click:()=>clicks.push('quickLink:1')},
+  ]};
   actions.loginStart={id:'loginStart',type:'checkbox',checked:false,click:item=>clicks.push('login:'+item.checked)};
   actions.privateChat=false;actions.continueNag=false;
   const menu=electron.Menu.buildFromTemplate(menuTemplate(layout,actions));
@@ -40,7 +45,7 @@ async function main(){
       electron.nativeTheme.themeSource=theme;
       await open();
       const labels=await js("[...document.querySelectorAll('#items > .item .label')].map(n=>n.textContent)");
-      assert.deepEqual(labels,['问绯月','提醒（3 条未读）','提醒检查 · 待执行','今日任务','三地天气','本地复盘','阅读与学习','任务','动画生成器','桌宠动作','设置与维护']);
+      assert.deepEqual(labels,['问绯月','提醒（3 条未读）','提醒检查 · 待执行','今日任务','三地天气','本地复盘','常用链接','阅读与学习','任务','动画生成器','桌宠动作','设置与维护']);
       assert.equal(await js("document.querySelectorAll('.group[aria-expanded=true]').length"),0,'重开菜单时所有分组均应折叠');
       const before=page().getBounds();
       assert(before.y+before.height<=area.y+area.height&&before.x+before.width<=area.x+area.width,'菜单超出工作区');
@@ -71,6 +76,12 @@ async function main(){
     assert.equal(menu.getMenuItemById('loginStart').checked,true);
     await open();
     assert.equal(await js("[...document.querySelectorAll('.item')].find(b=>b.textContent.includes('登录 Windows')).getAttribute('aria-checked')"),'true');
+    await open();
+    await js(`document.querySelector('.group[title="常用链接"]').click()`);
+    assert.equal(await js(`document.querySelector('.group[title="常用链接"]').nextElementSibling.querySelector('button[title="日常刷题入口"] .label')?.textContent`),'知序题库');
+    await until(()=>js(`(()=>{const m=document.getElementById('menu').getBoundingClientRect(),i=document.getElementById('items').getBoundingClientRect();return m.height<=innerHeight&&i.bottom<=m.bottom+1;})()`),'菜单高度或列表容器超出边界');
+    await js(`document.querySelector('.group[title="常用链接"]').nextElementSibling.querySelector('button[title="日常刷题入口"]').click()`);
+    await until(()=>clicks.includes('quickLink:1'),'常用链接子项点击未执行动作');
     popup.hide();
     assert.equal(opened,closed,'每次打开都对应一次关闭');
     console.log('PASS：自绘菜单浅深色渲染、向上展开、分组展开保持底边、点击原动作、勾选切换、Esc 关闭。');

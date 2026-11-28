@@ -7,6 +7,7 @@
   {"action":"today","label":"今日任务","icon":"📋"},
   {"action":"weather","label":"三地天气","icon":"⛅"},
   {"action":"review","label":"本地复盘","icon":"📖"},
+  {"action":"quickLinks","label":"常用链接","icon":"🔗"},
   "-",
   {"label":"阅读与学习","icon":"📚","items":[
     {"action":"news","label":"新闻简报","icon":"📰"},

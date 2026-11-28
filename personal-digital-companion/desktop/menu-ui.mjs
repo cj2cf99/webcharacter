@@ -28,7 +28,7 @@ function render(list,path=[]){
     button.type='button';button.disabled=!item.enabled;
     const icon=element('span','icon',item.icon);
     if(item.image){const image=element('img','menu-face');image.src=item.image;image.alt='';icon.append(image);}
-    button.title=item.label;button.append(icon,element('span','label',item.label));
+    button.title=item.title||item.label;button.append(icon,element('span','label',item.label));
     if(item.tone)button.classList.add(item.tone);
     if(item.submenu){
       button.classList.add('group');button.setAttribute('aria-expanded','false');button.append(element('span','tail','›'));
@@ -69,9 +69,10 @@ document.addEventListener('keydown',event=>{
   event.preventDefault();
 });
 new ResizeObserver(()=>api.size(menu.getBoundingClientRect().height)).observe(menu);
-api.onShow(async cycle=>{
+api.onShow(async (cycle,maxHeight)=>{
   document.body.classList.remove('show');
   if(document.activeElement===avatar)avatar.blur();
+  menu.style.maxHeight=Number.isFinite(maxHeight)?`${maxHeight}px`:'';
   renderAvatar(cycle);
   box.replaceChildren(render(await api.read()));
   void document.body.offsetWidth;document.body.classList.add('show');

@@ -12,13 +12,14 @@ import {attachConversationDetails} from '../desktop/conversation-details.mjs';
 import {createReminderChecks} from '../desktop/reminder-checks.mjs';
 import {attachSettings} from '../desktop/settings-host.mjs';
 import {attachPollSettings} from '../desktop/poll-settings-host.mjs';
+import {attachQuickLinks} from '../desktop/quick-links-host.mjs';
 import {pages} from '../desktop/source-updates.mjs';
 
 const root=resolve(import.meta.dirname,'..'),profile=mkdtempSync(join(tmpdir(),'feiyue-titlebar-'));
 const out=join(root,'output/titlebar-qa');
 const fixture=join(profile,'desktop');
 mkdirSync(fixture);
-for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','task-inbox-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs']){
+for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','task-inbox-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs','quick-links-preload.cjs']){
   copyFileSync(join(root,'desktop',file),join(fixture,file));
 }
 const common={root:profile,profile,bundle:join(root,'output/desktop-bundle'),visible:false};
@@ -122,7 +123,8 @@ async function test(){
       ...(!cursor&&{ai_step_id:'old-snapshot',skill:'emotion-appraisal'})})],next:cursor?null:[1]})});
   const owner=new TestWindow({width:250,height:360});
   const settings=attachSettings(runtime,{...common,win:owner});
-  const hosts=[review,registration,weather,history,settings,polls,inbox];
+  const quickLinks=attachQuickLinks(runtime,{...common});
+  const hosts=[review,registration,weather,history,settings,polls,inbox,quickLinks];
   try{
     for(const host of hosts){
       await host.open();
@@ -317,8 +319,33 @@ async function test(){
     assert.ok(await testUi(history,"!document.querySelector('.ai-snapshot').innerText.includes('legacy-private-id') && !document.querySelector('.ai-snapshot details').open"));
     await testUi(history,"document.querySelector('.ai-snapshot summary').click()");
     await until(history,"document.querySelector('.ai-snapshot pre')?.textContent.includes('legacy-private-id')");
+    // Ctrl+Enter 快捷键提交保存
+    await testUi(quickLinks,"{document.querySelector('#nameInput').value='知序题库';document.querySelector('#urlInput').value='https://example.com/zhixu';document.querySelector('#noteInput').value='刷题入口';document.querySelector('#nameInput').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true}))}");
+    await until(quickLinks,"document.querySelector('#countChip')?.textContent==='1 / 10' && document.querySelectorAll('#linkList li').length===1");
+    assert.equal(quickLinks.snapshot().links[0].name,'知序题库');
+    // 重复 URL 提示不阻止保存，且附「查看」按钮；360 窄窗下无横向滚动
+    await testUi(quickLinks,"{document.querySelector('#nameInput').value='题库镜像';document.querySelector('#urlInput').value='https://example.com/zhixu';document.querySelector('#noteInput').value='备用';document.querySelector('#linkForm').requestSubmit()}");
+    await until(quickLinks,"document.querySelector('#countChip')?.textContent==='2 / 10' && Boolean(document.querySelector('#toast .toast-view'))");
+    assert.equal(await testUi(quickLinks,'document.documentElement.scrollWidth<=innerWidth'),true,'360px 窄窗有卡片时出现横向滚动');
+    // 调整顺序（下移第 1 条）并进入编辑态检查 360px 无横向滚动
+    await testUi(quickLinks,"document.querySelector('#linkList li:first-child [data-step=\"1\"]').click()");
+    await until(quickLinks,"document.querySelector('#linkList li:first-child .link-title')?.textContent==='题库镜像'");
+    assert.equal(await testUi(quickLinks,'document.activeElement?.closest("li")?.querySelector(".link-title")?.textContent'),'知序题库');
+    assert.equal(await testUi(quickLinks,'document.activeElement?.dataset?.step'),'-1');
+    await testUi(quickLinks,"document.querySelector('#linkList li:first-child .mini-btn:not(.danger)').click()");
+    assert.equal(await testUi(quickLinks,'document.documentElement.scrollWidth<=innerWidth'),true,'360px 窄窗编辑态出现横向滚动');
+    await testUi(quickLinks,"{document.querySelector('#nameInput').value='题库镜像改';document.querySelector('#linkForm').requestSubmit()}");
+    await until(quickLinks,"document.querySelector('#linkList li:first-child .link-title')?.textContent==='题库镜像改'");
+    // 删除二次确认：首次点击不删除且 360px 无横向滚动，再次点击才删除
+    await testUi(quickLinks,"document.querySelector('#linkList li:first-child .mini-btn.danger').click()");
+    assert.equal(await testUi(quickLinks,"document.querySelector('#linkList li:first-child .mini-btn.danger').textContent"),'确认删除？');
+    assert.equal(await testUi(quickLinks,'document.documentElement.scrollWidth<=innerWidth'),true,'360px 窄窗确认删除态出现横向滚动');
+    assert.equal(quickLinks.snapshot().links.length,2);
+    await testUi(quickLinks,"document.querySelector('#linkList li:first-child .mini-btn.danger').click()");
+    await until(quickLinks,"document.querySelector('#countChip')?.textContent==='1 / 10' && document.querySelectorAll('#linkList li').length===1");
+    assert.equal(quickLinks.snapshot().links[0].name,'知序题库');
     console.log('PASS：今日工时行、零与小数、执行回执、只读任务日志及前后翻页。');
-    console.log('PASS：七个面板通过深浅色、原生标题栏和热加载检查；轮询设定通过保存、重开、队列定位和数值边界检查。');
+    console.log('PASS：八个面板通过深浅色、原生标题栏和热加载检查；轮询设定通过保存、重开、队列定位和数值边界检查。');
   }finally{for(const host of hosts)host.close();checkStore.close();owner.destroy();}
 }
 test().then(()=>electron.app.exit(0),error=>{console.error(error);electron.app.exit(1);});

@@ -12,7 +12,7 @@ export function createMenuPopup(electron,{bundle,root,readCycle=()=>null,onOpen=
   const own=event=>win&&!win.isDestroyed()&&event.senderFrame===win.webContents.mainFrame;
   function items(list){
     return list.filter(item=>item.visible!==false).map(item=>item.type==='separator'?{type:'separator'}:{
-      label:item.label,icon:item.fyIcon||'',image:item.fyImage||'',tone:item.fyTone||'',type:item.type,enabled:item.enabled!==false,checked:Boolean(item.checked),
+      label:item.label,icon:item.fyIcon||'',image:item.fyImage||'',tone:item.fyTone||'',title:item.fyTitle||'',type:item.type,enabled:item.enabled!==false,checked:Boolean(item.checked),
       submenu:item.submenu?items(item.submenu.items):undefined,
     });
   }
@@ -77,7 +77,8 @@ export function createMenuPopup(electron,{bundle,root,readCycle=()=>null,onOpen=
       await loading;
       if(shown){shown=false;win.hide();onClose();}
       pending=true;
-      win.webContents.send('menu:show',readCycle());
+      const maxHeight=Math.max(120,screen.getDisplayNearestPoint(anchor).workArea.height-SHADOW*2);
+      win.webContents.send('menu:show',readCycle(),maxHeight);
     },
     hide,
     close(){if(win&&!win.isDestroyed())win.destroy();},

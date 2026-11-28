@@ -52,9 +52,12 @@ function index(items,path=[]){
   }
 }
 index(menu);
+const quickLinksPath=menuPaths.get('常用链接')?.path;
+if(quickLinksPath)menuPaths.set('应用链接设置',{action:'quickLinks',path:`${quickLinksPath} → 应用链接设置`});
+const sortedMenuPaths=[...menuPaths.entries()].sort((a,b)=>b[0].length-a[0].length);
 export function menuEntry(text){
   if(!/(在哪|怎么打开|如何打开|怎么进入|菜单|打开|进入|查看)/u.test(text))return null;
-  for(const [label,item] of menuPaths)if(text.includes(label))return item;
+  for(const [label,item] of sortedMenuPaths)if(text.includes(label))return item;
   return null;
 }
 export function menuGuidance(text){

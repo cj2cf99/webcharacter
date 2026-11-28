@@ -42,6 +42,7 @@ import {attachDictation} from './dictation-host.mjs';
 import {attachWeather} from './weather-host.mjs';
 import {createReminderChecks,checkDueItems} from './reminder-checks.mjs';
 import {attachPollSettings} from './poll-settings-host.mjs';
+import {attachQuickLinks} from './quick-links-host.mjs';
 import {attachNewsPanel} from './news-panel-host.mjs';
 import {attachStudy} from './study-host.mjs';
 import {createNewsEditor} from './news-editor.mjs';
@@ -417,6 +418,9 @@ export async function startDesktop(electron,options={}){
     }});
   menuUnread=checks.unread;pendingCheckVisible=checks.pending;
   const pollSettings=attachPollSettings(electron,{root,bundle,checks});
+  const quickLinks=attachQuickLinks(electron,{root,bundle,profile,onChange:()=>{if(!cleaned&&tray)menu();},onOpenError:error=>{
+    if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'常用链接',message:'常用链接或设置页打不开，请重试。',detail:error?.message,buttons:['确定']}).catch(()=>{});
+  }});
   updatePollClock=()=>{
     checks.setExecutionBusy(Boolean(modelExecuting||backgroundJob||transcription?.busy||
       privateChat?.active||localPool?.active||tasks.executingCount?.()||screenQuestion.executing));
@@ -1142,6 +1146,7 @@ export async function startDesktop(electron,options={}){
       tasks:taskInbox&&{click:()=>taskNotice(taskInbox.open())},
       restoreTerminal:electron.dialog?.showOpenDialog&&{click:()=>taskNotice(restoreLocalTerminal())},
       review:{click:()=>taskNotice(screenQuestion.openReview())},
+      quickLinks:{submenu:quickLinks.menuItems()},
       knowledge:{click:()=>taskNotice(knowledge.open())},
       animationCrop:{click:()=>openAnimationMaker('crop')},
       animationGemini:{click:()=>openAnimationMaker('gemini')},
@@ -1248,7 +1253,7 @@ export async function startDesktop(electron,options={}){
     if(media.length)pcSettings.mediaChanged(media.map(name=>resolve(bundle,name)));
     if(files.includes('tray.png'))tray.setImage(nativeImage.createFromPath(resolve(bundle,'tray.png')));
     for(const [page,panel] of [['index.html',win],['thought.html',thoughtOverlay.panel],['settings.html',pcSettings.panel],['weather.html',weather.panel],
-      ['conversation.html',screenQuestion.details],['reminder-review.html',reminderReview?.panel],['poll-settings.html',pollSettings.panel],
+      ['conversation.html',screenQuestion.details],['reminder-review.html',reminderReview?.panel],['poll-settings.html',pollSettings.panel],['quick-links.html',quickLinks.panel],
       ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],['study.html',study.panel],['knowledge.html',knowledge.panel],['card-draw.html',cardDraw.panel],
       ['screen-question.html',screenQuestion.panel],['registration-review.html',screenQuestion.inquiryPanel],['sound-settings.html',settingsWindow],
       ...(messages.panels??[]).map(panel=>['message-box.html',panel])]){
@@ -1289,7 +1294,7 @@ export async function startDesktop(electron,options={}){
     reminderStartup.abort();
     interruptMemory(true);electron.powerMonitor?.removeListener?.('suspend',suspendMemory);
     electron.powerMonitor?.removeListener?.('lock-screen',lockScene);
-    curiosity?.close();scenePanel?.close();pollSettings.close();newsPanel.close();study.close();checks.close();
+    curiosity?.close();scenePanel?.close();pollSettings.close();quickLinks.close();newsPanel.close();study.close();checks.close();
     stopLayout();
     clearTimeout(refreshTimer);clearTimeout(memoryResultTimer);stopSources?.();
     ipcMain.removeListener('desktop:attachment-done',onAttachmentDone);

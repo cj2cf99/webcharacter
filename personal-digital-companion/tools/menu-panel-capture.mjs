@@ -14,6 +14,8 @@ import {attachWeather} from '../desktop/weather-host.mjs';
 import {attachConversationDetails} from '../desktop/conversation-details.mjs';
 import {createReminderChecks} from '../desktop/reminder-checks.mjs';
 import {attachPollSettings} from '../desktop/poll-settings-host.mjs';
+import {attachQuickLinks} from '../desktop/quick-links-host.mjs';
+import {createQuickLinksStore} from '../desktop/quick-links-core.mjs';
 import {createMessageBoxes} from '../desktop/message-box.mjs';
 import {attachKnowledge} from '../desktop/knowledge-host.mjs';
 import {attachCardDraw} from '../desktop/card-draw-host.mjs';
@@ -23,7 +25,7 @@ import {createKnowledgeBackups} from '../desktop/knowledge-backups.mjs';
 const root=resolve(import.meta.dirname,'..'),profile=mkdtempSync(join(tmpdir(),'feiyue-menu-qa-'));
 const out=join(root,'output/menu-qa');
 mkdirSync(join(profile,'desktop'));
-for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','task-inbox-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs','message-box-preload.cjs','knowledge-preload.cjs','card-draw-preload.cjs'])
+for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','task-inbox-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs','quick-links-preload.cjs','message-box-preload.cjs','knowledge-preload.cjs','card-draw-preload.cjs'])
   copyFileSync(join(root,'desktop',file),join(profile,'desktop',file));
 const common={root:profile,profile,bundle:join(root,'output/desktop-bundle'),visible:true};
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -245,6 +247,11 @@ async function main(){
   for(const name of ['20261128-210100-000.png','20261128-210200-000.png'])
     copyFileSync(join(cardPictures,'抽卡','20261128-210000-000.png'),join(cardPictures,'高清',name));
   const cards=attachCardDraw(runtime,{...common,pictureRoot:cardPictures,enabled:false});
+  const quickLinkSeed=createQuickLinksStore({dataDir:join(profile,'quick-links')});
+  quickLinkSeed.create({name:'知序题库',url:'https://example.com/zhixu',note:'日常刷题与错题复盘入口'});
+  quickLinkSeed.create({name:'天气雷达图',url:'https://www.jma.go.jp/bosai/nowc/',note:'日本气象厅实时降水与雷雨云图'});
+  quickLinkSeed.create({name:'项目文档',url:'https://github.com/cj2cf99/extratools',note:'extratools 仓库主页'});
+  const quickLinks=attachQuickLinks(runtime,{...common});
   try{
     await cards.open();
     const cardPage=code=>cards.panel.webContents.executeJavaScript(code);
@@ -258,7 +265,7 @@ async function main(){
     }
     assert.equal(await cardPage("document.querySelectorAll('#cards .card').length"),8);
     assert.equal(await cardPage("document.querySelectorAll('#hd .card img').length"),2);
-    for(const [name,host] of [['today',review],['inbox',inbox],['registration',registration],['weather',weather],['polls',polls]]){
+    for(const [name,host] of [['today',review],['inbox',inbox],['registration',registration],['weather',weather],['polls',polls],['quick-links',quickLinks]]){
       await host.open();host.panel.setSize(430,560);await wait(500);await shot(name,host.panel);
     }
     for(const view of ['chat','tasks','checks','notices','pending','log']){
@@ -295,6 +302,6 @@ async function main(){
       await shot(name,view);view.destroy();
     }
     console.log('截图已写入 '+out);
-  }finally{for(const h of [review,inbox,registration,weather,polls,history,cards])h.close();checkStore.close();}
+  }finally{for(const h of [review,inbox,registration,weather,polls,history,cards,quickLinks])h.close();checkStore.close();}
 }
 main().then(()=>electron.app.exit(0),error=>{console.error(error);electron.app.exit(1);});
