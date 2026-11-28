@@ -17,6 +17,7 @@ const cases={
   settings:['设置与维护','动画与声音','settings.html'],
   question:['','问绯月','screen-question.html'],
   message:['设置与维护','云端连接','message-box.html'],
+  card:['动画生成器','抽卡','card-draw.html'],
   menu:['','','menu.html'],
 };
 const [group,label,page]=cases[target];
@@ -35,7 +36,7 @@ class TestTray{
 }
 const preload={
   poll:'poll-settings-preload.cjs',pending:'conversation-preload.cjs',inbox:'task-inbox-preload.cjs',settings:'preload.cjs',
-  question:'screen-question-preload.cjs',message:'message-box-preload.cjs',menu:'menu-preload.cjs',
+  question:'screen-question-preload.cjs',message:'message-box-preload.cjs',menu:'menu-preload.cjs',card:'card-draw-preload.cjs',
 };
 let created=0,loads=0,shows=0,window;
 function TestWindow(options){

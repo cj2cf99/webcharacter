@@ -28,7 +28,8 @@
     {"action":"animationLocal","label":"本地生图","icon":"🪄"},
     {"action":"animationGif","label":"GIF","icon":"🎞"},
     "-",
-    {"action":"voiceStudio","label":"语音制作","icon":"🎙"}
+    {"action":"voiceStudio","label":"语音制作","icon":"🎙"},
+    {"action":"cardDraw","label":"抽卡","icon":"🎴"}
   ]},
   {"label":"桌宠动作","icon":"🎀","items":[
     {"action":"visibility","icon":"👁"},

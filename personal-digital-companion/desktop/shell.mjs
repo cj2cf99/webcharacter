@@ -15,6 +15,7 @@ import {createMessageBoxes} from './message-box.mjs';
 import {createThoughtOverlay} from './thought-overlay.mjs';
 import {createPanelWindow} from './panel-window.mjs';
 import {attachKnowledge} from './knowledge-host.mjs';
+import {attachCardDraw} from './card-draw-host.mjs';
 import {attachSettings} from './settings-host.mjs';
 import {watchFileChanges,setLiveWarningLog,warnLiveUpdate} from './live-files.mjs';
 import {menuTemplate} from './menu-layout.mjs';
@@ -101,6 +102,7 @@ export async function startDesktop(electron,options={}){
   }}:archive;
   let taskThought=null,pollThought=null,memoryThought=null,lastThought='',localPool=null,localREST=null;
   let memoryResult=null,memoryResultTimer;
+  let cardResult=null,cardResultTimer;
   let privateChat,privatePanel,privateTimer,transcription;
   let modelExecuting=false,updatePollClock=()=>{};
   const tasks=options.tasks||await createDesktopTasks({profile,dialog:messages,memory,safeStorage:electron.safeStorage,onExecutionChange:()=>updatePollClock(),
@@ -176,7 +178,7 @@ export async function startDesktop(electron,options={}){
     updatePollClock();
     // 思考云标出正式工作与闲时工作。
     const label=(prefix,value)=>value&&{...value,title:prefix+value.title};
-    const thought=label('正式 · ',transcription?.active)??(work?null:label('正式 · ',privateChat?.active??localPool?.active??taskThought)??label('闲时 · ',memoryThought??memoryResult)??pollThought);
+    const thought=label('正式 · ',transcription?.active)??(work?null:label('正式 · ',privateChat?.active??localPool?.active??taskThought)??label('闲时 · ',memoryThought??memoryResult)??cardResult??pollThought);
     const encoded=JSON.stringify(thought);
     if(force||lastThought!==encoded){
       lastThought=encoded;thoughtOverlay.set(thought);
@@ -423,6 +425,16 @@ export async function startDesktop(electron,options={}){
   const newsPanel=attachNewsPanel(electron,{root,bundle,checks,model:localModel,compile:compileNews});
   const study=attachStudy(electron,{root,bundle,profile,model:localModel,connection:options.studyConnection,onForeground:interruptMemory});
   const knowledge=attachKnowledge(electron,{profile,root,bundle,model:localModel,enabled:!options.benchmark});
+  // 抽卡只提示暂停和高清完成；隔离资料目录的实例不碰系统“图片”文件夹。
+  const cardDraw=attachCardDraw(electron,{root,bundle,profile,enabled:!options.benchmark,log:tasks.traffic?.write,
+    pictureRoot:options.cardPictureRoot??(options.profile?resolve(options.profile,'card-draw-pictures'):undefined),
+    onNotice:stage=>{
+      cardResult={title:'抽卡',stage};
+      clearTimeout(cardResultTimer);
+      cardResultTimer=setTimeout(()=>{cardResult=null;syncActivity();},8000);
+      cardResultTimer.unref?.();
+      syncActivity();
+    }});
   const serverTask=createServerTaskCommand({profile,tasks,localModel,interactionWork,dialog:messages,knowledge});
   const upgradeVision=options.upgradeVision;
   const voice=createBubbleVoice({root,profile});
@@ -1136,6 +1148,7 @@ export async function startDesktop(electron,options={}){
       animationLocal:{click:()=>openAnimationMaker('local')},
       animationGif:{click:()=>openAnimationMaker('gif')},
       voiceStudio:{click:()=>openVoiceStudio()},
+      cardDraw:{click:()=>taskNotice(cardDraw.open())},
       notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
       pendingCheck:checks.pending&&{click:()=>taskNotice(screenQuestion.openReview('checks'))},
       pollSettings:{click:()=>taskNotice(pollSettings.open())},
@@ -1236,7 +1249,7 @@ export async function startDesktop(electron,options={}){
     if(files.includes('tray.png'))tray.setImage(nativeImage.createFromPath(resolve(bundle,'tray.png')));
     for(const [page,panel] of [['index.html',win],['thought.html',thoughtOverlay.panel],['settings.html',pcSettings.panel],['weather.html',weather.panel],
       ['conversation.html',screenQuestion.details],['reminder-review.html',reminderReview?.panel],['poll-settings.html',pollSettings.panel],
-      ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],['study.html',study.panel],['knowledge.html',knowledge.panel],
+      ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],['study.html',study.panel],['knowledge.html',knowledge.panel],['card-draw.html',cardDraw.panel],
       ['screen-question.html',screenQuestion.panel],['registration-review.html',screenQuestion.inquiryPanel],['sound-settings.html',settingsWindow],
       ...(messages.panels??[]).map(panel=>['message-box.html',panel])]){
       if(!panel||panel.isDestroyed())continue;
@@ -1291,6 +1304,7 @@ export async function startDesktop(electron,options={}){
     taskInbox?.close();
     weather.close();
     knowledge.close();
+    clearTimeout(cardResultTimer);cardDraw.close();
     movement=null;ipcMain.removeListener('pc:runtime',onMovementRuntime);pcSettings.close();
     stopPoll();ipcMain.removeListener('desktop:sound-ready',soundReady);ipcMain.removeListener('desktop:sound-change',soundChange);ipcMain.removeListener('desktop:sound-preview',soundPreview);
     if(settingsWindow&&!settingsWindow.isDestroyed())settingsWindow.destroy();
@@ -1443,6 +1457,6 @@ export async function startDesktop(electron,options={}){
   const remindersReady=waitForStartupReminders(reminderStartup.signal);
   if(!options.benchmark)checks.start();
   taskNotice(tasks.startup(remindersReady));
-  return {win,show,hide,moveTo,thoughtOverlay,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,transcription,study,knowledge,
+  return {win,show,hide,moveTo,thoughtOverlay,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,transcription,study,knowledge,cardDraw,
     get localAPIAddress(){return localREST?.address??null;},getStats:()=>({pointerMessages,visible:win.isVisible(),ready:previousReady})};
 }
