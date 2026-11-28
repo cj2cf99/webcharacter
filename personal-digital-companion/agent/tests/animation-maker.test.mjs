@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createAnimationMaker, createVoiceStudio} from '../../desktop/animation-maker.mjs';
+import {createAnimationMaker, createVideoStudio, createVoiceStudio} from '../../desktop/animation-maker.mjs';
 
 const ok = body => ({ok: true, json: async () => body});
 
@@ -45,6 +45,14 @@ test('动画生成器：目录缺失或启动超时给出明确错误', async ()
   try {
     await assert.rejects(createAnimationMaker({dir, wait: 500, sleep: async () => {}, fetcher: down, openExternal() {}, spawn: () => ({on() {}, unref() {}})}).open('crop'), /未启动/);
   } finally { rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('视频生成：按自己的服务名识别，打开根地址，缺目录时报视频生成', async () => {
+  const opened = [], spawned = [];
+  const maker = createVideoStudio({openExternal: u => opened.push(u), spawn: (...a) => spawned.push(a), fetcher: async () => ok({app: 'videostudio'}), base: 'http://w'});
+  await maker.open();
+  assert.deepEqual([opened, spawned.length], [['http://w/'], 0]);
+  await assert.rejects(createVideoStudio({dir: 'Z:/none', fetcher: async () => ok({app: 'voicestudio'}), openExternal() {}}).open(), /找不到视频生成/);
 });
 
 test('语音制作：按自己的服务名识别，打开根地址，缺目录时报语音制作', async () => {

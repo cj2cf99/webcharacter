@@ -30,6 +30,7 @@
     {"action":"animationGif","label":"GIF","icon":"🎞"},
     "-",
     {"action":"voiceStudio","label":"语音制作","icon":"🎙"},
+    {"action":"videoStudio","label":"视频生成","icon":"🎬"},
     {"action":"cardDraw","label":"抽卡","icon":"🎴"}
   ]},
   {"label":"桌宠动作","icon":"🎀","items":[
