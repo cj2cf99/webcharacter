@@ -172,6 +172,13 @@ function renderNotices(data){
         action.type='button';
         action.onclick=()=>void api.openNotice?.(item.id).catch(error=>{status.textContent=error?.message||'无法打开任务管理，请重试。';});
         nodes.push(action);
+      }else if(item.kind==='x-download'){
+        nodes.push(videoNotice(item));
+      }else if(item.kind==='x-download-alert'){
+        const action=element('button','查看队列','notice-action');
+        action.type='button';
+        action.onclick=()=>void api.openNotice?.(item.id).catch(error=>{status.textContent=error?.message||'无法打开 X 视频管理，请重试。';});
+        nodes.push(action);
       }else if(item.kind==='reminder-edit'){
         const action=element('button','查看并处理','notice-action');
         action.type='button';
@@ -179,11 +186,56 @@ function renderNotices(data){
         nodes.push(action);
       }
       noticeDetail.replaceChildren(...nodes);
+      if(item.kind==='x-download')noticeDetail.scrollIntoView({block:'nearest'});
       if(!item.seen)try{await api.markNoticeRead(item.id);}catch{status.textContent='已读状态保存失败，请重试。';}
     };
     return button;
   }));
   status.textContent=data.events.length?'':data.filter==='unread'?'没有未读提醒。':'没有符合条件的提醒。';
+}
+// 下载完成提醒：首帧缩略图 + 播放键，放在详情区（列表行本身已是按钮）。
+function videoNotice(item){
+  const box=element('div','','xv-notice');
+  const note=element('p','正在读取视频…','fy-meta');note.setAttribute('role','status');
+  box.append(note);
+  async function play(index){
+    try{note.textContent=(await api.xVideoPlay(item.id,index)).message;}
+    catch{note.textContent='播放失败，请重试。';}
+  }
+  async function fill(){
+    note.textContent='正在读取视频…';box.replaceChildren(note);
+    let card;
+    try{card=await api.xVideo(item.id);}
+    catch{
+      note.textContent='视频信息读取失败。';
+      const retry=element('button','↻ 重试','notice-action');retry.type='button';retry.onclick=()=>void fill();
+      box.append(retry);return;
+    }
+    if(card.state!=='ready'){note.textContent=card.message;note.dataset.tone='warn';return;}
+    note.textContent='';
+    const isArticle=card.kind==='article';
+    const first=Math.max(0,card.files.findIndex(file=>!file.missing));
+    const player=element('button','','xv-player');player.type='button';
+    player.title=(isArticle?'打开文章 ':'播放 ')+card.name;player.setAttribute('aria-label',player.title);
+    if(card.thumb){const image=element('img','');image.src=card.thumb;image.alt=card.name+' 缩略图';player.append(image);}
+    else player.append(element('span',isArticle?'📄':'🎞','xv-placeholder'));
+    player.append(element('span',isArticle?'📖':'▶','xv-play'));
+    if(!isArticle&&card.files.length>1)player.append(element('span',card.files.length+' 段','xv-count'));
+    player.onclick=()=>void play(first);
+    box.replaceChildren(player);
+    if(!isArticle&&card.files.length>1){
+      const parts=element('div','','xv-segments');
+      card.files.forEach((file,index)=>{
+        const part=element('button','第 '+(index+1)+'/'+card.files.length+' 段'+(file.missing?'（缺失）':''),'');
+        part.type='button';part.onclick=()=>void play(index);
+        parts.append(part);
+      });
+      box.append(parts);
+    }
+    box.append(note);
+  }
+  void fill();
+  return box;
 }
 function remaining(){
   if(!nextAt)return '';

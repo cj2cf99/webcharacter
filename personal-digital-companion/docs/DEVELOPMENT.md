@@ -1,3 +1,16 @@
+## X 视频与长文归档（2026-11-28 JST · 开发自审中，未部署）
+
+按[需求](X_VIDEO_DOWNLOAD_REQUIREMENTS.md)与[设计](X_VIDEO_DOWNLOAD_DESIGN.md)开发。核心 `desktop/x-video.mjs`（纯 Node，界面和将来的云端任务共用 `enqueue()`）与 `desktop/x-article.mjs`（Electron 隐藏窗 + 独立临时会话，复用加密 Cookie），宿主与双窗 `desktop/x-video*`，提醒卡片在本地复盘，Chrome 插件在 `G:/selftool/extratools/x-cookie-helper/`。注意点：
+
+- yt-dlp 单文件版强制结束后会遗留解包目录，子进程的 `TEMP`/`TMP` 指到任务目录内一并清理。
+- 同一任务的旧进程未退出前不重启；引擎更新要等全部在途下载/抓取任务结束；视频最多 3 路并行，文章最多 1 路（共用 3 槽）。
+- 续传时 yt-dlp 会为已完成的段重新打印完成行，收尾以这些行为准。
+- 文章支持纯图文不依赖 `yt-dlp`，长文归档默认需已导入 X 登录 Cookie；内嵌视频复用底层 `yt-dlp` 直落文章目录（不触发当日引擎检查），不生成重复视频条目，整体受 3 分钟超时覆盖；更新重抓旧目录完整移入 `archive/` 不删除。
+- 根目录维护便携 `catalog.json`（损坏保留原文件并提示，仅安全读取后写入），搬迁目录改 `.local-tools.json` `xDownloadRoot` 后需重启绯月生效（换根过滤旧根条目、缺视频缩略图懒生成）；文章目录支持手工改名及移入/移出 `archive/` 自动同步（视频移出 `archive/` 不自动恢复）。
+- 部署时正式安装目录的 `.local-tools.json` 需要补 `ytDlp`。
+
+验证与自审见 `docs/reviews/` 下 `X_VIDEO_*` 报告。
+
 ## 陪我学习：列表版面、翻页与续练归属（2026-11-27 JST · 已部署并登记，待用户确认）
 
 按正式版反馈：语言页按场景一行一个，所有列表每页 10 条并常驻页码，续练只在题库页。规则见[学习设计](STUDY_DESIGN.md#列表版面翻页与续练归属2026-11-27-jst)，验证见[复核报告](reviews/STUDY_LIST_LAYOUT_REVIEW_2026-11-27.md)。仅桌面改动，不涉及网关。

@@ -179,7 +179,8 @@ ipcMain.emit('desktop:sound-ready',event);assert.equal(win.sent.at(-1)[1].enable
 ipcMain.emit('desktop:sound-change',event,{enabled:false,volume:23});assert.deepEqual(JSON.parse(readFileSync(join(profile,'sound-settings.json'),'utf8')),normalizeSound({enabled:false,volume:23}));
 ipcMain.emit('desktop:sound-change',event,{enabled:true,volume:999});ipcMain.emit('desktop:sound-ready',event);assert.equal(win.sent.at(-1)[1].volume,23);
 const labels=items=>items.filter(item=>item.type!=='separator').map(item=>item.label);
-assert.deepEqual(labels(tray.menu),['问绯月','今日任务','三地天气','本地复盘','常用链接','阅读与学习','任务','动画生成器','桌宠动作','设置与维护']);
+assert.deepEqual(labels(tray.menu),['问绯月','今日任务','三地天气','本地复盘','X视频下载与管理','常用链接','阅读与学习','任务','动画生成器','桌宠动作','设置与维护']);
+assert.deepEqual(labels(tray.menu.find(item=>item.label==='X视频下载与管理').submenu),['登记下载','X视频管理']);
 assert.deepEqual(labels(tray.menu.find(item=>item.label==='常用链接').submenu),['应用链接设置','（暂无已登记链接）']);
 assert.deepEqual(labels(tray.menu.find(item=>item.label==='动画生成器').submenu),['切图校准','Gemini 生图','本地生图','GIF','语音制作','视频生成','抽卡']);
 win.webContents.emit('context-menu');assert.equal(tray.openedMenu,tray.menu,'角色右键与托盘使用同一菜单');

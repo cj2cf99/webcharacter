@@ -1,0 +1,43 @@
+<!doctype html><html lang="zh-CN" class="fy-panel xv-manage"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:"><title>绯月 · X视频管理</title><link rel="stylesheet" href="feiyue-surface.css"><link rel="stylesheet" href="x-video.css"></head>
+<body>
+<header class="fy-titlebar"><div class="fy-caption"><h1>X视频管理</h1></div>
+  <span class="title-tools">
+    <button id="cookieButton" type="button" class="fy-icon icon-badge" aria-label="X 登录 Cookie">🍪<i class="state-dot" id="cookieDot" data-tone="warn"></i></button>
+    <button id="updateButton" type="button" class="fy-icon icon-badge" title="检查 yt-dlp 更新" aria-label="检查 yt-dlp 更新">⬆<i class="state-dot" id="updateDot" hidden></i></button>
+  </span></header>
+<p id="banner" class="banner" role="alert" hidden></p>
+<p id="updateBar" class="update-bar" role="status" hidden><span id="updateState"></span><button type="button" id="updateStop" hidden>取消更新</button></p>
+<nav class="fy-bar">
+  <div class="fy-seg" role="tablist" aria-label="视图">
+    <button id="tabLibrary" role="tab" type="button" data-tab="library" data-icon="🎬" aria-selected="true" title="已下载"><span>已下载</span> <em id="libraryCount">0</em></button>
+    <button id="tabQueue" role="tab" type="button" data-tab="queue" data-icon="⚡" aria-selected="false" title="队列与进度"><span>队列与进度</span> <em id="queueCount">0</em><i class="fy-dot" id="queueDot" hidden></i></button>
+  </div>
+  <span class="grow"></span>
+  <label class="search-wrap" id="searchWrap"><input id="search" type="search" placeholder="搜名称…" aria-label="按名称搜索已下载视频或文章" maxlength="100"></label>
+</nav>
+<main class="fy-scroll" id="main">
+  <p id="toast" class="fy-toast" role="status" aria-live="polite"></p>
+  <section id="libraryView" role="tabpanel" aria-labelledby="tabLibrary">
+    <ul id="library" class="lib-grid"></ul>
+    <nav class="fy-pager" id="pager" aria-label="分页" hidden><button id="newer" type="button" aria-label="较新一页" title="较新">‹</button><span id="page"></span><button id="older" type="button" aria-label="较早一页" title="较早">›</button></nav>
+  </section>
+  <section id="queueView" role="tabpanel" aria-labelledby="tabQueue" hidden>
+    <h2 class="fy-section">3 路并行通道 <span class="fy-chip" id="laneCount" data-tone="info">0/3</span></h2>
+    <div id="lanes" class="lanes"></div>
+    <div class="pending-head"><h2 class="fy-section">待处理 <span class="fy-chip" id="pendingCount">0</span></h2><button type="button" id="resumeAll" hidden>▶ 全部继续</button></div>
+    <ul id="pending" class="fy-list"></ul>
+  </section>
+</main>
+<dialog id="updateDialog" aria-labelledby="updateTitle">
+  <h2 id="updateTitle">⬆ 发现 yt-dlp 新版本</h2><p id="updateText" class="dlg-desc"></p><p id="updateLock" class="dlg-warn" hidden></p>
+  <menu><button type="button" data-choice="">取消</button><button type="button" data-choice="skip" id="updateSkip">暂不更新直接下载</button><button type="button" data-choice="apply" class="primary">✓ 同意更新</button></menu>
+</dialog>
+<dialog id="cookieDialog" aria-labelledby="cookieTitle">
+  <h2 id="cookieTitle">🍪 X 登录 Cookie</h2><p id="cookieStatus" class="dlg-desc"></p>
+  <label class="dlg-field"><span>粘贴插件复制的内容（遮挡显示，只在本机加密保存）</span>
+    <textarea id="cookieText" rows="4" autocomplete="off" spellcheck="false" placeholder="# Netscape HTTP Cookie File"></textarea></label>
+  <div class="cookie-tools"><button type="button" id="cookieFile">📂 选择 cookies.txt</button><button type="button" id="cookieClear" class="danger-outline">清空已存</button></div>
+  <p id="cookieMessage" class="dlg-msg" role="status" hidden></p>
+  <menu><button type="button" id="cookieClose">关闭</button><button type="button" id="cookieSave" class="primary">✓ 校验并加密保存</button></menu>
+</dialog>
+<script type="module" src="x-video-ui.mjs"></script></body></html>

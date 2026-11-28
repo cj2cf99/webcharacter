@@ -51,7 +51,7 @@ export function questionBounds(pet,area,preferredHeight=260){
   return {bounds:{x,y,width,height},tail,tailX:Math.max(20,Math.min(width-60,pet.x+pet.width/2-x-20))};
 }
 
-export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,readDeepSeekStep,checks,reminderRequest,requestRestart,localModel,interactionWork,transcription,openTranscript,threadOptions,log,emotion=()=>null,topics=()=>null,auditPending=()=>[],readQuestionCitation,resumeAudit,openNews,openStudy,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,deepseekReply=writeDeepSeekReply,visible=true,knowledge,voice=createBubbleVoice({root,profile})}={}){
+export function attachScreenQuestion(electron,{win,profile,bundle,root,client,registration,serverTask,history,memory,vision,upgradeVision,readTasks,readTraffic,readDeepSeekStep,checks,reminderRequest,requestRestart,localModel,interactionWork,transcription,openTranscript,threadOptions,log,emotion=()=>null,topics=()=>null,auditPending=()=>[],readQuestionCitation,resumeAudit,openNews,openStudy,xVideo,onForeground=()=>{},onRegistration=()=>{},search=searchPublicWeb,deepseekReply=writeDeepSeekReply,visible=true,knowledge,voice=createBubbleVoice({root,profile})}={}){
   const sessions=new WeakMap(),replyHistory=new WeakMap();
   const {ipcMain,screen,desktopCapturer}=electron;
   let panel=null,servicePromise=null,controller=null,busy=false,disposed=false,generation=0,panelHeight=260,state={state:'idle',text:'想问我什么？'};
@@ -117,7 +117,7 @@ export function attachScreenQuestion(electron,{win,profile,bundle,root,client,re
   });
   details=attachConversationDetails(electron,{root,profile,bundle,visible,history:records,memory,readTasks,readTraffic,
     readAiStep:id=>id.startsWith('deepseek-')?readDeepSeekStep?.(id):localModel?.readAiStep?.(id),checks,edits,auditPending,readQuestionCitation,
-    openTranscript:openTranscript??threadOptions?.openTranscript,
+    openTranscript:openTranscript??threadOptions?.openTranscript,xVideo,
     threads:threads&&{store:threads,questions:syncQuestionLines,open:id=>openThread(id),newLine:()=>openThread(null,{fresh:true}),
       note:(id,input)=>submitThread(id,input,false),retry:id=>threadReplies.run(id),openTranscript:openTranscript??threadOptions?.openTranscript},
     resumeAudit:async id=>{

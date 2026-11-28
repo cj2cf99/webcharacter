@@ -13,13 +13,14 @@ import {createReminderChecks} from '../desktop/reminder-checks.mjs';
 import {attachSettings} from '../desktop/settings-host.mjs';
 import {attachPollSettings} from '../desktop/poll-settings-host.mjs';
 import {attachQuickLinks} from '../desktop/quick-links-host.mjs';
+import {attachXVideo} from '../desktop/x-video-host.mjs';
 import {pages} from '../desktop/source-updates.mjs';
 
 const root=resolve(import.meta.dirname,'..'),profile=mkdtempSync(join(tmpdir(),'feiyue-titlebar-'));
 const out=join(root,'output/titlebar-qa');
 const fixture=join(profile,'desktop');
 mkdirSync(fixture);
-for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','task-inbox-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs','quick-links-preload.cjs']){
+for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','task-inbox-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs','quick-links-preload.cjs','x-video-preload.cjs']){
   copyFileSync(join(root,'desktop',file),join(fixture,file));
 }
 const common={root:profile,profile,bundle:join(root,'output/desktop-bundle'),visible:false};
@@ -124,7 +125,10 @@ async function test(){
   const owner=new TestWindow({width:250,height:360});
   const settings=attachSettings(runtime,{...common,win:owner});
   const quickLinks=attachQuickLinks(runtime,{...common});
-  const hosts=[review,registration,weather,history,settings,polls,inbox,quickLinks];
+  const xVideo=attachXVideo({...runtime,clipboard:{readText:()=>''}},{...common,downloadRoot:join(profile,'Xdownload'),notify:()=>{}});
+  const hosts=[review,registration,weather,history,settings,polls,inbox,quickLinks,
+    {open:xVideo.openQuick,get panel(){return xVideo.quickPanel;},close(){}},
+    {open:()=>xVideo.openManage(),get panel(){return xVideo.managePanel;},close:()=>xVideo.close()}];
   try{
     for(const host of hosts){
       await host.open();

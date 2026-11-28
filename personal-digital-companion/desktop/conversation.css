@@ -33,11 +33,23 @@ button.source{display:block;text-align:left;overflow-wrap:anywhere}
 @keyframes ring{to{box-shadow:0 0 0 8px transparent}}
 #noticeControls{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
 #readAll{min-height:25px;padding:1px 10px;font-size:12px}
-.notice{display:flex;align-items:center;gap:7px;width:100%;text-align:left;cursor:pointer}
+.notice{display:flex;align-items:center;gap:7px;width:100%;min-width:0;text-align:left;cursor:pointer}
 .notice .fy-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .notice[data-seen] .fy-title{font-weight:400;color:var(--fy-muted)}
 #noticeDetail{white-space:pre-wrap}
 .notice-action{display:block;margin-top:6px;min-height:25px;padding:1px 10px;font-size:12px}
+/* X 视频下载完成：缩略图 + 播放键 */
+.xv-notice{display:grid;gap:6px;margin-top:6px;white-space:normal;animation:fy-rise .25s ease-out}
+.xv-notice p{margin:0}.xv-notice p:empty{display:none}.xv-notice p[data-tone=warn]{color:var(--fy-warn)}
+.fy-panel button.xv-player{position:relative;display:block;width:min(100%,320px);aspect-ratio:16/9;padding:0;overflow:hidden;border-radius:9px}
+.xv-player img{display:block;width:100%;height:100%;object-fit:cover;transition:transform .25s}
+.xv-player:hover img{transform:scale(1.04)}
+.xv-placeholder{display:grid;place-items:center;height:100%;font-size:28px}
+.xv-play{position:absolute;inset:0;margin:auto;display:grid;place-items:center;width:46px;height:46px;border-radius:50%;background:#22141db8;color:#fffaf6;border:1.5px solid #fff8;font-size:18px;transition:transform .18s,background-color .18s}
+.xv-player:hover .xv-play{transform:scale(1.1);background:var(--fy-accent);color:var(--fy-on-accent)}
+.xv-count{position:absolute;left:6px;top:6px;padding:1px 7px;border-radius:999px;background:var(--fy-accent);color:var(--fy-on-accent);font-size:11px;font-weight:700}
+.xv-segments{display:flex;gap:5px;flex-wrap:wrap}
+.fy-panel .xv-segments button{min-height:23px;padding:0 9px;border-radius:999px;font-size:11.5px}
 .image-preview{display:block;padding:3px;max-width:100%;margin:.4rem 0}.image-preview img{display:block;width:180px;max-width:100%;min-height:40px;height:auto;border-radius:4px}
 #taskReport{box-sizing:border-box;width:min(58rem,calc(100% - 1.5rem));max-height:calc(100% - 2rem);overflow:auto;color:var(--fy-ink);background:var(--fy-paper);border:1px solid var(--fy-line);border-radius:12px;padding:0 1rem 1rem;animation:fy-rise .25s ease-out}
 #taskReport::backdrop{background:#20192566}

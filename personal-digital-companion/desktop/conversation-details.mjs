@@ -5,7 +5,7 @@ import {tokyoDay} from './conversation-history.mjs';
 import {createPanelWindow,showPanel} from './panel-window.mjs';
 import {readTaskReviews} from './personality-diary.mjs';
 
-export function attachConversationDetails(electron,{root,profile,bundle,history,memory,readTasks,readTraffic,readAiStep,checks,edits,auditPending=()=>[],readQuestionCitation,resumeAudit,visible,onReview,threads,openTranscript}) {
+export function attachConversationDetails(electron,{root,profile,bundle,history,memory,readTasks,readTraffic,readAiStep,checks,edits,auditPending=()=>[],readQuestionCitation,resumeAudit,visible,onReview,threads,openTranscript,xVideo}) {
   const {ipcMain,shell}=electron;
   let initialView='chat';
   let panel=null, selection=null, selectedThread=null, shownSources=new Set(), loading=null;
@@ -150,12 +150,24 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
   ipcMain.handle('conversation:notice-open',(event,id)=>{
     if(!trusted(event)||!Number.isSafeInteger(id)||!shownNotices.has(id))throw Error('请从当前提醒列表打开');
     const notice=shownNotices.get(id);
+    if(notice.kind==='x-download-alert'){
+      if(!xVideo)throw Error('X 视频管理暂不可用');
+      return xVideo.openManage('queue');
+    }
     if(notice.kind==='transcript'&&notice.target_id){
       const openTarget=openTranscript??threads?.openTranscript;
       if(!openTarget)throw Error('任务管理入口暂不可用');
       return openTarget(notice.target_id);
     }
   });
+  // 下载完成提醒的缩略图和播放：只认当前列表里显示过的提醒。
+  function xVideoNotice(event,id){
+    const notice=shownNotices.get(id);
+    if(!trusted(event)||notice?.kind!=='x-download'||!xVideo)throw Error('请从当前提醒列表打开');
+    return notice.target_id;
+  }
+  ipcMain.handle('conversation:x-video',(event,id)=>xVideo?.card(xVideoNotice(event,id)));
+  ipcMain.handle('conversation:x-video-play',(event,id,index)=>xVideo?.play(xVideoNotice(event,id),index));
   function reviewed(event,token){if(trusted(event)&&typeof token==='string')onReview?.(token);}
   ipcMain.handle('conversation:reminder-decision',async(event,input)=>{
     if(!trusted(event)||!edits)throw Error('请从待确认窗口操作。');
@@ -195,6 +207,8 @@ export function attachConversationDetails(electron,{root,profile,bundle,history,
     ipcMain.removeHandler('conversation:read-notices');
     ipcMain.removeHandler('conversation:notice-open');
     ipcMain.removeHandler('conversation:ai-step');
+    ipcMain.removeHandler('conversation:x-video');
+    ipcMain.removeHandler('conversation:x-video-play');
     for(const name of ['report','report-image','report-fullscreen','resume-audit','question-citation'])ipcMain.removeHandler('conversation:'+name);
     for(const name of Object.keys(threadHandlers))ipcMain.removeHandler('conversation:'+name);
     ipcMain.removeHandler('conversation:read');ipcMain.removeHandler('conversation:source');ipcMain.removeHandler('conversation:reminder-decision');ipcMain.removeHandler('conversation:image');

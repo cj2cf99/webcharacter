@@ -1,0 +1,33 @@
+<!doctype html><html lang="zh-CN" class="fy-panel xv-quick"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:"><title>绯月 · X视频登记下载</title><link rel="stylesheet" href="feiyue-surface.css"><link rel="stylesheet" href="x-video.css"></head>
+<body>
+<header class="fy-titlebar"><div class="fy-caption"><h1>登记下载</h1></div>
+  <span class="quick-slots" id="slots" title="本地并行下载通道"><span class="slot-dots" aria-hidden="true"><i></i><i></i><i></i></span><b id="slotNum">0/3</b></span></header>
+<main class="fy-scroll">
+  <p id="banner" class="banner" role="alert" hidden></p>
+  <form id="form" class="quick-body" novalidate>
+    <div class="quick-mode">
+      <div class="fy-seg" role="radiogroup" aria-label="下载类型">
+        <button type="button" data-kind="video" data-icon="🎬" aria-pressed="true"><span>视频</span></button>
+        <button type="button" data-kind="article" data-icon="📄" aria-pressed="false"><span>文章</span></button>
+      </div>
+      <label class="replies-field" id="repliesWrap" hidden><span>回复数</span>
+        <input id="replies" type="number" min="0" max="10" step="1" value="2" aria-label="抓取回复条数"></label>
+    </div>
+    <label class="q-field"><span class="q-label" id="urlLabel">X 视频链接</span>
+      <span class="url-wrap"><input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://x.com/…/status/…">
+        <button id="paste" type="button" class="fy-icon clip-btn" title="填入剪贴板里的帖子链接" aria-label="填入剪贴板里的帖子链接">📋</button></span></label>
+    <label class="q-field"><span class="q-label">名称 <small class="fy-meta" id="nameHint">选填，留空按东京时间命名</small></span>
+      <input id="name" type="text" autocomplete="off" maxlength="100" placeholder="如：猫咪踩奶日常"></label>
+    <div class="quick-foot"><span id="where" class="fy-meta"></span><button id="download" type="submit" class="primary">⬇ 开始下载</button></div>
+    <p id="toast" class="fy-toast" role="status" aria-live="polite"></p>
+    <div id="jump" class="quick-jump" hidden>
+      <button type="button" id="overwriteBtn" hidden>↻ 更新重抓</button>
+      <button type="button" id="jumpQueue">查看进度 →</button>
+    </div>
+  </form>
+</main>
+<dialog id="updateDialog" aria-labelledby="updateTitle">
+  <h2 id="updateTitle">⬆ 发现 yt-dlp 新版本</h2><p id="updateText" class="dlg-desc"></p><p id="updateLock" class="dlg-warn" hidden></p>
+  <menu><button type="button" data-choice="">取消</button><button type="button" data-choice="skip">暂不更新直接下载</button><button type="button" data-choice="apply" class="primary">✓ 同意更新并下载</button></menu>
+</dialog>
+<script type="module" src="x-video-quick-ui.mjs"></script></body></html>

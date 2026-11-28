@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('conversations',{
   onChecks:callback=>ipcRenderer.on('conversation:checks-changed',()=>callback()),
   markNoticeRead:id=>ipcRenderer.invoke('conversation:read-notices',id),
   openNotice:id=>ipcRenderer.invoke('conversation:notice-open',id),
+  xVideo:id=>ipcRenderer.invoke('conversation:x-video',id),
+  xVideoPlay:(id,index)=>ipcRenderer.invoke('conversation:x-video-play',id,index),
   openSource:url=>ipcRenderer.invoke('conversation:source',url),
   image:(day,id,open=false)=>ipcRenderer.invoke('conversation:image',day,id,open),
   report:(day,id)=>ipcRenderer.invoke('conversation:report',day,id),

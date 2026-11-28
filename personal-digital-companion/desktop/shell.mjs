@@ -43,6 +43,8 @@ import {attachWeather} from './weather-host.mjs';
 import {createReminderChecks,checkDueItems} from './reminder-checks.mjs';
 import {attachPollSettings} from './poll-settings-host.mjs';
 import {attachQuickLinks} from './quick-links-host.mjs';
+import {attachXVideo} from './x-video-host.mjs';
+import {readTools as readXVideoTools} from './x-video.mjs';
 import {attachNewsPanel} from './news-panel-host.mjs';
 import {attachStudy} from './study-host.mjs';
 import {createNewsEditor} from './news-editor.mjs';
@@ -421,6 +423,12 @@ export async function startDesktop(electron,options={}){
   const quickLinks=attachQuickLinks(electron,{root,bundle,profile,onChange:()=>{if(!cleaned&&tray)menu();},onOpenError:error=>{
     if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'常用链接',message:'常用链接或设置页打不开，请重试。',detail:error?.message,buttons:['确定']}).catch(()=>{});
   }});
+  // X 视频与文章下载写入既有提醒记录；隔离资料目录的实例不碰 F 盘。
+  const xVideo=attachXVideo(electron,{root,bundle,profile,notify:notice=>checks.upsertNotice(notice),
+    downloadRoot:options.xVideoRoot??(options.profile?resolve(options.profile,'Xdownload'):(readXVideoTools(root).downloadRoot||undefined))});
+  const openXVideo=work=>{void work().catch(error=>{
+    if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'X视频下载与管理',message:'X 视频窗口打不开，请重试。',detail:error?.message,buttons:['确定']}).catch(()=>{});
+  });};
   updatePollClock=()=>{
     checks.setExecutionBusy(Boolean(modelExecuting||backgroundJob||transcription?.busy||
       privateChat?.active||localPool?.active||tasks.executingCount?.()||screenQuestion.executing));
@@ -520,7 +528,7 @@ export async function startDesktop(electron,options={}){
       const n=nags?.pendingQuestions().find(item=>item.id===id);
       return n&&diary.questionCitation(n,true);
     },
-    openNews:newsPanel.open,openStudy:study.open,resumeAudit:resumeQuestion,onRegistration:()=>contextualAction('chat-registration'),serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
+    openNews:newsPanel.open,openStudy:study.open,xVideo,resumeAudit:resumeQuestion,onRegistration:()=>contextualAction('chat-registration'),serverTask,registration:tasks.registration,reminderRequest:tasks.weatherRequest,
     memory,vision:memory&&(options.vision??createVision()),readTasks:memory?.readTasks??tasks.executor?.review.read,
     readTraffic:tasks.traffic?.readPage,readDeepSeekStep:tasks.traffic?.readDeepSeekStep,client:options.screenQuestionClient,requestRestart,localModel,interactionWork,upgradeVision,log:tasks.traffic?.write});
   const weather=attachWeather(electron,{profile,bundle,root,service:options.weather,request:tasks.weatherRequest,background:!options.benchmark,recordCheck:checks.record,checks});
@@ -1162,6 +1170,8 @@ export async function startDesktop(electron,options={}){
       voiceStudio:{click:()=>openVoiceStudio()},
       videoStudio:{click:()=>openVideoStudio()},
       cardDraw:{click:()=>taskNotice(cardDraw.open())},
+      xVideoAdd:{click:()=>openXVideo(xVideo.openQuick)},
+      xVideoManage:{click:()=>openXVideo(()=>xVideo.openManage())},
       notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
       pendingCheck:checks.pending&&{click:()=>taskNotice(screenQuestion.openReview('checks'))},
       pollSettings:{click:()=>taskNotice(pollSettings.open())},
@@ -1264,6 +1274,7 @@ export async function startDesktop(electron,options={}){
       ['conversation.html',screenQuestion.details],['reminder-review.html',reminderReview?.panel],['poll-settings.html',pollSettings.panel],['quick-links.html',quickLinks.panel],
       ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],['study.html',study.panel],['knowledge.html',knowledge.panel],['card-draw.html',cardDraw.panel],
       ['screen-question.html',screenQuestion.panel],['registration-review.html',screenQuestion.inquiryPanel],['sound-settings.html',settingsWindow],
+      ['x-video-quick.html',xVideo.quickPanel],['x-video.html',xVideo.managePanel],
       ...(messages.panels??[]).map(panel=>['message-box.html',panel])]){
       if(!panel||panel.isDestroyed())continue;
       const changes=files.filter(name=>name===page||pages[page].includes(name)||(page==='index.html'&&name==='baseline.png'));
@@ -1302,7 +1313,7 @@ export async function startDesktop(electron,options={}){
     reminderStartup.abort();
     interruptMemory(true);electron.powerMonitor?.removeListener?.('suspend',suspendMemory);
     electron.powerMonitor?.removeListener?.('lock-screen',lockScene);
-    curiosity?.close();scenePanel?.close();pollSettings.close();quickLinks.close();newsPanel.close();study.close();checks.close();
+    curiosity?.close();scenePanel?.close();pollSettings.close();quickLinks.close();xVideo.close();newsPanel.close();study.close();checks.close();
     stopLayout();
     clearTimeout(refreshTimer);clearTimeout(memoryResultTimer);stopSources?.();
     ipcMain.removeListener('desktop:attachment-done',onAttachmentDone);
@@ -1471,5 +1482,6 @@ export async function startDesktop(electron,options={}){
   if(!options.benchmark)checks.start();
   taskNotice(tasks.startup(remindersReady));
   return {win,show,hide,moveTo,thoughtOverlay,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,transcription,study,knowledge,cardDraw,
+    xVideo,
     get localAPIAddress(){return localREST?.address??null;},getStats:()=>({pointerMessages,visible:win.isVisible(),ready:previousReady})};
 }

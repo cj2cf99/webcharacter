@@ -29,6 +29,8 @@ export const pages = {
   'screen-question.html':['feiyue-surface.css','screen-question.css','question-attachment.mjs','screen-question-ui.mjs',
     'bubble-voice-ui.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs','bubble-voice-segments.mjs'],
   'weather.html':['feiyue-surface.css','weather.css','weather-ui.mjs'],
+  'x-video-quick.html':['feiyue-surface.css','x-video.css','x-video-shared.mjs','x-video-quick-ui.mjs'],
+  'x-video.html':['feiyue-surface.css','x-video.css','x-video-shared.mjs','x-video-ui.mjs'],
 };
 export const desktopFiles = [...new Set(Object.entries(pages).flatMap(([page,files])=>[page,...files]))]
   .filter(name=>!['companion-player.mjs','companion-state.mjs'].includes(name));

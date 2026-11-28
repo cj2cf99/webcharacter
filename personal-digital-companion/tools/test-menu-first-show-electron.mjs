@@ -18,6 +18,8 @@ const cases={
   question:['','问绯月','screen-question.html'],
   message:['设置与维护','云端连接','message-box.html'],
   card:['动画生成器','抽卡','card-draw.html'],
+  xadd:['X视频下载与管理','登记下载','x-video-quick.html'],
+  xmanage:['X视频下载与管理','X视频管理','x-video.html'],
   menu:['','','menu.html'],
 };
 const [group,label,page]=cases[target];
@@ -37,10 +39,12 @@ class TestTray{
 const preload={
   poll:'poll-settings-preload.cjs',pending:'conversation-preload.cjs',inbox:'task-inbox-preload.cjs',settings:'preload.cjs',
   question:'screen-question-preload.cjs',message:'message-box-preload.cjs',menu:'menu-preload.cjs',card:'card-draw-preload.cjs',
+  xadd:'x-video-preload.cjs',xmanage:'x-video-preload.cjs',
 };
 let created=0,loads=0,shows=0,window;
 function TestWindow(options){
   const match=target==='settings'?options.title==='绯月设置 · 本地 PC':options.webPreferences?.preload?.endsWith(preload[target]);
+  // 两个 X 视频窗口共用预加载；本例每个进程只点一个菜单项，计数仍对应该入口。
   const createdWindow=new electron.BrowserWindow(match&&mode==='drop-first'?{...options,show:false}:options);
   if(match){
     window=createdWindow;created++;
@@ -102,6 +106,11 @@ async function run(){
       `document.querySelector('#checks').getAttribute('aria-pressed')==='true' &&
         /任务轮询 · 待执行.*JST/.test(document.querySelector('#checkState').textContent)`),'提醒检查未显示当前待执行任务');
   }
+  // 在真实桌宠壳里确认页面经 IPC 取到了数据。
+  if(target==='xadd')await until(()=>window.webContents.executeJavaScript(
+    "document.getElementById('where').textContent.includes('Xdownload')&&document.getElementById('slotNum').textContent==='0/3'"),'登记小窗未取到状态');
+  if(target==='xmanage')await until(()=>window.webContents.executeJavaScript(
+    "Boolean(document.querySelector('#library .fy-empty'))&&document.getElementById('libraryCount').textContent==='0'"),'管理窗口未取到列表');
   console.log('PASS',target,source,mode,{created,loads,shows});
 }
 run().then(()=>electron.app.exit(0),e=>{console.error(target,source,mode,{created,loads,shows},e);electron.app.exit(1);});

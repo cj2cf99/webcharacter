@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel xv-page">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>绯月 · X视频下载与管理（简化版原型）</title>
+<link rel="stylesheet" href="../../desktop/feiyue-surface.css">
+<link rel="stylesheet" href="x-video.css">
+</head>
+<body>
+<!-- 仅原型演示用顶栏：正式版中「登记下载」与「X视频管理」为两个独立菜单面板 -->
+<div class="proto-switcher" role="navigation" aria-label="原型独立窗口切换">
+  <span class="proto-tag">原型视图（正式版分窗）</span>
+  <div class="proto-tabs">
+    <button type="button" data-win="quick" aria-pressed="true">➕ 登记下载小窗</button>
+    <button type="button" data-win="manage" aria-pressed="false">🎬 视频管理窗口</button>
+    <button type="button" id="protoNotices">🔔 提醒预览 <em id="noticeBadge">0</em></button>
+    <button type="button" id="protoExt">🧩 Chrome 插件</button>
+  </div>
+</div>
+
+<!-- 窗口 A：轻量「登记下载」小窗（极简，不加载管理列表和缩略图） -->
+<section id="quickWin" class="quick-shell">
+  <div class="win-card quick-win" role="region" aria-label="X视频登记下载">
+    <header class="fy-titlebar">
+      <div class="fy-caption"><h1>X视频 · 登记下载</h1></div>
+      <span class="quick-slots" id="quickSlots" title="本地并行下载槽位">
+        <span class="slot-dots"><i></i><i></i><i></i></span>
+        <b id="quickRunNum">0/3</b>
+      </span>
+    </header>
+
+    <form id="quickForm" class="quick-body" novalidate>
+      <label class="q-field">
+        <span class="q-label">X 视频链接</span>
+        <div class="url-wrap">
+          <input id="urlInput" type="url" inputmode="url" autocomplete="off"
+            placeholder="粘贴 https://x.com/.../status/..." aria-label="X 视频地址">
+          <button id="clipBtn" type="button" class="fy-icon clip-btn" title="读取剪贴板示例链接" aria-label="填入剪贴板链接">📋</button>
+        </div>
+      </label>
+
+      <label class="q-field">
+        <span class="q-label">名称 <small class="fy-meta">（选填，留空用 JST 精确到秒）</small></span>
+        <input id="nameInput" type="text" autocomplete="off"
+          placeholder="如：猫咪踩奶日常，留空自动 2026-11-28_204500" aria-label="视频名称">
+      </label>
+
+      <p id="quickBanner" class="banner" role="alert" hidden>
+        <span id="quickBannerText"></span>
+        <button id="quickBannerDismiss" type="button">知道了</button>
+      </p>
+
+      <div class="quick-foot">
+        <span class="fy-meta" id="quickSaveHint">📁 F:\Xdownload</span>
+        <button id="downloadBtn" type="submit" class="primary">⬇ 开始下载</button>
+      </div>
+
+      <p id="quickToast" class="fy-toast" aria-live="polite"></p>
+      <div id="quickJumpWrap" class="quick-jump" hidden>
+        <button type="button" id="jumpToQueue">查看 3 路并行进度 →</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<!-- 窗口 B：「X视频管理」窗口（极简标题栏，只管已下载内容与 3 路队列进度） -->
+<section id="manageWin" class="manage-win" hidden>
+  <header class="fy-titlebar">
+    <div class="fy-caption"><h1>X视频管理</h1></div>
+    <div class="title-tools">
+      <button id="cookieChip" type="button" class="fy-icon icon-badge" title="导入 / 管理 X 登录 Cookie" aria-label="Cookie 状态">
+        🍪<i class="state-dot" id="cookieDot"></i>
+      </button>
+      <button id="updateChip" type="button" class="fy-icon icon-badge" title="检查 yt-dlp 更新" aria-label="检查更新">
+        ↻<i class="state-dot" id="updateDot" hidden></i>
+      </button>
+    </div>
+  </header>
+
+  <p id="banner" class="banner" role="alert" hidden>
+    <span id="bannerText"></span>
+    <button id="bannerDismiss" type="button">知道了</button>
+  </p>
+
+  <nav class="fy-bar">
+    <div class="fy-seg" role="tablist">
+      <button role="tab" type="button" data-tab="library" data-icon="🎬" aria-selected="true">
+        <span>已下载</span> <em id="libCount">0</em>
+      </button>
+      <button role="tab" type="button" data-tab="queue" data-icon="⚡" aria-selected="false">
+        <span>队列与进度</span> <em id="queueCount">0</em>
+        <span class="fy-dot" id="queueDot" hidden></span>
+      </button>
+    </div>
+    <span class="grow"></span>
+    <div class="search-wrap" id="searchWrap">
+      <input id="searchInput" type="search" placeholder="搜名称…" aria-label="按名称搜索已下载视频">
+      <button id="searchClear" type="button" class="search-clear" aria-label="清除搜索" hidden>✕</button>
+    </div>
+  </nav>
+
+  <main class="fy-scroll" id="main">
+    <p id="toast" class="fy-toast" aria-live="polite"></p>
+
+    <section data-view="library">
+      <ul id="libList" class="lib-grid"></ul>
+      <div class="fy-pager" id="libPager"></div>
+    </section>
+
+    <section data-view="queue" hidden>
+      <!-- 顶部 3 路并行通道可视化槽位 -->
+      <h2 class="fy-section">3 路并行通道 <span class="fy-chip" id="secRunChip">0/3</span></h2>
+      <div id="lanesGrid" class="lanes"></div>
+
+      <!-- 下方单一清晰的待处理目标队列（普通顺位 + 超时降级队尾） -->
+      <h2 class="fy-section">待处理目标 <span class="fy-chip" id="secPendingChip">0</span></h2>
+      <ul id="pendingList" class="fy-list pending-list"></ul>
+    </section>
+  </main>
+</section>
+
+<!-- 弹层 -->
+<dialog id="updateDialog">
+  <form method="dialog">
+    <h2>⬆ 发现 yt-dlp 新版本</h2>
+    <p id="updateDesc" class="dlg-desc"></p>
+    <p id="updateLockNote" class="dlg-warn" hidden></p>
+    <p class="fy-meta">只有经你明确同意才会更新，绝不静默升级。</p>
+    <menu>
+      <button type="button" id="updCancel">取消</button>
+      <button type="button" id="updSkip">暂不更新直接下载</button>
+      <button type="button" id="updAgree" class="primary">✓ 同意更新</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="cookieDialog">
+  <form method="dialog">
+    <h2>🍪 导入 X 登录 Cookie</h2>
+    <p class="fy-meta" id="cookieStatusDesc"></p>
+    <label class="dlg-field">
+      <span>粘贴从 Chrome 插件复制的 Netscape Cookie（仅本地加密保存，不回显明文）：</span>
+      <textarea id="cookieInput" rows="4" placeholder="# Netscape HTTP Cookie File&#10;.x.com	TRUE	/	TRUE	..."></textarea>
+    </label>
+    <div class="cookie-tools">
+      <button type="button" id="cookiePickFile">📂 选择 cookies.txt</button>
+      <input id="cookieFile" type="file" accept=".txt" hidden>
+      <button type="button" id="cookieOpenExt">🧩 打开插件预览</button>
+      <button type="button" id="cookieClearBtn" class="danger-outline">清空已存</button>
+    </div>
+    <p id="cookieMsg" class="dlg-msg" hidden></p>
+    <menu>
+      <button type="button" id="cookieClose">关闭</button>
+      <button type="button" id="cookieSave" class="primary">✓ 校验并加密保存</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="noticeDialog" class="wide-dlg">
+  <form method="dialog">
+    <div class="dlg-head">
+      <h2>🔔 绯月 · 提醒记录（缩略图 + 播放键）</h2>
+      <div class="fy-seg" role="group" aria-label="提醒筛选">
+        <button type="button" data-nfilter="unread" aria-pressed="true">未读</button>
+        <button type="button" data-nfilter="all" aria-pressed="false">全部</button>
+      </div>
+      <button type="button" id="noticeReadAll" class="fy-meta-btn">全部已读</button>
+    </div>
+    <div class="notice-split">
+      <ul id="noticeList" class="fy-list notice-list"></ul>
+      <div id="noticeDetail" class="notice-detail">
+        <p class="fy-empty">点选左侧一条提醒查看详情与播放卡片</p>
+      </div>
+    </div>
+    <menu>
+      <button type="button" id="noticeClose">关闭</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="extDialog" class="ext-dlg">
+  <form method="dialog">
+    <div class="ext-pop">
+      <div class="ext-top">
+        <span class="ext-logo">🌙</span>
+        <div>
+          <strong>绯月 X Cookie 助手</strong>
+          <small class="fy-meta">Chrome MV3 扩展预览</small>
+        </div>
+        <label class="ext-login-toggle" title="切换模拟 Chrome 当前 X 登录态">
+          <input type="checkbox" id="extLoggedIn" checked> 已登录 X
+        </label>
+      </div>
+      <div class="ext-card" id="extCookieStatus"></div>
+      <div class="ext-actions">
+        <button type="button" id="extCopyBtn" class="primary">📋 一键提取并复制 Cookie</button>
+        <button type="button" id="extDownloadBtn">💾 导出 cookies.txt</button>
+      </div>
+      <p id="extMsg" class="dlg-msg" hidden></p>
+      <div class="ext-future">
+        <span>🚧 后续扩展位（本期未启用）</span>
+        <small>提取当前 X 页面视频链接 → 一键生成我的云端下载任务</small>
+      </div>
+    </div>
+    <menu>
+      <button type="button" id="extPasteToFeiyue">↳ 粘贴到绯月导入框</button>
+      <button type="button" id="extClose">关闭</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="playerDialog" class="player-dlg">
+  <form method="dialog">
+    <h2>▶ 本地播放器已呼出（原型示意）</h2>
+    <div id="playerPreview" class="player-preview"></div>
+    <p id="playerMeta" class="fy-meta"></p>
+    <menu>
+      <button type="button" id="playerClose" class="primary">确定</button>
+    </menu>
+  </form>
+</dialog>
+
+<details class="lab">
+  <summary title="原型演示控制（正式版没有）">🧪</summary>
+  <div>
+    <b>原型演示（正式版没有）</b>
+    <button type="button" id="labBatch">⚡ 塞入 4 条演示 3 路通道</button>
+    <button type="button" id="labTimeout">⏱ 模拟 #1 超 1h 自动降级</button>
+    <button type="button" id="labUpdate">⬆ 模拟发现 yt-dlp 更新</button>
+    <button type="button" id="labMissingDisk">⚠ 模拟缺少 yt-dlp / F 盘</button>
+    <button type="button" id="labLoadFail">↻ 下次翻页加载失败</button>
+    <button type="button" id="labEmpty">🧹 清空 / 恢复样例</button>
+    <button type="button" id="labTheme">🌓 切换浅色 / 深色</button>
+  </div>
+</details>
+
+<script src="x-video.js"></script>
+</body>
+</html>

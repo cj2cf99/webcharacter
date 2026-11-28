@@ -1,3 +1,67 @@
+## 2026-11-29 绯月 X 视频下载管理与长文归档 · 绯月 Windows 正式安装版 · 待用户确认部署
+
+状态：**待用户确认部署**（开发代码、两轮复审修复及自审已全部完成并同步提交至远端分支，未写入正式安装目录、未重启、未登记花园）。
+
+### 更新需求
+- 用户原话：需求整理与实现见 [X_VIDEO_DOWNLOAD_REQUIREMENTS.md](docs/X_VIDEO_DOWNLOAD_REQUIREMENTS.md)（用户原话 1–11、规则 R1–R24），并按用户对复审意见确认的口径收口（F1 长文默认登录态、F6 搬迁改 `.local-tools.json` `xDownloadRoot` 并重启、F16 不做视频移出 `archive` 自动恢复、F18 文章内嵌视频不触发当日 `yt-dlp` 更新询问）。
+- 本次指令：“目前自身一轮，确认没有严重bug就准备先部署一次，部署前commit&push一轮”。
+
+### 变更与前后行为
+| 项 | 安装前 | 安装后 |
+| --- | --- | --- |
+| 右键/托盘菜单「本地复盘」下方 | 紧接「常用链接」 | 新增「X视频下载与管理」分组（`登记下载`、`X视频管理` 两独立窗口） |
+| X 视频下载与队列 | 无 | 复用本机 `yt-dlp.exe`（`.local-tools.json` 补 `ytDlp`）与 `ffmpeg`，最大 3 路固定槽位并行；超 1 小时自动暂停降级最低优先级；每日首次自动检查 + 强同意更新门禁；完成写入既有 `notices` 提醒带首帧缩略图与播放键；仅归档（移入 `archive\`）不删除；加密保存 `x.com` Cookie |
+| X 长文与媒体归档 | 无 | 复用绯月内置 Electron 隐藏窗 + 独立临时会话（登录态 Cookie）抓长文/帖子、引用与前 N 条回复（0–10，默认 2）；平铺 `article.md` 与 `01.jpg`/`02.mp4` 至 `<名称>_<status_id>`；单并发 3 分钟全流程超时；重复 `status_id` 提示已存在且可原位更新重抓（旧版整目录移入 `archive\` 保留，不删除） |
+| 便携目录索引 `catalog.json` | 无 | 根目录维护 `catalog.json`（只存安全相对路径），支持整体搬迁（改 `xDownloadRoot` 重启）、文章手工改名与移入/移出 `archive\` 自动同步、换根过滤与搬迁视频缩略图懒生成 |
+| 既有功能（常用链接、语音/视频生成、抽卡、REST v9） | 现状 | 不变（`local-rest.mjs` 8765 接口未改动） |
+
+### 来源与基线
+- 来源仓库：`G:\selftool\WebCharacter\personal-digital-companion`，分支 `codex/workspace-checkpoint-20261120`（提交前基线 `4df2e89`，本次精准提交仅包含 X 视频与长文改动及本记录，工作区另 7 个无关文件与仓库外 `../=` 保留未入库）。
+- 目标安装目录：`G:\selftool\.release-feiyue-handbook-desktop-20261120\personal-digital-companion`（核对运行实例 PID `31380`，启动时间 `2026-11-28T10:58:21.115Z`，REST `version 9`，资料目录 `output/desktop-profile`）。
+- 既有文件前像与候选比对（SHA-256 前 12 位；8 个既有代码/配置在安装版中与 `4df2e89` LF 归一化后完全一致；`desktop/README.md` 安装时将以安装版 `EB96781E19C4` 为基线精准插入本节说明）：
+
+| 文件 | 安装前像 | 开发版候选 | 备注 |
+| --- | --- | --- | --- |
+| `desktop/shell.mjs` | `6A8681ABDFC9` | `D15193B75C35` | 挂载 `attachXVideo`、菜单入口与退出清理 |
+| `desktop/menu-layout.json` | `706799C27200` | `C725EF4B862B` | 「本地复盘」下新增「X视频下载与管理」 |
+| `desktop/source-updates.mjs` | `AE2BAE98A5EE` | `1215133579AA` | 登记 `x-video-quick.html` 与 `x-video.html` 热加载依赖 |
+| `desktop/conversation-details.mjs` | `5A74EFFC0D35` | `FC5617197099` | 提醒列表支持 `x-download` / `x-download-alert` |
+| `desktop/conversation-preload.cjs` | `96F880CFDF28` | `21C6042A1381` | 暴露 `xVideo` / `xVideoPlay` IPC |
+| `desktop/conversation-ui.mjs` | `DC7B30C6F7EF` | `BCBC42DD8450` | 渲染下载完成缩略图播放/打开文章卡片 |
+| `desktop/conversation.css` | `09CEB2A3D198` | `004389E85838` | `.xv-notice` 样式 |
+| `desktop/screen-question-host.mjs` | `8F8C0255EDB4` | `FEF8D5CDD56C` | 透传 `xVideo` 到 `attachConversationDetails` |
+| `desktop/README.md` | `EB96781E19C4` | `C3B34EF070FE` | 安装时按安装版插入 X 视频说明段 |
+| `.local-tools.json` | `B475D04ED083` | `7082FE206476` | 安装版新增 `"ytDlp": "G:/DevTools/yt-dlp/yt-dlp.exe"` |
+| 新增 `desktop/x-*`（10 个文件） | 无 | 见 `X_VIDEO_AND_ARTICLE_FIX_R2_SELF_AUDIT_2026-11-28.md` | `x-video.mjs`、`x-article.mjs`、`x-video-host.mjs`、`x-video-preload.cjs`、`x-video-shared.mjs`、`x-video-quick.*`、`x-video.*` |
+
+### 数据、配置与兼容性影响
+- 纯代码与 `.local-tools.json` 增加 `"ytDlp"` 配置，无数据库结构或业务数据变更，跳过数据库备份。
+- 新增资料目录子目录 `x-video/`（`state.json`、`thumbs/`、`cookies.bin`）与下载根目录 `F:\Xdownload\`（含 `catalog.json`、`.downloading\`、`archive\`），互不影响原有业务表与 REST v9 接口。
+
+### 实测命令与结果（提交前最新代码状态）
+| 检查项 | 结果 |
+| --- | --- |
+| `node --test --test-timeout=30000 agent/tests/x-video.test.mjs agent/tests/x-article.test.mjs G:\selftool\extratools\x-cookie-helper\netscape.test.mjs` | 33 / 33 通过（2.59s） |
+| `node tools/build-desktop.mjs` & `node tools/test-desktop-shell.mjs` | 构建成功；桌面壳 7 / 7 PASS |
+| 两轮复审复现脚本（`repro-core`、`repro-more`、`repro-electron`、`run-repro-ui-cookie`、`recheck-scraper`、`recheck-timing`、`run-recheck-e2e-safe`） | G1–G7 与 F2–F19 全部对应通过（详见 [R2 自审报告](docs/reviews/X_VIDEO_AND_ARTICLE_FIX_R2_SELF_AUDIT_2026-11-28.md)） |
+| Electron 回归（`test-x-video-electron`、`test-panel-titlebar-electron`、`test-menu-popup-electron`、`test-menu-first-show-electron` 4 组） | 全部 EXIT:0，0 控制台错误 |
+
+**未完成验证**：登录态下真实 X 线上长文/带引用回复帖子的首次实机抓取（待安装后由用户导入本人 Cookie 实测）；真实 `yt-dlp.exe` 视频下载与 `F:\Xdownload` 默认程序打开；正式安装版菜单冷启动首击。
+
+### 风险与恢复方案
+- 风险：`.local-tools.json` 若未配置 `ytDlp` 则视频下载会报缺少引擎；正式安装版 `desktop/README.md` 含已上线章节需按前像插入而非整文件覆盖。
+- 恢复：安装前将全部 10 个既有前像备份至 `G:\selftool\.release-feiyue-handbook-desktop-20261120\personal-digital-companion\output\install-backup-x-video-20261129\`；若启动或验收异常，删去新增 10 个 `desktop/x-*` 文件、全量还原备份并按相同步骤受控重启。
+
+### 部署步骤与发布后验证方式
+1. 取得用户对本次部署的明确确认。
+2. 复核 `G:\selftool\.release-feiyue-handbook-desktop-20261120\personal-digital-companion` 内 10 个前像 SHA-256 与上表一致；备份至 `output/install-backup-x-video-20261129/`。
+3. 写入 10 个新增 `desktop/x-*` 文件与 8 个既有改动文件，按安装版 `README.md` 插入说明段，`.local-tools.json` 补充 `"ytDlp": "G:/DevTools/yt-dlp/yt-dlp.exe"`。
+4. 向运行中的绯月主窗口发送关闭请求正常退出，等待 5 秒确认旧进程（PID `31380`）、单实例锁与 8765 端口完全释放。
+5. 清除 `ELECTRON_RUN_AS_NODE`，以独立非沙盒进程启动正式安装版，核对 `GET http://127.0.0.1:8765/infoguide` 新 PID 与 `version 9` 正常。
+6. 请用户实机点击菜单「X视频下载与管理 → 登记下载 / X视频管理」，导入本人 X Cookie 验证长文与视频下载效果；收尾后按默认规则准备并确认花园登记清单再提交 `POST /v1/batches`。
+
+---
+
 ## 2026-11-28 绯月动画生成器：语音制作、视频生成入口与借用接口 v9 · 绯月 Windows 正式安装版 · 已部署并登记，待用户实机验收
 
 状态：**已于 2026-11-28 14:18 JST 部署并受控重启**（用户回复“确认部署”）。**14:24 JST 花园登记完成**（批次 `feiyue-studio-menu-20261128`），菜单实机点击待用户验收。
