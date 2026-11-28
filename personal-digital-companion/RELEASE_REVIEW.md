@@ -1,6 +1,6 @@
-## 2026-11-29 绯月 X 视频下载管理与长文归档 · 绯月 Windows 正式安装版 · 待用户确认部署
+## 2026-11-29 绯月 X 视频下载管理与长文归档 · 绯月 Windows 正式安装版 · 已部署并登记，待用户实机验收
 
-状态：**待用户确认部署**（开发代码、两轮复审修复及自审已全部完成并同步提交至远端分支，未写入正式安装目录、未重启、未登记花园）。
+状态：**已于 2026-11-29 00:31:52 JST 部署并受控重启在线（PID 23036，REST v9）**（用户回复“发布”）。**01:12:51 JST 花园登记与签收完成**（用户回复“登记”，批次 `feiyue-x-video-article-20261129`）；菜单实机点击、带 Cookie 长文抓取与真实 `yt-dlp` 下载待用户实机验收。
 
 ### 更新需求
 - 用户原话：需求整理与实现见 [X_VIDEO_DOWNLOAD_REQUIREMENTS.md](docs/X_VIDEO_DOWNLOAD_REQUIREMENTS.md)（用户原话 1–11、规则 R1–R24），并按用户对复审意见确认的口径收口（F1 长文默认登录态、F6 搬迁改 `.local-tools.json` `xDownloadRoot` 并重启、F16 不做视频移出 `archive` 自动恢复、F18 文章内嵌视频不触发当日 `yt-dlp` 更新询问）。
@@ -59,6 +59,16 @@
 4. 向运行中的绯月主窗口发送关闭请求正常退出，等待 5 秒确认旧进程（PID `31380`）、单实例锁与 8765 端口完全释放。
 5. 清除 `ELECTRON_RUN_AS_NODE`，以独立非沙盒进程启动正式安装版，核对 `GET http://127.0.0.1:8765/infoguide` 新 PID 与 `version 9` 正常。
 6. 请用户实机点击菜单「X视频下载与管理 → 登记下载 / X视频管理」，导入本人 X Cookie 验证长文与视频下载效果；收尾后按默认规则准备并确认花园登记清单再提交 `POST /v1/batches`。
+
+### 部署回执（2026-11-29 JST）
+- 安装前核对：10 个前像 SHA-256 与上表完全一致，`GET /v1/batches?unacknowledged=1` 无未签收批次；已完整备份至 `G:\selftool\.release-feiyue-handbook-desktop-20261120\personal-digital-companion\output\install-backup-x-video-20261129\`。
+- 写入与构建：10 个新增 `desktop/x-*` 文件与 8 个既有改动文件原子写入并核对哈希一致，`desktop/README.md` 按安装版保留既有段落并插入「X视频下载与管理」说明，`.local-tools.json` 保留原 `ffmpeg` 并补充 `"ytDlp": "G:/DevTools/yt-dlp/yt-dlp.exe"`；全部 `.mjs` `node --check` 通过并在正式目录重新构建 `output/desktop-bundle`。
+- 受控重启与验收：向旧 PID `31380` 发送关闭请求并等待 5 秒确认旧进程、单实例锁与 8765 端口释放后，清除 `ELECTRON_RUN_AS_NODE` 独立启动正式安装版；核实新实例 PID `23036`（启动时间 `2026-11-29T00:31:52+09:00`）、命令行、资料目录 `output/desktop-profile` 及 `GET http://127.0.0.1:8765/infoguide` `version: 9` 一致。
+- 花园登记回执（2026-11-29 JST）：
+  - 主项目登记包单独提交 `7d2d6f3b63217219cd29f7dd0bbde0bb349d8444`（`G:\cloudflare\myapp` `main`，只含 `database/changes/feiyue-x-video-article-20261129/` 4 个文件），已普通推送到 `origin/main` 并回读一致。
+  - 批次 `feiyue-x-video-article-20261129`（摘要 `efb4e22bbff5a86ecf60c9b67caf51efaf40e5e0ca637e837ff76b4a8f074e21`）于 `01:11:42 JST` 入队，`01:12:50 JST` 状态 `done`，3 步全部 `verified`（修订 `236～238`：改善 #112、#113，部署 #132、明细 #219，`绯月（桌面精灵）#61` 版本 `35.6 → 35.7`）。
+  - `01:12:51 JST` 完成 `/ack` 签收；纯登记元数据，未做数据库备份。
+- **待用户实机确认**：从菜单点开「X视频下载与管理 → 登记下载 / X视频管理」，导入本人 X Cookie 验证长文与 `yt-dlp` 下载。
 
 ---
 
