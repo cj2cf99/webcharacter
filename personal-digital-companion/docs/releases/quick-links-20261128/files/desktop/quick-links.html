@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'">
+  <title>绯月 · 应用链接设置</title>
+  <link rel="stylesheet" href="feiyue-surface.css">
+  <link rel="stylesheet" href="quick-links.css">
+</head>
+<body>
+  <header class="fy-titlebar">
+    <div class="fy-caption">
+      <h1>应用链接设置</h1>
+    </div>
+  </header>
+
+  <section class="entry-bar" aria-label="链接登记">
+    <form id="linkForm" class="entry-form" novalidate>
+      <div class="field">
+        <label for="nameInput">中文名称</label>
+        <input id="nameInput" type="text" maxlength="24" placeholder="如：知序题库" required autofocus>
+      </div>
+      <div class="field">
+        <label for="urlInput">URL 路径</label>
+        <input id="urlInput" type="url" placeholder="https://example.com" required>
+      </div>
+      <div class="field">
+        <label for="noteInput">备注（悬停显示）</label>
+        <input id="noteInput" type="text" maxlength="80" placeholder="可选说明">
+      </div>
+      <div class="entry-actions">
+        <button id="submitBtn" type="submit" class="primary">登记</button>
+        <button id="cancelEditBtn" type="button" hidden>取消</button>
+      </div>
+    </form>
+    <div class="entry-tip-row">
+      <span id="formHint">仅支持 http/https · Ctrl+Enter 保存</span>
+      <button type="button" id="editingBadge" class="entry-editing-badge" hidden title="定位到正在编辑的条目">正在编辑</button>
+    </div>
+  </section>
+
+  <main class="fy-scroll">
+    <p id="toast" class="fy-toast" role="status"></p>
+    <h2 class="fy-section">
+      已登记链接（可拖动或用 ↑ ↓ 调整顺序）
+      <span id="countChip" class="count-chip" data-full="false">– / 10</span>
+    </h2>
+    <ul id="linkList" class="fy-list" aria-label="已登记链接列表" hidden></ul>
+    <p id="emptyState" class="fy-empty" hidden>还没有登记常用链接，请在上方填写后点击「登记」。</p>
+    <div id="loadingState" class="load-skeleton" aria-label="正在读取常用链接">
+      <i aria-hidden="true"></i>
+      <i aria-hidden="true"></i>
+      <i aria-hidden="true"></i>
+    </div>
+    <div id="errorState" class="load-error" hidden>
+      <span id="errorMessage">读取常用链接失败，请检查配置后重试。</span>
+      <button type="button" id="retryBtn">重试</button>
+    </div>
+  </main>
+
+  <script type="module" src="quick-links-ui.mjs"></script>
+</body>
+</html>

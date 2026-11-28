@@ -1,0 +1,15 @@
+desktop/menu-layout.json	D34A73D4619E	AB725C0A9275
+desktop/shell.mjs	3B6B98D4D186	C1018926FCA1
+desktop/README.md	1CD133B78C0B	2C4D3AF715AE
+desktop/menu-popup.mjs	B510B0D0A9C3	810062F777EA
+desktop/menu-preload.cjs	127A8C5103C7	1C3785D41AA2
+desktop/menu-ui.mjs	0F621CC894EB	4802395183B4
+desktop/menu.css	3B11D852449F	C92A54F8C98E
+desktop/source-updates.mjs	7B877DC7C160	AE2BAE98A5EE
+desktop/interaction-skills.mjs	7F8D0BB73CC1	E2C2BB4FE517
+desktop/quick-links-core.mjs	新增	3B913A160DC6
+desktop/quick-links-host.mjs	新增	45B75D308653
+desktop/quick-links-preload.cjs	新增	FBE457DFEEB1
+desktop/quick-links-ui.mjs	新增	FB8F39414016
+desktop/quick-links.css	新增	2F327E149FBB
+desktop/quick-links.html	新增	73F2C018288D

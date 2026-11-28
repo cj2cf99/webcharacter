@@ -1,3 +1,95 @@
+## 2026-11-28 绯月常用链接（Quick Links）· 绯月 Windows 正式安装版 · 已部署并登记，待用户实机验收
+
+状态：**已于 2026-11-28 14:07 JST 部署并受控重启，14:15 JST 花园登记与签收完成，待用户实机验收**。两轮代码与规范复审已闭环（`G:/selftool/extratools/docs/reviews/IMPLEMENTATION_REVIEW_2026-11-28.md`、`IMPLEMENTATION_RE_REVIEW_2026-11-28.md`），核心/宿主单测及完整 Electron 回归均已通过。
+
+### 需求与验收
+需求与设计基线见 `G:/selftool/extratools/quick-links/REQUIREMENTS.md` 与 `DESIGN.md`（方案 B）。要点：
+- 右键 / 托盘一级菜单「本地复盘」正下方新增「🔗 常用链接」分组，首项固定「⚙ 应用链接设置」，分隔线后展示最多 10 条已登记链接（不显示序号，悬停原生 `title` 显示备注，未填备注时显示 URL，点击调用 `shell.openExternal` 打开默认浏览器）。
+- 「应用链接设置」面板支持登记（中文名称 `1..24` 字、仅 `http://`/`https://` URL、备注 `0..80` 字）、`Ctrl+Enter` 提交、编辑、二次确认删除（`确认删除？`）、重复 URL 提醒但不阻止保存、拖拽手柄与 `↑/↓` 调序（保持与菜单顺序一致）。
+- 配置文件损坏时不覆盖原文件，展示错误并支持重试加载；`360px` 窄窗及浅/深色双主题无横向滚动。
+
+### 目标、基线与差异
+- **目标**：`G:/selftool/.release-feiyue-handbook-desktop-20261120/personal-digital-companion`（当前运行 PID `18360`，`instance.started` 2026-11-28T04:21:39.306Z，即 13:21 JST，REST v8，资料目录 `output/desktop-profile`）。
+- **来源**：`G:/selftool/extratools` `main @ 1822c39` 与 `G:/selftool/WebCharacter` `codex/workspace-checkpoint-20261120 @ eb707cf`。
+- **固定快照**：[docs/releases/quick-links-20261128/](docs/releases/quick-links-20261128/)（`files/desktop/` 15 个文件、`manifest.txt`、`SHA256SUMS`）。**安装只从该固定快照取文件**。
+- **合入方式**：以安装版为基线精准合入「常用链接」改动（保留安装版原文与换行符）；开发工作区尚未安装的「语音制作（`voiceStudio`）」菜单与 `agyBorrow` 通道**不带入**。
+
+| 文件 | 安装前像 SHA-256 前 12 位 | 候选前 12 位 | 前后行为 |
+| --- | --- | --- | --- |
+| `desktop/menu-layout.json` | `D34A73D4619E` | `AB725C0A9275` | 「本地复盘」下新增 `quickLinks`（「常用链接」）入口 |
+| `desktop/shell.mjs` | `3B6B98D4D186` | `C1018926FCA1` | 挂载 `attachQuickLinks`、动态菜单、`updated` 热重载与 `cleanup` 清理 |
+| `desktop/README.md` | `1CD133B78C0B` | `2C4D3AF715AE` | 补充「常用链接」入口与操作说明 |
+| `desktop/menu-popup.mjs` | `B510B0D0A9C3` | `810062F777EA` | 透传 `fyTitle` 为 `title`，并向自绘菜单发送工作区最大高度 `maxHeight` |
+| `desktop/menu-preload.cjs` | `127A8C5103C7` | `1C3785D41AA2` | `onShow` 透传 `maxHeight` |
+| `desktop/menu-ui.mjs` | `0F621CC894EB` | `4802395183B4` | 渲染 `button.title = item.title \|\| item.label`，应用 `menu.style.maxHeight` |
+| `desktop/menu.css` | `3B11D852449F` | `C92A54F8C98E` | `#menu` 改为纵向 Flex，`#items` 支持超长展开内部滚动 |
+| `desktop/source-updates.mjs` | `7B877DC7C160` | `AE2BAE98A5EE` | `pages` 登记 `quick-links.html` 及其样式/脚本依赖 |
+| `desktop/interaction-skills.mjs` | `7F8D0BB73CC1` | `E2C2BB4FE517` | 支持「常用链接 / 应用链接设置」问句指引，按标签长度降序匹配 |
+| `desktop/quick-links-core.mjs` | 新增 | `3B913A160DC6` | 核心存储、校验、上限 10 条、原子写盘与菜单项数据生成 |
+| `desktop/quick-links-host.mjs` | 新增 | `45B75D308653` | Electron 窗口宿主、可信帧与 `http/https` 校验、菜单项与外链错误兜底 |
+| `desktop/quick-links-preload.cjs` | 新增 | `FBE457DFEEB1` | 暴露受控 `window.quickLinks` 接口 |
+| `desktop/quick-links-ui.mjs` | 新增 | `FB8F39414016` | 面板交互、调序焦点保留、二次确认删除、重复 URL 跳卡与错误重试 |
+| `desktop/quick-links.css` | 新增 | `2F327E149FBB` | 复用 `feiyue-surface.css` 令牌，支持 360px 窄窗与浅/深色双主题 |
+| `desktop/quick-links.html` | 新增 | `73F2C018288D` | 月印标题栏面板页面与严格 CSP |
+
+### 数据、配置与外部影响
+- 无数据库结构与业务数据变更，纯代码发布，跳过数据库备份。
+- 首次登记链接时在当前 `profile` 下生成 `quick-links/quick-links.json`；配置文件损坏时不覆盖原文件，返回错误状态并允许重试。
+- 不新增后台轮询或外部 API 调用；点击链接仅在主进程二次校验 `http:`/`https:` 后交由系统默认浏览器打开。
+
+### 实际验证（2026-11-28 JST）
+
+| 检查 | 结果 |
+| --- | --- |
+| 快照 15 文件 `node --check`、`JSON.parse` 与 `SHA256SUMS` 生成 | 通过 |
+| `node --test --test-timeout=15000 g:\selftool\extratools\quick-links\quick-links-core.test.mjs` | 6/6 通过 |
+| `node --test --test-timeout=15000 agent/tests/quick-links-host.test.mjs` | 1/1 通过 |
+| `node tools/test-desktop-shell.mjs` | 通过（含「常用链接」一级/二级菜单与全量壳层断言） |
+| `electron tools/run-electron-check.mjs tools/test-menu-popup-electron.mjs` | 通过（浅/深色渲染、展开边界与子项点击） |
+| `electron tools/run-electron-check.mjs tools/test-menu-shell-electron.mjs` | 通过（角色与托盘右键自绘菜单一致） |
+| `electron tools/run-electron-check.mjs tools/test-panel-titlebar-electron.mjs` | 通过（8 面板浅/深色、360px 无溢出、`Ctrl+Enter`、调序焦点保留、二次确认删除） |
+
+**未完成项**：真实桌面安装版冷启动首击可见性、鼠标悬停原生 tooltip、真实点击拉起系统浏览器及鼠标拖拽排序将在安装重启后由实机验证。
+
+### 风险与恢复方案
+- **风险**：文件替换期间旧进程若触发热加载，可能短暂找不到新动作；须将 15 个文件全部核对写入后再统一退出并重启绯月。
+- **恢复方案**：9 个已有安装文件备份至安装目录 `output/install-backup-quick-links-20261128/`；异常时还原这 9 个文件、删除 6 个新增文件，并按相同重启步骤恢复。
+
+### 部署步骤与发布后验证
+1. 取得用户明确部署确认。
+2. 核对安装版 9 个前像 SHA-256 与 6 个新增目标不存在，确认无进行中任务。
+3. 备份 9 个前像至 `output/install-backup-quick-links-20261128/`，从固定快照原子写入 15 个文件并核对 SHA-256。
+4. 让 PID `18360` 正常退出，等待 5 秒确认旧进程、单实例锁与 8765 端口已释放。
+5. 以独立非沙盒进程并清除 `ELECTRON_RUN_AS_NODE` 拉起正式安装版，核对 `GET http://127.0.0.1:8765/infoguide` 新 PID 与资料目录不变。
+6. 用户实机打开「常用链接 → 应用链接设置」，登记/排序/编辑/悬停查看备注并点击跳转验证。
+7. 读取线上花园生成精确清单经用户确认后，经本机 REST `POST /v1/batches` 完成登记并回读签收。
+
+### 花园登记清单（草案，待安装后核对线上再确认）
+
+| 归属项目 | 归属功能 | 记录类型 | 标题 | 内容与行为变化（含版本） | 验收依据 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 网页角色组件 | 绯月（桌面精灵）（既有，#61） | 改善 | 新增「常用链接」右键菜单与「应用链接设置」面板 | 一级菜单新增「常用链接」，支持最多 10 条 `http/https` 链接登记、编辑、二次确认删除、拖拽与 `↑/↓` 调序及悬停备注（不单独增版） | 需求与两轮复审报告、单测与 Electron 回归结果 | 草案 |
+| 网页角色组件 | 绯月（桌面精灵）（既有，#61） | 部署 | 绯月常用链接（Quick Links）安装 | 按实际安装结果登记「发布成功」及实际时间，版本由现值（预计 `35.4`）递增至 `+0.1`（预计 `35.5`） | 安装回执、`/infoguide` 核对与实机验证 | 草案 |
+
+无需更新（草案）：项目、功能定义、种子、种子落地、Bug、关系、平台、平台功能、链接、数据源；语言学习对练、题库代行、知识库、报纸模块本次不涉及。
+
+### 部署回执（2026-11-28 JST）
+- 写入前核对：9 个前像 SHA-256 与清单一致，6 个新增目标不存在；9 个前像已备份至安装目录 `output/install-backup-quick-links-20261128/desktop/`。
+- 原子写入与校验：15 个文件经 `.install-tmp` 校验 SHA-256 后改名写入安装目录 `desktop/`，复核 0 项不符，无残留 `.install-tmp`。
+- 受控退出与重启：旧主进程 PID `18360` 于 `14:07:05 JST` 正常退出；等待 5 秒后确认 `LEFT_PROC=0` 与 `127.0.0.1:8765` 监听已释放；清除 `ELECTRON_RUN_AS_NODE` 后独立拉起新进程 PID `31448`（`instance.started` `2026-11-28T05:07:16.708Z`，即 `14:07:16 JST`）。
+- 实例与产物核验：`GET http://127.0.0.1:8765/infoguide` 返回 `version: 8`、`pid: 31448`（与 8765 监听 `OwningProcess` 一致）、资料目录为原安装目录 `output/desktop-profile`；`output/desktop-bundle/` 中 5 个更新前端文件与 `desktop/` SHA-256 全部一致。
+- **待用户确认**：实机右键打开「常用链接 → 应用链接设置」与悬停/外链跳转验证，以及下方精确花园登记清单确认。（花园登记已完成，见下）
+
+### 花园登记回执（2026-11-28 JST）
+- 只读核对花园目录修订 `224`：归属 `#16` 网页角色组件 → `#61` 绯月（桌面精灵），原版本 `35.4`（部署次数 `66`）。向用户展示完整清单后，用户回复「确认登记」。`reviewHash` 为 `8e0a8c6ee0b9dfb362c5dc6fd3d8e3fe0fe295d3b4f5ca01fb75b5cf446ae8b4`。
+- 登记包 `database/changes/feiyue-quick-links-20261128/`（`registration.json`、`step-001.sql`、`step-002.sql`）已单独提交至主项目 `G:\cloudflare\myapp` `main`（提交 `d2c402f0bc4ed30952968b9a65b1245886887dfd`）并推送至 `origin/main`。
+- 批次 `feiyue-quick-links-20261128` 于 `14:15:00 JST`（`05:15:00Z`）入队 `http://127.0.0.1:8765/v1/batches`，两步均 `verified`：
+  - Step 1（改善 `#106`）：`14:15:14 JST` `verified`，修订 `225`
+  - Step 2（部署 `#128` / 明细 `#215`，版本 `35.4 → 35.5`）：`14:15:31 JST` `verified`，修订 `226`
+- 批次于 `14:15:38 JST` 完成（`state: done`），并于 `14:15:40 JST` 完成 `POST /v1/batches/feiyue-quick-links-20261128/ack` 签收。
+
+---
+
 ## 2026-11-28 绯月抽卡（OpenAI 生图）· 绯月 Windows 正式安装版 · 已部署并登记，待用户实机验收
 
 状态：**已于 2026-11-28 13:21 JST 部署并受控重启**（用户回复“确认安装”），**13:31 JST 花园登记完成**。实机效果与真实密钥出图尚未验收，回执见本节末尾。第三方复审两轮（`docs/reviews/CARD_DRAW_COMPLIANCE_REVIEW{,_R2}_2026-11-28.md`），意见处理见同目录 `CARD_DRAW_COMPLIANCE_RESPONSE{,_R2}_2026-11-28.md`；第 2 轮修改后未再送第三方复审。
