@@ -1,0 +1,414 @@
+--- installed/desktop/animation-maker.mjs
++++ candidate/desktop/animation-maker.mjs
+@@ -1,5 +1,5 @@
+-// 菜单「动画生成器」：只做入口。服务不在运行时以独立进程拉起 webmcreator，再用系统浏览器打开对应页签；
+-// 长时间处理都在该服务进程里，不占绯月进程。
++// 菜单「动画生成器」：只做入口。服务不在运行时以独立进程拉起对应的本机服务，再用系统浏览器打开页面；
++// 长时间处理都在该服务进程里，不占绯月进程。下级「语音制作」「视频生成」是独立项目 voicestudio、videostudio，只在点击时启动。
+ import {spawn as nodeSpawn} from 'node:child_process';
+ import {existsSync} from 'node:fs';
+ import {join} from 'node:path';
+@@ -7,30 +7,37 @@
+ export const ANIMATION_MAKER_DIR = process.env.FEIYUE_WEBMCREATOR_DIR || 'G:/selftool/webmcreator';
+ export const ANIMATION_MAKER_URL = process.env.FEIYUE_WEBMCREATOR_URL || 'http://127.0.0.1:8766';
+ const TABS = new Set(['crop', 'gemini', 'local', 'gif']);
++export const VOICE_STUDIO_DIR = process.env.FEIYUE_VOICESTUDIO_DIR || 'G:/selftool/toolswithmodel/voicestudio';
++export const VOICE_STUDIO_URL = process.env.FEIYUE_VOICESTUDIO_URL || 'http://127.0.0.1:8767';
++export const createVoiceStudio = options => createAnimationMaker({dir: VOICE_STUDIO_DIR, base: VOICE_STUDIO_URL, app: 'voicestudio', name: '语音制作', tabs: null, ...options});
++export const VIDEO_STUDIO_DIR = process.env.FEIYUE_VIDEOSTUDIO_DIR || 'G:/selftool/toolswithmodel/videostudio';
++export const VIDEO_STUDIO_URL = process.env.FEIYUE_VIDEOSTUDIO_URL || 'http://127.0.0.1:8769';
++export const createVideoStudio = options => createAnimationMaker({dir: VIDEO_STUDIO_DIR, base: VIDEO_STUDIO_URL, app: 'videostudio', name: '视频生成', tabs: null, ...options});
+ 
+-export function createAnimationMaker({openExternal, spawn = nodeSpawn, fetcher = fetch, dir = ANIMATION_MAKER_DIR, base = ANIMATION_MAKER_URL, wait = 5000, sleep = ms => new Promise(r => setTimeout(r, ms))}) {
++// tabs 为 null 时是单页服务，open() 直接打开根地址
++export function createAnimationMaker({openExternal, spawn = nodeSpawn, fetcher = fetch, dir = ANIMATION_MAKER_DIR, base = ANIMATION_MAKER_URL, app = 'webmcreator', name = '动画生成器', tabs = TABS, wait = 5000, sleep = ms => new Promise(r => setTimeout(r, ms))}) {
+   let starting = null;
+   async function alive() {
+     try {
+       const r = await fetcher(base + '/api/status', {signal: AbortSignal.timeout(1500)});
+-      return r.ok && (await r.json()).app === 'webmcreator';
++      return r.ok && (await r.json()).app === app;
+     } catch { return false; }
+   }
+   async function start() {
+     const entry = join(dir, 'server.mjs');
+-    if (!existsSync(entry)) throw Error('找不到动画生成器：' + entry);
++    if (!existsSync(entry)) throw Error(`找不到${name}：` + entry);
+     const env = {...process.env}; delete env.ELECTRON_RUN_AS_NODE;
+     const child = spawn('node', [entry], {cwd: dir, env, detached: true, stdio: 'ignore', windowsHide: true});
+     child.on?.('error', () => {});
+     child.unref?.();
+     for (let t = 0; t < wait; t += 250) { await sleep(250); if (await alive()) return; }
+-    throw Error('动画生成器 5 秒内未启动，请确认已安装 Node.js');
++    throw Error(`${name} 5 秒内未启动，请确认已安装 Node.js`);
+   }
+   return {
+     async open(tab) {
+-      if (!TABS.has(tab)) throw Error('未知页签：' + tab);
++      if (tabs && !tabs.has(tab)) throw Error('未知页签：' + tab);
+       if (!await alive()) { starting ||= start().finally(() => { starting = null; }); await starting; }
+-      await openExternal(`${base}/#${tab}`);
++      await openExternal(tabs ? `${base}/#${tab}` : `${base}/`);
+     },
+   };
+ }
+--- installed/desktop/agy-cli-client.mjs
++++ candidate/desktop/agy-cli-client.mjs
+@@ -149,9 +149,9 @@
+   || (existsSync(DEFAULT_WSL_DIR) ? join(DEFAULT_WSL_DIR, 'temp') : join(tmpdir(), 'feiyue-agy'));
+ let standbyOn = false, standbyModel = 'gemini-3.8-flash-low', spare = null;
+ 
+-function startSpare(model) {
++function startSpare(model, extraArgs = []) {
+   mkdirSync(standbyDir, {recursive: true});
+-  const [file, fileArgs] = agyCommand(['-p', '', '--input-format', 'stream-json', '--output-format', 'stream-json', '--model', model], standbyDir);
++  const [file, fileArgs] = agyCommand(['-p', '', '--input-format', 'stream-json', '--output-format', 'stream-json', '--model', model, ...extraArgs], standbyDir);
+   const child = spawn(file, fileArgs, {windowsHide: true, cwd: standbyDir, stdio: ['pipe', 'pipe', 'pipe']});
+   const entry = {child, model, dead: false, waiters: [], lines: []};
+   const rl = createInterface({input: child.stdout});
+@@ -262,6 +262,30 @@
+   }
+ }
+ 
++// ───────── 进行中计数与借用调用 ─────────
++// 绯月自身正在进行的 agy 调用数，借用任务据此让位（预热待命进程不算）。
++let activeCalls = 0;
++export const agyActiveCalls = () => activeCalls;
++async function tracked(task) {
++  activeCalls++;
++  try { return await task(); } finally { activeCalls--; }
++}
++
++// 给借用接口的一次性调用：提示词只经标准输入传入（命令行参数经 wsl.exe -- 会被 shell 展开），
++// 不领用待命进程，附带沙盒与禁用斜杠命令参数，不放开任何工具权限。
++export async function runAgyIsolated({prompt, model = 'gemini-3.8-flash-low', signal, timeoutMs = 120_000} = {}) {
++  if (isAgyResourceExhausted()) return {success: false, error: 'RESOURCE_EXHAUSTED'};
++  if (signal?.aborted) return {success: false, error: 'ABORTED'};
++  const entry = startSpare(model, ['--sandbox', '--disable-slash-commands']);
++  try {
++    const result = await sendTurn(entry, prompt, {signal, timeoutMs});
++    if (result) return {success: true, response: result.response ?? ''};
++    return {success: false, error: signal?.aborted ? 'ABORTED' : isAgyResourceExhausted() ? 'RESOURCE_EXHAUSTED' : 'AGY_CLI_FAILED'};
++  } finally {
++    if (!entry.dead) stopChild(entry.child);
++  }
++}
++
+ // ───────── 对话会话 ─────────
+ // 面对面对话要记得前几轮，所以这里保留同一个进程：多轮共享上下文，空闲超时或轮数达上限后回收，
+ // 进程中途退出则下一轮换新进程（上下文从头开始）。一次只处理一轮，后到的排队。
+@@ -298,7 +322,7 @@
+   return {
+     // first：新会话第一轮前置的人设说明，之后的轮次不再重复。
+     ask(prompt, options = {}) {
+-      const run = queue.then(() => turn(prompt, options));
++      const run = queue.then(() => tracked(() => turn(prompt, options)));
+       queue = run.catch(() => {});
+       return run;
+     },
+@@ -328,7 +352,11 @@
+  * @param {number} [options.timeoutMs=60000] 超时时间
+  * @returns {Promise<{success: boolean, response?: string, structuredOutput?: any, durationSeconds?: number, usage?: any, error?: string}>}
+  */
+-export async function runAgyPrompt({
++export function runAgyPrompt(options) {
++  return tracked(() => singlePrompt(options));
++}
++
++async function singlePrompt({
+   prompt,
+   schema,
+   model = 'gemini-3.8-flash-low',
+--- installed/desktop/ai-gateway.mjs
++++ candidate/desktop/ai-gateway.mjs
+@@ -7,7 +7,13 @@
+ import {createAiWorkflowModel} from './ai-workflow-model.mjs';
+ import {createLocalModel,desktopModelPath,LOCAL_MODEL_FILE} from './local-model.mjs';
+ import {createAgyCliModel,testAgyCliPipeline} from './agy-local-model.mjs';
+-import {extractJson,isAgyInstalled,isAgyResourceExhausted,runAgyPrompt,standbyDir} from './agy-cli-client.mjs';
++import {agyActiveCalls,extractJson,isAgyInstalled,isAgyResourceExhausted,runAgyIsolated,runAgyPrompt,standbyDir} from './agy-cli-client.mjs';
++
++// 本机借用接口的 agy 文本通道：未安装时不提供；绯月自身在用或额度冷却时让借用方等待。
++export function agyBorrow(){
++  return isAgyInstalled()?{agy:input=>runAgyIsolated(input),
++    agyBusy:()=>isAgyResourceExhausted()?'cooldown':agyActiveCalls()?'busy':null}:{};
++}
+ import {createAgyVision,normalizeImageList,normalizeVisionAnswer,parseVisionJson,rejectCutoutQuestion,VISION_SYSTEM_PROMPT} from './vision-client.mjs';
+ import {createAiNetworkPool} from './ai-network-pool.mjs';
+ import {capTimeoutMs} from './ai-execution-round.mjs';
+--- installed/desktop/borrow.mjs
++++ candidate/desktop/borrow.mjs
+@@ -1,5 +1,6 @@
+ // 本机借用接口：让本机其他程序（如动画生成器）借用绯月的 AI、ComfyUI 与已登记 CLI。
+ // 与生图一样属于并行工作，不占正式工作名额；借用任务之间按到达顺序逐个执行。结果只留在内存，重启后需按原编号重交。
++// agy 文本通道单独排队，开始前给绯月自身的 agy 调用和额度冷却让位，不阻塞生图与放大。
+ import {execFile} from 'node:child_process';
+ import {batchId} from './garden-registration.mjs';
+ 
+@@ -41,7 +42,12 @@
+     if (!Object.hasOwn(CLI_COMMANDS, input.command)) bad('CLI 只允许已登记命令：' + Object.keys(CLI_COMMANDS).join('、'));
+     return {id, channel, command: input.command};
+   }
+-  bad('channel 须为 ai、comfy 或 cli');
++  if (channel === 'agy') {
++    const {prompt} = input;
++    if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 4000) bad('提示词须为 1～4000 字');
++    return {id, channel, prompt};
++  }
++  bad('channel 须为 ai、comfy、cli 或 agy');
+ };
+ 
+ function runCli(command) {
+@@ -51,13 +57,55 @@
+ }
+ 
+ // gemini({prompt, images, aspectRatio}) → {mime, bytes}；upscale({mime, bytes}) → {mime, bytes, width?, height?}
+-export function createBorrow({gemini, upscale, cli = runCli, now = () => new Date().toISOString()}) {
+-  const jobs = new Map(), queue = [];
+-  let running = false;
++// agy({prompt, signal}) → {success, response, error}；agyBusy() → null | 'busy' | 'cooldown'
++export function createBorrow({gemini, upscale, cli = runCli, agy, agyBusy = () => null, quietMs = 3000, pollMs = 500, now = () => new Date().toISOString()}) {
++  const jobs = new Map(), queue = [], agyQueue = [], aborts = new Map();
++  let running = false, agyRunning = false;
+   const view = job => {
+     const {task, ...rest} = job;
+-    return job.state === 'queued' ? {...rest, queue: {position: queue.indexOf(job) + 1}} : rest;
++    const line = job.channel === 'agy' ? agyQueue : queue;
++    return job.state === 'queued' ? {...rest, queue: {position: line.indexOf(job) + 1}} : rest;
+   };
++  const prune = () => {
++    const done = [...jobs.values()].filter(j => j.finished);
++    for (const j of done.slice(0, Math.max(0, done.length - KEEP))) jobs.delete(j.id);
++  };
++  const sleep = ms => new Promise(r => setTimeout(r, ms));
++  // 连续空闲 quietMs 才开始，避免插在绯月两次调用之间
++  async function yieldTurn(job, signal) {
++    let free = null;
++    while (!signal.aborted) {
++      const busy = agyBusy();
++      if (busy) { free = null; job.waiting = busy; }
++      else { free ??= Date.now(); if (Date.now() - free >= quietMs) break; }
++      await sleep(pollMs);
++    }
++    delete job.waiting;
++  }
++  async function pumpAgy() {
++    if (agyRunning) return;
++    agyRunning = true;
++    try {
++      while (agyQueue.length) {
++        const job = agyQueue[0], abort = new AbortController();
++        aborts.set(job.id, abort);
++        await yieldTurn(job, abort.signal);
++        if (!abort.signal.aborted) {
++          job.state = 'running'; job.started = now();
++          try {
++            const r = await agy({prompt: job.task.prompt, signal: abort.signal});
++            if (!r.success) throw Error(r.error === 'RESOURCE_EXHAUSTED' ? 'agy 额度已用尽，请稍后再试' : r.error || 'agy 调用失败');
++            job.result = {text: String(r.response).slice(0, 20000)}; job.state = 'done';
++          } catch (e) { job.state = 'failed'; job.error = String(e?.message || e).slice(0, 300); }
++          job.finished = now();
++        }
++        delete job.task; aborts.delete(job.id);
++        const at = agyQueue.indexOf(job);
++        if (at >= 0) agyQueue.splice(at, 1);
++      }
++    } finally { agyRunning = false; }
++    prune();
++  }
+   async function work(job) {
+     const t = job.task;
+     if (t.channel === 'ai') {
+@@ -84,8 +132,7 @@
+       }
+     } finally { running = false; }
+     // 只保留最近的结果
+-    const done = [...jobs.values()].filter(j => j.finished);
+-    for (const j of done.slice(0, Math.max(0, done.length - KEEP))) jobs.delete(j.id);
++    prune();
+   }
+   return {
+     // 同一编号重复提交返回原任务，不重复执行
+@@ -96,10 +143,24 @@
+         return {existing: true, job: view(old)};
+       }
+       const task = cleanTask(input);
++      if (task.channel === 'agy' && !agy) throw Object.assign(Error('本机未安装 agy'), {status: 503});
+       const job = {id: task.id, channel: task.channel, state: 'queued', created: now(), started: null, finished: null, error: null, result: null, task};
+-      jobs.set(job.id, job); queue.push(job); void pump();
++      jobs.set(job.id, job);
++      if (task.channel === 'agy') { agyQueue.push(job); void pumpAgy(); } else { queue.push(job); void pump(); }
+       return {existing: false, job: view(job)};
+     },
+     get(id) { const job = jobs.get(id); return job ? view(job) : null; },
++    // 只有 agy 任务可取消：排队的直接移除，执行中的中断并丢弃结果
++    cancel(id) {
++      const job = jobs.get(id);
++      if (!job) return null;
++      if (job.channel !== 'agy' || job.finished) throw Object.assign(Error('只能取消未完成的 agy 借用'), {status: 409});
++      aborts.get(id)?.abort();
++      const at = agyQueue.indexOf(job);
++      if (at >= 0 && !aborts.has(id)) agyQueue.splice(at, 1);
++      jobs.delete(id);
++      return {id, cancelled: true};
++    },
++    channels: () => ['ai', 'comfy', 'cli', ...(agy ? ['agy'] : [])],
+   };
+ }
+--- installed/desktop/local-rest.mjs
++++ candidate/desktop/local-rest.mjs
+@@ -31,13 +31,14 @@
+     body:{id:'稳定编号，同花园批次格式',title:'复盘 PE Band 同步',content:'可选，保留提醒正文原文',deadline:'2026-12-07T09:30+09:00'},response:'{ existing: boolean, reminder: Reminder }'},
+   {method:'GET',path:'/v1/reminders/:id',summary:'按原编号查询提醒登记。done 表示取得既有提醒记录编号，找不到返回 404。任何状态都不返回正文。',response:'Reminder'},
+   {method:'POST',path:'/v1/reminders/:id/retry',summary:'恢复 blocked 提醒并核对原登记，沿用原编号和正文，无需提交正文。',response:'Reminder'},
+-  {method:'POST',path:'/v1/borrow',summary:'本机程序借用绯月的 AI、ComfyUI 或已登记 CLI。与生图同属并行工作，不占正式名额；借用任务之间逐个执行。新建 202，同编号重交 200 返回原任务。请求体上限 30MB。',
+-    body:{id:'调用方生成的稳定编号',channel:'ai | comfy | cli',kind:'ai：gemini-image',prompt:'ai：提示词 1～4000 字',images:'ai：可选，最多 4 张 [{mime,base64}]',aspectRatio:'ai：可选，如 2:3',workflow:'comfy：upscale',image:'comfy：{mime,base64}',command:'cli：已登记命令 ID'},
++  {method:'POST',path:'/v1/borrow',summary:'本机程序借用绯月的 AI、ComfyUI、已登记 CLI 或 agy 文本。与生图同属并行工作，不占正式名额；借用任务之间逐个执行，agy 单独排队并给绯月自身调用让位。新建 202，同编号重交 200 返回原任务。请求体上限 30MB。',
++    body:{id:'调用方生成的稳定编号',channel:'ai | comfy | cli | agy',kind:'ai：gemini-image',prompt:'ai、agy：提示词 1～4000 字',images:'ai：可选，最多 4 张 [{mime,base64}]',aspectRatio:'ai：可选，如 2:3',workflow:'comfy：upscale',image:'comfy：{mime,base64}',command:'cli：已登记命令 ID'},
+     response:'{ existing: boolean, job: BorrowJob }'},
+   {method:'GET',path:'/v1/borrow/:id',summary:'按原编号查询借用任务。结果只留在内存（最近 30 个），重启后返回 404，需按原内容重交。',response:'BorrowJob'},
++  {method:'DELETE',path:'/v1/borrow/:id',summary:'取消未完成的 agy 借用；排队的直接移除，执行中的中断并丢弃结果。其他通道返回 409。',response:'{ id, cancelled: true }'},
+ ];
+-export function infoGuide(address,repo=gardenRepo){
+-  return {version:8,baseURL:address,firstUse:firstUse(repo,address),auth:'除本说明外均使用 Authorization: Bearer <token>；从已独立核实的 instance.profile 下读取 '+tokenFile+'，勿打印或提交令牌。',
++export function infoGuide(address,repo=gardenRepo,channels=['ai','comfy','cli']){
++  return {version:9,baseURL:address,firstUse:firstUse(repo,address),auth:'除本说明外均使用 Authorization: Bearer <token>；从已独立核实的 instance.profile 下读取 '+tokenFile+'，勿打印或提交令牌。',
+     contentType:'application/json',routes:routes.map(r=>({auth:true,...r})),
+     skillDirectory:{method:'GET',path:'/v1/skills',auth:true,usage:'技能描述和调用示例来自总纲。workflow 的 entry、steps、exit 表示当前对话转录流程。按每项 call 说明通过相应入口调用。'},
+     prepare:'依次执行 firstUse.commands 中的 sync、inspect、prepare，使用对应 cwd 与 args。制单只在调用侧生成 registration.json、逐步 SQL 和 reviewHash。先向用户展示归属、前后值、版本、实际结果和无需更新项，取得明确确认；内容改变须重新展示。',
+@@ -58,8 +59,9 @@
+     reminder:{id:'调用方生成并保存的稳定编号',title:'标题',deadline:'东京时间 YYYY-MM-DDTHH:mm+09:00',state:['queued','running','blocked','done'],
+       recordId:'done 时为既有提醒记录编号，否则为 null',error:'暂停原因或 null',created:'UTC ISO',finished:'取得登记回执的 UTC ISO 或 null',
+       retry:'请求结果未知时先 GET 原编号。404 才按原内容重交。blocked 可调用原编号的 retry，云端回执不明时核对原登记。正文只用于登记，完成后清除本地队列副本。'},
+-    borrow:{state:['queued','running','done','failed'],job:'{ id, channel, state, created, started, finished, error, result, queue? }',
+-      result:'ai / comfy：{ image: { mime, base64, width?, height? } }；cli：{ stdout }',commands:Object.keys(CLI_COMMANDS),
++    borrow:{state:['queued','running','done','failed'],job:'{ id, channel, state, created, started, finished, error, result, queue?, waiting? }',
++      result:'ai / comfy：{ image: { mime, base64, width?, height? } }；cli：{ stdout }；agy：{ text } 为模型原样回复',commands:Object.keys(CLI_COMMANDS),channels,
++      waiting:'agy 排队时：busy 表示绯月正在使用 agy，cooldown 表示额度冷却',
+       note:'密钥与模型都留在绯月；调用方只提交输入并按编号轮询。'},
+     retry:'202 代表已持久入队，200 为查询、重复提交或恢复回执。超时先按 id 查询。blocked 保留现场；基线变化先查实际状态，只对剩余变更重新制单确认。done 表示最终回读一致，复盘已写入。错误体 {error}；400 参数，401 鉴权，403 来源，404 未找到，409 清单或状态冲突，413 过大，415 正文格式，429 本地待处理已满（稍后按同一编号重交）。',
+   };
+@@ -102,7 +104,7 @@
+       const parts=url.pathname.split('/');
+       const route=routes.find(r=>r.method===req.method&&r.path.split('/').length===parts.length&&r.path.split('/').every((p,i)=>p===':id'?batchId.test(parts[i]):p===parts[i]));
+       if(!route)fail(404,'接口不存在');
+-      if(route.auth===false)return reply(200,{...infoGuide('http://'+authority,repo),instance});
++      if(route.auth===false)return reply(200,{...infoGuide('http://'+authority,repo,borrow?.channels?.()),instance});
+       const actual=Buffer.from(req.headers.authorization??'');
+       if(actual.length!==expected.length||!timingSafeEqual(actual,expected))fail(401,'需要本机令牌');
+       if(route.path==='/v1/skills'){
+@@ -114,6 +116,7 @@
+       if(parts[2]==='borrow'){
+         if(!borrow)fail(503,'借用接口暂不可用');
+         if(!id){const result=borrow.submit(await bodyOf(req,30*1024*1024));return reply(result.existing?200:202,result);}
++        if(req.method==='DELETE'){const gone=borrow.cancel(id);if(!gone)fail(404,'借用任务不存在');return reply(200,gone);}
+         const job=borrow.get(id);if(!job)fail(404,'借用任务不存在');return reply(200,job);
+       }
+       if(parts[2]==='registration-turns'){
+--- installed/desktop/shell.mjs
++++ candidate/desktop/shell.mjs
+@@ -6,8 +6,8 @@
+ import {fileURLToPath,pathToFileURL} from 'node:url';
+ import {dirname,resolve} from 'node:path';
+ import {createInteractionWork} from './interaction-work.mjs';
+-import {createAnimationMaker} from './animation-maker.mjs';
+-import {requestGeminiImage,isBandaoConfigured,createVision,setCloudTaskAudit,setCloudFallbackLog,createLocalAi,createPrivateModel,desktopModelPath,readGpuLoad} from './ai-gateway.mjs';
++import {createAnimationMaker,createVoiceStudio,createVideoStudio} from './animation-maker.mjs';
++import {agyBorrow,requestGeminiImage,isBandaoConfigured,createVision,setCloudTaskAudit,setCloudFallbackLog,createLocalAi,createPrivateModel,desktopModelPath,readGpuLoad} from './ai-gateway.mjs';
+ import {setTimeout as delay} from 'node:timers/promises';
+ import {mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:fs';
+ import {readFile,stat} from 'node:fs/promises';
+@@ -1102,6 +1102,20 @@
+       if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'动画生成器',message:'动画生成器没能打开。',detail:error.message,buttons:['确定']}).catch(()=>{});
+     });
+   }
++  // 语音制作挂在动画生成器菜单下级，是另一个独立服务；装载模型占内存和显存，只在点击时启动。
++  const voiceStudio=createVoiceStudio({openExternal:url=>electron.shell.openExternal(url)});
++  function openVoiceStudio(){
++    void voiceStudio.open().catch(error=>{
++      if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'语音制作',message:'语音制作没能打开。',detail:error.message,buttons:['确定']}).catch(()=>{});
++    });
++  }
++  // 视频生成同样是独立服务；打开页面后才启动模型后端。
++  const videoStudio=createVideoStudio({openExternal:url=>electron.shell.openExternal(url)});
++  function openVideoStudio(){
++    void videoStudio.open().catch(error=>{
++      if(!quitApproved&&electron.dialog)void messages.showMessageBox({type:'error',title:'视频生成',message:'视频生成没能打开。',detail:error.message,buttons:['确定']}).catch(()=>{});
++    });
++  }
+   function menu(candidate=layout){
+     const attachedCommand=click=>({enabled:windowsReady,click});
+     const actions={
+@@ -1145,6 +1159,8 @@
+       animationGemini:{click:()=>openAnimationMaker('gemini')},
+       animationLocal:{click:()=>openAnimationMaker('local')},
+       animationGif:{click:()=>openAnimationMaker('gif')},
++      voiceStudio:{click:()=>openVoiceStudio()},
++      videoStudio:{click:()=>openVideoStudio()},
+       cardDraw:{click:()=>taskNotice(cardDraw.open())},
+       notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
+       pendingCheck:checks.pending&&{click:()=>taskNotice(screenQuestion.openReview('checks'))},
+@@ -1440,7 +1456,7 @@
+         queueInfo:()=>({used:formalUsed(),limit:FORMAL_LIMIT,tasks:tasks.formalCount?.()??0,
+           running:localPool?.active?.title??((tasks.executingCount?.()??0)?taskThought?.title??'本机任务':null)})});
+       // 借用接口：动画生成器等本机程序借用 Gemini、ComfyUI 高清放大与已登记 CLI
+-      const borrow=createBorrow({gemini:input=>requestGeminiImage(input),upscale:image=>localUpscale({root,profile,image})});
++      const borrow=createBorrow({gemini:input=>requestGeminiImage(input),upscale:image=>localUpscale({root,profile,image}),...agyBorrow()});
+       localREST=await openLocalREST({profile,pool:localPool,borrow,...options.localAPI});
+       localPool.start();
+     }catch(error){
+--- installed/desktop/menu-layout.json
++++ candidate/desktop/menu-layout.json
+@@ -29,6 +29,8 @@
+     {"action":"animationLocal","label":"本地生图","icon":"🪄"},
+     {"action":"animationGif","label":"GIF","icon":"🎞"},
+     "-",
++    {"action":"voiceStudio","label":"语音制作","icon":"🎙"},
++    {"action":"videoStudio","label":"视频生成","icon":"🎬"},
+     {"action":"cardDraw","label":"抽卡","icon":"🎴"}
+   ]},
+   {"label":"桌宠动作","icon":"🎀","items":[
+--- installed/desktop/README.md
++++ candidate/desktop/README.md
+@@ -8,6 +8,10 @@
+ 
+ ## 抽卡
+ 
++右键菜单「动画生成器」下的「语音制作」打开独立项目 `G:/selftool/toolswithmodel/voicestudio`（`127.0.0.1:8767`）：只在点击时启动，装载模型约占 15.5GB 内存和 7GB 显存；用页面右上角 ⏻ 退出并释放。
++
++同一子菜单的「视频生成」打开独立项目 `G:/selftool/toolswithmodel/videostudio`（`127.0.0.1:8769`）：只在点击时启动服务，打开页面后检查占用并启动 ComfyUI 后端；用页面右上角的退出按钮释放内存和显存。语音制作、视频生成、本地生图同一时间只能有一个占用模型。
++
+ 右键绯月或托盘图标，打开「动画生成器 → 抽卡」。它是绯月自有窗口（[需求](../docs/CARD_DRAW_REQUIREMENTS.md)、[设计](../docs/CARD_DRAW_DESIGN.md)）。填人物、服装、动作参考图和提示词（都可留空），打开开关后每分钟用 OpenAI 抽一张低画质图；在「挑卡」勾选的图下一轮优先重绘为 2048 高清。首次需填 API Key，第一次成功后用系统加密保存。图片在系统“图片”文件夹的 `绯月抽卡\抽卡` 与 `绯月抽卡\高清`，「清理未勾选」把图移到回收站。关窗后继续执行，每张都按 OpenAI 账号计费。词库为 `desktop/card-draw-words.json`。
+ 
+ ## 陪我学习
+--- installed/docs/LOCAL_GARDEN_API.md
++++ candidate/docs/LOCAL_GARDEN_API.md
+@@ -133,6 +133,28 @@
+ 
+ 本机 SQLite 在首次启动时建立独立的提醒请求表。花园表、原路由和旧批次回执沿用原有格式。两类任务共享 20 个名额及执行顺序。既有云端提醒模板、业务表、主站代码和提醒检查频率保持。正式工作队列及提醒业务的设计依据见 [正式工作队列](FORMAL_WORK_QUEUE.md) 和 [登记链路](RECORDING_CHAIN_RELEASE_DESIGN.md)。
+ 
++## v8：本机借用接口（2026-11-25 JST，开发版）
++
++让本机其他程序（首个调用方是动画生成器 `G:/selftool/webmcreator`）借用绯月的 AI、ComfyUI 与已登记 CLI。密钥、模型和工作流都留在绯月，调用方只提交输入并按编号轮询。借用与生图一样是并行工作，不占正式工作名额，不等正式工作空闲；借用任务之间按到达顺序逐个执行。
++
++- `POST /v1/borrow`：新建 202 `{existing:false, job}`，同编号重交 200 返回原任务，同编号换通道 409。请求体上限 30MB，图片单张不超过 20MB。
++  - `channel:'ai'`：`kind:'gemini-image'`、`prompt`（1～4000 字）、可选 `images`（最多 4 张 `{mime, base64}`）、可选 `aspectRatio`（如 `2:3`，传给 Gemini `imageConfig`）。
++  - `channel:'comfy'`：`workflow:'upscale'`、`image:{mime, base64}`，走本机图像 skill 的 4× NMKD 放大。
++  - `channel:'cli'`：`command` 只能是已登记命令，目前只有只读的 `python-version`。
++- `GET /v1/borrow/:id`：返回 `{id, channel, state: queued|running|done|failed, created, started, finished, error, result, queue?}`。`result` 对 ai/comfy 为 `{image:{mime, base64, width?, height?}}`，对 cli 为 `{stdout}`。
++- 结果只留在内存，最多保留最近 30 个；绯月重启后查询返回 404，需按原内容重交。
++- 编号格式同花园批次。鉴权、来源限制与其他路由相同。
++
++## v9：借用接口增加 agy 文本通道（2026-11-27 JST 开发，2026-11-28 安装）
++
++首个调用方是语音分段制作页面 `G:/selftool/toolswithmodel/voicestudio` 的情绪改写。说明中 `borrow.channels` 含 `agy` 才可用；本机未装 agy 时不列出，提交返回 503。
++
++- `POST /v1/borrow`，`channel:'agy'`：`prompt`（1～4000 字）。
++- 单独排队、一次一个，不阻塞生图与放大。开始前让位：绯月自身没有进行中的 agy 调用且额度不在冷却，连续满 3 秒才开始；等待中任务的 `waiting` 为 `busy` 或 `cooldown`，不会自动放弃。已开始的任务不被打断。
++- 完成结果 `{text}` 为模型原样回复，解析与校验由调用方负责。
++- `DELETE /v1/borrow/:id`：取消未完成的 agy 任务（排队的移除，执行中的中断并丢弃结果），返回 `{id, cancelled:true}`；不存在 404，其他通道或已完成 409。
++- 调用方式：一次性 stream-json 进程，提示词只经标准输入传入，附 `--sandbox --disable-slash-commands`，不放开任何工具权限，工作目录为现有 agy 空目录，模型沿用 `gemini-3.8-flash-low`，单次超时 120 秒。
++
+ ## 正式安装验收后的全局说明条款
+ 
+ 待更新位置为 `C:/Users/asura/.codex/AGENTS.md` 和 `C:/Users/asura/.claude/CLAUDE.md`。本次开发阶段自动审批因正式安装、受控重启和验收尚未完成而拒绝写入。实际切换时在两份文件追加以下条款，并在本次发布纪要记录执行情况。
