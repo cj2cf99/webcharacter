@@ -32,7 +32,7 @@
 - `menu-layout.json`：「动画生成器」子菜单末尾加 `{"action":"cardDraw","label":"抽卡","icon":"🎴"}`。
 - `source-updates.mjs`：`pages` 加 `card-draw.html`。
 - `desktop/README.md`（入口说明）、`docs/DESKTOP_UI_GUIDE.md`（菜单结构）、`tools/test-desktop-shell.mjs`（子菜单标签断言）、`tools/test-menu-first-show-electron.mjs`（加 `card` 入口）。问答里的菜单指引由菜单文字自动生成，技能文本中没有写死本路径。
-- 新增 `tools/test-card-draw-electron.mjs`：抽卡窗口隔离检查，自带浅深色与 360 宽截图，因此未改公共截图巡检工具（开发时调整）。
+- 新增 `tools/test-card-draw-electron.mjs`：抽卡窗口隔离检查（交互与流程）。公共截图巡检 `tools/menu-panel-capture.mjs` 按项目约定纳入抽卡面板，浅色、深色各跑一次，含默认宽度与 360 宽。
 
 测试与基准模式：`benchmark` 时不启动调度器；图片根目录与资料目录由调用方传入，目录到第一次保存时才创建，隔离测试一律指向临时目录，不碰真实“图片”文件夹。
 

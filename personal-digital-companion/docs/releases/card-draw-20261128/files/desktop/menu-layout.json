@@ -1,0 +1,62 @@
+[
+  {"action":"question","label":"问绯月","icon":"💬"},
+  {"action":"privateChat","tone":"hot"},
+  {"action":"notices","icon":"🔔","tone":"hot"},
+  {"action":"pendingCheck","label":"提醒检查 · 待执行","icon":"⏱","tone":"hot"},
+  {"action":"continueNag","label":"待确认","icon":"💭","tone":"hot"},
+  {"action":"today","label":"今日任务","icon":"📋"},
+  {"action":"weather","label":"三地天气","icon":"⛅"},
+  {"action":"review","label":"本地复盘","icon":"📖"},
+  "-",
+  {"label":"阅读与学习","icon":"📚","items":[
+    {"action":"news","label":"新闻简报","icon":"📰"},
+    {"action":"knowledge","label":"知识库","icon":"🗂"},
+    {"action":"study","label":"陪我学习","icon":"📚"}
+  ]},
+  {"label":"任务","icon":"🧩","items":[
+    {"action":"writeDiary","label":"看绯月写日记","icon":"✍"},
+    {"action":"reviewLocalTasks","label":"补写本机任务执行评价","icon":"📝"},
+    {"action":"tasks","label":"绯月任务管理","icon":"🗂"},
+    {"action":"retry","label":"中断任务与补传","icon":"🔁"},
+    {"action":"log","label":"任务日志","icon":"📜"},
+    "-",
+    {"action":"restoreTerminal","label":"恢复本机任务终端 ID","icon":"🛠"}
+  ]},
+  {"label":"动画生成器","icon":"🎬","items":[
+    {"action":"animationCrop","label":"切图校准","icon":"✂"},
+    {"action":"animationGemini","label":"Gemini 生图","icon":"✨"},
+    {"action":"animationLocal","label":"本地生图","icon":"🪄"},
+    {"action":"animationGif","label":"GIF","icon":"🎞"},
+    "-",
+    {"action":"cardDraw","label":"抽卡","icon":"🎴"}
+  ]},
+  {"label":"桌宠动作","icon":"🎀","items":[
+    {"action":"visibility","icon":"👁"},
+    {"action":"work","icon":"💼"},
+    {"action":"move","label":"移动到","icon":"🖥"},
+    {"action":"home","label":"回到右下角","icon":"↘"},
+    {"action":"randomMovement","label":"随机移动","icon":"👣"},
+    "-",
+    {"action":"attachment","icon":"🪟","items":[
+      {"action":"climbLeft","label":"左侧电梯上行","icon":"⬆"},
+      {"action":"climbRight","label":"右侧电梯上行","icon":"⬆"},
+      {"action":"sit","label":"上沿坐姿","icon":"🪑"},
+      {"action":"lie","label":"上沿侧卧","icon":"🛋"},
+      {"action":"continuous","label":"坐卧连续循环","icon":"🔄"},
+      "-",
+      {"action":"detach","label":"解除依附","icon":"✋"}
+    ]}
+  ]},
+  {"label":"设置与维护","icon":"⚙","items":[
+    {"action":"settings","label":"动画与声音","icon":"🎞"},
+    {"action":"pollSettings","label":"轮询设定","icon":"⏲"},
+    {"action":"loginStart","label":"登录 Windows 后延迟 1 分钟启动","icon":"🚀"},
+    {"action":"connection","label":"云端连接","icon":"☁"},
+    {"label":"线上测试","icon":"🧪","items":[
+      {"action":"multiScreenTest","label":"多屏截图内容确认","icon":"🖥"}
+    ]},
+    "-",
+    {"action":"restart","label":"重启绯月","icon":"♻","tone":"danger"},
+    {"action":"quit","label":"退出","icon":"⏻","tone":"danger"}
+  ]}
+]

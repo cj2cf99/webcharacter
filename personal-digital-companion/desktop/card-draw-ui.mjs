@@ -97,11 +97,13 @@ async function loadPic(slot,file){
   const frame=slot.querySelector('.frame');
   frame.classList.remove('bad');frame.classList.add('loading');
   try{
-    if(!/^image\/(png|jpeg|webp)$/.test(file.type))throw Error('type');
+    // 没有扩展名的文件类型为空，交给解码判断；解不开同样走下面的提示。
+    if(file.type&&!/^image\/(png|jpeg|webp)$/.test(file.type))throw Error('type');
     const bitmap=await createImageBitmap(file),scale=Math.min(1,MAX_SIDE/Math.max(bitmap.width,bitmap.height));
     const canvas=document.createElement('canvas');
     canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
     canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
+    bitmap.close();
     await saveRef(slot,canvas.toDataURL('image/png'));
   }catch{ // 原来的图保留，提示后可重新选
     void frame.offsetWidth;frame.classList.add('bad');
@@ -123,8 +125,12 @@ for(const slot of $$('.pic')){
 for(const type of ['dragover','drop'])addEventListener(type,event=>event.preventDefault());
 // 粘贴到：当前聚焦的槽 → 鼠标所在的槽 → 第一个空槽
 addEventListener('paste',event=>{
-  const file=[...event.clipboardData.files].find(item=>item.type.startsWith('image/'));
-  if(!file||tab!=='setup'||$('dialog[open]'))return;
+  if(tab!=='setup'||$('dialog[open]'))return;
+  // 提示词框里带文字的粘贴按文字处理。
+  if(document.activeElement.id==='prompt'&&event.clipboardData.getData('text'))return;
+  // 一次多个文件时先取明确的图片，没有才试类型为空的。
+  const files=[...event.clipboardData.files],file=files.find(item=>item.type.startsWith('image/'))??files.find(item=>!item.type);
+  if(!file)return;
   const slot=document.activeElement.closest('.pic')||hovered||$$('.pic').find(item=>!S?.refs[item.dataset.slot]);
   if(slot){event.preventDefault();void loadPic(slot,file);}
 });

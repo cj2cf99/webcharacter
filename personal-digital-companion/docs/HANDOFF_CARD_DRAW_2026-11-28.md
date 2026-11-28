@@ -90,7 +90,11 @@ node --test --test-force-exit --test-timeout=45000 "agent/tests/*.test.mjs"
 ## 8. 接续安装时要做的
 
 1. 按本项目 `AGENTS.md`「本机桌宠功能更新」：先核实实际安装目录与加载路径。
-2. **以安装版为基线合入改动**，不要拿开发区的 `shell.mjs`、`menu-layout.json` 等整文件覆盖；`menu-layout.json` 热加载会先于主进程生效，旧进程不认识 `cardDraw` 动作，故文件更新后紧接着重启。
+2. **以安装版为基线合入改动**，不要拿开发区的 `shell.mjs`、`menu-layout.json` 等整文件覆盖（会丢掉安装版独有的内容）。主程序、菜单与新增的 `card-draw*` 文件要一起更新后再重启：
+   - 旧进程运行时只换 `menu-layout.json`：热加载因不认识 `cardDraw` 动作而失败，保留旧菜单，看不到「抽卡」。
+   - 新菜单配旧 `shell.mjs` 启动：整个菜单退回只剩「重启绯月」「退出」。
+   - 新主程序配旧菜单：正常启动，但没有「抽卡」项。
+   - 页面样式与脚本依赖 `source-updates.mjs` 登记，构建产物要一并核对。
 3. 在实际待发布目录写 `RELEASE_REVIEW.md`，取得用户本次确认。
 4. 更新文件 → 退出绯月 → 等 5 秒 → 以独立进程启动（清除 `ELECTRON_RUN_AS_NODE`）。
 5. 用户实机验收：无参考图一张、带参考图一张、高清一张（会计费），看花费显示。

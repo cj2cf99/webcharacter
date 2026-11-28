@@ -1,0 +1,191 @@
+--- installed/desktop/shell.mjs
++++ candidate/desktop/shell.mjs
+@@ -15,6 +15,7 @@
+ import {createThoughtOverlay} from './thought-overlay.mjs';
+ import {createPanelWindow} from './panel-window.mjs';
+ import {attachKnowledge} from './knowledge-host.mjs';
++import {attachCardDraw} from './card-draw-host.mjs';
+ import {attachSettings} from './settings-host.mjs';
+ import {watchFileChanges,setLiveWarningLog,warnLiveUpdate} from './live-files.mjs';
+ import {menuTemplate} from './menu-layout.mjs';
+@@ -101,6 +102,7 @@
+   }}:archive;
+   let taskThought=null,pollThought=null,memoryThought=null,lastThought='',localPool=null,localREST=null;
+   let memoryResult=null,memoryResultTimer;
++  let cardResult=null,cardResultTimer;
+   let privateChat,privatePanel,privateTimer,transcription;
+   let modelExecuting=false,updatePollClock=()=>{};
+   const tasks=options.tasks||await createDesktopTasks({profile,dialog:messages,memory,safeStorage:electron.safeStorage,onExecutionChange:()=>updatePollClock(),
+@@ -176,7 +178,7 @@
+     updatePollClock();
+     // 思考云标出正式工作与闲时工作。
+     const label=(prefix,value)=>value&&{...value,title:prefix+value.title};
+-    const thought=label('正式 · ',transcription?.active)??(work?null:label('正式 · ',privateChat?.active??localPool?.active??taskThought)??label('闲时 · ',memoryThought??memoryResult)??pollThought);
++    const thought=label('正式 · ',transcription?.active)??(work?null:label('正式 · ',privateChat?.active??localPool?.active??taskThought)??label('闲时 · ',memoryThought??memoryResult)??cardResult??pollThought);
+     const encoded=JSON.stringify(thought);
+     if(force||lastThought!==encoded){
+       lastThought=encoded;thoughtOverlay.set(thought);
+@@ -423,6 +425,16 @@
+   const newsPanel=attachNewsPanel(electron,{root,bundle,checks,model:localModel,compile:compileNews});
+   const study=attachStudy(electron,{root,bundle,profile,model:localModel,connection:options.studyConnection,onForeground:interruptMemory});
+   const knowledge=attachKnowledge(electron,{profile,root,bundle,model:localModel,enabled:!options.benchmark});
++  // 抽卡只提示暂停和高清完成；隔离资料目录的实例不碰系统“图片”文件夹。
++  const cardDraw=attachCardDraw(electron,{root,bundle,profile,enabled:!options.benchmark,log:tasks.traffic?.write,
++    pictureRoot:options.cardPictureRoot??(options.profile?resolve(options.profile,'card-draw-pictures'):undefined),
++    onNotice:stage=>{
++      cardResult={title:'抽卡',stage};
++      clearTimeout(cardResultTimer);
++      cardResultTimer=setTimeout(()=>{cardResult=null;syncActivity();},8000);
++      cardResultTimer.unref?.();
++      syncActivity();
++    }});
+   const serverTask=createServerTaskCommand({profile,tasks,localModel,interactionWork,dialog:messages,knowledge});
+   const upgradeVision=options.upgradeVision;
+   const voice=createBubbleVoice({root,profile});
+@@ -1128,6 +1140,7 @@
+       animationGemini:{click:()=>openAnimationMaker('gemini')},
+       animationLocal:{click:()=>openAnimationMaker('local')},
+       animationGif:{click:()=>openAnimationMaker('gif')},
++      cardDraw:{click:()=>taskNotice(cardDraw.open())},
+       notices:menuUnread>0&&{label:'提醒（'+menuUnread+' 条未读）',click:()=>taskNotice(screenQuestion.openReview('notices'))},
+       pendingCheck:checks.pending&&{click:()=>taskNotice(screenQuestion.openReview('checks'))},
+       pollSettings:{click:()=>taskNotice(pollSettings.open())},
+@@ -1228,7 +1241,7 @@
+     if(files.includes('tray.png'))tray.setImage(nativeImage.createFromPath(resolve(bundle,'tray.png')));
+     for(const [page,panel] of [['index.html',win],['thought.html',thoughtOverlay.panel],['settings.html',pcSettings.panel],['weather.html',weather.panel],
+       ['conversation.html',screenQuestion.details],['reminder-review.html',reminderReview?.panel],['poll-settings.html',pollSettings.panel],
+-      ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],['study.html',study.panel],['knowledge.html',knowledge.panel],
++      ['task-inbox.html',taskInbox?.panel],['news-panel.html',newsPanel.panel],['study.html',study.panel],['knowledge.html',knowledge.panel],['card-draw.html',cardDraw.panel],
+       ['screen-question.html',screenQuestion.panel],['registration-review.html',screenQuestion.inquiryPanel],['sound-settings.html',settingsWindow],
+       ...(messages.panels??[]).map(panel=>['message-box.html',panel])]){
+       if(!panel||panel.isDestroyed())continue;
+@@ -1283,6 +1296,7 @@
+     taskInbox?.close();
+     weather.close();
+     knowledge.close();
++    clearTimeout(cardResultTimer);cardDraw.close();
+     movement=null;ipcMain.removeListener('pc:runtime',onMovementRuntime);pcSettings.close();
+     stopPoll();ipcMain.removeListener('desktop:sound-ready',soundReady);ipcMain.removeListener('desktop:sound-change',soundChange);ipcMain.removeListener('desktop:sound-preview',soundPreview);
+     if(settingsWindow&&!settingsWindow.isDestroyed())settingsWindow.destroy();
+@@ -1435,6 +1449,6 @@
+   const remindersReady=waitForStartupReminders(reminderStartup.signal);
+   if(!options.benchmark)checks.start();
+   taskNotice(tasks.startup(remindersReady));
+-  return {win,show,hide,moveTo,thoughtOverlay,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,transcription,study,knowledge,
++  return {win,show,hide,moveTo,thoughtOverlay,attachment,startAttachment,stopPoll,setWork,pcSettings,tasks,screenQuestion,weather,localModel,transcription,study,knowledge,cardDraw,
+     get localAPIAddress(){return localREST?.address??null;},getStats:()=>({pointerMessages,visible:win.isVisible(),ready:previousReady})};
+ }
+--- installed/desktop/menu-layout.json
++++ candidate/desktop/menu-layout.json
+@@ -26,7 +26,9 @@
+     {"action":"animationCrop","label":"切图校准","icon":"✂"},
+     {"action":"animationGemini","label":"Gemini 生图","icon":"✨"},
+     {"action":"animationLocal","label":"本地生图","icon":"🪄"},
+-    {"action":"animationGif","label":"GIF","icon":"🎞"}
++    {"action":"animationGif","label":"GIF","icon":"🎞"},
++    "-",
++    {"action":"cardDraw","label":"抽卡","icon":"🎴"}
+   ]},
+   {"label":"桌宠动作","icon":"🎀","items":[
+     {"action":"visibility","icon":"👁"},
+--- installed/desktop/source-updates.mjs
++++ candidate/desktop/source-updates.mjs
+@@ -6,6 +6,7 @@
+ // 构建与热加载使用同一份页面依赖。每次只更新受影响的窗口。
+ export const pages = {
+   'news-notice.html':['feiyue-surface.css','news-notice.css'],
++  'card-draw.html':['feiyue-surface.css','card-draw.css','card-draw-ui.mjs'],
+   'knowledge.html':['feiyue-surface.css','knowledge.css','knowledge-ui.mjs'],
+   'study.html':['feiyue-surface.css','study.css','study-ui.mjs','pair-choice.mjs','dictation-ui.mjs','bubble-voice-capture.mjs','bubble-voice-processor.mjs',
+     'study-voice.mjs','bubble-voice-segments.mjs'],
+--- installed/desktop/README.md
++++ candidate/desktop/README.md
+@@ -2,6 +2,10 @@
+ 
+ 右键绯月或托盘图标，进入「桌宠动作」，取消勾选「随机移动」即可停止自动走动。开关保存在本机，重启后继续生效。需要找回绯月时，可以从同一菜单点「回到右下角」。
+ 
++## 抽卡
++
++右键绯月或托盘图标，打开「动画生成器 → 抽卡」。它是绯月自有窗口（[需求](../docs/CARD_DRAW_REQUIREMENTS.md)、[设计](../docs/CARD_DRAW_DESIGN.md)）。填人物、服装、动作参考图和提示词（都可留空），打开开关后每分钟用 OpenAI 抽一张低画质图；在「挑卡」勾选的图下一轮优先重绘为 2048 高清。首次需填 API Key，第一次成功后用系统加密保存。图片在系统“图片”文件夹的 `绯月抽卡\抽卡` 与 `绯月抽卡\高清`，「清理未勾选」把图移到回收站。关窗后继续执行，每张都按 OpenAI 账号计费。词库为 `desktop/card-draw-words.json`。
++
+ ## 陪我学习
+ 
+ 在绯月或托盘右键菜单选择「阅读与学习 → 陪我学习」，也可以在「问绯月」输入“陪我学习”。
+--- installed/tools/menu-panel-capture.mjs
++++ candidate/tools/menu-panel-capture.mjs
+@@ -16,13 +16,14 @@
+ import {attachPollSettings} from '../desktop/poll-settings-host.mjs';
+ import {createMessageBoxes} from '../desktop/message-box.mjs';
+ import {attachKnowledge} from '../desktop/knowledge-host.mjs';
++import {attachCardDraw} from '../desktop/card-draw-host.mjs';
+ import {createKnowledgeStore} from '../desktop/knowledge-store.mjs';
+ import {createKnowledgeBackups} from '../desktop/knowledge-backups.mjs';
+ 
+ const root=resolve(import.meta.dirname,'..'),profile=mkdtempSync(join(tmpdir(),'feiyue-menu-qa-'));
+ const out=join(root,'output/menu-qa');
+ mkdirSync(join(profile,'desktop'));
+-for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','task-inbox-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs','message-box-preload.cjs','knowledge-preload.cjs'])
++for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','task-inbox-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs','message-box-preload.cjs','knowledge-preload.cjs','card-draw-preload.cjs'])
+   copyFileSync(join(root,'desktop',file),join(profile,'desktop',file));
+ const common={root:profile,profile,bundle:join(root,'output/desktop-bundle'),visible:true};
+ const wait=ms=>new Promise(r=>setTimeout(r,ms));
+@@ -231,7 +232,32 @@
+       ...Array.from({length:cursor?3:15},(_,i)=>JSON.stringify({time:new Date(now-i*60_000).toISOString(),direction:i%2?'receive':'send',method:'GET',route:'/api/tasks',status:200,duration_ms:120+i}))],
+       next:cursor?null:[1]})});
+   const boxes=createMessageBoxes(runtime,{...common});
++  // 抽卡：假图片放在隔离目录，不启动调度器；默认宽度和 360 窄窗都截图。
++  const cardPictures=join(profile,'card-draw-pictures');
++  mkdirSync(join(cardPictures,'抽卡'),{recursive:true});
++  for(let i=0;i<8;i++){
++    const pixels=Buffer.alloc(64*64*4,255);
++    for(let p=0;p<pixels.length;p+=4){pixels[p]=i*31;pixels[p+1]=255-i*29;pixels[p+2]=(p/256)%256;}
++    writeFileSync(join(cardPictures,'抽卡','20261128-2100'+String(i).padStart(2,'0')+'-000.png'),
++      electron.nativeImage.createFromBitmap(pixels,{width:64,height:64}).toPNG());
++  }
++  mkdirSync(join(cardPictures,'高清'),{recursive:true});
++  for(const name of ['20261128-210100-000.png','20261128-210200-000.png'])
++    copyFileSync(join(cardPictures,'抽卡','20261128-210000-000.png'),join(cardPictures,'高清',name));
++  const cards=attachCardDraw(runtime,{...common,pictureRoot:cardPictures,enabled:false});
+   try{
++    await cards.open();
++    const cardPage=code=>cards.panel.webContents.executeJavaScript(code);
++    for(const [size,width,height] of [['',760,800],['-360',360,640]]){
++      cards.panel.setContentSize(width,height);
++      for(const view of ['setup','cards','hd']){
++        await cardPage(`document.querySelector('[data-tab=${view}]').click()`);
++        await wait(500);await shot('card-draw-'+view+size,cards.panel);
++        assert(await cardPage('document.documentElement.scrollWidth<=innerWidth&&main.scrollWidth<=main.clientWidth'),view+size);
++      }
++    }
++    assert.equal(await cardPage("document.querySelectorAll('#cards .card').length"),8);
++    assert.equal(await cardPage("document.querySelectorAll('#hd .card img').length"),2);
+     for(const [name,host] of [['today',review],['inbox',inbox],['registration',registration],['weather',weather],['polls',polls]]){
+       await host.open();host.panel.setSize(430,560);await wait(500);await shot(name,host.panel);
+     }
+@@ -269,6 +295,6 @@
+       await shot(name,view);view.destroy();
+     }
+     console.log('截图已写入 '+out);
+-  }finally{for(const h of [review,inbox,registration,weather,polls,history])h.close();checkStore.close();}
++  }finally{for(const h of [review,inbox,registration,weather,polls,history,cards])h.close();checkStore.close();}
+ }
+ main().then(()=>electron.app.exit(0),error=>{console.error(error);electron.app.exit(1);});
+--- installed/tools/test-menu-first-show-electron.mjs
++++ candidate/tools/test-menu-first-show-electron.mjs
+@@ -17,6 +17,7 @@
+   settings:['设置与维护','动画与声音','settings.html'],
+   question:['','问绯月','screen-question.html'],
+   message:['设置与维护','云端连接','message-box.html'],
++  card:['动画生成器','抽卡','card-draw.html'],
+   menu:['','','menu.html'],
+ };
+ const [group,label,page]=cases[target];
+@@ -35,7 +36,7 @@
+ }
+ const preload={
+   poll:'poll-settings-preload.cjs',pending:'conversation-preload.cjs',inbox:'task-inbox-preload.cjs',settings:'preload.cjs',
+-  question:'screen-question-preload.cjs',message:'message-box-preload.cjs',menu:'menu-preload.cjs',
++  question:'screen-question-preload.cjs',message:'message-box-preload.cjs',menu:'menu-preload.cjs',card:'card-draw-preload.cjs',
+ };
+ let created=0,loads=0,shows=0,window;
+ function TestWindow(options){

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN" class="fy-panel draw-page">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; object-src 'none'; base-uri 'none'">
+<title>绯月 · 抽卡</title>
+<link rel="stylesheet" href="feiyue-surface.css">
+<link rel="stylesheet" href="card-draw.css">
+</head>
+<body>
+<header class="fy-titlebar">
+  <div class="fy-caption"><h1>抽卡</h1></div>
+  <button type="button" id="keyChip" class="keychip" title="密钥状态">🔑 …</button>
+</header>
+
+<section class="deck" aria-label="自动抽卡状态">
+  <button type="button" id="power" class="power" role="switch" aria-checked="false" aria-label="自动抽卡开关"><span class="knob">🎴</span></button>
+  <div class="ring" id="ring"><b id="ringText">—</b></div>
+  <strong id="stateText" class="state">读取中</strong>
+  <div class="meters">
+    <span class="meter" title="排队中的高清"><i>✨</i><b id="queueNum">0</b></span>
+    <span class="meter money" title="本次启动 / 累计花费（按接口用量推算，以账单为准）"><i>💰</i><b id="costNow">$0.000</b><small id="costAll">/ $0.000</small></span>
+  </div>
+</section>
+<p id="banner" class="banner" role="alert" hidden><span id="bannerText"></span><button type="button" id="resume">继续</button></p>
+<p id="status" class="fy-toast note" role="status"></p>
+
+<nav class="fy-bar">
+  <div class="fy-seg" role="tablist">
+    <button type="button" role="tab" data-tab="setup" data-icon="⚙" aria-selected="true"><span>配置</span></button>
+    <button type="button" role="tab" data-tab="cards" data-icon="🎴" aria-selected="false"><span>挑卡</span> <em id="cardCount"></em></button>
+    <button type="button" role="tab" data-tab="hd" data-icon="✨" aria-selected="false"><span>高清</span> <em id="hdCount"></em></button>
+  </div>
+  <span class="grow"></span>
+  <span id="saved" class="saved">✓ 已记住</span>
+</nav>
+
+<main class="fy-scroll" id="main">
+  <section data-view="setup">
+    <div class="slots">
+      <div class="slot pic" data-slot="who"><span class="slot-head"><i>🧑</i>人物</span>
+        <div class="frame"><button type="button" class="drop" aria-label="选择人物图片" title="点击选择、拖入，或 Ctrl+V 粘贴"><img alt="人物参考图" hidden><span class="hint">＋</span></button><button type="button" class="clear" aria-label="移除人物图片" title="移除" hidden>✕</button></div>
+        <em class="fy-chip"></em><input type="file" accept="image/png,image/jpeg,image/webp" hidden></div>
+      <div class="slot pic" data-slot="wear"><span class="slot-head"><i>👘</i>服装</span>
+        <div class="frame"><button type="button" class="drop" aria-label="选择服装图片" title="点击选择、拖入，或 Ctrl+V 粘贴"><img alt="服装参考图" hidden><span class="hint">＋</span></button><button type="button" class="clear" aria-label="移除服装图片" title="移除" hidden>✕</button></div>
+        <em class="fy-chip"></em><input type="file" accept="image/png,image/jpeg,image/webp" hidden></div>
+      <div class="slot pic" data-slot="act"><span class="slot-head"><i>🤸</i>动作</span>
+        <div class="frame"><button type="button" class="drop" aria-label="选择动作图片" title="点击选择、拖入，或 Ctrl+V 粘贴"><img alt="动作参考图" hidden><span class="hint">＋</span></button><button type="button" class="clear" aria-label="移除动作图片" title="移除" hidden>✕</button></div>
+        <em class="fy-chip"></em><input type="file" accept="image/png,image/jpeg,image/webp" hidden></div>
+      <label class="slot wide" data-slot="free"><span class="slot-head"><i>✍</i>提示词<em class="fy-chip"></em></span><textarea id="prompt" rows="3" maxlength="8000" placeholder="想补充什么就写什么，可以留空"></textarea></label>
+    </div>
+    <details class="api"><summary><span class="fy-caret">›</span> 接口与规格</summary>
+      <div class="api-body">
+        <label>服务 <select aria-label="服务"><option>ChatGPT（OpenAI）</option></select></label>
+        <dl>
+          <dt>🎴 抽卡</dt><dd>有参考图：api.openai.com/v1/images/edits<br>只有文字：api.openai.com/v1/images/generations<br><span class="fy-chip">gpt-image-2.6-flare</span> <span class="fy-chip">1024²</span> <span class="fy-chip">低画质</span></dd>
+          <dt>✨ 高清</dt><dd>api.openai.com/v1/images/edits<br><span class="fy-chip">gpt-image-2.6-sunburst</span> <span class="fy-chip">2048²</span> <span class="fy-chip">高画质</span></dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+  <section data-view="cards" hidden><button type="button" id="fresh" class="fresh" hidden></button><ul id="cards" class="grid"></ul><div class="fy-pager" id="cardsPager"></div></section>
+  <section data-view="hd" hidden><ul id="hd" class="grid big"></ul><div class="fy-pager" id="hdPager"></div></section>
+</main>
+
+<footer class="fy-foot" id="foot" hidden>
+  <button type="button" id="clean" class="clean" disabled>🧹 清理未勾选 <b id="cleanNum">0</b></button>
+</footer>
+
+<dialog id="keyBox">
+  <form method="dialog">
+    <h2>🔐 填写 API Key</h2>
+    <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…">
+    <p class="fy-meta">第一次请求成功后，用 Windows 系统加密保存在本机。</p>
+    <menu><button type="button" id="keyCancel">取消</button><button value="ok" class="primary">使用</button></menu>
+  </form>
+</dialog>
+<dialog id="confirmBox">
+  <form method="dialog">
+    <h2>🧹 清理 <b id="confirmNum"></b> 张？</h2>
+    <p>所有未勾选的抽卡图，<strong>包括还没看过的</strong>，移到回收站。高清图不动。</p>
+    <menu><button value="no">先不</button><button value="ok" class="primary">移到回收站</button></menu>
+  </form>
+</dialog>
+<dialog id="viewer"><img alt="大图"><p class="fy-meta"></p><form method="dialog"><button type="button" id="viewPick" hidden></button><button class="fy-icon" aria-label="关闭">✕</button></form></dialog>
+
+<script type="module" src="card-draw-ui.mjs"></script>
+</body>
+</html>

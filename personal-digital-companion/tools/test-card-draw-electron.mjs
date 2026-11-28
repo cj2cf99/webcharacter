@@ -87,6 +87,36 @@ async function test(){
   await js(`document.querySelector('[data-slot=act] .clear').click()`);
   await until(`document.querySelector('[data-slot=act] img').hidden`,'移除图片');
   assert.ok(!existsSync(join(profile,'card-draw/refs/act.png')));
+  // 没有扩展名的图片文件，系统给不出类型，仍按内容读取
+  const bare=join(profile,'reference-without-extension');writeFileSync(bare,png(80,60,7));
+  await choose('act',bare);
+  assert.equal(await js(`document.querySelector('[data-slot=act] input').value`),'');
+  await until(`!document.querySelector('[data-slot=act] img').hidden`,'无类型图片（选择）');
+  await js(`document.querySelector('[data-slot=act] .clear').click()`);
+  await until(`document.querySelector('[data-slot=act] img').hidden`,'再次移除');
+  await js(`(async()=>{const d=await ${transfer};const blob=d.files[0];const n=new DataTransfer();n.items.add(new File([blob],'noext'));
+    document.activeElement.blur();dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:n}));})()`);
+  await until(`!document.querySelector('[data-slot=act] img').hidden`,'无类型图片（粘贴）');
+  await js(`document.querySelector('[data-slot=act] .clear').click()`);
+  await until(`document.querySelector('[data-slot=act] img').hidden`,'最后移除');
+  // 提示词框里粘贴“文字 + 无类型附件”按文字处理，不拦截、不放进图片槽
+  const mixed=await js(`(async()=>{const d=new DataTransfer();d.items.add(new File(['junk'],'noext'));d.setData('text/plain','一段文字');
+    const box=document.querySelector('#prompt');box.focus();const e=new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:d});
+    box.dispatchEvent(e);await new Promise(r=>setTimeout(r,600));
+    const slot=document.querySelector('[data-slot=act]');return [e.defaultPrevented,slot.querySelector('img').hidden,slot.querySelector('em').textContent.includes('读不了')];})()`);
+  assert.deepEqual(mixed,[false,true,false],'提示词框粘贴文字不被拦下');
+  // 提示词框里只粘贴图片，仍放进空槽
+  await js(`(async()=>{const d=await ${transfer};const box=document.querySelector('#prompt');box.focus();
+    box.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:d}));})()`);
+  await until(`!document.querySelector('[data-slot=act] img').hidden`,'提示词框里粘贴图片');
+  await js(`document.querySelector('[data-slot=act] .clear').click()`);
+  await until(`document.querySelector('[data-slot=act] img').hidden`,'移除后');
+  // 一次粘贴多个文件时优先取图片类型
+  await js(`(async()=>{const d=await ${transfer};const n=new DataTransfer();n.items.add(new File(['junk'],'noext'));n.items.add(d.files[0]);
+    document.activeElement.blur();dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:n}));})()`);
+  await until(`!document.querySelector('[data-slot=act] img').hidden`,'多文件取图片');
+  await js(`document.querySelector('[data-slot=act] .clear').click()`);
+  await until(`document.querySelector('[data-slot=act] img').hidden`,'多文件移除');
   // 提示词记忆
   await js(`document.querySelector('#prompt').focus()`);await contents.insertText('雨夜屋顶上的猫');
   await until(`document.querySelector('#saved').classList.contains('on')`,'已记住');

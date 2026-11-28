@@ -16,13 +16,14 @@ import {createReminderChecks} from '../desktop/reminder-checks.mjs';
 import {attachPollSettings} from '../desktop/poll-settings-host.mjs';
 import {createMessageBoxes} from '../desktop/message-box.mjs';
 import {attachKnowledge} from '../desktop/knowledge-host.mjs';
+import {attachCardDraw} from '../desktop/card-draw-host.mjs';
 import {createKnowledgeStore} from '../desktop/knowledge-store.mjs';
 import {createKnowledgeBackups} from '../desktop/knowledge-backups.mjs';
 
 const root=resolve(import.meta.dirname,'..'),profile=mkdtempSync(join(tmpdir(),'feiyue-menu-qa-'));
 const out=join(root,'output/menu-qa');
 mkdirSync(join(profile,'desktop'));
-for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','task-inbox-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs','message-box-preload.cjs','knowledge-preload.cjs'])
+for(const file of ['panel-titlebar.json','registration-preload.cjs','reminder-review-preload.cjs','task-inbox-preload.cjs','weather-preload.cjs','conversation-preload.cjs','preload.cjs','poll-settings-preload.cjs','message-box-preload.cjs','knowledge-preload.cjs','card-draw-preload.cjs'])
   copyFileSync(join(root,'desktop',file),join(profile,'desktop',file));
 const common={root:profile,profile,bundle:join(root,'output/desktop-bundle'),visible:true};
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -231,7 +232,32 @@ async function main(){
       ...Array.from({length:cursor?3:15},(_,i)=>JSON.stringify({time:new Date(now-i*60_000).toISOString(),direction:i%2?'receive':'send',method:'GET',route:'/api/tasks',status:200,duration_ms:120+i}))],
       next:cursor?null:[1]})});
   const boxes=createMessageBoxes(runtime,{...common});
+  // 抽卡：假图片放在隔离目录，不启动调度器；默认宽度和 360 窄窗都截图。
+  const cardPictures=join(profile,'card-draw-pictures');
+  mkdirSync(join(cardPictures,'抽卡'),{recursive:true});
+  for(let i=0;i<8;i++){
+    const pixels=Buffer.alloc(64*64*4,255);
+    for(let p=0;p<pixels.length;p+=4){pixels[p]=i*31;pixels[p+1]=255-i*29;pixels[p+2]=(p/256)%256;}
+    writeFileSync(join(cardPictures,'抽卡','20261128-2100'+String(i).padStart(2,'0')+'-000.png'),
+      electron.nativeImage.createFromBitmap(pixels,{width:64,height:64}).toPNG());
+  }
+  mkdirSync(join(cardPictures,'高清'),{recursive:true});
+  for(const name of ['20261128-210100-000.png','20261128-210200-000.png'])
+    copyFileSync(join(cardPictures,'抽卡','20261128-210000-000.png'),join(cardPictures,'高清',name));
+  const cards=attachCardDraw(runtime,{...common,pictureRoot:cardPictures,enabled:false});
   try{
+    await cards.open();
+    const cardPage=code=>cards.panel.webContents.executeJavaScript(code);
+    for(const [size,width,height] of [['',760,800],['-360',360,640]]){
+      cards.panel.setContentSize(width,height);
+      for(const view of ['setup','cards','hd']){
+        await cardPage(`document.querySelector('[data-tab=${view}]').click()`);
+        await wait(500);await shot('card-draw-'+view+size,cards.panel);
+        assert(await cardPage('document.documentElement.scrollWidth<=innerWidth&&main.scrollWidth<=main.clientWidth'),view+size);
+      }
+    }
+    assert.equal(await cardPage("document.querySelectorAll('#cards .card').length"),8);
+    assert.equal(await cardPage("document.querySelectorAll('#hd .card img').length"),2);
     for(const [name,host] of [['today',review],['inbox',inbox],['registration',registration],['weather',weather],['polls',polls]]){
       await host.open();host.panel.setSize(430,560);await wait(500);await shot(name,host.panel);
     }
@@ -269,6 +295,6 @@ async function main(){
       await shot(name,view);view.destroy();
     }
     console.log('截图已写入 '+out);
-  }finally{for(const h of [review,inbox,registration,weather,polls,history])h.close();checkStore.close();}
+  }finally{for(const h of [review,inbox,registration,weather,polls,history,cards])h.close();checkStore.close();}
 }
 main().then(()=>electron.app.exit(0),error=>{console.error(error);electron.app.exit(1);});
